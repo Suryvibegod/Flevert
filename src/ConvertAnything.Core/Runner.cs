@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Win32.SafeHandles;
 
 namespace ConvertAnything.Core;
 
@@ -19,17 +20,8 @@ public sealed class Runner(RunLog log)
         IOperation operation, IReadOnlyList<string> files, IProgress<BatchProgress>? progress, CancellationToken ct)
     {
         var taken = 0;
-        return RunAsync(operation, Enumerate(), () => files.Count - taken, progress, ct);
-
-        async IAsyncEnumerable<string> Enumerate()
-        {
-            foreach (var file in files)
-            {
-                taken++;
-                yield return file;
-                await Task.CompletedTask.ConfigureAwait(false);
-            }
-        }
+        var source = files.Select(file => { taken++; return file; }).ToAsyncEnumerable();
+        return RunAsync(operation, source, () => files.Count - taken, progress, ct);
     }
 
     /// <param name="pending">How many received files are still queued; lets progress grow as late files join the batch.</param>
@@ -73,30 +65,19 @@ public sealed class Runner(RunLog log)
         return new BatchOutcome(results, results.Count + interrupted + pending());
     }
 
-    private static string? Reject(IOperation operation, string file)
-    {
-        var info = new FileInfo(file);
-        if (!info.Exists)
-            return "Input file not found.";
-        if (!operation.Extensions.Contains(info.Extension, StringComparer.OrdinalIgnoreCase))
-            return $"File type {info.Extension} is not supported by {operation.Id}.";
-        // A link in a shared folder could point at a private file and leak a converted copy of it there.
-        // Cloud placeholders (OneDrive) are reparse points too but have no LinkTarget, so they still work.
-        if (info.LinkTarget is not null)
-            return "Symbolic links are not followed.";
-        return null;
-    }
-
     /// <returns>The result, or <c>null</c> when cancellation interrupted this file.</returns>
     private async Task<FileResult?> RunOneAsync(IOperation operation, string file, CancellationToken ct)
     {
         var timer = Stopwatch.StartNew();
+        SafeFileHandle? pin = null;
         FileResult result;
         try
         {
-            result = Reject(operation, file) is { } reason
+            var reason = Reject(operation, file) ?? Pin(file, out pin);
+            // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned.
+            result = reason is not null
                 ? new FileResult(file, null, reason)
-                : new FileResult(file, await operation.RunAsync(file, ct).ConfigureAwait(false), null);
+                : new FileResult(file, await operation.RunAsync(file, ct).WaitAsync(ct).ConfigureAwait(false), null);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -109,8 +90,34 @@ public sealed class Runner(RunLog log)
         {
             result = new FileResult(file, null, ex.ToString());
         }
+        finally
+        {
+            pin?.Dispose();
+        }
 
         log.Write(operation.Id, result, timer.Elapsed);
         return result;
+    }
+
+    private static string? Reject(IOperation operation, string file)
+    {
+        // Paths also arrive over the batch pipe; accept only plain absolute file paths, not device namespaces.
+        if (!Path.IsPathFullyQualified(file)
+            || file.StartsWith(@"\\.\", StringComparison.Ordinal)
+            || file.StartsWith(@"\\?\GLOBALROOT", StringComparison.OrdinalIgnoreCase))
+            return "Only absolute file paths are accepted.";
+
+        var info = new FileInfo(file);
+        if (!info.Exists)
+            return "Input file not found.";
+        if (!operation.Extensions.Contains(info.Extension, StringComparer.OrdinalIgnoreCase))
+            return $"File type {info.Extension} is not supported by {operation.Id}.";
+        return null;
+    }
+
+    private static string? Pin(string file, out SafeFileHandle? pin)
+    {
+        pin = InputPin.TryPin(file, out var reason);
+        return reason;
     }
 }

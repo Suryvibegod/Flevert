@@ -145,6 +145,76 @@ public sealed class RunnerTests : IDisposable
         Assert.False(File.Exists(_dir.Combine("shared (copy).txt")));
     }
 
+    [Theory]
+    [InlineData("relative.txt")]
+    [InlineData(@"\\.\C:\x.txt")]
+    [InlineData(@"\\?\GLOBALROOT\Device\HarddiskVolume1\x.txt")]
+    public async Task Runner_rejects_paths_that_are_not_plain_absolute_file_paths(string path)
+    {
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [path], progress: null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.False(result.Succeeded);
+        Assert.Contains("absolute", result.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Cancel_returns_promptly_even_if_the_operation_ignores_the_token()
+    {
+        var file = _dir.File("a.txt");
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+
+        await new Runner(new RunLog(_logs.Path)).RunAsync(new StubbornOp(), [file], progress: null, cts.Token);
+
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(2), $"took {timer.Elapsed}");
+    }
+
+    [Fact]
+    public async Task Input_cannot_be_renamed_or_replaced_while_it_is_being_processed()
+    {
+        var file = _dir.File("a.txt");
+        var op = new RenamingOp();
+
+        await new Runner(new RunLog(_logs.Path)).RunAsync(op, [file], progress: null, CancellationToken.None);
+
+        Assert.False(op.RenameSucceeded);
+    }
+
+    private sealed class StubbornOp : IOperation
+    {
+        public string Id => "test.stubborn";
+        public string MenuPath => "Test/Stubborn";
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+        public async Task<string> RunAsync(string inputPath, CancellationToken ct)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(30), CancellationToken.None);
+            return inputPath;
+        }
+    }
+
+    private sealed class RenamingOp : IOperation
+    {
+        public bool RenameSucceeded { get; private set; }
+        public string Id => "test.rename";
+        public string MenuPath => "Test/Rename";
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+        public Task<string> RunAsync(string inputPath, CancellationToken ct)
+        {
+            try
+            {
+                File.Move(inputPath, inputPath + ".moved");
+                RenameSucceeded = true;
+            }
+            catch (IOException)
+            {
+            }
+
+            return Task.FromResult(inputPath);
+        }
+    }
+
     [Fact]
     public void Catalog_finds_operations_by_id()
     {
