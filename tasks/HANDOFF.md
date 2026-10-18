@@ -27,47 +27,24 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 | Module | Trạng thái |
 |---|---|
 | core | Xong + đã sửa theo 3 vòng review. **Vòng 4 (xác minh các bản sửa vòng 3) chưa có kết quả, cần chạy lại** (xem dưới). 100 test pass, 1 skip (symlink cần quyền admin). |
-| image | Task 1 xong (MagickSetup: policy allow-list, giới hạn tài nguyên, đọc theo đuôi file). **Hai project image chưa có trong `ConvertAnything.sln`.** Tiếp theo: Task 2 trong [tasks/image/todo.md](image/todo.md). |
+| image | Task 1 xong (MagickSetup: policy allow-list, giới hạn tài nguyên, đọc theo đuôi file). Hai project image đã có trong solution. Tiếp theo: Task 2 trong [tasks/image/todo.md](image/todo.md). |
 | installer, media, pdf | Chưa làm. Spec nháp: [SPEC-media.md](../SPEC-media.md), [SPEC-pdf.md](../SPEC-pdf.md). |
 
 Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói). Kế hoạch core: [plan.md](plan.md), [todo.md](todo.md) (Phase 4 = sửa theo review).
 
 ## Dựng máy mới
 
-```powershell
-winget install --id Microsoft.DotNet.SDK.10 -e
-winget install --id GitHub.cli -e
-gh auth login --web            # đăng nhập tài khoản Suryvibegod
-git clone https://github.com/Suryvibegod/ConvertAnything.git
-cd ConvertAnything
-git config user.name "Suryvibegod"
-git config user.email "79949229+Suryvibegod@users.noreply.github.com"
-dotnet sln add src/ConvertAnything.Image tests/ConvertAnything.Image.Tests
-dotnet build ConvertAnything.sln
-dotnet test ConvertAnything.sln
-```
+Người dùng chỉ clone repo, mở Claude Code trong thư mục repo (chấp nhận hộp thoại tin cậy thư mục) rồi gõ "làm tiếp đi". [CLAUDE.md](../CLAUDE.md) chỉ Claude chạy `scripts/setup-dev.ps1`: cài .NET 10 SDK và GitHub CLI nếu thiếu, đặt danh tính commit, sửa rule git rewrite hỏng nếu có, cài plugin agent-skills, build và chạy test. `.claude/settings.json` khai báo marketplace và bật plugin cho repo.
 
-Trong Claude Code, cài plugin quy trình:
-
-```
-/plugin marketplace add addyosmani/agent-skills
-/plugin install agent-skills@addy-agent-skills
-```
+Plugin cài giữa phiên chỉ được nạp sau khi khởi động lại Claude Code hoặc `/reload-plugins`; trong lúc đó đọc thẳng skill từ `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/`.
 
 Lưu ý môi trường của máy cũ (có thể gặp lại):
-- Git global có rule hỏng `url.https://github.com.insteadof git@github.com:` (thiếu `/` cuối) làm cài plugin lỗi. Sửa bằng `git config --global url."https://github.com/".insteadOf "git@github.com:"` sau khi xóa rule cũ.
-- Test chạy tiến trình `ca.exe` thật cần build cả solution trước (`dotnet build`).
+- Git global có rule hỏng `url.https://github.com.insteadof git@github.com:` (thiếu `/` cuối) làm cài plugin lỗi; script tự sửa.
+- Test chạy tiến trình `ca.exe` thật cần build cả solution trước (script đã làm).
 - Thư mục `%TEMP%` có thể có nhóm lạ (ví dụ `CodexSandboxUsers`) được quyền ghi; code đã tính tới, test tự dựng ACL.
 
-## Câu lệnh để Claude làm tiếp
+## Việc dở dang cụ thể (làm theo thứ tự)
 
-Dán vào Claude Code ở thư mục repo:
-
-> Đọc `tasks/HANDOFF.md` rồi làm tiếp ConvertAnything đúng như mô tả trong đó, theo quy trình agent-skills của Addy, không hỏi lại tôi. Việc đầu tiên: chạy lại review xác minh vòng 4 cho core (diff `6498e3f..HEAD` trên `src/ConvertAnything.Core`, `src/ConvertAnything.Cli`, `tests/ConvertAnything.Core.Tests`), sửa nếu còn Critical/High/Required; sau đó thêm hai project image vào solution và làm tiếp Task 2 của `tasks/image/todo.md`.
-
-## Việc dở dang cụ thể
-
-1. Review vòng 4 cho core (agent đang chạy khi tắt máy, kết quả mất).
-2. `dotnet sln add` hai project image (đã có trong lệnh dựng máy ở trên).
-3. Image Task 2: lát dọc JPG → PNG (auto-orient, đăng ký op vào catalog trong `src/ConvertAnything.Cli/Program.cs`, `ProjectReference` từ Cli tới Image, menu, kiểm thật bằng `tools/MenuProbe`).
-4. Khi bấm thử menu trên máy thật: `install-menu --dev --allow-insecure-location` nếu chạy từ thư mục build; nhớ `uninstall-menu` sau khi thử.
+1. Chạy lại review xác minh vòng 4 cho core: reviewer bối cảnh trống, chỉ đọc, trên diff `6498e3f..HEAD` của `src/ConvertAnything.Core`, `src/ConvertAnything.Cli`, `tests/ConvertAnything.Core.Tests`; sửa nếu còn Critical/High/Required (agent đang chạy khi tắt máy, kết quả mất).
+2. Image Task 2: lát dọc JPG → PNG (auto-orient, đăng ký op vào catalog trong `src/ConvertAnything.Cli/Program.cs`, `ProjectReference` từ Cli tới Image, menu, kiểm thật bằng `tools/MenuProbe`).
+3. Khi bấm thử menu trên máy thật: `install-menu --dev --allow-insecure-location` nếu chạy từ thư mục build; nhớ `uninstall-menu` sau khi thử.
