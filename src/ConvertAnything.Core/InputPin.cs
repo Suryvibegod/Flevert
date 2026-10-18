@@ -5,9 +5,9 @@ using Microsoft.Win32.SafeHandles;
 namespace ConvertAnything.Core;
 
 /// <summary>
-/// Opens an input without following links and keeps it open, read-shared only, while an operation works on it.
-/// Without delete sharing nobody can rename, delete or replace the file in the meantime, so the operation reopening the
-/// same path is guaranteed to read the file that was checked.
+/// Opens an input without following links and keeps it open, read-shared only, while an operation works on it. Without
+/// delete sharing nobody can rename, delete or replace the file meanwhile, and the operation is given the file's real
+/// location from the handle, so a junction swapped in a parent folder cannot redirect what is read or where output goes.
 /// </summary>
 internal static partial class InputPin
 {
@@ -17,38 +17,66 @@ internal static partial class InputPin
     private const uint FileFlagOpenReparsePoint = 0x00200000;
     private const int FileAttributeTagInfoClass = 9;
     private const uint FileAttributeReparsePoint = 0x400;
-    private const uint ReparseTagSymlink = 0xA000000C;
-    private const uint ReparseTagMountPoint = 0xA0000003;
+    private const uint NameSurrogateBit = 0x20000000; // symlinks, mount points and other name-redirecting reparse tags
+    private const int MaxPath = 260;
 
     /// <returns>A handle to keep open while processing, or <c>null</c> with <paramref name="reason"/> set.</returns>
-    public static SafeFileHandle? TryPin(string path, out string? reason)
+    public static SafeFileHandle? TryPin(string path, out string? reason, out string realPath)
     {
-        var handle = CreateFileW(path, GenericRead, FileShareRead, 0, OpenExisting, FileFlagOpenReparsePoint, 0);
+        realPath = path;
+        var handle = CreateFileW(ToExtendedPath(path), GenericRead, FileShareRead, 0, OpenExisting, FileFlagOpenReparsePoint, 0);
         if (handle.IsInvalid)
-        {
-            reason = new Win32Exception(Marshal.GetLastPInvokeError()).Message;
-            handle.Dispose();
-            return null;
-        }
+            return Fail(handle, new Win32Exception(Marshal.GetLastPInvokeError()).Message, out reason);
 
-        if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfoClass, out var info, (uint)Marshal.SizeOf<FileAttributeTagInfo>()))
-        {
-            reason = new Win32Exception(Marshal.GetLastPInvokeError()).Message;
-            handle.Dispose();
-            return null;
-        }
+        if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfoClass, out var tag, (uint)Marshal.SizeOf<FileAttributeTagInfo>()))
+            return Fail(handle, new Win32Exception(Marshal.GetLastPInvokeError()).Message, out reason);
 
         // A link in a shared folder could point at a private file and leak a converted copy of it there.
-        // Cloud placeholders (OneDrive) are reparse points too, with other tags, and still work.
-        if ((info.FileAttributes & FileAttributeReparsePoint) != 0 && info.ReparseTag is ReparseTagSymlink or ReparseTagMountPoint)
-        {
-            reason = "Symbolic links are not followed.";
-            handle.Dispose();
-            return null;
-        }
+        // Cloud placeholders (OneDrive) are reparse points too, but not name surrogates, and still work.
+        if ((tag.FileAttributes & FileAttributeReparsePoint) != 0 && (tag.ReparseTag & NameSurrogateBit) != 0)
+            return Fail(handle, "Symbolic links are not followed.", out reason);
 
+        // A hard link to a file another account cannot read is not a reparse point but leaks the same way.
+        if (!GetFileInformationByHandle(handle, out var info))
+            return Fail(handle, new Win32Exception(Marshal.GetLastPInvokeError()).Message, out reason);
+        if (info.NumberOfLinks > 1)
+            return Fail(handle, "Files with more than one hard link are not processed.", out reason);
+
+        if (FinalPath(handle) is not { } final)
+            return Fail(handle, new Win32Exception(Marshal.GetLastPInvokeError()).Message, out reason);
+
+        realPath = final;
         reason = null;
         return handle;
+    }
+
+    private static SafeFileHandle? Fail(SafeFileHandle handle, string why, out string? reason)
+    {
+        handle.Dispose();
+        reason = why;
+        return null;
+    }
+
+    // Without the prefix CreateFileW is limited to MAX_PATH unless the machine opted in to long paths.
+    private static string ToExtendedPath(string path) => path switch
+    {
+        _ when path.StartsWith(@"\\?\", StringComparison.Ordinal) => path,
+        _ when path.StartsWith(@"\\", StringComparison.Ordinal) => @"\\?\UNC\" + path[2..],
+        _ => @"\\?\" + path,
+    };
+
+    private static string? FinalPath(SafeFileHandle handle)
+    {
+        var buffer = new char[short.MaxValue];
+        var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, 0);
+        if (length == 0 || length >= buffer.Length)
+            return null;
+
+        var final = new string(buffer, 0, (int)length);
+        if (final.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+            return @"\\" + final[8..];
+        // Keep the extended form only where it is needed, so ordinary paths look ordinary in names and logs.
+        return final.StartsWith(@"\\?\", StringComparison.Ordinal) && final.Length - 4 < MaxPath ? final[4..] : final;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -56,6 +84,15 @@ internal static partial class InputPin
     {
         public uint FileAttributes;
         public uint ReparseTag;
+    }
+
+    // FILETIME is two DWORDs: 4-byte packing keeps the native layout (no padding before the times).
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    private struct ByHandleFileInformation
+    {
+        public uint FileAttributes;
+        public long CreationTime, LastAccessTime, LastWriteTime;
+        public uint VolumeSerialNumber, FileSizeHigh, FileSizeLow, NumberOfLinks, FileIndexHigh, FileIndexLow;
     }
 
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
@@ -66,4 +103,11 @@ internal static partial class InputPin
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetFileInformationByHandleEx(
         SafeFileHandle file, int infoClass, out FileAttributeTagInfo info, uint size);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetFileInformationByHandle(SafeFileHandle file, out ByHandleFileInformation info);
+
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static partial uint GetFinalPathNameByHandleW(SafeFileHandle file, [Out] char[] path, uint length, uint flags);
 }

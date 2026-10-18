@@ -73,11 +73,12 @@ public sealed class Runner(RunLog log)
         FileResult result;
         try
         {
-            var reason = Reject(operation, file) ?? Pin(file, out pin);
+            var realPath = file;
+            var reason = Reject(operation, file) ?? Pin(file, out pin, out realPath);
             // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned.
             result = reason is not null
                 ? new FileResult(file, null, reason)
-                : new FileResult(file, await operation.RunAsync(file, ct).WaitAsync(ct).ConfigureAwait(false), null);
+                : new FileResult(file, await operation.RunAsync(realPath, ct).WaitAsync(ct).ConfigureAwait(false), null);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -115,9 +116,9 @@ public sealed class Runner(RunLog log)
         return null;
     }
 
-    private static string? Pin(string file, out SafeFileHandle? pin)
+    private static string? Pin(string file, out SafeFileHandle? pin, out string realPath)
     {
-        pin = InputPin.TryPin(file, out var reason);
+        pin = InputPin.TryPin(file, out var reason, out realPath);
         return reason;
     }
 }

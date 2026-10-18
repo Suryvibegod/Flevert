@@ -26,5 +26,6 @@ public sealed class TempDir : IDisposable
     {
         try { Directory.Delete(Path, recursive: true); }
         catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 }

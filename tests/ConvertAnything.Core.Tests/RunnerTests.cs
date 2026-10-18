@@ -182,6 +182,81 @@ public sealed class RunnerTests : IDisposable
         Assert.False(op.RenameSucceeded);
     }
 
+    [Fact]
+    public async Task Operation_receives_the_real_location_when_the_path_goes_through_a_junction()
+    {
+        var real = Directory.CreateDirectory(_dir.Combine("real")).FullName;
+        File.WriteAllText(Path.Combine(real, "a.txt"), "x");
+        var junction = _dir.Combine("via");
+        var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{junction}\" \"{real}\"")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+        })!;
+        await mklink.WaitForExitAsync();
+        Assert.Equal(0, mklink.ExitCode);
+        var op = new RecordingOp();
+
+        try
+        {
+            var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(op, [Path.Combine(junction, "a.txt")], progress: null, CancellationToken.None);
+
+            Assert.True(Assert.Single(outcome.Results).Succeeded, outcome.Results[0].Error);
+            // A junction swapped mid-run cannot redirect where the input is read or the output written.
+            Assert.Equal(Path.Combine(real, "a.txt"), op.Received, ignoreCase: true);
+        }
+        finally
+        {
+            Directory.Delete(junction); // removes the link only, never its target
+        }
+    }
+
+    [Fact]
+    public async Task Runner_rejects_a_file_with_more_than_one_hard_link()
+    {
+        var target = _dir.File("private.txt", "secret");
+        var link = _dir.Combine("shared.txt");
+        Assert.True(CreateHardLinkW(link, target, 0), "could not create a hard link");
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [link], progress: null, CancellationToken.None);
+
+        Assert.Contains("hard link", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Runner_handles_inputs_longer_than_260_characters()
+    {
+        var deep = _dir.Path;
+        while (deep.Length < 300)
+            deep = Path.Combine(deep, new string('d', 40));
+        Directory.CreateDirectory(deep);
+        var file = Path.Combine(deep, "a.txt");
+        File.WriteAllText(file, "deep");
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [file], progress: null, CancellationToken.None);
+
+        Assert.True(Assert.Single(outcome.Results).Succeeded, outcome.Results[0].Error);
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern bool CreateHardLinkW(string link, string existing, nint security);
+
+    private sealed class RecordingOp : IOperation
+    {
+        public string? Received { get; private set; }
+        public string Id => "test.record";
+        public string MenuPath => "Test/Record";
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+        public Task<string> RunAsync(string inputPath, CancellationToken ct)
+        {
+            Received = inputPath;
+            return Task.FromResult(inputPath);
+        }
+    }
+
     private sealed class StubbornOp : IOperation
     {
         public string Id => "test.stubborn";
