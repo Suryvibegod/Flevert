@@ -25,8 +25,19 @@ public sealed class CommandLineTests
     [Fact]
     public void Parses_install_menu_with_dev_flag()
     {
-        Assert.Equal(new InstallMenuCommand(IncludeDev: true), CommandLine.Parse(["install-menu", "--dev"]));
-        Assert.Equal(new InstallMenuCommand(IncludeDev: false), CommandLine.Parse(["install-menu"]));
+        Assert.Equal(new InstallMenuCommand(IncludeDev: true, AllowInsecureLocation: false), CommandLine.Parse(["install-menu", "--dev"]));
+        Assert.Equal(new InstallMenuCommand(IncludeDev: false, AllowInsecureLocation: false), CommandLine.Parse(["install-menu"]));
+    }
+
+    [Fact]
+    public void Insecure_location_override_is_a_separate_flag_from_dev()
+    {
+        Assert.Equal(new InstallMenuCommand(IncludeDev: false, AllowInsecureLocation: true),
+            CommandLine.Parse(["install-menu", "--allow-insecure-location"]));
+        Assert.Equal(new InstallMenuCommand(IncludeDev: true, AllowInsecureLocation: true),
+            CommandLine.Parse(["install-menu", "--dev", "--allow-insecure-location"]));
+        Assert.Equal(new InstallMenuCommand(IncludeDev: true, AllowInsecureLocation: false),
+            CommandLine.Parse(["install-menu", "--dev"]));
     }
 
     [Fact]

@@ -159,6 +159,19 @@ public sealed class RunnerTests : IDisposable
         Assert.Contains("absolute", result.Error, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("//./C:/x.txt")]
+    [InlineData(@"\??\GLOBALROOT\Device\HarddiskVolume1\x.txt")]
+    [InlineData("//?/GLOBALROOT/Device/HarddiskVolume1/x.txt")]
+    [InlineData(@"\./C:\x.txt")]
+    public async Task Runner_rejects_device_paths_however_they_are_spelled(string path)
+    {
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [path], progress: null, CancellationToken.None);
+
+        Assert.Contains("absolute", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Cancel_returns_promptly_even_if_the_operation_ignores_the_token()
     {

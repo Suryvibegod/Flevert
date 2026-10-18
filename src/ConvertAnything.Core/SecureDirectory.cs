@@ -40,6 +40,19 @@ public static partial class SecureDirectory
         new DirectoryInfo(directory).SetAccessControl(acl);
     }
 
+    /// <summary>Restricts and labels the folder, creating it if needed; failures are ignored (defence in depth).</summary>
+    public static void TrySecure(string directory)
+    {
+        try
+        {
+            Directory.CreateDirectory(directory);
+            RestrictToOwnerAndAdmins(directory);
+            TryApplyNoReadUpLabel(directory);
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
     public static void TryApplyNoReadUpLabel(string directory)
     {
         try

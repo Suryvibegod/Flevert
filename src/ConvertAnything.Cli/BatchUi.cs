@@ -62,22 +62,32 @@ internal sealed class BatchUi : ApplicationContext
 
     private void Finish(BatchOutcome outcome)
     {
-        AllSucceeded = outcome.Results.Count == outcome.Total && outcome.Results.All(r => r.Succeeded);
-        _form.Finishing = true;
-        _form.Close();
-
-        var summary = BatchSummary.Describe(outcome.Results, outcome.Total, Path.GetDirectoryName(_logFile)!);
-        _tray = new NotifyIcon { Icon = _form.Icon, Text = "ConvertAnything", Visible = true };
-        if (summary.HasFailures)
-            _tray.BalloonTipClicked += (_, _) => OpenLog();
-        _tray.BalloonTipClosed += (_, _) => ExitThread();
-        _tray.ShowBalloonTip((int)NotificationLifetime.TotalMilliseconds, "ConvertAnything", summary.Text,
-            summary.HasFailures ? ToolTipIcon.Warning : ToolTipIcon.Info);
-
-        // BalloonTipClosed is not raised when the system suppresses the balloon (e.g. Focus Assist), so also exit on a timer.
+        // Scheduled first: whatever fails below, the process still exits. BalloonTipClosed is not raised when the system
+        // suppresses the balloon (e.g. Focus Assist), so the timer is also the normal way out in that case.
         var exit = new System.Windows.Forms.Timer { Interval = (int)NotificationLifetime.TotalMilliseconds };
         exit.Tick += (_, _) => ExitThread();
         exit.Start();
+
+        AllSucceeded = outcome.Results.Count == outcome.Total && outcome.Results.All(r => r.Succeeded);
+        try
+        {
+            _form.Finishing = true;
+            _form.Close();
+
+            var summary = BatchSummary.Describe(outcome.Results, outcome.Total, Path.GetDirectoryName(_logFile)!);
+            _tray = new NotifyIcon { Icon = _form.Icon, Text = "ConvertAnything", Visible = true };
+            if (summary.HasFailures)
+                _tray.BalloonTipClicked += (_, _) => OpenLog();
+            _tray.BalloonTipClosed += (_, _) => ExitThread();
+            _tray.ShowBalloonTip((int)NotificationLifetime.TotalMilliseconds, "ConvertAnything", summary.Text,
+                summary.HasFailures ? ToolTipIcon.Warning : ToolTipIcon.Info);
+        }
+#pragma warning disable CA1031 // A failed notification must not keep the process alive; the log has the details.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            ExitThread();
+        }
     }
 
     private void OpenLog()

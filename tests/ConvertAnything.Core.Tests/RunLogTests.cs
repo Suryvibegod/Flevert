@@ -30,6 +30,19 @@ public sealed class RunLogTests : IDisposable
     }
 
     [Fact]
+    public async Task Write_waits_for_another_writer_and_then_appends()
+    {
+        var log = new RunLog(_logs.Path);
+        Directory.CreateDirectory(_logs.Path);
+        var holder = new FileStream(log.CurrentFile, FileMode.Append, FileAccess.Write, FileShare.Read);
+        _ = Task.Delay(300).ContinueWith(_ => holder.Dispose());
+
+        await Task.Run(() => log.Write("dev.copy", new FileResult("a.txt", "b.txt", null), TimeSpan.Zero));
+
+        Assert.Single(File.ReadAllLines(log.CurrentFile));
+    }
+
+    [Fact]
     public void Prune_never_throws_when_an_old_log_cannot_be_deleted()
     {
         var old = _logs.File("ca-20200101.log");

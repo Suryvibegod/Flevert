@@ -14,9 +14,10 @@ public static class InstallLocation
         FileSystemRights.WriteAttributes | FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles |
         FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership | GenericAll | GenericWrite;
 
-    // Rights on a parent folder that let someone rename the install folder away and put another in its place.
+    // Rights on a parent folder that let someone rename the install folder, or the parent itself, away and rebuild the
+    // path with a planted ca.exe. Modify grants DELETE on the parent, which is enough.
     private const FileSystemRights ParentRights =
-        FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.ChangePermissions |
+        FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.ChangePermissions |
         FileSystemRights.TakeOwnership | GenericAll;
 
     /// <summary>
@@ -24,7 +25,10 @@ public static class InstallLocation
     /// whole folder, that account could run code as this user. Checks owners and DACLs of the folder, everything in it,
     /// and every parent folder.
     /// </summary>
-    public static bool IsWritableOnlyByOwnerAndAdmins(string directory)
+    public static bool IsWritableOnlyByOwnerAndAdmins(string directory) => IsWritableOnlyByOwnerAndAdmins(directory, stopAt: null);
+
+    /// <param name="stopAt">Tests only: stop the parent walk before this folder, so a test can build the whole chain.</param>
+    internal static bool IsWritableOnlyByOwnerAndAdmins(string directory, string? stopAt)
     {
         using var me = WindowsIdentity.GetCurrent();
         var trusted = new HashSet<SecurityIdentifier>
@@ -49,6 +53,8 @@ public static class InstallLocation
 
         for (var parent = root.Parent; parent is not null; parent = parent.Parent)
         {
+            if (stopAt is not null && string.Equals(parent.FullName.TrimEnd('\\'), stopAt.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                break;
             if (!IsSafe(parent.GetAccessControl(), ParentRights, trusted))
                 return false;
         }

@@ -9,9 +9,6 @@ namespace ConvertAnything.Core;
 /// </summary>
 public sealed class RunLog(string directory)
 {
-    // Per user: another account in the same session must not be able to hold or deny this lock.
-    private static readonly string CrossProcessLock =
-        $@"Local\ConvertAnything.Log.{System.Security.Principal.WindowsIdentity.GetCurrent().User}";
     private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(2);
 
     public static string DefaultDirectory { get; } =
@@ -37,20 +34,28 @@ public sealed class RunLog(string directory)
         BestEffort(() =>
         {
             System.IO.Directory.CreateDirectory(Directory);
-            // FileMode.Append is not an atomic append across processes, so serialise writers machine-wide per session.
-            using var gate = OpenLock();
-            var owned = gate is not null && WaitFor(gate);
+            AppendExclusively(CurrentFile, Encoding.UTF8.GetBytes(line + Environment.NewLine));
+        });
+    }
+
+    // FileMode.Append is not an atomic append across processes. Opening without write sharing serialises writers; the
+    // file lives in a folder only this user can open, so no other account can hold it (unlike a named mutex).
+    private static void AppendExclusively(string path, byte[] bytes)
+    {
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        for (var attempt = 1; ; attempt++)
+        {
             try
             {
-                using var stream = new FileStream(CurrentFile, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-                stream.Write(Encoding.UTF8.GetBytes(line + Environment.NewLine));
+                using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+                stream.Write(bytes);
+                return;
             }
-            finally
+            catch (IOException) when (waited.Elapsed < LockTimeout)
             {
-                if (owned)
-                    gate!.ReleaseMutex();
+                Thread.Sleep(Math.Min(5 * attempt, 50)); // another writer holds the file
             }
-        });
+        }
     }
 
     /// <summary>Deletes daily logs outside the retention window; the window includes today.</summary>
@@ -67,27 +72,6 @@ public sealed class RunLog(string directory)
                 BestEffort(() => File.Delete(file));
         }
     });
-
-    private static Mutex? OpenLock()
-    {
-        try { return new Mutex(initiallyOwned: false, CrossProcessLock); }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
-        {
-            return null; // write unlocked rather than not at all
-        }
-    }
-
-    private static bool WaitFor(Mutex gate)
-    {
-        try
-        {
-            return gate.WaitOne(LockTimeout);
-        }
-        catch (AbandonedMutexException)
-        {
-            return true;
-        }
-    }
 
 #pragma warning disable CA1031 // Logging must never fail the caller.
     private static void BestEffort(Action action)

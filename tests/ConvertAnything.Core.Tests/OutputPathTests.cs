@@ -61,6 +61,29 @@ public sealed class OutputPathTests : IDisposable
     }
 
     [Fact]
+    public async Task WriteAtomically_skips_a_dangling_link_that_occupies_the_desired_name()
+    {
+        var target = Directory.CreateDirectory(_dir.Combine("gone")).FullName;
+        var link = _dir.Combine("out.txt");
+        var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true,
+        })!;
+        await mklink.WaitForExitAsync();
+        Directory.Delete(target); // the junction now dangles
+        try
+        {
+            var final = await OutputPath.WriteAtomicallyAsync(link, (temp, ct) => File.WriteAllTextAsync(temp, "x", ct), CancellationToken.None);
+
+            Assert.Equal(_dir.Combine("out (1).txt"), final);
+        }
+        finally
+        {
+            Directory.Delete(link);
+        }
+    }
+
+    [Fact]
     public async Task WriteAtomically_produces_final_file_and_leaves_no_partial()
     {
         var final = await OutputPath.WriteAtomicallyAsync(

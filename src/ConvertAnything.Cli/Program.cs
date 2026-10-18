@@ -42,13 +42,13 @@ internal static class Program
 
                 if (!InstallLocation.IsWritableOnlyByOwnerAndAdmins(Path.GetDirectoryName(exe)!))
                 {
-                    if (!install.IncludeDev)
+                    if (!install.AllowInsecureLocation)
                     {
                         Console.Error.WriteLine($"Refusing to register {exe}: other accounts can modify its folder and could run code as you. Install with the ConvertAnything installer instead.");
                         return BadUsage;
                     }
 
-                    Console.Error.WriteLine($"Warning: other accounts can modify {Path.GetDirectoryName(exe)}. Use --dev only on a machine you trust.");
+                    Console.Error.WriteLine($"Warning: other accounts can modify {Path.GetDirectoryName(exe)}. Use --allow-insecure-location only on a machine you trust.");
                 }
 
                 var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));
@@ -92,6 +92,9 @@ internal static class Program
 
         try
         {
+            // Logs hold every path processed; keep the whole app-data folder private to this user, like the batch keys.
+            SecureDirectory.TrySecure(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConvertAnything"));
             log.Prune(LogRetention, DateOnly.FromDateTime(DateTime.Now));
             if (Environment.GetEnvironmentVariable("CONVERTANYTHING_HEADLESS") == "1")
                 return RunHeadless(operation, leader, log);

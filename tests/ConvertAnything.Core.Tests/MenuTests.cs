@@ -128,7 +128,7 @@ public sealed class MenuTests
             System.Security.AccessControl.AccessControlType.Allow));
         new DirectoryInfo(parent.Path).SetAccessControl(acl);
 
-        Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(child));
+        Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(child, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
     [Fact]
@@ -144,6 +144,26 @@ public sealed class MenuTests
         new FileInfo(dll).SetAccessControl(acl);
 
         Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir.Path));
+    }
+
+    [Fact]
+    public void Install_location_whose_parent_other_users_may_modify_is_unsafe()
+    {
+        // Modify includes DELETE on the parent itself: it can be renamed away and rebuilt with a planted ca.exe.
+        using var parent = new TempDir();
+        var child = Directory.CreateDirectory(Path.Combine(parent.Path, "app")).FullName;
+        ProtectToOwnerAndAdmins(child);
+        var acl = new DirectoryInfo(parent.Path).GetAccessControl();
+        acl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        foreach (var sid in OwnerAndAdmins())
+            acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(sid,
+                System.Security.AccessControl.FileSystemRights.FullControl, System.Security.AccessControl.AccessControlType.Allow));
+        acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+            new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.AuthenticatedUserSid, null),
+            System.Security.AccessControl.FileSystemRights.Modify, System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(parent.Path).SetAccessControl(acl);
+
+        Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(child, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
     private static System.Security.Principal.SecurityIdentifier[] OwnerAndAdmins()
@@ -188,22 +208,13 @@ public sealed class MenuTests
     [Fact]
     public void Install_location_with_only_user_system_and_admin_write_access_is_safe()
     {
-        // Built explicitly: inherited ACLs vary by machine (e.g. sandbox tools add groups to the profile's Temp folder).
-        using var dir = new TempDir();
-        var acl = new System.Security.AccessControl.DirectorySecurity();
-        acl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-        using var me = System.Security.Principal.WindowsIdentity.GetCurrent();
-        foreach (var sid in new[]
-                 {
-                     me.User!,
-                     new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.LocalSystemSid, null),
-                     new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinAdministratorsSid, null),
-                 })
-            acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(sid,
-                System.Security.AccessControl.FileSystemRights.FullControl, System.Security.AccessControl.AccessControlType.Allow));
-        new DirectoryInfo(dir.Path).SetAccessControl(acl);
+        // The whole checked chain is built here: inherited ACLs on real parents vary by machine (sandbox tools, for one,
+        // add groups to the profile's Temp folder), so the walk stops at the folder this test does not control.
+        using var parent = new TempDir();
+        ProtectToOwnerAndAdmins(parent.Path);
+        var child = Directory.CreateDirectory(Path.Combine(parent.Path, "app")).FullName;
 
-        Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir.Path));
+        Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(child, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
     [Fact]

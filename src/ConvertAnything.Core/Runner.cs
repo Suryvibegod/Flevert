@@ -103,9 +103,7 @@ public sealed class Runner(RunLog log)
     private static string? Reject(IOperation operation, string file)
     {
         // Paths also arrive over the batch pipe; accept only plain absolute file paths, not device namespaces.
-        if (!Path.IsPathFullyQualified(file)
-            || file.StartsWith(@"\\.\", StringComparison.Ordinal)
-            || file.StartsWith(@"\\?\GLOBALROOT", StringComparison.OrdinalIgnoreCase))
+        if (!IsPlainFilePath(file))
             return "Only absolute file paths are accepted.";
 
         var info = new FileInfo(file);
@@ -114,6 +112,22 @@ public sealed class Runner(RunLog log)
         if (!operation.Extensions.Contains(info.Extension, StringComparer.OrdinalIgnoreCase))
             return $"File type {info.Extension} is not supported by {operation.Id}.";
         return null;
+    }
+
+    /// <summary>Allow-list, either slash: <c>C:\…</c>, <c>\\server\share\…</c>, <c>\\?\C:\…</c> or <c>\\?\UNC\…</c>.</summary>
+    private static bool IsPlainFilePath(string file)
+    {
+        if (!Path.IsPathFullyQualified(file))
+            return false;
+
+        var p = file.Replace('/', '\\');
+        if (p.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (p.StartsWith(@"\\?\", StringComparison.Ordinal))
+            return p.Length > 6 && char.IsAsciiLetter(p[4]) && p[5] == ':' && p[6] == '\\';
+        if (p.StartsWith(@"\\", StringComparison.Ordinal))
+            return p.Length > 2 && p[2] is not ('.' or '?');
+        return p.Length > 2 && char.IsAsciiLetter(p[0]) && p[1] == ':' && p[2] == '\\';
     }
 
     private static string? Pin(string file, out SafeFileHandle? pin, out string realPath)

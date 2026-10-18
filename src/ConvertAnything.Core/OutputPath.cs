@@ -18,7 +18,7 @@ public static class OutputPath
         for (var n = 0; n < MaxAttempts; n++)
         {
             var candidate = Path.Combine(dir, FitName(stem, n == 0 ? "" : $" ({n})", ext));
-            if (!Path.Exists(candidate))
+            if (!IsTaken(candidate))
                 return candidate;
         }
 
@@ -57,10 +57,24 @@ public static class OutputPath
                 File.Move(temp, final, overwrite: false);
                 return final;
             }
-            catch (IOException) when (Path.Exists(final) && attempt < MaxAttempts)
+            catch (IOException) when (IsTaken(final) && attempt < MaxAttempts)
             {
             }
         }
+    }
+
+    // Path.Exists follows links, so a dangling link would read as free although its name is occupied.
+    private static bool IsTaken(string path)
+    {
+        if (Path.Exists(path))
+            return true;
+        try
+        {
+            File.GetAttributes(path);
+            return true;
+        }
+        catch (FileNotFoundException) { return false; }
+        catch (DirectoryNotFoundException) { return false; }
     }
 
     private static string FitName(string stem, string suffix, string ext)
