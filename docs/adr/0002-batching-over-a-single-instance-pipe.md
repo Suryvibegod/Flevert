@@ -6,7 +6,7 @@ Accepted
 
 ## Date
 
-2026-10-19 (revised the same day after the second adversarial review)
+2026-10-19 (revised the same day after the second and third adversarial reviews)
 
 ## Context
 
@@ -24,6 +24,7 @@ Command-line context menu verbs (ADR-0001) make Explorer start one `ca.exe` per 
 - **Hand-over protocol.** The client sends length-prefixed raw UTF-16 paths. The leader queues them (deduplicated, ordinal) and replies `Accepted`, then waits for the client to close before resetting the pipe (Disconnect discards unread data). If the message would push the batch past 1000 files it replies `Full` and the sender processes its files itself; the leader's own files are never capped. Every connection has a 2 s timeout, and a client that breaks the pipe is disconnected without ending the batch.
 - **Name and key.** The pipe name contains the user SID, the session id, a per-operation random key and the op id. Keys live in `%LOCALAPPDATA%\ConvertAnything\pipes`, a folder whose ACL is limited to the user, SYSTEM and Administrators and labelled medium no-read-up. Keys are created atomically (first writer wins), regenerated when corrupt, and **rotated when a batch closes**, because pipe names are visible to every account in the pipe namespace.
 - **Peer checks.** Both ends require the peer to run the same executable, in the same session, at an integrity level no lower than their own.
+- **Robust listener.** A connection wait that faults (a client vanished before the connection completed) or a failed Disconnect replaces the pipe instance; idleness is measured from the last connection. Untrusted clients get a `Refused` reply rather than silence. The key is rotated before the pipe name is released, and only if it is still the key this batch used; the name is recomputed on every join attempt, and a refused or foreign-owned name rotates the key and retries once.
 - **Fallbacks.** A pipe name held by another account, an untrusted peer, a `Full` reply, a failure to set up the key, or a 10 s overall join deadline makes the process work alone.
 
 ## Alternatives Considered
@@ -61,3 +62,5 @@ Command-line context menu verbs (ADR-0001) make Explorer start one `ca.exe` per 
 - Files that arrive after the user presses Cancel are no longer acknowledged: the leader stops accepting as soon as its consumer stops.
 - Two selections of the same operation made while a batch is running merge into that batch.
 - **Accepted trade-off:** a new selection started in the instant between a batch closing and its key rotating can split into two batches.
+- **Accepted trade-off:** outputs take the ACL of the folder they are written to, not of the input file, so a file the user protected with its own explicit ACL produces a copy readable by whoever can read that folder.
+- **Accepted trade-off:** an operation that ignores cancellation is abandoned; if the process exits before it finishes, its hidden `.ca-*.partial` file can be left behind.
