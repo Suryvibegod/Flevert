@@ -9,7 +9,9 @@ namespace ConvertAnything.Core;
 /// </summary>
 public sealed class RunLog(string directory)
 {
-    private const string CrossProcessLock = @"Local\ConvertAnything.Log";
+    // Per user: another account in the same session must not be able to hold or deny this lock.
+    private static readonly string CrossProcessLock =
+        $@"Local\ConvertAnything.Log.{System.Security.Principal.WindowsIdentity.GetCurrent().User}";
     private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(2);
 
     public static string DefaultDirectory { get; } =
@@ -36,8 +38,8 @@ public sealed class RunLog(string directory)
         {
             System.IO.Directory.CreateDirectory(Directory);
             // FileMode.Append is not an atomic append across processes, so serialise writers machine-wide per session.
-            using var gate = new Mutex(initiallyOwned: false, CrossProcessLock);
-            var owned = WaitFor(gate);
+            using var gate = OpenLock();
+            var owned = gate is not null && WaitFor(gate);
             try
             {
                 using var stream = new FileStream(CurrentFile, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
@@ -46,7 +48,7 @@ public sealed class RunLog(string directory)
             finally
             {
                 if (owned)
-                    gate.ReleaseMutex();
+                    gate!.ReleaseMutex();
             }
         });
     }
@@ -65,6 +67,15 @@ public sealed class RunLog(string directory)
                 BestEffort(() => File.Delete(file));
         }
     });
+
+    private static Mutex? OpenLock()
+    {
+        try { return new Mutex(initiallyOwned: false, CrossProcessLock); }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or WaitHandleCannotBeOpenedException)
+        {
+            return null; // write unlocked rather than not at all
+        }
+    }
 
     private static bool WaitFor(Mutex gate)
     {

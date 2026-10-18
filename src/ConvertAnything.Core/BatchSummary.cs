@@ -2,7 +2,7 @@ namespace ConvertAnything.Core;
 
 public sealed record BatchSummary(string Text, bool HasFailures)
 {
-    public static BatchSummary Describe(IReadOnlyList<FileResult> results, int total)
+    public static BatchSummary Describe(IReadOnlyList<FileResult> results, int total, string logDirectory)
     {
         var failed = results.Count(r => !r.Succeeded);
         var succeeded = results.Count - failed;
@@ -12,7 +12,7 @@ public sealed record BatchSummary(string Text, bool HasFailures)
 
         if (failed > 0)
             // The balloon may be gone before the user reads it, so name the place rather than relying on a click.
-            return new($@"Done: {Files(succeeded)}, {failed} failed. Details: %LOCALAPPDATA%\ConvertAnything\logs", true);
+            return new($"Done: {Files(succeeded)}, {failed} failed. Details: {logDirectory}", true);
 
         return results.Count == 1
             ? new($"Done: {Path.GetFileName(results[0].Output)}", false)

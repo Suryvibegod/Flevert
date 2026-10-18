@@ -63,9 +63,10 @@ internal sealed class BatchUi : ApplicationContext
     private void Finish(BatchOutcome outcome)
     {
         AllSucceeded = outcome.Results.Count == outcome.Total && outcome.Results.All(r => r.Succeeded);
+        _form.Finishing = true;
         _form.Close();
 
-        var summary = BatchSummary.Describe(outcome.Results, outcome.Total);
+        var summary = BatchSummary.Describe(outcome.Results, outcome.Total, Path.GetDirectoryName(_logFile)!);
         _tray = new NotifyIcon { Icon = _form.Icon, Text = "ConvertAnything", Visible = true };
         if (summary.HasFailures)
             _tray.BalloonTipClicked += (_, _) => OpenLog();

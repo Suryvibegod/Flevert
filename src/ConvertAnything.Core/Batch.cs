@@ -218,6 +218,7 @@ public sealed class BatchLeader : IAsyncDisposable
     private readonly Stopwatch _age = Stopwatch.StartNew();
     private readonly Task _listener;
     private volatile bool _consumerWaiting;
+    private int _disposed;
 
     private BatchLeader(NamedPipeServerStream? server, IReadOnlyList<string> files, TimeSpan idle, Action? onClosed)
     {
@@ -270,6 +271,8 @@ public sealed class BatchLeader : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
         await _stop.CancelAsync().ConfigureAwait(false);
         try
         {

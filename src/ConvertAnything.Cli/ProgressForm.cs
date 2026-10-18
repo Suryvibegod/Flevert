@@ -37,6 +37,22 @@ internal sealed class ProgressForm : Form
         CancelButton = _cancel;
     }
 
+    /// <summary>Set before the batch closes the window itself, so only a user close counts as Cancel.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool Finishing { get; set; }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (!Finishing && e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true; // keep the window until the current file stops
+            _cancel.PerformClick();
+            return;
+        }
+
+        base.OnFormClosing(e);
+    }
+
     public void Report(BatchProgress progress)
     {
         _bar.Maximum = Math.Max(progress.Total, 1); // grows when late files join the batch
