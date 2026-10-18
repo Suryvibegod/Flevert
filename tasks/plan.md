@@ -28,7 +28,7 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 
 ### Phase 2: Explorer integration
 - [x] Task 4: `install-menu --dev` / `uninstall-menu` với `ExtendedSubCommandsKey` + `Player`
-- [ ] Task 5: Gom lô: mutex + named pipe, cửa sổ chờ 400 ms, lỗi từng file không chặn lô
+- [x] Task 5: Gom lô: mutex + named pipe, cửa sổ chờ 400 ms, lỗi từng file không chặn lô
 - [ ] Task 6: Thông báo một lần cho cả lô + cửa sổ tiến độ có Cancel
 
 ### Checkpoint: Explorer integration

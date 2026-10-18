@@ -97,7 +97,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ---
 
-## Task 5: Gom lô
+## Task 5: Gom lô ✅
 
 **Description:** `run` đầu tiên giữ named mutex `ConvertAnything.<op-id>.<session>` và mở named pipe; các tiến trình sau gửi đường dẫn qua pipe rồi thoát. Chủ lô chờ đến khi 400 ms không có đường dẫn mới, xử lý tuần tự, lỗi từng file ghi log và đi tiếp. Cửa sổ chờ dùng `TimeProvider`.
 

@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace ConvertAnything.Core;
 
-/// <summary>Tab-separated, one line per processed file: time, op-id, input, status, ms, output or error.</summary>
+/// <summary>Tab-separated, one line per processed file: time, pid, op-id, input, status, ms, output or error.</summary>
 public sealed class RunLog(string directory)
 {
     private static readonly object Gate = new();
@@ -19,6 +19,7 @@ public sealed class RunLog(string directory)
         var detail = result.Succeeded ? result.Output : OneLine(result.Error!);
         var line = string.Join('\t',
             DateTimeOffset.Now.ToString("o", CultureInfo.InvariantCulture),
+            Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
             operationId,
             result.Input,
             result.Succeeded ? "ok" : "failed",
@@ -28,7 +29,30 @@ public sealed class RunLog(string directory)
         lock (Gate)
         {
             System.IO.Directory.CreateDirectory(Directory);
-            File.AppendAllText(CurrentFile, line + Environment.NewLine);
+            AppendShared(CurrentFile, line + Environment.NewLine);
+        }
+    }
+
+    // Two operations can run in separate processes at once; share the file and retry rather than fail the batch.
+    private static void AppendShared(string path, string text)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(text);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                stream.Write(bytes);
+                return;
+            }
+            catch (IOException) when (attempt < 5)
+            {
+                Thread.Sleep(20 * attempt);
+            }
+            catch (IOException)
+            {
+                return;
+            }
         }
     }
 
