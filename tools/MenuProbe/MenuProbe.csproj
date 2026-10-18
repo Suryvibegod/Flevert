@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dev-only tool: reads and invokes the real Explorer context menu for files, to verify menu registration without clicking. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>
