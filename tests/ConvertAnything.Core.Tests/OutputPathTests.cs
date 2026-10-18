@@ -67,7 +67,9 @@ public sealed class OutputPathTests : IDisposable
         var link = _dir.Combine("out.txt");
         var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
         {
-            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
         })!;
         await mklink.WaitForExitAsync();
         Directory.Delete(target); // the junction now dangles
