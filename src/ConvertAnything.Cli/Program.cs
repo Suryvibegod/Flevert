@@ -15,6 +15,8 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        var invocationDirectory = Environment.CurrentDirectory;
+        SafeStartup.Apply();
         var catalog = new OperationCatalog([new DevCopy(), new DevSlowCopy()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -23,7 +25,8 @@ internal static class Program
         switch (CommandLine.Parse(args))
         {
             case RunCommand run:
-                return RunBatch(run, catalog, log);
+                // SafeStartup moved the current directory, so resolve relative paths against where ca was started.
+                return RunBatch(run with { Files = [.. run.Files.Select(f => Path.GetFullPath(f, invocationDirectory))] }, catalog, log);
 
             case InstallMenuCommand install:
                 var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));

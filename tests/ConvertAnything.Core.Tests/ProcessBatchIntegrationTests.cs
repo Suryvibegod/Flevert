@@ -41,9 +41,20 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         Assert.Equal([leader.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)], LoggedProcessIds());
     }
 
+    [Fact]
+    public async Task Relative_paths_resolve_against_the_directory_ca_was_started_in()
+    {
+        _dir.File("relative.txt");
+
+        var process = Ca("dev.copy", "relative.txt");
+        await process.WaitForExitAsync();
+
+        Assert.True(File.Exists(_dir.Combine("relative (copy).txt")));
+    }
+
     private Process Ca(string operation, params string[] files)
     {
-        var start = new ProcessStartInfo(CaExe) { UseShellExecute = false };
+        var start = new ProcessStartInfo(CaExe) { UseShellExecute = false, WorkingDirectory = _dir.Path };
         start.ArgumentList.Add("run");
         start.ArgumentList.Add(operation);
         foreach (var f in files)
