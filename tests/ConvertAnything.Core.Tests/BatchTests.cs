@@ -48,8 +48,8 @@ public sealed class BatchTests
             seen.Add(file);
             if (file == @"C:\first.txt")
             {
-                // Simulates a slow conversion: the late file arrives well after the idle window.
-                await Task.Delay(Idle * 2);
+                // Simulates a slow conversion: the late file arrives after both the idle window and the minimum lifetime.
+                await Task.Delay(TimeSpan.FromSeconds(2.5));
                 Assert.Null(await Batch.LeadOrJoinAsync(op, [@"C:\late.txt"], Idle, CancellationToken.None));
             }
         }
@@ -153,6 +153,100 @@ public sealed class BatchTests
             .GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier))
             .Cast<System.Security.AccessControl.FileSystemAccessRule>();
         Assert.All(rules, r => Assert.Contains(r.IdentityReference.Value, allowed));
+    }
+
+    [Fact]
+    public async Task Clients_that_connect_and_vanish_at_any_moment_do_not_wedge_the_leader()
+    {
+        var op = UniqueOp();
+        var leader = (await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None))!;
+        var name = Batch.PipeName(op);
+
+        // Some of these land before the listener has started waiting, some between connections.
+        await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => Task.Run(async () =>
+        {
+            using var rogue = new System.IO.Pipes.NamedPipeClientStream(".", name,
+                System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+            try { await rogue.ConnectAsync(1000); }
+            catch (TimeoutException) { }
+        })));
+
+        Assert.Null(await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None));
+        var drained = DrainAsync(leader);
+        Assert.Same(drained, await Task.WhenAny(drained, Task.Delay(TimeSpan.FromSeconds(10))));
+        Assert.Equal([@"C:.txt", @"C:.txt"], await drained);
+        await leader.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task A_client_that_vanished_before_the_leader_started_listening_does_not_wedge_it()
+    {
+        // Deterministic version of the race: the client connects and closes before the first WaitForConnection.
+        var name = $"ca-test-{Guid.NewGuid():N}";
+        System.IO.Pipes.NamedPipeServerStream Create() => new(name, System.IO.Pipes.PipeDirection.InOut, 1,
+            System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
+        var server = Create();
+        using (var rogue = new System.IO.Pipes.NamedPipeClientStream(".", name,
+                   System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous))
+            await rogue.ConnectAsync(1000);
+
+        var leader = BatchLeader.Start(Create, server, [@"C:\a.txt"], Idle, onClosed: () => { });
+
+        // The replacement instance must still accept a well-behaved sender.
+        using (var client = new System.IO.Pipes.NamedPipeClientStream(".", name,
+                   System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous))
+        {
+            await client.ConnectAsync(5000);
+            await Batch.WritePathsAsync(client, [@"C:\b.txt"], CancellationToken.None);
+            var reply = new byte[1];
+            Assert.Equal(1, await client.ReadAsync(reply));
+            Assert.Equal(Batch.Accepted, reply[0]);
+        }
+
+        var drained = DrainAsync(leader);
+        Assert.Same(drained, await Task.WhenAny(drained, Task.Delay(TimeSpan.FromSeconds(10))));
+        Assert.Equal([@"C:\a.txt", @"C:\b.txt"], await drained);
+        await leader.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task A_client_that_connects_and_stays_silent_does_not_block_others()
+    {
+        var op = UniqueOp();
+        await using var leader = (await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None))!;
+        using var silent = new System.IO.Pipes.NamedPipeClientStream(".", Batch.PipeName(op),
+            System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+        await silent.ConnectAsync(2000);
+
+        Assert.Null(await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None));
+        Assert.Equal([@"C:.txt", @"C:.txt"], await DrainAsync(leader));
+    }
+
+    [Fact]
+    public async Task A_leader_whose_consumer_stopped_no_longer_accepts_files()
+    {
+        var op = UniqueOp();
+        await using var leader = (await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None))!;
+        using var cancel = new CancellationTokenSource();
+        await foreach (var _ in leader.ReadAllAsync(cancel.Token))
+            break; // the consumer stops early, as on Cancel
+        await Task.Delay(200);
+
+        await using var late = await Batch.LeadOrJoinAsync(op, [@"C:\late.txt"], Idle, CancellationToken.None);
+
+        Assert.NotNull(late);
+        Assert.Equal([@"C:\late.txt"], await DrainAsync(late));
+    }
+
+    [Fact]
+    public async Task The_batch_key_changes_once_a_batch_has_closed()
+    {
+        var op = UniqueOp();
+        var before = Batch.PipeName(op);
+        await using (var leader = await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None))
+            await DrainAsync(leader!);
+
+        Assert.NotEqual(before, Batch.PipeName(op));
     }
 
     private static async Task<List<string>> DrainAsync(BatchLeader leader)

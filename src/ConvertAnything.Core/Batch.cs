@@ -17,6 +17,7 @@ public static class Batch
     internal const int MaxFilesPerBatch = 1000;
     internal const byte Accepted = 1;
     internal const byte Full = 2;
+    internal const byte Refused = 3;
     internal static readonly TimeSpan IoTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan JoinDeadline = TimeSpan.FromSeconds(10);
     private const int MaxPayloadBytes = 1 << 20;
@@ -25,53 +26,54 @@ public static class Batch
     public static async Task<BatchLeader?> LeadOrJoinAsync(
         string operationId, IReadOnlyList<string> files, TimeSpan idle, CancellationToken ct)
     {
-        string name;
-        try
-        {
-            name = PipeName(operationId);
-        }
-#pragma warning disable CA1031 // Coordination is an optimisation: if it cannot be set up, process these files alone.
-        catch (Exception)
-#pragma warning restore CA1031
-        {
-            return BatchLeader.Alone(files);
-        }
-
         var deadline = Stopwatch.StartNew();
+        var rotatedAfterRefusal = false;
         while (deadline.Elapsed < JoinDeadline)
         {
-            NamedPipeServerStream server;
+            string key, name;
             try
             {
-                server = new NamedPipeServerStream(name, PipeDirection.InOut, maxNumberOfServerInstances: 1,
-                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                // Recomputed on every attempt: a leader that just closed has rotated the key.
+                key = ReadOrCreateSecret(SecretPath(operationId));
+                name = PipeName(operationId, key);
             }
-            catch (UnauthorizedAccessException)
+#pragma warning disable CA1031 // Coordination is an optimisation: if it cannot be set up, process these files alone.
+            catch (Exception)
+#pragma warning restore CA1031
             {
-                return BatchLeader.Alone(files); // name held by another account: never wait on it
-            }
-            catch (IOException)
-            {
-                switch (await TrySendAsync(name, files, ct).ConfigureAwait(false))
-                {
-                    case SendResult.Delivered: return null;
-                    case SendResult.Refused: return BatchLeader.Alone(files);
-                    default: continue; // the leader closed or was busy; try to lead
-                }
+                return BatchLeader.Alone(files);
             }
 
-            return BatchLeader.Start(server, files, idle, onClosed: () => TryRotateSecret(operationId));
+            NamedPipeServerStream? server = TryCreateServer(name, out var foreignOwner);
+            if (server is not null)
+                return BatchLeader.Start(() => CreateServer(name), server, files, idle, onClosed: () => TryRotateSecret(operationId, key));
+
+            var result = foreignOwner
+                ? SendResult.Refused
+                : await TrySendAsync(name, files, Remaining(deadline), ct).ConfigureAwait(false);
+            switch (result)
+            {
+                case SendResult.Delivered:
+                    return null;
+                case SendResult.Refused when !rotatedAfterRefusal:
+                    // Someone else holds or answers this name: move the operation to a fresh name once, then retry.
+                    rotatedAfterRefusal = true;
+                    TryRotateSecret(operationId, key);
+                    continue;
+                case SendResult.Refused:
+                    return BatchLeader.Alone(files);
+                default:
+                    continue; // the leader closed or was busy; try to lead
+            }
         }
 
         return BatchLeader.Alone(files);
     }
 
-    internal static string PipeName(string operationId)
-    {
-        using var identity = WindowsIdentity.GetCurrent();
-        using var self = Process.GetCurrentProcess();
-        return $"ConvertAnything-{identity.User}-{self.SessionId}-{ReadOrCreateSecret(SecretPath(operationId))}-{operationId}";
-    }
+    internal static string PipeName(string operationId) => PipeName(operationId, ReadOrCreateSecret(SecretPath(operationId)));
+
+    internal static string SecretPath(string operationId) => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConvertAnything", "pipes", operationId + ".key");
 
     /// <summary>
     /// A random part of the pipe name, readable only by this user at medium integrity or above, and replaced whenever a
@@ -117,27 +119,62 @@ public static class Batch
 
     private enum SendResult { Delivered, Retry, Refused }
 
-    private static async Task<SendResult> TrySendAsync(string name, IReadOnlyList<string> files, CancellationToken ct)
+    private static string PipeName(string operationId, string key)
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        using var self = Process.GetCurrentProcess();
+        return $"ConvertAnything-{identity.User}-{self.SessionId}-{key}-{operationId}";
+    }
+
+    private static NamedPipeServerStream CreateServer(string name) =>
+        new(name, PipeDirection.InOut, maxNumberOfServerInstances: 1,
+            PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+
+    private static NamedPipeServerStream? TryCreateServer(string name, out bool foreignOwner)
+    {
+        foreignOwner = false;
+        try
+        {
+            return CreateServer(name);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            foreignOwner = true; // the name is held by another account: never wait on it
+            return null;
+        }
+        catch (IOException)
+        {
+            return null; // a leader of ours already exists
+        }
+    }
+
+    private static TimeSpan Remaining(Stopwatch deadline)
+    {
+        var left = JoinDeadline - deadline.Elapsed;
+        return left < IoTimeout ? (left > TimeSpan.Zero ? left : TimeSpan.FromMilliseconds(1)) : IoTimeout;
+    }
+
+    private static async Task<SendResult> TrySendAsync(string name, IReadOnlyList<string> files, TimeSpan timeout, CancellationToken ct)
     {
         var client = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         await using (client.ConfigureAwait(false))
         {
             try
             {
-                await client.ConnectAsync(IoTimeout, ct).ConfigureAwait(false);
+                await client.ConnectAsync(timeout, ct).ConfigureAwait(false);
                 if (!PipePeer.IsTrusted(PipePeer.ServerProcessId(client)))
                     return SendResult.Refused;
 
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                timeout.CancelAfter(IoTimeout);
-                await WritePathsAsync(client, files, timeout.Token).ConfigureAwait(false);
+                using var io = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                io.CancelAfter(timeout);
+                await WritePathsAsync(client, files, io.Token).ConfigureAwait(false);
                 var reply = new byte[1];
-                if (await client.ReadAsync(reply, timeout.Token).ConfigureAwait(false) != 1)
+                if (await client.ReadAsync(reply, io.Token).ConfigureAwait(false) != 1)
                     return SendResult.Retry;
                 return reply[0] switch
                 {
                     Accepted => SendResult.Delivered,
-                    Full => SendResult.Refused,
+                    Full or Refused => SendResult.Refused,
                     _ => SendResult.Retry,
                 };
             }
@@ -152,18 +189,30 @@ public static class Batch
         }
     }
 
-    private static string SecretPath(string operationId) => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConvertAnything", "pipes", operationId + ".key");
-
-    private static void TryRotateSecret(string operationId)
+    /// <summary>Replaces the key only if it is still the one this batch used, so a newer batch's key is never rotated away.</summary>
+    private static void TryRotateSecret(string operationId, string usedKey)
     {
         var path = SecretPath(operationId);
         try
         {
+            if (TryReadSecret(path) != usedKey)
+                return;
+
             // Also re-secures folders created before the folder was locked down.
             SecureDirectory.RestrictToOwnerAndAdmins(Path.GetDirectoryName(path)!);
             SecureDirectory.TryApplyNoReadUpLabel(Path.GetDirectoryName(path)!);
-            WriteSecret(path, overwrite: true);
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    WriteSecret(path, overwrite: true);
+                    return;
+                }
+                catch (IOException) when (attempt < 10)
+                {
+                    Thread.Sleep(5 * attempt); // a starting process may be reading the old key
+                }
+            }
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
@@ -211,38 +260,46 @@ public sealed class BatchLeader : IAsyncDisposable
 {
     // A fast operation can drain the queue before slower-starting processes connect; keep the batch open at least this long.
     private static readonly TimeSpan MinimumLifetime = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan ReplaceBackoff = TimeSpan.FromMilliseconds(20);
 
     private readonly Channel<string> _queue = Channel.CreateUnbounded<string>();
     private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _stop = new();
     private readonly Stopwatch _age = Stopwatch.StartNew();
     private readonly Task _listener;
-    private volatile bool _consumerWaiting;
+    private bool _busy;
     private int _disposed;
 
-    private BatchLeader(NamedPipeServerStream? server, IReadOnlyList<string> files, TimeSpan idle, Action? onClosed)
+    private BatchLeader(
+        Func<NamedPipeServerStream>? createServer, NamedPipeServerStream? server, IReadOnlyList<string> files, TimeSpan idle,
+        Action? onClosed)
     {
         foreach (var file in files)
             TryEnqueue(file);
 
-        if (server is null)
+        if (server is null || createServer is null)
         {
             _queue.Writer.Complete();
             _listener = Task.CompletedTask;
         }
         else
         {
-            _listener = Task.Run(() => ListenAsync(server, idle, onClosed));
+            _listener = Task.Run(() => ListenAsync(createServer, server, idle, onClosed));
         }
     }
 
     /// <summary>Distinct files queued but not yet handed to the consumer.</summary>
     public int Pending => _queue.Reader.Count;
 
-    internal static BatchLeader Start(NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle, Action onClosed) =>
-        new(server, files, idle, onClosed);
+    /// <param name="createServer">Creates a replacement pipe instance with the same name, after a client broke the current one.</param>
+    internal static BatchLeader Start(
+        Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle, Action onClosed) =>
+        new(createServer, server, files, idle, onClosed);
 
-    internal static BatchLeader Alone(IReadOnlyList<string> files) => new(null, files, TimeSpan.Zero, null);
+    internal static BatchLeader Start(NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle, Action onClosed) =>
+        new(() => throw new IOException("No replacement pipe available."), server, files, idle, onClosed);
+
+    internal static BatchLeader Alone(IReadOnlyList<string> files) => new(null, null, files, TimeSpan.Zero, null);
 
     /// <summary>
     /// Yields each distinct file as it arrives. Completes once the consumer is idle, nothing is queued and no path arrived
@@ -254,13 +311,18 @@ public sealed class BatchLeader : IAsyncDisposable
         {
             while (true)
             {
-                _consumerWaiting = true;
+                Volatile.Write(ref _busy, false);
                 if (!await _queue.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
                     yield break;
-                _consumerWaiting = false;
 
-                while (_queue.Reader.TryRead(out var file))
+                while (true)
+                {
+                    // Marked busy before taking a file, so the listener never sees "nothing queued and idle" while one is held.
+                    Volatile.Write(ref _busy, true);
+                    if (!_queue.Reader.TryRead(out var file))
+                        break;
                     yield return file;
+                }
             }
         }
         finally
@@ -278,7 +340,7 @@ public sealed class BatchLeader : IAsyncDisposable
         {
             await _listener.ConfigureAwait(false);
         }
-#pragma warning disable CA1031 // Disposal must always complete; the listener already logged nothing worth surfacing.
+#pragma warning disable CA1031 // Disposal must always complete.
         catch (Exception)
 #pragma warning restore CA1031
         {
@@ -302,70 +364,97 @@ public sealed class BatchLeader : IAsyncDisposable
             return _seen.Count + files.Distinct(StringComparer.Ordinal).Count(f => !_seen.Contains(f)) <= Batch.MaxFilesPerBatch;
     }
 
-    private async Task ListenAsync(NamedPipeServerStream server, TimeSpan idle, Action? onClosed)
+    // Read the queue before the flag: the consumer sets the flag before taking, so a held file is always visible in one of them.
+    private bool IsIdle => _queue.Reader.Count == 0 && !Volatile.Read(ref _busy);
+
+    private async Task ListenAsync(Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed)
     {
         var ct = _stop.Token;
+        var sinceActivity = Stopwatch.StartNew();
+        Task? connecting = null;
         try
         {
-            await using (server.ConfigureAwait(false))
+            while (!ct.IsCancellationRequested)
             {
-                Task? connecting = null;
+                connecting ??= server.WaitForConnectionAsync(ct);
+                var wait = idle - sinceActivity.Elapsed;
+                if (wait < ReplaceBackoff)
+                    wait = ReplaceBackoff;
+
+                if (await Task.WhenAny(connecting, Task.Delay(wait, ct)).ConfigureAwait(false) != connecting)
+                {
+                    if (sinceActivity.Elapsed >= idle && _age.Elapsed >= MinimumLifetime && IsIdle)
+                        break;
+                    continue; // still working, too young, or recently active: keep the batch open so late files join it
+                }
+
+                var finished = connecting;
+                connecting = null;
+                sinceActivity.Restart();
+                if (finished.IsFaulted || finished.IsCanceled)
+                {
+                    _ = finished.Exception; // observed
+                    if (ct.IsCancellationRequested)
+                        break;
+                    // A client vanished before the connection completed; the instance cannot be trusted to recover.
+                    server = await ReplaceAsync(server, createServer).ConfigureAwait(false);
+                    await Task.Delay(ReplaceBackoff, ct).ConfigureAwait(false);
+                    continue;
+                }
+
                 try
                 {
-                    while (!ct.IsCancellationRequested)
-                    {
-                        connecting ??= server.WaitForConnectionAsync(ct);
-                        if (await Task.WhenAny(connecting, Task.Delay(idle, ct)).ConfigureAwait(false) != connecting)
-                        {
-                            if (_consumerWaiting && _queue.Reader.Count == 0 && _age.Elapsed >= MinimumLifetime)
-                                break;
-                            continue; // still working, or too young: keep the batch open so late files join it
-                        }
-
-                        var finished = connecting;
-                        connecting = null;
-                        try
-                        {
-                            await finished.ConfigureAwait(false);
-                            await ServeAsync(server, ct).ConfigureAwait(false);
-                        }
-                        catch (Exception ex) when (ex is IOException or OperationCanceledException && !ct.IsCancellationRequested)
-                        {
-                            // A broken, slow or untrusted client must not end the batch; a sender without a reply retries.
-                        }
-
-                        // Disconnect also resets a pipe a client broke, so the next WaitForConnection works.
-                        try { server.Disconnect(); }
-                        catch (InvalidOperationException) { }
-                        catch (IOException) { }
-                    }
+                    await ServeAsync(server, ct).ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                catch (Exception ex) when (ex is IOException or OperationCanceledException && !ct.IsCancellationRequested)
                 {
-                }
-                finally
-                {
-                    _queue.Writer.TryComplete();
+                    // A broken, slow or untrusted client must not end the batch; a sender without a reply retries.
                 }
 
-                if (connecting is not null)
-                    await connecting.ContinueWith(static _ => { }, TaskScheduler.Default).ConfigureAwait(false);
+                try
+                {
+                    server.Disconnect();
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or IOException)
+                {
+                    server = await ReplaceAsync(server, createServer).ConfigureAwait(false);
+                }
             }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch (IOException)
+        {
+            // No replacement instance could be created; finish with the files already queued.
         }
         finally
         {
-            _queue.Writer.TryComplete();
+            // Rotate before the name is released, so nobody can claim the old name in between.
             onClosed?.Invoke();
+            _queue.Writer.TryComplete();
+            await server.DisposeAsync().ConfigureAwait(false);
+            if (connecting is not null)
+                await connecting.ContinueWith(static t => _ = t.Exception, TaskScheduler.Default).ConfigureAwait(false);
         }
+    }
+
+    private static async Task<NamedPipeServerStream> ReplaceAsync(NamedPipeServerStream server, Func<NamedPipeServerStream> createServer)
+    {
+        await server.DisposeAsync().ConfigureAwait(false);
+        return createServer();
     }
 
     private async Task ServeAsync(NamedPipeServerStream server, CancellationToken ct)
     {
-        if (!PipePeer.IsTrusted(PipePeer.ClientProcessId(server)))
-            return;
-
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(Batch.IoTimeout);
+
+        if (!PipePeer.IsTrusted(PipePeer.ClientProcessId(server)))
+        {
+            await server.WriteAsync(new[] { Batch.Refused }, timeout.Token).ConfigureAwait(false);
+            return;
+        }
 
         var files = await Batch.ReadPathsAsync(server, timeout.Token).ConfigureAwait(false);
         if (!HasRoomFor(files))
