@@ -57,7 +57,8 @@ internal static class Program
         }
 
         // No synchronization context exists yet, so blocking here cannot deadlock. Followers exit without loading WinForms.
-        var batch = Batch.CollectAsync(run.OperationId, run.Files, BatchIdleWindow, CancellationToken.None).GetAwaiter().GetResult();
+        var inputs = run.Files.Select(InputPath.ToLongPath).ToList();
+        var batch = Batch.CollectAsync(run.OperationId, inputs, BatchIdleWindow, CancellationToken.None).GetAwaiter().GetResult();
         if (batch is null)
             return Ok;
 
