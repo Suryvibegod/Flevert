@@ -28,7 +28,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ---
 
-## Task 2: OutputPath
+## Task 2: OutputPath ✅
 
 **Description:** `OutputPath.Reserve` chọn tên không trùng (` (1)`, ` (2)`...). `OutputPath.WriteAtomically` ghi vào `.<tên>.partial` cùng thư mục rồi đổi tên; lỗi giữa chừng thì xóa file tạm.
 
@@ -48,7 +48,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ---
 
-## Task 3: Lát dọc đầu tiên `ca.exe run dev.copy <file>`
+## Task 3: Lát dọc đầu tiên `ca.exe run dev.copy <file>` ✅
 
 **Description:** Hợp đồng `IOperation`, danh mục thao tác, thao tác `dev.copy` (copy file thành `tên (copy).ext`), parse lệnh `run`, ghi log dòng có cấu trúc vào `%LOCALAPPDATA%\ConvertAnything\logs`. Một file mỗi lần, chưa gom lô.
 

@@ -18,8 +18,8 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 
 ### Phase 1: Foundation
 - [x] Task 1: Khung solution, license, gitignore, CI build cục bộ, repo GitHub private
-- [ ] Task 2: `OutputPath`: tên không đè + ghi file tạm rồi đổi tên
-- [ ] Task 3: Lát dọc đầu tiên: `ca.exe run dev.copy <file>` + log
+- [x] Task 2: `OutputPath`: tên không đè + ghi file tạm rồi đổi tên
+- [x] Task 3: Lát dọc đầu tiên: `ca.exe run dev.copy <file>` + log
 
 ### Checkpoint: Foundation
 - [ ] `dotnet test` xanh, `dotnet format --verify-no-changes` sạch
