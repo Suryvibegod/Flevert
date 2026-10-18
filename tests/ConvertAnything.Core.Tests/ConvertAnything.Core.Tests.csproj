@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ConvertAnything.Core\ConvertAnything.Core.csproj" />
+    <!-- Build order only: ProcessBatchIntegrationTests launches the real ca.exe. -->
+    <ProjectReference Include="..\..\src\ConvertAnything.Cli\ConvertAnything.Cli.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

@@ -31,10 +31,11 @@ public sealed class RunnerTests : IDisposable
         var good = _dir.File("good.txt");
         var missing = _dir.Combine("missing.txt");
 
-        var results = await new Runner(new RunLog(_logs.Path)).RunAsync(
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
             new DevCopy(), [missing, good], progress: null, CancellationToken.None);
 
-        Assert.Collection(results,
+        Assert.Equal(2, outcome.Total);
+        Assert.Collection(outcome.Results,
             r => { Assert.Equal(missing, r.Input); Assert.False(r.Succeeded); Assert.NotNull(r.Error); },
             r => { Assert.Equal(good, r.Input); Assert.True(r.Succeeded); Assert.True(File.Exists(r.Output)); });
     }
@@ -64,10 +65,11 @@ public sealed class RunnerTests : IDisposable
         using var cts = new CancellationTokenSource();
         var progress = new SyncProgress<BatchProgress>(p => { if (p.Completed == 1) cts.Cancel(); });
 
-        var results = await new Runner(new RunLog(_logs.Path)).RunAsync(
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
             new DevCopy(), [first, second], progress, cts.Token);
 
-        Assert.Single(results);
+        Assert.Single(outcome.Results);
+        Assert.Equal(2, outcome.Total);
         Assert.False(File.Exists(_dir.Combine("2 (copy).txt")));
     }
 
@@ -79,11 +81,33 @@ public sealed class RunnerTests : IDisposable
         using var cts = new CancellationTokenSource();
         var progress = new SyncProgress<BatchProgress>(p => { if (p.Current == second) cts.Cancel(); });
 
-        var results = await new Runner(new RunLog(_logs.Path)).RunAsync(
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
             new DevSlowCopy(), [first, second], progress, cts.Token);
 
-        Assert.Equal([first], results.Select(r => r.Input));
+        Assert.Equal([first], outcome.Results.Select(r => r.Input));
+        Assert.Equal(2, outcome.Total);
         Assert.False(File.Exists(_dir.Combine("2 (copy).txt")));
+    }
+
+    [Fact]
+    public async Task Runner_processes_a_path_received_twice_only_once()
+    {
+        var file = _dir.File("a.txt");
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [file, file], progress: null, CancellationToken.None);
+
+        Assert.Single(outcome.Results);
+        Assert.Equal(["a (copy).txt", "a.txt"], _dir.FileNames());
+    }
+
+    [Fact]
+    public async Task Runner_treats_paths_differing_only_in_case_as_distinct()
+    {
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [_dir.Combine("A.txt"), _dir.Combine("a.txt")], progress: null, CancellationToken.None);
+
+        Assert.Equal(2, outcome.Results.Count);
     }
 
     [Fact]

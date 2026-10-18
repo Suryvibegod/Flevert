@@ -59,14 +59,31 @@ internal static class Program
             return BadUsage;
         }
 
-        // No synchronization context exists yet, so blocking here cannot deadlock. Followers exit without loading WinForms.
         var inputs = run.Files.Select(InputPath.ToLongPath).ToList();
-        var batch = Batch.CollectAsync(run.OperationId, inputs, BatchIdleWindow, CancellationToken.None).GetAwaiter().GetResult();
-        if (batch is null)
+        // No synchronization context exists yet, so blocking here cannot deadlock. Followers exit without loading WinForms.
+        var leader = Batch.LeadOrJoinAsync(run.OperationId, inputs, BatchIdleWindow, CancellationToken.None).GetAwaiter().GetResult();
+        if (leader is null)
             return Ok;
 
-        log.Prune(LogRetention, DateOnly.FromDateTime(DateTime.Now));
-        var files = batch.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        return BatchUi.Run(operation, files, log) ? Ok : SomeFilesFailed;
+        try
+        {
+            log.Prune(LogRetention, DateOnly.FromDateTime(DateTime.Now));
+            if (Environment.GetEnvironmentVariable("CONVERTANYTHING_HEADLESS") == "1")
+                return RunHeadless(operation, leader, log);
+            return BatchUi.Run(operation, leader, log) ? Ok : SomeFilesFailed;
+        }
+        finally
+        {
+            leader.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
+
+    /// <summary>Same batch without progress window or notification, for scripts and integration tests.</summary>
+    private static int RunHeadless(IOperation operation, BatchLeader leader, RunLog log)
+    {
+        var outcome = new Runner(log)
+            .RunAsync(operation, leader.ReadAllAsync(CancellationToken.None), () => leader.Pending, progress: null, CancellationToken.None)
+            .GetAwaiter().GetResult();
+        return outcome.Results.Count == outcome.Total && outcome.Results.All(r => r.Succeeded) ? Ok : SomeFilesFailed;
     }
 }

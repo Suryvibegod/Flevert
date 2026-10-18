@@ -218,21 +218,21 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 Nguồn: 3 reviewer bối cảnh trống, 2026-10-19. Cross-model bị bỏ qua (người dùng yêu cầu chạy không hỏi).
 
 ## R1: Log không bao giờ làm hỏng lô
-- [ ] `RunLog.Write` / `Prune` nuốt mọi exception (kể cả `UnauthorizedAccessException`)
-- [ ] Ghi log giữa nhiều tiến trình qua named mutex `Local\ConvertAnything.Log` (append không nguyên tử)
-- [ ] Mọi trường log qua `OneLine` (CR/LF/TAB không giả được dòng log)
-- [ ] `BatchUi`: work lỗi vẫn gọi `Finish`, tiến trình luôn thoát; exception chưa bắt ghi log rồi thoát
+- [x] `RunLog.Write` / `Prune` nuốt mọi exception (kể cả `UnauthorizedAccessException`)
+- [x] Ghi log giữa nhiều tiến trình qua named mutex `Local\ConvertAnything.Log` (append không nguyên tử)
+- [x] Mọi trường log qua `OneLine` (CR/LF/TAB không giả được dòng log)
+- [x] `BatchUi`: work lỗi vẫn gọi `Finish`, tiến trình luôn thoát; exception chưa bắt ghi log rồi thoát
 - Nguồn: C1, doubt#1, L3, O1
 
 ## R2: Giao thức gom lô v2
-- [ ] Chủ lô nhận tiếp file **trong lúc đang xử lý** (hàng đợi), đóng khi hết việc + 400 ms không có file mới → không tách lô vì tiến trình khởi động chậm, không tốn 400 ms trước file đầu
-- [ ] Timeout 2 s cho đọc/ghi/ack mỗi kết nối; `IOException` lúc chờ kết nối không làm chết chủ lô
-- [ ] Thứ tự: đọc → ack → flush → `WaitForPipeDrain` → mới thêm vào hàng đợi
-- [ ] Gói tin UTF-16 thô (giữ được surrogate lẻ); bỏ đường dẫn rỗng; tối đa 1000 file/lô
-- [ ] Khử trùng bằng so sánh `Ordinal`
-- [ ] Tên pipe gồm SID + bí mật ngẫu nhiên lưu trong `%LOCALAPPDATA%\ConvertAnything\pipe.key`; hai đầu kiểm tra tiến trình bên kia chạy cùng file exe
-- [ ] `UnauthorizedAccessException` → xử lý một mình ngay, không thử lại 40 s
-- [ ] Test: tiến trình `ca.exe` thật (20 cái), file đến trễ trong lúc xử lý vẫn vào lô; khôi phục `SetMinThreads`
+- [x] Chủ lô nhận tiếp file **trong lúc đang xử lý** (hàng đợi), đóng khi hết việc + 400 ms không có file mới → không tách lô vì tiến trình khởi động chậm, không tốn 400 ms trước file đầu
+- [x] Timeout 2 s cho đọc/ghi/ack mỗi kết nối; `IOException` lúc chờ kết nối không làm chết chủ lô
+- [x] Thứ tự: đọc → ack → flush → `WaitForPipeDrain` → mới thêm vào hàng đợi
+- [x] Gói tin UTF-16 thô (giữ được surrogate lẻ); bỏ đường dẫn rỗng; tối đa 1000 file/lô
+- [x] Khử trùng bằng so sánh `Ordinal`
+- [x] Tên pipe gồm SID + bí mật ngẫu nhiên lưu trong `%LOCALAPPDATA%\ConvertAnything\pipe.key`; hai đầu kiểm tra tiến trình bên kia chạy cùng file exe
+- [x] `UnauthorizedAccessException` → xử lý một mình ngay, không thử lại 40 s
+- [x] Test: tiến trình `ca.exe` thật (20 cái), file đến trễ trong lúc xử lý vẫn vào lô; khôi phục `SetMinThreads`
 - Nguồn: doubt#2–8, M1, L1, R2, R3, R4
 
 ## R3: OutputPath an toàn hơn

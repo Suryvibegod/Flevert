@@ -11,13 +11,13 @@ internal sealed class BatchUi : ApplicationContext
 
     private readonly CancellationTokenSource _cancellation = new();
     private readonly ProgressForm _form;
-    private readonly RunLog _log;
+    private readonly string _logFile; // fixed at batch start so a batch crossing midnight opens its own log
     private NotifyIcon? _tray;
 
-    private BatchUi(IOperation operation, IReadOnlyList<string> files, RunLog log)
+    private BatchUi(IOperation operation, BatchLeader leader, RunLog log)
     {
-        _log = log;
-        _form = new ProgressForm(operation.MenuPath.Replace('/', ' '), files.Count, _cancellation);
+        _logFile = log.CurrentFile;
+        _form = new ProgressForm(operation.MenuPath.Replace('/', ' '), leader.Pending, _cancellation);
         _ = _form.Handle; // installs the WinForms synchronization context so Progress<T> reports on this thread
 
         var progress = new Progress<BatchProgress>(_form.Report);
@@ -25,14 +25,15 @@ internal sealed class BatchUi : ApplicationContext
         {
             try
             {
-                return await new Runner(log).RunAsync(operation, files, progress, _cancellation.Token);
+                return await new Runner(log).RunAsync(
+                    operation, leader.ReadAllAsync(_cancellation.Token), () => leader.Pending, progress, _cancellation.Token);
             }
 #pragma warning disable CA1031 // Whatever happens, the batch must end with a notification and the process must exit.
             catch (Exception ex)
 #pragma warning restore CA1031
             {
                 log.Write(operation.Id, new FileResult("(batch)", null, ex.ToString()), TimeSpan.Zero);
-                return (IReadOnlyList<FileResult>)files.Select(f => new FileResult(f, null, "batch failed")).ToList();
+                return new BatchOutcome([new FileResult("(batch)", null, "batch failed")], 1);
             }
         });
 
@@ -45,26 +46,26 @@ internal sealed class BatchUi : ApplicationContext
         };
         reveal.Start();
 
-        work.ContinueWith(t => Finish(t.Result, files.Count), TaskScheduler.FromCurrentSynchronizationContext());
+        work.ContinueWith(t => Finish(t.Result), TaskScheduler.FromCurrentSynchronizationContext());
     }
 
     public bool AllSucceeded { get; private set; }
 
-    public static bool Run(IOperation operation, IReadOnlyList<string> files, RunLog log)
+    public static bool Run(IOperation operation, BatchLeader leader, RunLog log)
     {
         Application.EnableVisualStyles();
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        using var ui = new BatchUi(operation, files, log);
+        using var ui = new BatchUi(operation, leader, log);
         Application.Run(ui);
         return ui.AllSucceeded;
     }
 
-    private void Finish(IReadOnlyList<FileResult> results, int total)
+    private void Finish(BatchOutcome outcome)
     {
-        AllSucceeded = results.Count == total && results.All(r => r.Succeeded);
+        AllSucceeded = outcome.Results.Count == outcome.Total && outcome.Results.All(r => r.Succeeded);
         _form.Close();
 
-        var summary = BatchSummary.Describe(results, total);
+        var summary = BatchSummary.Describe(outcome.Results, outcome.Total);
         _tray = new NotifyIcon { Icon = _form.Icon, Text = "ConvertAnything", Visible = true };
         if (summary.HasFailures)
             _tray.BalloonTipClicked += (_, _) => OpenLog();
@@ -80,8 +81,11 @@ internal sealed class BatchUi : ApplicationContext
 
     private void OpenLog()
     {
-        if (File.Exists(_log.CurrentFile))
-            Process.Start(new ProcessStartInfo("explorer.exe") { ArgumentList = { $"/select,{_log.CurrentFile}" } });
+        if (File.Exists(_logFile))
+            Process.Start(new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"))
+            {
+                ArgumentList = { $"/select,{_logFile}" },
+            });
     }
 
     protected override void ExitThreadCore()

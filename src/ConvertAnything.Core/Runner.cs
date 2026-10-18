@@ -9,30 +9,68 @@ public sealed record FileResult(string Input, string? Output, string? Error)
 
 public sealed record BatchProgress(int Completed, int Total, string? Current);
 
+/// <param name="Results">Finished files, in processing order. A file interrupted by cancellation is not included.</param>
+/// <param name="Total">Every distinct file the batch received, including those left unprocessed by cancellation.</param>
+public sealed record BatchOutcome(IReadOnlyList<FileResult> Results, int Total);
+
 public sealed class Runner(RunLog log)
 {
-    public async Task<IReadOnlyList<FileResult>> RunAsync(
+    public Task<BatchOutcome> RunAsync(
+        IOperation operation, IReadOnlyList<string> files, IProgress<BatchProgress>? progress, CancellationToken ct)
+    {
+        var taken = 0;
+        return RunAsync(operation, Enumerate(), () => files.Count - taken, progress, ct);
+
+        async IAsyncEnumerable<string> Enumerate()
+        {
+            foreach (var file in files)
+            {
+                taken++;
+                yield return file;
+                await Task.CompletedTask.ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <param name="pending">How many received files are still queued; lets progress grow as late files join the batch.</param>
+    public async Task<BatchOutcome> RunAsync(
         IOperation operation,
-        IReadOnlyList<string> files,
+        IAsyncEnumerable<string> files,
+        Func<int> pending,
         IProgress<BatchProgress>? progress,
         CancellationToken ct)
     {
-        var results = new List<FileResult>(files.Count);
+        var results = new List<FileResult>();
+        // Exact comparison: case-sensitive folders can hold a.txt and A.txt as different files.
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var interrupted = 0;
 
-        foreach (var file in files)
+        try
         {
-            if (ct.IsCancellationRequested)
-                break;
+            await foreach (var file in files.WithCancellation(ct).ConfigureAwait(false))
+            {
+                if (!seen.Add(file))
+                    continue;
 
-            progress?.Report(new BatchProgress(results.Count, files.Count, file));
-            var result = await RunOneAsync(operation, file, ct).ConfigureAwait(false);
-            if (result is null)
-                break;
-            results.Add(result);
-            progress?.Report(new BatchProgress(results.Count, files.Count, null));
+                progress?.Report(new BatchProgress(results.Count, results.Count + 1 + pending(), file));
+                var result = await RunOneAsync(operation, file, ct).ConfigureAwait(false);
+                if (result is null)
+                {
+                    interrupted = 1;
+                    break;
+                }
+
+                results.Add(result);
+                progress?.Report(new BatchProgress(results.Count, results.Count + pending(), null));
+                if (ct.IsCancellationRequested)
+                    break;
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
         }
 
-        return results;
+        return new BatchOutcome(results, results.Count + interrupted + pending());
     }
 
     /// <returns>The result, or <c>null</c> when cancellation interrupted this file.</returns>

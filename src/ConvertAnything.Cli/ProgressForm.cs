@@ -21,11 +21,11 @@ internal sealed class ProgressForm : Form
         Padding = new Padding(12);
         Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
 
-        _bar.Maximum = total;
+        _bar.Maximum = Math.Max(total, 1);
         _cancel.Click += (_, _) =>
         {
             _cancel.Enabled = false;
-            _status.Text = "Cancelling after the current file…";
+            _status.Text = "Cancelling…";
             cancellation.Cancel();
         };
 
@@ -39,6 +39,7 @@ internal sealed class ProgressForm : Form
 
     public void Report(BatchProgress progress)
     {
+        _bar.Maximum = Math.Max(progress.Total, 1); // grows when late files join the batch
         _bar.Value = Math.Min(progress.Completed, _bar.Maximum);
         if (progress.Current is { } file && _cancel.Enabled)
             _status.Text = $"{progress.Completed + 1} of {progress.Total}: {Path.GetFileName(file)}";
