@@ -210,3 +210,67 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 ## Checkpoint: Complete
 - [ ] Đủ 9 success criteria trong spec
 - [ ] Mày duyệt, rồi push lên GitHub
+
+---
+
+# Phase 4: Sửa theo review (code-review, security-audit, doubt-driven)
+
+Nguồn: 3 reviewer bối cảnh trống, 2026-10-19. Cross-model bị bỏ qua (người dùng yêu cầu chạy không hỏi).
+
+## R1: Log không bao giờ làm hỏng lô
+- [ ] `RunLog.Write` / `Prune` nuốt mọi exception (kể cả `UnauthorizedAccessException`)
+- [ ] Ghi log giữa nhiều tiến trình qua named mutex `Local\ConvertAnything.Log` (append không nguyên tử)
+- [ ] Mọi trường log qua `OneLine` (CR/LF/TAB không giả được dòng log)
+- [ ] `BatchUi`: work lỗi vẫn gọi `Finish`, tiến trình luôn thoát; exception chưa bắt ghi log rồi thoát
+- Nguồn: C1, doubt#1, L3, O1
+
+## R2: Giao thức gom lô v2
+- [ ] Chủ lô nhận tiếp file **trong lúc đang xử lý** (hàng đợi), đóng khi hết việc + 400 ms không có file mới → không tách lô vì tiến trình khởi động chậm, không tốn 400 ms trước file đầu
+- [ ] Timeout 2 s cho đọc/ghi/ack mỗi kết nối; `IOException` lúc chờ kết nối không làm chết chủ lô
+- [ ] Thứ tự: đọc → ack → flush → `WaitForPipeDrain` → mới thêm vào hàng đợi
+- [ ] Gói tin UTF-16 thô (giữ được surrogate lẻ); bỏ đường dẫn rỗng; tối đa 1000 file/lô
+- [ ] Khử trùng bằng so sánh `Ordinal`
+- [ ] Tên pipe gồm SID + bí mật ngẫu nhiên lưu trong `%LOCALAPPDATA%\ConvertAnything\pipe.key`; hai đầu kiểm tra tiến trình bên kia chạy cùng file exe
+- [ ] `UnauthorizedAccessException` → xử lý một mình ngay, không thử lại 40 s
+- [ ] Test: tiến trình `ca.exe` thật (20 cái), file đến trễ trong lúc xử lý vẫn vào lô; khôi phục `SetMinThreads`
+- Nguồn: doubt#2–8, M1, L1, R2, R3, R4
+
+## R3: OutputPath an toàn hơn
+- [ ] `Path.Exists` (thư mục trùng tên cũng tính là đã có); tối đa 10 000 lần thử
+- [ ] Cắt bớt stem để `tên (n).ext` không vượt 255 ký tự
+- [ ] Lỗi xóa file tạm không che lỗi gốc
+- Nguồn: L2, O2, O3
+
+## R4: Khởi động an toàn
+- [ ] `SetCurrentDirectory(AppContext.BaseDirectory)` + `SetDefaultDllDirectories` ngay đầu `Main`
+- [ ] Gọi `explorer.exe` bằng đường dẫn tuyệt đối trong `%WINDIR%`
+- Nguồn: H2
+
+## R5: install-menu an toàn
+- [ ] Từ chối đăng ký nếu thư mục exe cho người khác ngoài user/SYSTEM/Administrators quyền ghi (trừ `--dev`)
+- [ ] Từ chối nếu `ProcessPath` là `dotnet.exe`
+- [ ] Kiểm op-id `^[a-z0-9.-]+$`, nhãn menu không chứa `\`, không là `shell`, không trùng (không phân biệt hoa thường), không vừa lá vừa nhánh; chỉ số verb 3 chữ số
+- Nguồn: H1, I1, O4, nit
+
+## R6: Đầu vào
+- [ ] Từ chối file là symlink/junction (`LinkTarget != null`); file OneDrive (reparse cloud) vẫn chạy
+- [ ] Runner từ chối file có đuôi không thuộc `operation.Extensions`
+- Nguồn: M2, I2
+
+## R7: CLI và thông báo
+- [ ] `AttachConsole(ATTACH_PARENT_PROCESS)` cho lệnh khác `run` để `list-ops` / usage in ra terminal
+- [ ] Thông báo lỗi ghi chỗ xem log; balloon mở đúng file log của lô (không tính lại sau nửa đêm)
+- Nguồn: R5, O5, nit
+
+## R8: Đo khởi động đúng đường đi
+- [ ] Biến môi trường `CONVERTANYTHING_LOG_DIR` đổi thư mục log (cho test và script đo)
+- [ ] `measure-startup.ps1` đo tiến trình phụ gửi vào chủ lô đang chạy, log vào thư mục tạm
+- Nguồn: R6
+
+## R9: Spec, ADR
+- [ ] SPEC-core: Cancel dừng ngay file đang chạy (bỏ file dở); không mutex; tên tạm `.ca-<guid>.partial`; menu theo từng đuôi file
+- [ ] ADR-0002 gom lô (kèm trade-off: chủ lô chết sau ack thì mất file phụ; race junction thư mục cha)
+- Nguồn: R1 (contract fix), nits, trade-offs
+
+## Checkpoint: Review fixes
+- [ ] Cả 3 reviewer chạy lại trên phần đã sửa, không còn Critical/High/Required
