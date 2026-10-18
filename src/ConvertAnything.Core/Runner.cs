@@ -73,6 +73,20 @@ public sealed class Runner(RunLog log)
         return new BatchOutcome(results, results.Count + interrupted + pending());
     }
 
+    private static string? Reject(IOperation operation, string file)
+    {
+        var info = new FileInfo(file);
+        if (!info.Exists)
+            return "Input file not found.";
+        if (!operation.Extensions.Contains(info.Extension, StringComparer.OrdinalIgnoreCase))
+            return $"File type {info.Extension} is not supported by {operation.Id}.";
+        // A link in a shared folder could point at a private file and leak a converted copy of it there.
+        // Cloud placeholders (OneDrive) are reparse points too but have no LinkTarget, so they still work.
+        if (info.LinkTarget is not null)
+            return "Symbolic links are not followed.";
+        return null;
+    }
+
     /// <returns>The result, or <c>null</c> when cancellation interrupted this file.</returns>
     private async Task<FileResult?> RunOneAsync(IOperation operation, string file, CancellationToken ct)
     {
@@ -80,10 +94,9 @@ public sealed class Runner(RunLog log)
         FileResult result;
         try
         {
-            if (!File.Exists(file))
-                throw new FileNotFoundException("Input file not found.", file);
-
-            result = new FileResult(file, await operation.RunAsync(file, ct).ConfigureAwait(false), null);
+            result = Reject(operation, file) is { } reason
+                ? new FileResult(file, null, reason)
+                : new FileResult(file, await operation.RunAsync(file, ct).ConfigureAwait(false), null);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

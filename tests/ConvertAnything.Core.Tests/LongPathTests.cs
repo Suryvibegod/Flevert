@@ -34,12 +34,12 @@ public sealed class LongPathTests : IDisposable
         Assert.Equal("Ảnh Đà Lạt 🍊 (copy).txt", Path.GetFileName(output));
     }
 
-    [Fact]
+    [SkippableFact]
     public void Expands_8dot3_short_paths_that_Explorer_passes_for_long_paths()
     {
         var full = _dir.File("Ảnh Đà Lạt 🍊 rất dài.txt");
         var shortPath = ShortPath(full);
-        Assert.NotEqual(full, shortPath); // precondition: the test volume generates 8.3 names, as C: does by default
+        Skip.If(shortPath == full, "8.3 short names are disabled on this volume.");
 
         Assert.Equal(full, InputPath.ToLongPath(shortPath));
     }

@@ -111,6 +111,41 @@ public sealed class RunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task Runner_rejects_a_file_type_the_operation_does_not_support()
+    {
+        var image = _dir.File("photo.jpg");
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [image], progress: null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.False(result.Succeeded);
+        Assert.Contains("not supported", result.Error, StringComparison.Ordinal);
+        Assert.Equal(["photo.jpg"], _dir.FileNames());
+    }
+
+    [SkippableFact]
+    public async Task Runner_rejects_a_symbolic_link_instead_of_following_it()
+    {
+        var target = _dir.File("private.txt", "secret");
+        var link = _dir.Combine("shared.txt");
+        try
+        {
+            File.CreateSymbolicLink(link, target);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            Skip.If(true, "Creating symbolic links needs Developer Mode or admin rights on this machine.");
+        }
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [link], progress: null, CancellationToken.None);
+
+        Assert.False(Assert.Single(outcome.Results).Succeeded);
+        Assert.False(File.Exists(_dir.Combine("shared (copy).txt")));
+    }
+
+    [Fact]
     public void Catalog_finds_operations_by_id()
     {
         var catalog = new OperationCatalog([new DevCopy()]);
