@@ -101,6 +101,74 @@ public sealed class MenuTests
         Assert.Throws<ArgumentException>(() => Install(new FakeOp(id, menuPath, ".jpg")));
     }
 
+    [Theory]
+    [InlineData("jpg")]
+    [InlineData(@".j\pg")]
+    [InlineData(".JPG")]
+    [InlineData(".")]
+    public void Rejects_extensions_that_are_not_lower_case_dot_tokens(string ext)
+    {
+        Assert.Throws<ArgumentException>(() => Install(new FakeOp("image.to-png", "Convert/PNG", ext)));
+    }
+
+    [Fact]
+    public void Install_location_whose_parent_lets_other_users_delete_children_is_unsafe()
+    {
+        using var parent = new TempDir();
+        var child = Directory.CreateDirectory(Path.Combine(parent.Path, "app")).FullName;
+        ProtectToOwnerAndAdmins(child);
+        var acl = new DirectoryInfo(parent.Path).GetAccessControl();
+        acl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        foreach (var sid in OwnerAndAdmins())
+            acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(sid,
+                System.Security.AccessControl.FileSystemRights.FullControl, System.Security.AccessControl.AccessControlType.Allow));
+        acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+            new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.AuthenticatedUserSid, null),
+            System.Security.AccessControl.FileSystemRights.DeleteSubdirectoriesAndFiles,
+            System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(parent.Path).SetAccessControl(acl);
+
+        Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(child));
+    }
+
+    [Fact]
+    public void Install_location_with_a_file_other_users_can_write_is_unsafe()
+    {
+        using var dir = new TempDir();
+        ProtectToOwnerAndAdmins(dir.Path);
+        var dll = dir.File("ca.dll");
+        var acl = new FileInfo(dll).GetAccessControl();
+        acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+            new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.AuthenticatedUserSid, null),
+            System.Security.AccessControl.FileSystemRights.Write, System.Security.AccessControl.AccessControlType.Allow));
+        new FileInfo(dll).SetAccessControl(acl);
+
+        Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir.Path));
+    }
+
+    private static System.Security.Principal.SecurityIdentifier[] OwnerAndAdmins()
+    {
+        using var me = System.Security.Principal.WindowsIdentity.GetCurrent();
+        return
+        [
+            me.User!,
+            new(System.Security.Principal.WellKnownSidType.LocalSystemSid, null),
+            new(System.Security.Principal.WellKnownSidType.BuiltinAdministratorsSid, null),
+        ];
+    }
+
+    private static void ProtectToOwnerAndAdmins(string path)
+    {
+        var acl = new System.Security.AccessControl.DirectorySecurity();
+        acl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        foreach (var sid in OwnerAndAdmins())
+            acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(sid,
+                System.Security.AccessControl.FileSystemRights.FullControl,
+                System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+                System.Security.AccessControl.PropagationFlags.None, System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(path).SetAccessControl(acl);
+    }
+
     [Fact]
     public void Rejects_labels_that_differ_only_in_case()
     {

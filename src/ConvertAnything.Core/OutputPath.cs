@@ -66,6 +66,8 @@ public static class OutputPath
     private static string FitName(string stem, string suffix, string ext)
     {
         var room = MaxFileNameLength - suffix.Length - ext.Length;
+        if (room < 1)
+            throw new PathTooLongException($"The extension {ext[..Math.Min(ext.Length, 20)]}… leaves no room for a file name.");
         if (stem.Length > room)
         {
             stem = stem[..room];

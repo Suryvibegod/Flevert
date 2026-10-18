@@ -90,7 +90,12 @@ public sealed class RunLog(string directory)
     {
         var builder = new StringBuilder(text.Length);
         foreach (var c in text)
-            builder.Append(char.IsControl(c) ? ' ' : c);
+        {
+            // Control characters forge lines; bidi overrides (Cf) and U+2028/2029 make names display misleadingly.
+            var category = char.GetUnicodeCategory(c);
+            builder.Append(category is UnicodeCategory.Control or UnicodeCategory.Format
+                or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator ? ' ' : c);
+        }
         return builder.ToString();
     }
 }

@@ -53,6 +53,14 @@ public sealed class OutputPathTests : IDisposable
     }
 
     [Fact]
+    public void Reserve_reports_a_clear_error_when_the_extension_leaves_no_room_for_a_counter()
+    {
+        var desired = _dir.File("a." + new string('e', 252)); // 254 characters: valid, but " (1)" cannot fit
+
+        Assert.Throws<PathTooLongException>(() => OutputPath.Reserve(desired));
+    }
+
+    [Fact]
     public async Task WriteAtomically_produces_final_file_and_leaves_no_partial()
     {
         var final = await OutputPath.WriteAtomicallyAsync(

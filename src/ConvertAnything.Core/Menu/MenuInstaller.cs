@@ -79,6 +79,13 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath)
         if (!OperationId().IsMatch(op.Id))
             throw new ArgumentException($"Operation id '{op.Id}' must match {OperationId()}.", nameof(op));
 
+        foreach (var ext in op.Extensions)
+        {
+            // Extensions become registry key names under SystemFileAssociations.
+            if (!Extension().IsMatch(ext))
+                throw new ArgumentException($"Extension '{ext}' of '{op.Id}' must match {Extension()}.", nameof(op));
+        }
+
         foreach (var label in op.MenuPath.Split('/'))
         {
             if (label.Length == 0 || label.Contains('\\', StringComparison.Ordinal) || label.Equals("shell", StringComparison.OrdinalIgnoreCase))
@@ -88,6 +95,9 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath)
 
     [GeneratedRegex("^[a-z0-9][a-z0-9.-]*$")]
     private static partial Regex OperationId();
+
+    [GeneratedRegex(@"^\.[a-z0-9]+$")]
+    private static partial Regex Extension();
 
     private sealed class MenuNode(string label)
     {

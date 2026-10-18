@@ -39,6 +39,17 @@ public sealed class RunLogTests : IDisposable
     }
 
     [Fact]
+    public void Bidi_overrides_and_unicode_line_separators_are_stripped()
+    {
+        var log = new RunLog(_logs.Path);
+
+        log.Write("dev.copy", new FileResult("a\u202Etxt.exe\u2028b\u2029c.txt", "out.txt", null), TimeSpan.Zero);
+
+        var input = Assert.Single(File.ReadAllLines(log.CurrentFile)).Split('\t')[3];
+        Assert.DoesNotContain(input, c => c is '\u202E' or '\u2028' or '\u2029');
+    }
+
+    [Fact]
     public void Control_characters_in_any_field_cannot_forge_extra_log_lines()
     {
         var log = new RunLog(_logs.Path);
