@@ -9,6 +9,7 @@ internal static class Program
     private const int Ok = 0;
     private const int SomeFilesFailed = 1;
     private const int BadUsage = 2;
+    private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(400);
 
     private static async Task<int> Main(string[] args)
     {
@@ -25,7 +26,12 @@ internal static class Program
                     return BadUsage;
                 }
 
-                var results = await new Runner(log).RunAsync(operation, run.Files, progress: null, CancellationToken.None);
+                var batch = await Batch.CollectAsync(run.OperationId, run.Files, BatchIdleWindow, CancellationToken.None);
+                if (batch is null)
+                    return Ok;
+
+                var files = batch.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                var results = await new Runner(log).RunAsync(operation, files, progress: null, CancellationToken.None);
                 return results.All(r => r.Succeeded) ? Ok : SomeFilesFailed;
 
             case InstallMenuCommand install:
