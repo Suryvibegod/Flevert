@@ -118,7 +118,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ---
 
-## Task 6: Thông báo cho cả lô
+## Task 6: Thông báo cho cả lô ✅
 
 **Description:** Chủ lô xong thì hiện balloon qua WinForms `NotifyIcon.ShowBalloonTip` (hiện thành toast trên Win10/11): `"Done: 20 files"` hoặc `"Done: 18 files, 2 failed. See log."`, rồi thoát. Lô chạy > 2 giây thì hiện cửa sổ tiến độ (file thứ mấy / tổng, nút Cancel); Cancel dừng sau file đang xử lý.
 
