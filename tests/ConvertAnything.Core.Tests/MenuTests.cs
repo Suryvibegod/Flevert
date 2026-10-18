@@ -90,6 +90,68 @@ public sealed class MenuTests
         Assert.Equal(["SystemFileAssociations\\.txt\\shell\\SomeoneElse"], _registry.Snapshot().Keys);
     }
 
+    [Theory]
+    [InlineData("image to-png", "Convert/PNG")]   // space would split the registry command line
+    [InlineData("Image.ToPng", "Convert/PNG")]    // ids are lower-case
+    [InlineData("image.to-png", "Convert\\PNG")]  // backslash would create a registry subkey
+    [InlineData("image.to-png", "shell/PNG")]     // collides with the reserved "shell" subkey
+    [InlineData("image.to-png", "Convert//PNG")]  // empty label
+    public void Rejects_operations_that_would_corrupt_the_registry_layout(string id, string menuPath)
+    {
+        Assert.Throws<ArgumentException>(() => Install(new FakeOp(id, menuPath, ".jpg")));
+    }
+
+    [Fact]
+    public void Rejects_labels_that_differ_only_in_case()
+    {
+        Assert.Throws<ArgumentException>(() => Install(
+            new FakeOp("image.a", "Convert/PNG", ".jpg"),
+            new FakeOp("image.b", "convert/JPG", ".jpg")));
+    }
+
+    [Fact]
+    public void Rejects_a_label_that_is_both_a_command_and_a_submenu()
+    {
+        Assert.Throws<ArgumentException>(() => Install(
+            new FakeOp("dev.a", "Dev", ".txt"),
+            new FakeOp("dev.b", "Dev/Copy", ".txt")));
+    }
+
+    [Fact]
+    public void Install_location_with_only_user_system_and_admin_write_access_is_safe()
+    {
+        // Built explicitly: inherited ACLs vary by machine (e.g. sandbox tools add groups to the profile's Temp folder).
+        using var dir = new TempDir();
+        var acl = new System.Security.AccessControl.DirectorySecurity();
+        acl.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        using var me = System.Security.Principal.WindowsIdentity.GetCurrent();
+        foreach (var sid in new[]
+                 {
+                     me.User!,
+                     new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.LocalSystemSid, null),
+                     new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinAdministratorsSid, null),
+                 })
+            acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(sid,
+                System.Security.AccessControl.FileSystemRights.FullControl, System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(dir.Path).SetAccessControl(acl);
+
+        Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir.Path));
+    }
+
+    [Fact]
+    public void Install_location_that_other_users_can_write_is_unsafe()
+    {
+        using var dir = new TempDir();
+        var acl = new DirectoryInfo(dir.Path).GetAccessControl();
+        acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+            new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.AuthenticatedUserSid, null),
+            System.Security.AccessControl.FileSystemRights.Modify,
+            System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(dir.Path).SetAccessControl(acl);
+
+        Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir.Path));
+    }
+
     private void Install(params IOperation[] ops) => new MenuInstaller(_registry, Exe).Install(ops);
 
     private sealed class FakeOp(string id, string menuPath, params string[] extensions) : IOperation
