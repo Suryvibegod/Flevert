@@ -12,8 +12,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Exe = (Resolve-Path $Exe).Path
+# Start-Process -Wait polls about once a second in Windows PowerShell, which hides the real time; wait on the process directly.
 $times = 1..$Runs | ForEach-Object {
-    (Measure-Command { Start-Process -FilePath $Exe -ArgumentList 'run', 'measure.startup', 'C:\nonexistent.txt' -Wait }).TotalMilliseconds
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    $process = [Diagnostics.Process]::Start($Exe, 'run measure.startup C:\nonexistent.txt')
+    $process.WaitForExit()
+    $timer.Elapsed.TotalMilliseconds
 }
 $sorted = $times | Sort-Object
 $median = ($sorted[[math]::Floor(($Runs - 1) / 2)] + $sorted[[math]::Ceiling(($Runs - 1) / 2)]) / 2
