@@ -12,7 +12,7 @@ Cho phép người dùng Windows chuột phải vào file, chọn một thao tá
 - Nhận lệnh từ Explorer, gom nhiều file được chọn cùng lúc thành **một lô** xử lý bởi **một tiến trình**.
 - Đặt tên file output không bao giờ đè file có sẵn, không bao giờ sửa file gốc.
 - Báo kết quả bằng một thông báo góc màn hình cho cả lô.
-- Lô chạy lâu hơn 2 giây thì hiện cửa sổ tiến độ nhỏ (file thứ mấy / tổng, nút Cancel). Nén video mất vài phút; chạy im lặng thì người dùng tưởng treo.
+- Lô chạy lâu hơn 2 giây thì hiện cửa sổ tiến độ nhỏ (file thứ mấy / tổng, nút Cancel). Nén video mất vài phút; chạy im lặng thì người dùng tưởng treo. Cancel dừng **ngay** file đang chạy (bỏ file dở) và không xử lý các file còn lại.
 - Ghi log lỗi để người dùng gửi lại khi báo bug.
 - Định nghĩa hợp đồng `IOperation` để các module khác cắm thao tác vào.
 
@@ -32,7 +32,7 @@ Cho phép người dùng Windows chuột phải vào file, chọn một thao tá
 | Kiểu exe | `WinExe` | Explorer gọi exe không nháy cửa sổ console |
 | Test | xUnit | Chuẩn phổ biến của .NET |
 | Thông báo + tiến độ | WinForms (`NotifyIcon.ShowBalloonTip`, một `Form` nhỏ) | Có sẵn trong .NET; balloon hiện như toast trên Win10/11, không cần AUMID / MSIX. Chỉ nạp WinForms khi cần hiện UI |
-| Gom lô | Named mutex + named pipe | Có sẵn trong .NET, không thêm thư viện |
+| Gom lô | Named pipe một instance (không mutex) | Có sẵn trong .NET; xem [ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md) |
 
 Không thêm package NuGet nào ngoài xUnit cho module này. `ConvertAnything.Core` không tham chiếu WinForms; UI nằm trong `ConvertAnything.Cli`.
 
@@ -53,6 +53,8 @@ ca.exe run <op-id> <file>...        Chạy thao tác (Explorer gọi lệnh này
 ca.exe install-menu [--dev]         Ghi menu chuột phải vào HKCU (--dev: thêm thao tác thử dev.copy)
 ca.exe uninstall-menu               Gỡ mọi key đã ghi
 ca.exe list-ops                     In danh sách thao tác và loại file áp dụng
+
+Biến môi trường: CONVERTANYTHING_HEADLESS=1 (chạy lô không UI), CONVERTANYTHING_LOG_DIR (đổi thư mục log)
 ```
 
 ## Project Structure
@@ -89,13 +91,13 @@ public interface IOperation
 ### Luồng một lần bấm
 
 ```
-Explorer ──"ca.exe run image.to-png <file>"──▶ tiến trình A (giữ mutex, mở pipe)
-Explorer ──"ca.exe run image.to-png <file>"──▶ tiến trình B ──gửi path qua pipe──▶ A, rồi thoát
-                                                        ...
-A: chờ 400 ms không có path mới → xử lý cả lô → 1 thông báo → thoát
+Explorer ──"ca.exe run image.to-png <file1>"──▶ A tạo được pipe → A là chủ lô, xử lý file1 ngay
+Explorer ──"ca.exe run image.to-png <file2>"──▶ B: pipe đã có → gửi path → nhận ack → thoát
+                                                   A: nhận file2 vào hàng đợi trong lúc đang xử lý
+A: hết hàng đợi + đang rảnh + 400 ms không có path mới → đóng pipe → 1 thông báo → thoát
 ```
 
-Mutex và pipe đặt tên theo `<op-id>` + session người dùng, để hai thao tác khác nhau chạy song song không lẫn lô.
+Tên pipe: `ConvertAnything-<SID>-<session>-<bí mật>-<op-id>`. Bí mật là 16 ký tự ngẫu nhiên trong `%LOCALAPPDATA%\ConvertAnything\pipe.key`, chỉ user đó đọc được. Hai đầu kiểm tra tiến trình bên kia chạy cùng file exe. Chi tiết, các bảo đảm và trade-off: [ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md).
 
 ### Menu trong registry
 
@@ -109,13 +111,13 @@ Cấu trúc:
 
 ```
 HKCU\Software\Classes\
-  ConvertAnything.Menu.<nhóm>\shell\              ← bộ menu dùng chung cho 1 nhóm loại file
-    convert\  MUIVerb=Convert, ExtendedSubCommandsKey=ConvertAnything.Menu.<nhóm>\convert
+  ConvertAnything.Menu.<.ext>\shell\              ← cây menu riêng cho mỗi đuôi file
+    000\  MUIVerb=Convert, ExtendedSubCommandsKey=ConvertAnything.Menu.<.ext>\Convert
     ...
-  ConvertAnything.Menu.<nhóm>\convert\shell\png\  MUIVerb=PNG, MultiSelectModel=Player
+  ConvertAnything.Menu.<.ext>\Convert\shell\000\  MUIVerb=PNG, MultiSelectModel=Player
       command\ (Default) = "<installdir>\ca.exe" run image.to-png "%1"
   SystemFileAssociations\.jpg\shell\ConvertAnything\
-    MUIVerb=ConvertAnything, Icon=<installdir>\ca.exe, ExtendedSubCommandsKey=ConvertAnything.Menu.<nhóm>
+    MUIVerb=ConvertAnything, Icon=<installdir>\ca.exe, ExtendedSubCommandsKey=ConvertAnything.Menu.<.ext>
 ```
 
 Chỉ ghi HKCU nên không cần admin. Key tool tạo đều có tên bắt đầu bằng `ConvertAnything`, gỡ là tìm theo tên đó.
@@ -130,7 +132,7 @@ Menu, thông báo, log, README: tiếng Anh. Tài liệu nội bộ (spec, plan)
 
 - Cùng thư mục với file gốc. Tên do thao tác đề xuất (`anh.png`, `anh (nén).jpg`).
 - Trùng tên thì thêm ` (1)`, ` (2)`...
-- Ghi ra file tạm `.<tên>.partial` rồi đổi tên khi xong: hỏng giữa chừng không để lại file dở.
+- Ghi ra file tạm `.ca-<guid>.partial` (độ dài cố định) rồi đổi tên khi xong: hỏng giữa chừng không để lại file dở. Tên output tự cắt bớt để vừa 255 ký tự; thư mục trùng tên cũng tính là đã có.
 
 ### Log
 
@@ -162,7 +164,8 @@ public static class OutputPath
 
 ## Testing Strategy
 
-- **Unit** (`ConvertAnything.Core.Tests`): đặt tên output, mô hình menu từ danh sách thao tác, gom lô (logic chờ 400 ms với đồng hồ giả), parse lệnh.
+- **Unit** (`ConvertAnything.Core.Tests`): đặt tên output, mô hình menu từ danh sách thao tác, gom lô trong cùng tiến trình (50 lời gọi song song, file đến muộn khi đang xử lý, surrogate lẻ), parse lệnh.
+- **Tiến trình thật** (`ProcessBatchIntegrationTests`): chạy `ca.exe` với `CONVERTANYTHING_HEADLESS=1` và `CONVERTANYTHING_LOG_DIR` trỏ thư mục tạm.
 - **Integration**: ghi/gỡ registry vào key test riêng `HKCU\Software\Classes\ConvertAnything.Test`, kiểm tra gỡ xong không còn key nào; gom lô thật bằng nhiều tiến trình `ca.exe`.
 - **Runtime thủ công** (bắt buộc trước khi đóng module): bấm thật trong Explorer bằng thao tác `dev.copy`.
 - Viết test trước, chạy đỏ, rồi mới code cho xanh (theo `test-driven-development`).
@@ -185,7 +188,7 @@ public static class OutputPath
 7. Khởi động lạnh `ca.exe run` (bản publish, chưa nạp WinForms) < 300 ms, đo bằng `Measure-Command`, trung vị 10 lần.
 8. Đường dẫn tiếng Việt có dấu, dấu cách, dài > 260 ký tự đều chạy.
 9. `dotnet test` và `dotnet format --verify-no-changes` đều qua.
-10. Lô chạy > 2 giây hiện cửa sổ tiến độ; bấm Cancel thì dừng sau file đang xử lý, không để lại file `.partial`.
+10. Lô chạy > 2 giây hiện cửa sổ tiến độ; bấm Cancel thì dừng ngay, không để lại file `.partial`.
 
 ## Quyết định đã chốt
 

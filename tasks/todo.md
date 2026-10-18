@@ -236,40 +236,40 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19. Cross-model bị bỏ qua 
 - Nguồn: doubt#2–8, M1, L1, R2, R3, R4
 
 ## R3: OutputPath an toàn hơn
-- [ ] `Path.Exists` (thư mục trùng tên cũng tính là đã có); tối đa 10 000 lần thử
-- [ ] Cắt bớt stem để `tên (n).ext` không vượt 255 ký tự
-- [ ] Lỗi xóa file tạm không che lỗi gốc
+- [x] `Path.Exists` (thư mục trùng tên cũng tính là đã có); tối đa 10 000 lần thử
+- [x] Cắt bớt stem để `tên (n).ext` không vượt 255 ký tự
+- [x] Lỗi xóa file tạm không che lỗi gốc
 - Nguồn: L2, O2, O3
 
 ## R4: Khởi động an toàn
-- [ ] `SetCurrentDirectory(AppContext.BaseDirectory)` + `SetDefaultDllDirectories` ngay đầu `Main`
-- [ ] Gọi `explorer.exe` bằng đường dẫn tuyệt đối trong `%WINDIR%`
+- [x] `SetCurrentDirectory(AppContext.BaseDirectory)` + `SetDefaultDllDirectories` ngay đầu `Main`
+- [x] Gọi `explorer.exe` bằng đường dẫn tuyệt đối trong `%WINDIR%`
 - Nguồn: H2
 
 ## R5: install-menu an toàn
-- [ ] Từ chối đăng ký nếu thư mục exe cho người khác ngoài user/SYSTEM/Administrators quyền ghi (trừ `--dev`)
-- [ ] Từ chối nếu `ProcessPath` là `dotnet.exe`
-- [ ] Kiểm op-id `^[a-z0-9.-]+$`, nhãn menu không chứa `\`, không là `shell`, không trùng (không phân biệt hoa thường), không vừa lá vừa nhánh; chỉ số verb 3 chữ số
+- [x] Từ chối đăng ký nếu thư mục exe cho người khác ngoài user/SYSTEM/Administrators quyền ghi (trừ `--dev`)
+- [x] Từ chối nếu `ProcessPath` là `dotnet.exe`
+- [x] Kiểm op-id `^[a-z0-9.-]+$`, nhãn menu không chứa `\`, không là `shell`, không trùng (không phân biệt hoa thường), không vừa lá vừa nhánh; chỉ số verb 3 chữ số
 - Nguồn: H1, I1, O4, nit
 
 ## R6: Đầu vào
-- [ ] Từ chối file là symlink/junction (`LinkTarget != null`); file OneDrive (reparse cloud) vẫn chạy
-- [ ] Runner từ chối file có đuôi không thuộc `operation.Extensions`
+- [x] Từ chối file là symlink/junction (`LinkTarget != null`); file OneDrive (reparse cloud) vẫn chạy
+- [x] Runner từ chối file có đuôi không thuộc `operation.Extensions`
 - Nguồn: M2, I2
 
 ## R7: CLI và thông báo
-- [ ] `AttachConsole(ATTACH_PARENT_PROCESS)` cho lệnh khác `run` để `list-ops` / usage in ra terminal
-- [ ] Thông báo lỗi ghi chỗ xem log; balloon mở đúng file log của lô (không tính lại sau nửa đêm)
+- [x] `AttachConsole(ATTACH_PARENT_PROCESS)` cho lệnh khác `run` để `list-ops` / usage in ra terminal
+- [x] Thông báo lỗi ghi chỗ xem log; balloon mở đúng file log của lô (không tính lại sau nửa đêm)
 - Nguồn: R5, O5, nit
 
 ## R8: Đo khởi động đúng đường đi
-- [ ] Biến môi trường `CONVERTANYTHING_LOG_DIR` đổi thư mục log (cho test và script đo)
-- [ ] `measure-startup.ps1` đo tiến trình phụ gửi vào chủ lô đang chạy, log vào thư mục tạm
+- [x] Biến môi trường `CONVERTANYTHING_LOG_DIR` đổi thư mục log (cho test và script đo)
+- [x] `measure-startup.ps1` đo tiến trình phụ gửi vào chủ lô đang chạy, log vào thư mục tạm
 - Nguồn: R6
 
 ## R9: Spec, ADR
-- [ ] SPEC-core: Cancel dừng ngay file đang chạy (bỏ file dở); không mutex; tên tạm `.ca-<guid>.partial`; menu theo từng đuôi file
-- [ ] ADR-0002 gom lô (kèm trade-off: chủ lô chết sau ack thì mất file phụ; race junction thư mục cha)
+- [x] SPEC-core: Cancel dừng ngay file đang chạy (bỏ file dở); không mutex; tên tạm `.ca-<guid>.partial`; menu theo từng đuôi file
+- [x] ADR-0002 gom lô (kèm trade-off: chủ lô chết sau ack thì mất file phụ; race junction thư mục cha)
 - Nguồn: R1 (contract fix), nits, trade-offs
 
 ## Checkpoint: Review fixes
