@@ -92,6 +92,68 @@ public sealed class BatchTests
         Assert.Equal([@"C:\a.txt", odd], await DrainAsync(leader));
     }
 
+    [Fact]
+    public async Task Client_that_disconnects_without_sending_does_not_end_or_break_the_batch()
+    {
+        var op = UniqueOp();
+        var leader = (await Batch.LeadOrJoinAsync(op, [@"C:\a.txt"], Idle, CancellationToken.None))!;
+
+        using (var rogue = new System.IO.Pipes.NamedPipeClientStream(".", Batch.PipeName(op),
+                   System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous))
+            await rogue.ConnectAsync(2000);
+        await Task.Delay(100);
+
+        Assert.Null(await Batch.LeadOrJoinAsync(op, [@"C:\b.txt"], Idle, CancellationToken.None));
+        Assert.Equal([@"C:\a.txt", @"C:\b.txt"], await DrainAsync(leader));
+        await leader.DisposeAsync(); // must not throw
+    }
+
+    [Fact]
+    public async Task Files_beyond_the_batch_limit_are_refused_so_their_sender_works_alone()
+    {
+        var op = UniqueOp();
+        var many = Enumerable.Range(0, Batch.MaxFilesPerBatch - 1).Select(i => $@"C:\f{i}.txt").ToList();
+        await using var leader = (await Batch.LeadOrJoinAsync(op, many, Idle, CancellationToken.None))!;
+
+        await using var overflow = await Batch.LeadOrJoinAsync(op, [@"C:\x.txt", @"C:\y.txt"], Idle, CancellationToken.None);
+
+        Assert.NotNull(overflow);
+        Assert.Equal([@"C:\x.txt", @"C:\y.txt"], await DrainAsync(overflow));
+        Assert.Equal(many.Count, (await DrainAsync(leader)).Count);
+    }
+
+    [Fact]
+    public void An_empty_or_corrupt_pipe_secret_is_regenerated()
+    {
+        using var dir = new TempDir();
+        var path = dir.Combine("pipe.key");
+        File.WriteAllText(path, "");
+
+        var secret = Batch.ReadOrCreateSecret(path);
+
+        Assert.Matches("^[0-9A-F]{32}$", secret);
+        Assert.Equal(secret, Batch.ReadOrCreateSecret(path));
+    }
+
+    [Fact]
+    public void Batch_keys_live_in_a_folder_only_this_user_system_and_admins_can_open()
+    {
+        using var dir = new TempDir();
+        var keys = Path.Combine(dir.Path, "pipes");
+
+        Batch.ReadOrCreateSecret(Path.Combine(keys, "op.key"));
+
+        using var me = System.Security.Principal.WindowsIdentity.GetCurrent();
+        var allowed = new[]
+        {
+            me.User!.Value, "S-1-5-18", "S-1-5-32-544",
+        };
+        var rules = new DirectoryInfo(keys).GetAccessControl()
+            .GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier))
+            .Cast<System.Security.AccessControl.FileSystemAccessRule>();
+        Assert.All(rules, r => Assert.Contains(r.IdentityReference.Value, allowed));
+    }
+
     private static async Task<List<string>> DrainAsync(BatchLeader leader)
     {
         var files = new List<string>();
