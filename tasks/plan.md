@@ -27,7 +27,7 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 - [ ] Mày xem lại trước khi qua Phase 2
 
 ### Phase 2: Explorer integration
-- [ ] Task 4: `install-menu --dev` / `uninstall-menu` với `ExtendedSubCommandsKey` + `Player`
+- [x] Task 4: `install-menu --dev` / `uninstall-menu` với `ExtendedSubCommandsKey` + `Player`
 - [ ] Task 5: Gom lô: mutex + named pipe, cửa sổ chờ 400 ms, lỗi từng file không chặn lô
 - [ ] Task 6: Thông báo một lần cho cả lô + cửa sổ tiến độ có Cancel
 
@@ -56,4 +56,4 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 
 ## Decisions
 
-- Commit bằng `Suryvibegod <79949229+Suryvibegod@users.noreply.github.com>`, repo `old-account/ConvertAnything` (private).
+- Commit bằng `Suryvibegod <79949229+Suryvibegod@users.noreply.github.com>` (git config riêng của repo; các commit đầu dùng email cũ), repo `old-account/ConvertAnything` (private).

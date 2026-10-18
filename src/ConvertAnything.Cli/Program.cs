@@ -1,4 +1,5 @@
 using ConvertAnything.Core;
+using ConvertAnything.Core.Menu;
 using ConvertAnything.Core.Operations;
 
 namespace ConvertAnything.Cli;
@@ -26,6 +27,17 @@ internal static class Program
 
                 var results = await new Runner(log).RunAsync(operation, run.Files, progress: null, CancellationToken.None);
                 return results.All(r => r.Succeeded) ? Ok : SomeFilesFailed;
+
+            case InstallMenuCommand install:
+                var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));
+                new MenuInstaller(new WindowsRegistry(), Environment.ProcessPath!).Install(ops);
+                ShellNotify.AssociationsChanged();
+                return Ok;
+
+            case UninstallMenuCommand:
+                new MenuInstaller(new WindowsRegistry(), Environment.ProcessPath!).Uninstall();
+                ShellNotify.AssociationsChanged();
+                return Ok;
 
             case ListOpsCommand:
                 foreach (var op in catalog.All)

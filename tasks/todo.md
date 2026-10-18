@@ -76,7 +76,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ---
 
-## Task 4: Menu chuột phải trong registry
+## Task 4: Menu chuột phải trong registry ✅
 
 **Description:** Dựng mô hình menu từ danh mục thao tác (`MenuPath` "Dev/Copy" → menu lồng). `install-menu [--dev]` ghi vào HKCU theo cấu trúc `ExtendedSubCommandsKey` trong spec, mọi verb có `MultiSelectModel=Player`. `uninstall-menu` xóa mọi key tên bắt đầu `ConvertAnything`. Ghi registry qua interface `IRegistry`.
 
