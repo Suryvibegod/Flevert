@@ -24,7 +24,7 @@ public sealed class BatchSummaryTests
     {
         var summary = BatchSummary.Describe([Ok("a"), Failed("b"), Failed("c")], total: 3);
 
-        Assert.Equal("Done: 1 file, 2 failed. Click to open the log.", summary.Text);
+        Assert.Equal(@"Done: 1 file, 2 failed. Details: %LOCALAPPDATA%\ConvertAnything\logs", summary.Text);
         Assert.True(summary.HasFailures);
     }
 

@@ -11,7 +11,8 @@ public sealed record BatchSummary(string Text, bool HasFailures)
             return new($"Cancelled after {results.Count} of {total} files.", failed > 0);
 
         if (failed > 0)
-            return new($"Done: {Files(succeeded)}, {failed} failed. Click to open the log.", true);
+            // The balloon may be gone before the user reads it, so name the place rather than relying on a click.
+            return new($@"Done: {Files(succeeded)}, {failed} failed. Details: %LOCALAPPDATA%\ConvertAnything\logs", true);
 
         return results.Count == 1
             ? new($"Done: {Path.GetFileName(results[0].Output)}", false)
