@@ -166,7 +166,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ---
 
-## Task 8: Khởi động nhanh và log
+## Task 8: Khởi động nhanh và log ✅
 
 **Description:** Đo khởi động lạnh bản publish self-contained ReadyToRun. Xóa log cũ hơn 7 ngày khi khởi động.
 
