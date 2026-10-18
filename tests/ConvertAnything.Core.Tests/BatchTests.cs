@@ -1,5 +1,6 @@
 namespace ConvertAnything.Core.Tests;
 
+[Collection(nameof(SequentialBatchTests))]
 public sealed class BatchTests
 {
     private static readonly TimeSpan Idle = TimeSpan.FromMilliseconds(400);

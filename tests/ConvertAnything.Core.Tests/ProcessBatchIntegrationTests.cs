@@ -3,6 +3,7 @@ using System.Diagnostics;
 namespace ConvertAnything.Core.Tests;
 
 /// <summary>Runs the real ca.exe as separate processes, the way Explorer does, with UI disabled.</summary>
+[Collection(nameof(SequentialBatchTests))]
 public sealed class ProcessBatchIntegrationTests : IDisposable
 {
     private readonly TempDir _dir = new();
@@ -20,7 +21,8 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         var files = Enumerable.Range(1, 20).Select(i => _dir.File($"ảnh {i}.txt")).ToList();
         var timer = Stopwatch.StartNew();
 
-        await Task.WhenAll(files.Select(f => Ca("dev.copy", f)).ToList().Select(p => p.WaitForExitAsync()));
+        var processes = files.Select(f => Ca("dev.copy", f)).ToList();
+        await ExitAllOk(processes);
 
         // Headless: the leader exits as soon as the batch is done instead of waiting for a notification.
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(4), $"took {timer.Elapsed}");
@@ -35,7 +37,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         await Task.Delay(TimeSpan.FromSeconds(1.2)); // well past the 400 ms idle window, while file 2 is still running
 
         var late = Ca("dev.slow-copy", _dir.File("3.txt"));
-        await Task.WhenAll(leader.WaitForExitAsync(), late.WaitForExitAsync());
+        await ExitAllOk([leader, late]);
 
         Assert.Equal(3, Directory.GetFiles(_dir.Path, "* (copy).txt").Length);
         Assert.Equal([leader.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)], LoggedProcessIds());
@@ -46,8 +48,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     {
         _dir.File("relative.txt");
 
-        var process = Ca("dev.copy", "relative.txt");
-        await process.WaitForExitAsync();
+        await ExitAllOk([Ca("dev.copy", "relative.txt")]);
 
         Assert.True(File.Exists(_dir.Combine("relative (copy).txt")));
     }
@@ -62,6 +63,21 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         start.Environment["CONVERTANYTHING_LOG_DIR"] = _logs.Path;
         start.Environment["CONVERTANYTHING_HEADLESS"] = "1";
         return Process.Start(start)!;
+    }
+
+    /// <summary>Every process must exit with 0 within 30 s; stragglers are killed so a hang fails instead of stalling.</summary>
+    private static async Task ExitAllOk(IReadOnlyList<Process> processes)
+    {
+        try
+        {
+            await Task.WhenAll(processes.Select(p => p.WaitForExitAsync())).WaitAsync(TimeSpan.FromSeconds(30));
+            Assert.All(processes, p => Assert.Equal(0, p.ExitCode));
+        }
+        finally
+        {
+            foreach (var p in processes.Where(p => !p.HasExited))
+                p.Kill(entireProcessTree: true);
+        }
     }
 
     private string[] LoggedProcessIds() =>
