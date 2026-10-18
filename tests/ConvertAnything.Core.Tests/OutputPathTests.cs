@@ -33,6 +33,26 @@ public sealed class OutputPathTests : IDisposable
     }
 
     [Fact]
+    public void Reserve_treats_a_directory_with_the_desired_name_as_taken()
+    {
+        Directory.CreateDirectory(_dir.Combine("a.png"));
+
+        Assert.Equal(_dir.Combine("a (1).png"), OutputPath.Reserve(_dir.Combine("a.png")));
+    }
+
+    [Fact]
+    public void Reserve_shortens_the_name_so_the_counter_still_fits_in_255_characters()
+    {
+        var name = new string('n', 251) + ".txt";
+        _dir.File(name);
+
+        var reserved = Path.GetFileName(OutputPath.Reserve(_dir.Combine(name)));
+
+        Assert.True(reserved.Length <= 255, $"{reserved.Length} characters");
+        Assert.EndsWith(" (1).txt", reserved, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WriteAtomically_produces_final_file_and_leaves_no_partial()
     {
         var final = await OutputPath.WriteAtomicallyAsync(
