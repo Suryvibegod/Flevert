@@ -21,7 +21,8 @@ public static class OutputPath
         CancellationToken ct)
     {
         var dir = Path.GetDirectoryName(desiredPath)!;
-        var temp = Path.Combine(dir, $".{Path.GetFileName(desiredPath)}.{Guid.NewGuid():N}.partial");
+        // Fixed-length name: embedding the output name could push a long file name past the 255-character limit.
+        var temp = Path.Combine(dir, $".ca-{Guid.NewGuid():N}.partial");
 
         try
         {
