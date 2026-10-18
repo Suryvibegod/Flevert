@@ -26,6 +26,8 @@ public sealed class Runner(RunLog log)
 
             progress?.Report(new BatchProgress(results.Count, files.Count, file));
             var result = await RunOneAsync(operation, file, ct).ConfigureAwait(false);
+            if (result is null)
+                break;
             results.Add(result);
             progress?.Report(new BatchProgress(results.Count, files.Count, null));
         }
@@ -33,7 +35,8 @@ public sealed class Runner(RunLog log)
         return results;
     }
 
-    private async Task<FileResult> RunOneAsync(IOperation operation, string file, CancellationToken ct)
+    /// <returns>The result, or <c>null</c> when cancellation interrupted this file.</returns>
+    private async Task<FileResult?> RunOneAsync(IOperation operation, string file, CancellationToken ct)
     {
         var timer = Stopwatch.StartNew();
         FileResult result;
@@ -46,7 +49,8 @@ public sealed class Runner(RunLog log)
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            result = new FileResult(file, null, "cancelled");
+            log.Write(operation.Id, new FileResult(file, null, "cancelled"), timer.Elapsed);
+            return null;
         }
 #pragma warning disable CA1031 // One bad file must never stop the rest of the batch.
         catch (Exception ex)

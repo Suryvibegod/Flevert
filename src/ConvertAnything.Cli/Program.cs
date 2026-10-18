@@ -11,28 +11,16 @@ internal static class Program
     private const int BadUsage = 2;
     private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(400);
 
-    private static async Task<int> Main(string[] args)
+    [STAThread]
+    private static int Main(string[] args)
     {
-        var catalog = new OperationCatalog([new DevCopy()]);
+        var catalog = new OperationCatalog([new DevCopy(), new DevSlowCopy()]);
         var log = new RunLog(RunLog.DefaultDirectory);
 
         switch (CommandLine.Parse(args))
         {
             case RunCommand run:
-                var operation = catalog.Find(run.OperationId);
-                if (operation is null)
-                {
-                    log.Write(run.OperationId, new FileResult(string.Join(';', run.Files), null, "unknown operation"), TimeSpan.Zero);
-                    return BadUsage;
-                }
-
-                var batch = await Batch.CollectAsync(run.OperationId, run.Files, BatchIdleWindow, CancellationToken.None);
-                if (batch is null)
-                    return Ok;
-
-                var files = batch.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                var results = await new Runner(log).RunAsync(operation, files, progress: null, CancellationToken.None);
-                return results.All(r => r.Succeeded) ? Ok : SomeFilesFailed;
+                return RunBatch(run, catalog, log);
 
             case InstallMenuCommand install:
                 var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));
@@ -55,8 +43,25 @@ internal static class Program
                 return BadUsage;
 
             default:
-                Console.Error.WriteLine("Not implemented yet.");
                 return BadUsage;
         }
+    }
+
+    private static int RunBatch(RunCommand run, OperationCatalog catalog, RunLog log)
+    {
+        var operation = catalog.Find(run.OperationId);
+        if (operation is null)
+        {
+            log.Write(run.OperationId, new FileResult(string.Join(';', run.Files), null, "unknown operation"), TimeSpan.Zero);
+            return BadUsage;
+        }
+
+        // No synchronization context exists yet, so blocking here cannot deadlock. Followers exit without loading WinForms.
+        var batch = Batch.CollectAsync(run.OperationId, run.Files, BatchIdleWindow, CancellationToken.None).GetAwaiter().GetResult();
+        if (batch is null)
+            return Ok;
+
+        var files = batch.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        return BatchUi.Run(operation, files, log) ? Ok : SomeFilesFailed;
     }
 }

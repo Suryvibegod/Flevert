@@ -72,6 +72,21 @@ public sealed class RunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task File_interrupted_by_cancel_is_not_reported_as_a_result()
+    {
+        var first = _dir.File("1.txt");
+        var second = _dir.File("2.txt");
+        using var cts = new CancellationTokenSource();
+        var progress = new SyncProgress<BatchProgress>(p => { if (p.Current == second) cts.Cancel(); });
+
+        var results = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevSlowCopy(), [first, second], progress, cts.Token);
+
+        Assert.Equal([first], results.Select(r => r.Input));
+        Assert.False(File.Exists(_dir.Combine("2 (copy).txt")));
+    }
+
+    [Fact]
     public void Catalog_finds_operations_by_id()
     {
         var catalog = new OperationCatalog([new DevCopy()]);

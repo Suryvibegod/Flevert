@@ -4,6 +4,8 @@
     <OutputType>WinExe</OutputType>
     <AssemblyName>ca</AssemblyName>
     <RootNamespace>ConvertAnything.Cli</RootNamespace>
+    <AssemblyTitle>ConvertAnything</AssemblyTitle>
+    <Product>ConvertAnything</Product>
     <UseWindowsForms>true</UseWindowsForms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
