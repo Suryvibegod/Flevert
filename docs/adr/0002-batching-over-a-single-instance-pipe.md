@@ -6,7 +6,7 @@ Accepted
 
 ## Date
 
-2026-10-19
+2026-10-19 (revised the same day after the second adversarial review)
 
 ## Context
 
@@ -20,10 +20,11 @@ Command-line context menu verbs (ADR-0001) make Explorer start one `ca.exe` per 
 ## Decision
 
 - **Leader election by pipe creation.** Each process tries to create `NamedPipeServerStream` with `maxNumberOfServerInstances: 1` and `CurrentUserOnly`. The one that succeeds leads; the rest connect as clients.
-- **Streaming batch.** The leader starts processing its own file at once and keeps accepting paths while it works. It closes the pipe only when the consumer is idle, nothing is queued, and no connection arrived for 400 ms. Late files join the running batch and the progress total grows.
-- **Hand-over protocol.** Client sends length-prefixed raw UTF-16 paths. The leader queues them, writes a one-byte ack, flushes, and waits for the pipe to drain before disconnecting (Disconnect discards unread data). Each connection has a 2 s timeout. The runner drops exact (ordinal) duplicates, so a lost ack and a retry never produce two outputs within a batch.
-- **Name and peer checks.** The pipe name contains the user SID, the session id, a 16-character random secret stored in `%LOCALAPPDATA%\ConvertAnything\pipe.key` and the op id. Both ends check, via `GetNamedPipe{Server,Client}ProcessId` and the process image path, that the peer runs the same executable.
-- **Fallbacks.** A pipe name held by another account (`UnauthorizedAccessException`) or an untrusted peer makes the process work alone immediately. After 20 failed attempts a process also works alone. At most 1000 files per batch.
+- **Streaming batch.** The leader starts processing its own file at once and keeps accepting paths while it works. It closes the pipe only when the consumer is idle, nothing is queued, no connection arrived for 400 ms, and the batch is at least 1.5 s old (so slow-starting processes do not split a fast batch). When the consumer stops early (Cancel, error) the leader stops accepting immediately.
+- **Hand-over protocol.** The client sends length-prefixed raw UTF-16 paths. The leader queues them (deduplicated, ordinal) and replies `Accepted`, then waits for the client to close before resetting the pipe (Disconnect discards unread data). If the message would push the batch past 1000 files it replies `Full` and the sender processes its files itself; the leader's own files are never capped. Every connection has a 2 s timeout, and a client that breaks the pipe is disconnected without ending the batch.
+- **Name and key.** The pipe name contains the user SID, the session id, a per-operation random key and the op id. Keys live in `%LOCALAPPDATA%\ConvertAnything\pipes`, a folder whose ACL is limited to the user, SYSTEM and Administrators and labelled medium no-read-up. Keys are created atomically (first writer wins), regenerated when corrupt, and **rotated when a batch closes**, because pipe names are visible to every account in the pipe namespace.
+- **Peer checks.** Both ends require the peer to run the same executable, in the same session, at an integrity level no lower than their own.
+- **Fallbacks.** A pipe name held by another account, an untrusted peer, a `Full` reply, a failure to set up the key, or a 10 s overall join deadline makes the process work alone.
 
 ## Alternatives Considered
 
@@ -53,9 +54,10 @@ Command-line context menu verbs (ADR-0001) make Explorer start one `ca.exe` per 
 
 ## Consequences
 
-- Verified by tests: 50 concurrent in-process callers and 20 real `ca.exe` processes each form one batch; a process started while the leader is busy joins its batch; paths with lone surrogates survive.
+- Verified by tests: 50 concurrent in-process callers and 20 real `ca.exe` processes each form one batch; a process started while the leader is busy joins its batch; a client that disconnects without sending neither ends nor breaks the batch; an overflowing message is refused so its sender works alone; corrupt keys are regenerated; paths with lone surrogates survive.
 - A follower costs about 87 ms start-to-exit (median, `scripts/measure-startup.ps1`).
 - **Accepted trade-off:** if the leader crashes after acknowledging followers, their files are not processed (followers have already exited). The user sees no notification and can retry. Logging can no longer crash the leader (it is best effort), which removes the known cause.
 - **Accepted trade-off:** a duplicate is possible across batches if an ack is lost and the retry becomes a new leader after the first batch closed; the output is then named `x (1)`.
-- **Accepted trade-off:** files that arrive after the user presses Cancel are acknowledged but not processed.
+- Files that arrive after the user presses Cancel are no longer acknowledged: the leader stops accepting as soon as its consumer stops.
 - Two selections of the same operation made while a batch is running merge into that batch.
+- **Accepted trade-off:** a new selection started in the instant between a batch closing and its key rotating can split into two batches.

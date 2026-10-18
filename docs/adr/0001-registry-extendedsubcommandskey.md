@@ -23,7 +23,7 @@ ConvertAnything adds a cascading `ConvertAnything >` entry to the Explorer right
 Write static verbs under `HKCU\Software\Classes`:
 
 - `SystemFileAssociations\<.ext>\shell\ConvertAnything` with `MUIVerb`, `Icon` and `ExtendedSubCommandsKey=ConvertAnything.Menu<.ext>`.
-- Each menu level lives at `ConvertAnything.Menu<.ext>[\<submenu>]\shell\NN`, where `NN` is a two-digit index that preserves declared order (Explorer sorts verbs by key name).
+- Each menu level lives at `ConvertAnything.Menu<.ext>[\<submenu>]\shell\NNN`, where `NNN` is a three-digit index that preserves declared order (Explorer sorts verbs by key name).
 - Leaf verbs run `"<exe>" run <op-id> "%1"`.
 - Every verb sets `MultiSelectModel=Player`.
 

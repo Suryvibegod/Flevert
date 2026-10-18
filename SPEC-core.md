@@ -97,7 +97,7 @@ Explorer ──"ca.exe run image.to-png <file2>"──▶ B: pipe đã có → g
 A: hết hàng đợi + đang rảnh + 400 ms không có path mới → đóng pipe → 1 thông báo → thoát
 ```
 
-Tên pipe: `ConvertAnything-<SID>-<session>-<bí mật>-<op-id>`. Bí mật là 16 ký tự ngẫu nhiên trong `%LOCALAPPDATA%\ConvertAnything\pipe.key`, chỉ user đó đọc được. Hai đầu kiểm tra tiến trình bên kia chạy cùng file exe. Chi tiết, các bảo đảm và trade-off: [ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md).
+Tên pipe: `ConvertAnything-<SID>-<session>-<khóa>-<op-id>`. Khóa ngẫu nhiên riêng cho mỗi thao tác trong `%LOCALAPPDATA%\ConvertAnything\pipes`, thư mục chỉ user / SYSTEM / Administrators mở được, nhãn medium no-read-up; khóa đổi mỗi khi một lô đóng. Hai đầu kiểm tra tiến trình bên kia chạy cùng file exe, cùng session, integrity không thấp hơn. Lô sống tối thiểu 1,5 s; lô đầy (1000 file) trả `Full` để người gửi tự xử lý. Chi tiết, các bảo đảm và trade-off: [ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md).
 
 ### Menu trong registry
 
