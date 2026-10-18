@@ -22,15 +22,37 @@ internal static class Program
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);
 
-        switch (CommandLine.Parse(args))
+        var command = CommandLine.Parse(args);
+        if (command is not RunCommand)
+            ParentConsole.Attach();
+
+        switch (command)
         {
             case RunCommand run:
                 // SafeStartup moved the current directory, so resolve relative paths against where ca was started.
                 return RunBatch(run with { Files = [.. run.Files.Select(f => Path.GetFullPath(f, invocationDirectory))] }, catalog, log);
 
             case InstallMenuCommand install:
+                var exe = Environment.ProcessPath!;
+                if (Path.GetFileName(exe).Equals("dotnet.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.Error.WriteLine("Run ca.exe itself; a menu registered through dotnet.exe would not work.");
+                    return BadUsage;
+                }
+
+                if (!InstallLocation.IsWritableOnlyByOwnerAndAdmins(Path.GetDirectoryName(exe)!))
+                {
+                    if (!install.IncludeDev)
+                    {
+                        Console.Error.WriteLine($"Refusing to register {exe}: other accounts can modify its folder and could run code as you. Install with the ConvertAnything installer instead.");
+                        return BadUsage;
+                    }
+
+                    Console.Error.WriteLine($"Warning: other accounts can modify {Path.GetDirectoryName(exe)}. Use --dev only on a machine you trust.");
+                }
+
                 var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));
-                new MenuInstaller(new WindowsRegistry(), Environment.ProcessPath!).Install(ops);
+                new MenuInstaller(new WindowsRegistry(), exe).Install(ops);
                 ShellNotify.AssociationsChanged();
                 return Ok;
 
