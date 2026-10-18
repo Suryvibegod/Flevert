@@ -42,7 +42,8 @@ Không thêm package NuGet nào ngoài xUnit cho module này. `ConvertAnything.C
 Build:   dotnet build ConvertAnything.sln -c Debug
 Test:    dotnet test ConvertAnything.sln
 Lint:    dotnet format ConvertAnything.sln --verify-no-changes
-Publish: dotnet publish src/ConvertAnything.Cli -c Release -r win-x64 -p:PublishAot=true -o artifacts/publish
+Publish: dotnet publish src/ConvertAnything.Cli -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish
+Startup: powershell -File scripts/measure-startup.ps1
 ```
 
 Lệnh của `ca.exe`:

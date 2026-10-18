@@ -33,6 +33,24 @@ public sealed class RunLog(string directory)
         }
     }
 
+    /// <summary>Deletes daily logs outside the retention window; the window includes today.</summary>
+    public void Prune(TimeSpan retention, DateOnly today)
+    {
+        if (!System.IO.Directory.Exists(Directory))
+            return;
+
+        var oldestKept = today.AddDays(1 - (int)retention.TotalDays);
+        foreach (var file in System.IO.Directory.EnumerateFiles(Directory, "ca-*.log"))
+        {
+            var stamp = Path.GetFileNameWithoutExtension(file)["ca-".Length..];
+            if (DateOnly.TryParseExact(stamp, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) && day < oldestKept)
+            {
+                try { File.Delete(file); }
+                catch (IOException) { }
+            }
+        }
+    }
+
     // Two operations can run in separate processes at once; share the file and retry rather than fail the batch.
     private static void AppendShared(string path, string text)
     {

@@ -10,6 +10,7 @@ internal static class Program
     private const int SomeFilesFailed = 1;
     private const int BadUsage = 2;
     private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan LogRetention = TimeSpan.FromDays(7);
 
     [STAThread]
     private static int Main(string[] args)
@@ -62,6 +63,7 @@ internal static class Program
         if (batch is null)
             return Ok;
 
+        log.Prune(LogRetention, DateOnly.FromDateTime(DateTime.Now));
         var files = batch.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         return BatchUi.Run(operation, files, log) ? Ok : SomeFilesFailed;
     }
