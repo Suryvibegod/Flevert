@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>ca</AssemblyName>
+    <RootNamespace>ConvertAnything.Cli</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ConvertAnything.Core\ConvertAnything.Core.csproj" />
+  </ItemGroup>
+
+</Project>
