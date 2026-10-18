@@ -5,7 +5,7 @@ using System.Security.Principal;
 
 namespace ConvertAnything.Core;
 
-internal static partial class SecureDirectory
+public static partial class SecureDirectory
 {
     // Medium mandatory label, inherited by files and folders: lower-integrity processes cannot read, write or execute.
     private const string NoReadUpLabel = "S:(ML;OICI;NRNWNX;;;ME)";

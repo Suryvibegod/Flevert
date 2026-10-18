@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ConvertAnything.Core\ConvertAnything.Core.csproj" />
+    <PackageReference Include="Magick.NET-Q8-x64" Version="15.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ConvertAnything.Image.Tests" />
+  </ItemGroup>
+
+</Project>
