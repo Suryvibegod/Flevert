@@ -146,7 +146,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ---
 
-## Task 7: Đường dẫn dài và Unicode
+## Task 7: Đường dẫn dài và Unicode ✅
 
 **Description:** App manifest `longPathAware`; test đường dẫn > 260 ký tự và tên tiếng Việt / emoji qua toàn bộ luồng `run`.
 

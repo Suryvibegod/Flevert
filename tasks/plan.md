@@ -36,7 +36,7 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 - [ ] Mày bấm thử trên máy và duyệt
 
 ### Phase 3: Hardening
-- [ ] Task 7: Đường dẫn dài > 260 ký tự + Unicode
+- [x] Task 7: Đường dẫn dài > 260 ký tự + Unicode
 - [ ] Task 8: Đo khởi động lạnh (publish ReadyToRun), xoay vòng log 7 ngày
 - [ ] Task 9: Review (chất lượng, đơn giản hóa, bảo mật), README tiếng Anh, ADR registry
 
