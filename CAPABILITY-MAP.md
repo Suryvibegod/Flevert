@@ -5,9 +5,9 @@ Tool Windows miễn phí: chuột phải vào file ảnh / video-audio / PDF đ�
 | Module id | Trách nhiệm | Phụ thuộc |
 |-----------|-------------|-----------|
 | core | `ca.exe <thao-tác> <files...>`; ghi/gỡ menu chuột phải (registry, lọc theo loại file); gom nhiều file chọn cùng lúc thành 1 lô; đặt tên output không đè (`x (1).jpg`); thông báo khi xong/lỗi; log lỗi | — |
-| image | Convert JPG/PNG/WEBP/HEIC/BMP/TIFF qua lại; nén 3 mức; xóa metadata (EXIF, GPS) | core |
+| image | Convert JPG/PNG/WEBP/HEIC/AVIF/GIF/BMP/TIFF qua lại; nén 3 mức hoặc theo dung lượng mục tiêu; xóa metadata (EXIF, GPS) | core |
 | installer | Bộ cài 1 click; tùy chọn bật menu cũ cho toàn máy; gỡ sạch registry; kèm sẵn ffmpeg/pdfium | core |
-| media | Nén video (preset "vừa gửi Zalo/Messenger"); convert MP4/MOV/MKV/WEBM; tách MP3 từ video; convert audio MP3/WAV/M4A/FLAC | core |
+| media | Nén video theo mức hoặc dung lượng mục tiêu (preset "vừa gửi Zalo/Messenger"); convert MP4/MOV/MKV/WEBM/AVI/WMV; tách MP3 từ video; convert audio MP3/WAV/M4A/FLAC/OGG/Opus | core |
 | pdf | PDF sang ảnh; ảnh sang PDF; ghép PDF; tách PDF; nén PDF nhẹ | core, image |
 
 Thứ tự làm:

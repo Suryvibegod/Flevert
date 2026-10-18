@@ -12,6 +12,7 @@ Cho phép người dùng Windows chuột phải vào file, chọn một thao tá
 - Nhận lệnh từ Explorer, gom nhiều file được chọn cùng lúc thành **một lô** xử lý bởi **một tiến trình**.
 - Đặt tên file output không bao giờ đè file có sẵn, không bao giờ sửa file gốc.
 - Báo kết quả bằng một thông báo góc màn hình cho cả lô.
+- Lô chạy lâu hơn 2 giây thì hiện cửa sổ tiến độ nhỏ (file thứ mấy / tổng, nút Cancel). Nén video mất vài phút; chạy im lặng thì người dùng tưởng treo.
 - Ghi log lỗi để người dùng gửi lại khi báo bug.
 - Định nghĩa hợp đồng `IOperation` để các module khác cắm thao tác vào.
 
@@ -27,13 +28,13 @@ Cho phép người dùng Windows chuột phải vào file, chọn một thao tá
 | Thành phần | Lựa chọn | Lý do |
 |---|---|---|
 | Ngôn ngữ / runtime | C# trên .NET 10 (LTS, hỗ trợ tới 11/2028) | Gọi Win32 / registry dễ; một ngôn ngữ cho mọi module |
-| Biên dịch | NativeAOT, `win-x64` | Khởi động nhanh (mục tiêu < 150 ms), file exe đơn, không cần cài runtime |
+| Biên dịch | Self-contained, `win-x64`, ReadyToRun | Không cần cài runtime. **Không dùng NativeAOT**: cần Visual Studio C++ Build Tools (vài GB) và WinForms không hỗ trợ AOT |
 | Kiểu exe | `WinExe` | Explorer gọi exe không nháy cửa sổ console |
 | Test | xUnit | Chuẩn phổ biến của .NET |
-| Thông báo | Balloon của `Shell_NotifyIcon` (P/Invoke) | Hiện như toast trên Win10/11, không cần đăng ký AUMID / MSIX, chạy được với NativeAOT |
+| Thông báo + tiến độ | WinForms (`NotifyIcon.ShowBalloonTip`, một `Form` nhỏ) | Có sẵn trong .NET; balloon hiện như toast trên Win10/11, không cần AUMID / MSIX. Chỉ nạp WinForms khi cần hiện UI |
 | Gom lô | Named mutex + named pipe | Có sẵn trong .NET, không thêm thư viện |
 
-Không thêm package NuGet nào ngoài xUnit cho module này.
+Không thêm package NuGet nào ngoài xUnit cho module này. `ConvertAnything.Core` không tham chiếu WinForms; UI nằm trong `ConvertAnything.Cli`.
 
 ## Commands
 
@@ -180,9 +181,10 @@ public static class OutputPath
 4. File output đã tồn tại thì tên mới có ` (1)`; file gốc không đổi (so sánh hash trước/sau).
 5. 1 file lỗi không chặn các file còn lại; thông báo ghi số file lỗi; log có stack trace.
 6. `ca.exe uninstall-menu` xong không còn key nào tên `ConvertAnything` trong HKCU (test liệt kê kiểm tra).
-7. Khởi động lạnh `ca.exe` (bản AOT) < 150 ms, đo bằng `Measure-Command`.
+7. Khởi động lạnh `ca.exe run` (bản publish, chưa nạp WinForms) < 300 ms, đo bằng `Measure-Command`, trung vị 10 lần.
 8. Đường dẫn tiếng Việt có dấu, dấu cách, dài > 260 ký tự đều chạy.
 9. `dotnet test` và `dotnet format --verify-no-changes` đều qua.
+10. Lô chạy > 2 giây hiện cửa sổ tiến độ; bấm Cancel thì dừng sau file đang xử lý, không để lại file `.partial`.
 
 ## Quyết định đã chốt
 

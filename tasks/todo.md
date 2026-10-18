@@ -6,7 +6,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ---
 
-## Task 1: Khung solution, license, repo
+## Task 1: Khung solution, license, repo ✅
 
 **Description:** Tạo solution .NET 10 với 3 project, cấu hình chung (nullable, warning = error, analyzer AOT), MIT license, `.gitignore`, README tiếng Anh tối thiểu. Commit đầu tiên, tạo repo GitHub private, push.
 
@@ -120,12 +120,13 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ## Task 6: Thông báo cho cả lô
 
-**Description:** Chủ lô xong thì hiện balloon `Shell_NotifyIcon` (hiện thành toast trên Win10/11): `"Done: 20 files"` hoặc `"Done: 18 files, 2 failed. See log."`, rồi thoát.
+**Description:** Chủ lô xong thì hiện balloon qua WinForms `NotifyIcon.ShowBalloonTip` (hiện thành toast trên Win10/11): `"Done: 20 files"` hoặc `"Done: 18 files, 2 failed. See log."`, rồi thoát. Lô chạy > 2 giây thì hiện cửa sổ tiến độ (file thứ mấy / tổng, nút Cancel); Cancel dừng sau file đang xử lý.
 
 **Acceptance criteria:**
 - [ ] Lô 20 file → đúng 1 thông báo
 - [ ] Có lỗi → thông báo ghi số file lỗi
 - [ ] Tiến trình thoát sau khi thông báo hiện, không để icon kẹt ở khay hệ thống
+- [ ] Lô > 2 giây có cửa sổ tiến độ; Cancel không để lại file `.partial`
 
 **Verification:**
 - [ ] Unit test chuỗi nội dung thông báo
@@ -133,9 +134,9 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 **Dependencies:** Task 5
 
-**Files likely touched:** `src/ConvertAnything.Core/BatchSummary.cs`, `src/ConvertAnything.Cli/TrayNotifier.cs`, `src/ConvertAnything.Cli/Program.cs`, `tests/ConvertAnything.Core.Tests/BatchSummaryTests.cs`
+**Files likely touched:** `src/ConvertAnything.Core/BatchSummary.cs`, `src/ConvertAnything.Cli/BatchUi.cs`, `src/ConvertAnything.Cli/Program.cs`, `tests/ConvertAnything.Core.Tests/BatchSummaryTests.cs`
 
-**Estimated scope:** S
+**Estimated scope:** M
 
 ---
 
@@ -167,10 +168,10 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ## Task 8: Khởi động nhanh và log
 
-**Description:** Đo khởi động lạnh bản publish. Thử ReadyToRun single-file trước; nếu > 150 ms thì đề xuất cài VS Build Tools để build NativeAOT (hỏi trước). Xóa log cũ hơn 7 ngày khi khởi động.
+**Description:** Đo khởi động lạnh bản publish self-contained ReadyToRun. Xóa log cũ hơn 7 ngày khi khởi động.
 
 **Acceptance criteria:**
-- [ ] Khởi động lạnh `ca.exe` < 150 ms (trung vị 10 lần `Measure-Command`), hoặc có số đo và đề xuất rõ ràng nếu không đạt
+- [ ] Khởi động lạnh `ca.exe run` < 300 ms (trung vị 10 lần `Measure-Command`)
 - [ ] Log cũ hơn 7 ngày bị xóa
 
 **Verification:**

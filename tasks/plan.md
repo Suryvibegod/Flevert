@@ -12,12 +12,12 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 - **Phần rủi ro nhất làm sớm.** Menu registry (Task 4) và gom lô nhiều tiến trình (Task 5) là chỗ dễ sai nhất, đặt ở Phase 2 ngay sau khung tối thiểu.
 - **Registry bọc sau interface `IRegistry`.** Unit test dùng bản giả; integration test ghi vào key riêng `ConvertAnything.Test` rồi xóa.
 - **Đồng hồ bọc sau `TimeProvider`** (.NET có sẵn) để test cửa sổ chờ 400 ms không phải sleep thật.
-- **AOT-compatible từ đầu.** Bật `IsAotCompatible` + analyzer ngay Task 1, dù build AOT thật có thể đến sau (xem rủi ro 1).
+- **Không NativeAOT.** Cần VS C++ Build Tools và WinForms không hỗ trợ AOT. Dùng self-contained + ReadyToRun; WinForms chỉ nạp khi hiện UI để `run` khởi động nhanh.
 
 ## Task List
 
 ### Phase 1: Foundation
-- [ ] Task 1: Khung solution, license, gitignore, CI build cục bộ, repo GitHub private
+- [x] Task 1: Khung solution, license, gitignore, CI build cục bộ, repo GitHub private
 - [ ] Task 2: `OutputPath`: tên không đè + ghi file tạm rồi đổi tên
 - [ ] Task 3: Lát dọc đầu tiên: `ca.exe run dev.copy <file>` + log
 
@@ -29,7 +29,7 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 ### Phase 2: Explorer integration
 - [ ] Task 4: `install-menu --dev` / `uninstall-menu` với `ExtendedSubCommandsKey` + `Player`
 - [ ] Task 5: Gom lô: mutex + named pipe, cửa sổ chờ 400 ms, lỗi từng file không chặn lô
-- [ ] Task 6: Thông báo balloon một lần cho cả lô
+- [ ] Task 6: Thông báo một lần cho cả lô + cửa sổ tiến độ có Cancel
 
 ### Checkpoint: Explorer integration
 - [ ] Success criteria 1–6 trong spec đạt khi bấm thật trong Explorer
@@ -37,7 +37,7 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 
 ### Phase 3: Hardening
 - [ ] Task 7: Đường dẫn dài > 260 ký tự + Unicode
-- [ ] Task 8: Đo khởi động lạnh, build AOT, xoay vòng log 7 ngày
+- [ ] Task 8: Đo khởi động lạnh (publish ReadyToRun), xoay vòng log 7 ngày
 - [ ] Task 9: Review (chất lượng, đơn giản hóa, bảo mật), README tiếng Anh, ADR registry
 
 ### Checkpoint: Complete
@@ -48,12 +48,12 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| NativeAOT trên Windows cần MSVC linker (Visual Studio Build Tools, gói C++, vài GB). Máy chưa có Visual Studio nào. | High | Phát triển bằng build thường; bật analyzer AOT từ đầu. Task 8 đo khởi động: nếu bản thường (ReadyToRun, single-file) đã < 150 ms thì không cần AOT; nếu không thì hỏi mày cài Build Tools. |
+| Khởi động JIT chậm hơn AOT. | Med | ReadyToRun; không nạp WinForms trên đường chạy của tiến trình phụ (chỉ gửi path qua pipe rồi thoát). Task 8 đo. |
 | Explorer bật 100 tiến trình gần như cùng lúc; hai tiến trình cùng tưởng mình là "chủ lô". | High | Named mutex quyết định chủ; tiến trình thua kết nối pipe với retry; integration test bắn 50 tiến trình song song. |
 | Chọn > 100 file thì menu biến mất (giới hạn Windows cho verb dòng lệnh). | Med | Ghi vào README. Verb COM để phiên bản sau. |
 | Focus Assist / Do Not Disturb ẩn thông báo. | Low | Kết quả vẫn ghi log; không phụ thuộc thông báo để biết xong. |
 | Exe chưa ký số bị SmartScreen / antivirus cảnh báo. | Med | Để module `installer` xử lý (hướng dẫn, cân nhắc ký số miễn phí cho open source như SignPath). |
 
-## Open Questions
+## Decisions
 
-- **Danh tính commit git.** Git global trên máy là `Suryvibegod <79949229+Suryvibegod@users.noreply.github.com>`, khác email tài khoản Claude của mày. Commit repo này dùng danh tính nào?
+- Commit bằng `Suryvibegod <79949229+Suryvibegod@users.noreply.github.com>`, repo `old-account/ConvertAnything` (private).
