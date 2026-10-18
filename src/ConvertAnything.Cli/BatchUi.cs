@@ -21,7 +21,20 @@ internal sealed class BatchUi : ApplicationContext
         _ = _form.Handle; // installs the WinForms synchronization context so Progress<T> reports on this thread
 
         var progress = new Progress<BatchProgress>(_form.Report);
-        var work = Task.Run(() => new Runner(log).RunAsync(operation, files, progress, _cancellation.Token));
+        var work = Task.Run(async () =>
+        {
+            try
+            {
+                return await new Runner(log).RunAsync(operation, files, progress, _cancellation.Token);
+            }
+#pragma warning disable CA1031 // Whatever happens, the batch must end with a notification and the process must exit.
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                log.Write(operation.Id, new FileResult("(batch)", null, ex.ToString()), TimeSpan.Zero);
+                return (IReadOnlyList<FileResult>)files.Select(f => new FileResult(f, null, "batch failed")).ToList();
+            }
+        });
 
         var reveal = new System.Windows.Forms.Timer { Interval = (int)ShowProgressAfter.TotalMilliseconds };
         reveal.Tick += (_, _) =>

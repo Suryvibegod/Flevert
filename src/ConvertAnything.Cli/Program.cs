@@ -17,6 +17,8 @@ internal static class Program
     {
         var catalog = new OperationCatalog([new DevCopy(), new DevSlowCopy()]);
         var log = new RunLog(RunLog.DefaultDirectory);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);
 
         switch (CommandLine.Parse(args))
         {
