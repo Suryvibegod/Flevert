@@ -72,7 +72,8 @@ public sealed class ImageIoTests : IDisposable
         decode.Stop();
         var bound = TimeSpan.FromSeconds(1) + 2 * decode.Elapsed;
 
-        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(800));
+        // Cancel once this machine has decoded the image, so the cancel lands in the encode the test is about.
+        using var cancel = new CancellationTokenSource(decode.Elapsed + TimeSpan.FromMilliseconds(500));
         var timer = System.Diagnostics.Stopwatch.StartNew();
         var cancelledAt = TimeSpan.Zero;
         using var _ = cancel.Token.Register(() => cancelledAt = timer.Elapsed);

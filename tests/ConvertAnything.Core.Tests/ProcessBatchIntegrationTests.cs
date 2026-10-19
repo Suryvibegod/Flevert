@@ -225,7 +225,10 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ca-test-" + Guid.NewGuid().ToString("N"))).FullName;
         try
         {
-            Skip.IfNot(ConvertAnything.Core.Menu.InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir),
+            // Skipping on the function under test would hide a false refusal, so CI runners, whose profile is a plain
+            // Windows one, never skip.
+            Skip.If(Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true"
+                && !ConvertAnything.Core.Menu.InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir),
                 "Other accounts can change %LOCALAPPDATA% or a folder above it on this machine.");
             var start = new ProcessStartInfo(CaExe) { UseShellExecute = false, RedirectStandardError = true };
             start.ArgumentList.Add("check-location");

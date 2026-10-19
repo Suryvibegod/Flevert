@@ -169,6 +169,43 @@ public sealed class MenuTests
         Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
+    [Theory]
+    [InlineData(System.Security.Principal.WellKnownSidType.CreatorOwnerSid, true)] // becomes the user who creates each file
+    [InlineData(System.Security.Principal.WellKnownSidType.CreatorGroupSid, false)] // becomes their primary group, shared with others
+    public void Inherit_only_creator_entries_are_judged_by_who_they_become(System.Security.Principal.WellKnownSidType creator, bool safe)
+    {
+        using var parent = new TempDir();
+        ProtectToOwnerAndAdmins(parent.Path);
+        var app = Directory.CreateDirectory(Path.Combine(parent.Path, "app")).FullName;
+        var acl = new DirectoryInfo(app).GetAccessControl();
+        acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+            new System.Security.Principal.SecurityIdentifier(creator, null),
+            System.Security.AccessControl.FileSystemRights.FullControl,
+            System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+            System.Security.AccessControl.PropagationFlags.InheritOnly, System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(app).SetAccessControl(acl);
+
+        Assert.Equal(safe, InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
+    }
+
+    [Fact]
+    public void Write_that_a_parent_passes_to_new_files_makes_the_install_location_unsafe()
+    {
+        // Write without Delete on the parent is harmless to the parent itself, but the install folder inherits it for
+        // the files setup will copy.
+        using var parent = new TempDir();
+        ProtectToOwnerAndAdmins(parent.Path);
+        var acl = new DirectoryInfo(parent.Path).GetAccessControl();
+        acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+            new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null),
+            System.Security.AccessControl.FileSystemRights.Write, System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+            System.Security.AccessControl.PropagationFlags.None, System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(parent.Path).SetAccessControl(acl);
+        var app = Directory.CreateDirectory(Path.Combine(parent.Path, "app")).FullName;
+
+        Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
+    }
+
     [Fact]
     public void Inherit_only_entries_on_a_parent_do_not_make_the_install_location_unsafe()
     {
