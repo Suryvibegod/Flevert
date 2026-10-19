@@ -26,7 +26,7 @@ Plan: [plan.md](plan.md). Spec: core.md "Báo bản mới". ADR-0006.
 | Cửa sổ chủ top-most ẩn: hộp thoại đóng ngay | Bỏ cửa sổ chủ |
 | Hộp thoại nhận phím người dùng đang gõ ở cửa sổ khác: Enter/Space bấm Download, mở trình duyệt | Nút mặc định là **Later** (vô hại, mai hỏi lại) |
 
-## Review bối cảnh trống (commit 0f1f79d) và reconcile
+## Review bối cảnh trống (commit 9744720) và reconcile
 
 | Finding | Nguồn | Mức | Xử lý |
 |---|---|---|---|
@@ -48,7 +48,7 @@ Plan: [plan.md](plan.md). Spec: core.md "Báo bản mới". ADR-0006.
 | Trang setup trên Windows 10 chưa xem | code | Suggestion | Chưa có máy Windows 10; logic trang dùng chung, test-installer chạy đường im lặng |
 | Người không convert gì thì không được hỏi | doubt | Suggestion (sản phẩm) | Theo spec: chỉ kiểm sau khi dùng, không có tiến trình nền |
 
-## Review lại (commit f1c5160)
+## Review lại (commit 266cdc8)
 
 Không còn Critical/High/Required trong code. Hai cổng quy trình: CI chạy test tích hợp có UI lần đầu khi push (CI 3 lần trước khi tag); `test-installer.ps1` với kịch bản mới đã chạy sau khi sửa: **PASS** (2026-10-20: tắt bằng lệnh rồi cài đè vẫn tắt; `/UPDATECHECK=yes` không đổi gì), chạy lại trên bản nháp theo RELEASING.
 

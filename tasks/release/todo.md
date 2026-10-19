@@ -40,11 +40,12 @@ Ba audit (cấu trúc/vệ sinh repo, quy trình phát hành, quyền riêng tư
 - [x] CHANGELOG `[Unreleased]`; README: placeholder phiên bản trong lệnh kiểm
 - [x] LICENSE, `Directory.Build.props`: "Flevert contributors"
 - [x] core.md: thêm `FLEVERT_SLOW_COPY_MS`; `tasks/todo.md`: ghi chú là nhật ký lịch sử
-- [ ] Đổi tác giả mọi commit thành Suryvibegod (email ẩn), xóa và tạo lại repo, cài lại cấu hình (chủ repo đã duyệt; chỉ chủ repo làm)
+- [x] Đổi tác giả và người commit của mọi commit thành Suryvibegod (email ẩn), thay tên tài khoản cũ trong text/message, xóa tọa độ GPS cũ và blob fixture cũ khỏi lịch sử (git-filter-repo, 2026-10-20; mã commit trong tài liệu đã đổi theo)
+- [ ] Xóa và tạo lại repo, cài lại cấu hình (chủ repo đã duyệt; chỉ chủ repo làm)
 - [x] Tên hồ sơ GitHub đã xóa (API, theo yêu cầu người dùng)
 - [ ] 2FA: chỉ người dùng bật được; đã nhắc
 
-### Review bối cảnh trống của đợt sửa (50ac6c3..5739346)
+### Review bối cảnh trống của đợt sửa (6dd8b29..513aacb)
 
 | Finding | Nguồn | Mức | Xử lý |
 |---|---|---|---|
@@ -64,7 +65,7 @@ Ba audit (cấu trúc/vệ sinh repo, quy trình phát hành, quyền riêng tư
 
 ## Việc còn lại trước khi Publish
 
-- [x] Repo mới, cấu hình, CI (CI xanh 3/3 trên 50ac6c3; làm lại sau khi tạo lại repo)
+- [x] Repo mới, cấu hình, CI (CI xanh 3/3 trên 6dd8b29; làm lại sau khi tạo lại repo)
 - [ ] CI xanh 3 lần liên tiếp trên repo tạo lại
 - [ ] Tag `v0.1.0` → bản nháp → kiểm theo RELEASING (hash, attestation, `test-installer.ps1`, runtime)
 - [ ] Người dùng: cài bản nháp, kiểm ảnh iPhone dọc có GPS; chụp lại menu chuột phải (tên mới) cho README
