@@ -84,8 +84,14 @@ public sealed class FramesTests : IDisposable
         {
             for (var round = 0; round < 2; round++)
             {
-                var output = await Op(operationId).RunAsync(input, CancellationToken.None);
-                File.Delete(output);
+                try
+                {
+                    File.Delete(await Op(operationId).RunAsync(input, CancellationToken.None));
+                }
+                catch (ConvertAnything.Core.OperationSkippedException)
+                {
+                    // Compress may find too little to gain on noise; what matters here is that the process survives.
+                }
             }
         }
         finally

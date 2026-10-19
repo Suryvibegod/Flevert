@@ -68,7 +68,7 @@ internal sealed class BatchUi : ApplicationContext
         exit.Tick += (_, _) => ExitThread();
         exit.Start();
 
-        AllSucceeded = outcome.Results.Count == outcome.Total && outcome.Results.All(r => r.Succeeded);
+        AllSucceeded = outcome.Results.Count == outcome.Total && outcome.Results.All(r => !r.Failed);
         try
         {
             _form.Finishing = true;

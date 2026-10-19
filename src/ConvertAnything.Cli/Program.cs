@@ -122,6 +122,6 @@ internal static class Program
         var outcome = new Runner(log)
             .RunAsync(operation, leader.ReadAllAsync(CancellationToken.None), () => leader.Pending, progress: null, CancellationToken.None)
             .GetAwaiter().GetResult();
-        return outcome.Results.Count == outcome.Total && outcome.Results.All(r => r.Succeeded) ? Ok : SomeFilesFailed;
+        return outcome.Results.Count == outcome.Total && outcome.Results.All(r => !r.Failed) ? Ok : SomeFilesFailed;
     }
 }

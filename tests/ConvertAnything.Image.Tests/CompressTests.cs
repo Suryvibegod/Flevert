@@ -41,17 +41,37 @@ public sealed class CompressTests : IDisposable
 
     // A JPG already saved at quality 70 (a chat download) or a tiny PNG gets bigger when re-encoded; writing that as
     // "compressed" would mislead.
+    // Skipped, not failed: nothing went wrong, there is just nothing worth saving. A q80 source at Light (q85) saves a
+    // fraction of a percent after a lossy re-encode, which is not worth a second copy either.
     [Theory]
     [InlineData("light", "chat.jpg", 70u)]
+    [InlineData("light", "shared.jpg", 80u)]
     [InlineData("strong", "icon.png", null)]
-    public async Task A_result_that_is_not_smaller_is_refused_and_not_written(string level, string name, uint? quality)
+    public async Task A_result_that_is_not_meaningfully_smaller_is_skipped_and_not_written(string level, string name, uint? quality)
     {
         var input = name.EndsWith(".png", StringComparison.Ordinal) ? Flat(name) : CameraLike(name, 1200, 900, quality!.Value);
 
-        var error = await Assert.ThrowsAnyAsync<Exception>(() => Op(level).RunAsync(input, CancellationToken.None));
+        var skipped = await Assert.ThrowsAsync<OperationSkippedException>(() => Op(level).RunAsync(input, CancellationToken.None));
 
-        Assert.Contains("not smaller", error.Message, StringComparison.Ordinal);
+        Assert.Contains("already well compressed", skipped.Message, StringComparison.Ordinal);
         Assert.Equal([name], _dir.FileNames());
+    }
+
+    [Fact]
+    public async Task A_multi_page_tiff_is_skipped_rather_than_reduced_to_its_first_page()
+    {
+        var input = _dir.Combine("scan.tiff");
+        using (var pages = new MagickImageCollection())
+        {
+            pages.Add(new MagickImage(MagickColors.Red, 64, 64));
+            pages.Add(new MagickImage(MagickColors.Blue, 64, 64));
+            pages.Write(input, MagickFormat.Tiff);
+        }
+
+        var skipped = await Assert.ThrowsAsync<OperationSkippedException>(() => Op("balanced").RunAsync(input, CancellationToken.None));
+
+        Assert.Contains("2 pages", skipped.Message, StringComparison.Ordinal);
+        Assert.Equal(["scan.tiff"], _dir.FileNames());
     }
 
     [Fact]
@@ -157,7 +177,7 @@ public sealed class CompressTests : IDisposable
             exif.SetValue(ExifTag.Make, "TestCam");
             exif.SetValue(ExifTag.GPSLatitudeRef, "N");
             image.SetProfile(exif);
-            image.SetAttribute("comment", "secret");
+            image.SetAttribute("comment", "secret " + new string('x', 20_000)); // also enough to gain over 5%
             image.Write(input, MagickFormat.Jpeg);
         }
 
@@ -210,6 +230,8 @@ public sealed class CompressTests : IDisposable
         image.AddNoise(NoiseType.Gaussian, 0.6);
         if (quality is { } q)
             image.Quality = q;
+        // A PNG as most tools write it, at a modest zlib level, so maximum compression has something to gain.
+        image.Settings.SetDefine(MagickFormat.Png, "compression-level", "1");
         image.Write(path, ImageFile.FormatOf(Path.GetExtension(name)));
         return path;
     }

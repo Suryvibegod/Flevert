@@ -33,7 +33,10 @@ public sealed class ImageIoTests : IDisposable
             if (source.EndsWith(".gif", StringComparison.Ordinal))
                 frames.Write(file, MagickFormat.Gif);
             else
+            {
+                frames[0].Comment = new string('x', 20_000); // something for Compress to remove, so it is not skipped
                 frames[0].Write(file, MagickFormat.Jpeg);
+            }
         }
 
         var output = await Op(operationId).RunAsync(@"\\?\" + input, CancellationToken.None);

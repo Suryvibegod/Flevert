@@ -317,6 +317,31 @@ public sealed class RunnerTests : IDisposable
     private static extern uint GetShortPathNameW(string longPath, [System.Runtime.InteropServices.Out] char[] shortPath, uint length);
 
     [Fact]
+    public async Task An_operation_can_skip_a_file_with_a_reason_without_failing()
+    {
+        var file = _dir.File("a.txt");
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new SkippingOp(), [file], progress: null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Skipped);
+        Assert.False(result.Failed);
+        Assert.Equal("nothing to gain", result.Error);
+        var line = Assert.Single(File.ReadAllLines(Directory.GetFiles(_logs.Path).Single())).Split('\t');
+        Assert.Equal("skipped", line[4]);
+        Assert.Equal("nothing to gain", line[6]); // the reason, not a stack trace
+    }
+
+    private sealed class SkippingOp : IOperation
+    {
+        public string Id => "test.skip";
+        public string MenuPath => "Test/Skip";
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+        public Task<string> RunAsync(string inputPath, CancellationToken ct) => throw new OperationSkippedException("nothing to gain");
+    }
+
+    [Fact]
     public async Task Cancel_returns_promptly_even_if_the_operation_ignores_the_token()
     {
         var file = _dir.File("a.txt");

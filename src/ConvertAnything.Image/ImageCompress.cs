@@ -17,6 +17,7 @@ public enum CompressLevel
 public sealed class ImageCompress(CompressLevel level) : IOperation
 {
     private const uint StrongMaxEdge = 2560;
+    private const double MinSavedShare = 0.95;
 
     // Spelled out: ids are stored in the registry and must never change if the enum or its names do.
     public string Id => level switch
@@ -43,7 +44,10 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
         return Task.Run(async () =>
         {
             var source = ImageFile.RealFormat(inputPath);
-            using var images = ImageFile.Read(inputPath, allFrames: ImageFile.IsAnimationFormat(source));
+            using var images = ImageFile.Read(inputPath, allFrames: ImageFile.IsAnimationFormat(source) || source == MagickFormat.Tiff);
+            // The result is one JPG: compressing a multi-page scan that way would silently drop pages.
+            if (source == MagickFormat.Tiff && images.Count > 1)
+                throw new OperationSkippedException($"The TIFF has {images.Count} pages and Compress makes a single image; use Remove metadata to keep every page.");
             ImageFile.StopOnCancel(images, ct);
             var target = Target(source, animated: images.Count > 1);
             var desired = Path.Combine(
@@ -73,8 +77,9 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
 
                 // An already well-compressed source (a chat download at quality 70, a tiny PNG) can grow; a bigger
                 // "compressed" copy would mislead, so refuse it and let the temporary file be deleted.
-                if (new FileInfo(temp).Length >= new FileInfo(inputPath).Length)
-                    throw new InvalidOperationException("The image is already well compressed: the result is not smaller than the original.");
+                // Less than 5% saved is not worth a second, re-encoded copy (a q80 JPEG at Light saves a fraction of a percent).
+                if (new FileInfo(temp).Length > new FileInfo(inputPath).Length * MinSavedShare)
+                    throw new OperationSkippedException("The image is already well compressed: the result would be less than 5% smaller.");
             }, token), ct).ConfigureAwait(false);
         }, ct);
     }

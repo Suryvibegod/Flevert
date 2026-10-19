@@ -27,7 +27,7 @@ public sealed class RunLog(string directory)
             Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
             OneLine(operationId),
             OneLine(result.Input),
-            result.Succeeded ? "ok" : "failed",
+            result.Succeeded ? "ok" : result.Skipped ? "skipped" : "failed",
             ((long)elapsed.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
             OneLine((result.Succeeded ? result.Output : result.Error) ?? ""));
 

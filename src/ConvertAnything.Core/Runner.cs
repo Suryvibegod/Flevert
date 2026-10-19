@@ -3,9 +3,13 @@ using Microsoft.Win32.SafeHandles;
 
 namespace ConvertAnything.Core;
 
-public sealed record FileResult(string Input, string? Output, string? Error)
+/// <param name="Error">Why the file produced no output: a failure, or the reason it was skipped.</param>
+/// <param name="Skipped">The operation chose not to produce an output (nothing to gain); not a failure.</param>
+public sealed record FileResult(string Input, string? Output, string? Error, bool Skipped = false)
 {
     public bool Succeeded => Error is null;
+
+    public bool Failed => Error is not null && !Skipped;
 }
 
 public sealed record BatchProgress(int Completed, int Total, string? Current);
@@ -84,6 +88,10 @@ public sealed class Runner(RunLog log)
         {
             log.Write(operation.Id, new FileResult(file, null, "cancelled"), timer.Elapsed);
             return null;
+        }
+        catch (OperationSkippedException ex)
+        {
+            result = new FileResult(file, null, ex.Message, Skipped: true);
         }
 #pragma warning disable CA1031 // One bad file must never stop the rest of the batch.
         catch (Exception ex)

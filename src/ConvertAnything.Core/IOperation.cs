@@ -25,6 +25,27 @@ public interface IOperation
     Task<string> RunAsync(string inputPath, CancellationToken ct);
 }
 
+/// <summary>
+/// Thrown by an operation that chooses not to produce an output for a file, for a reason the user should see (for
+/// example "already well compressed"). Reported as skipped, with the message and no stack trace, not as a failure.
+/// </summary>
+public sealed class OperationSkippedException : Exception
+{
+    public OperationSkippedException()
+    {
+    }
+
+    public OperationSkippedException(string message)
+        : base(message)
+    {
+    }
+
+    public OperationSkippedException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
 public sealed class OperationCatalog(IEnumerable<IOperation> operations)
 {
     public IReadOnlyList<IOperation> All { get; } = [.. operations];
