@@ -38,8 +38,10 @@ dotnet publish src/ConvertAnything.Cli -c Release -r win-x64 --self-contained -p
 The developer operations copy `.txt` files, which is enough to exercise the menu, batching and progress window.
 
 ```
-artifacts\publish\ca.exe install-menu --dev
+artifacts\publish\ca.exe install-menu --dev --allow-insecure-location
 ```
+
+`install-menu` refuses a folder that other accounts can modify, or one reached through a junction, because the menu runs `ca.exe` as whoever clicks it. A build or publish folder inside the repository usually fails that check; `--allow-insecure-location` accepts it on a machine you trust.
 
 Right-click a `.txt` file, choose **Show more options**, then **ConvertAnything > Dev > Copy** (or **Slow copy**, which takes a second per file so you can see the progress window). Remove everything again with:
 

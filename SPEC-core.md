@@ -50,7 +50,9 @@ Lệnh của `ca.exe`:
 
 ```
 ca.exe run <op-id> <file>...        Chạy thao tác (Explorer gọi lệnh này)
-ca.exe install-menu [--dev]         Ghi menu chuột phải vào HKCU (--dev: thêm thao tác thử dev.copy)
+ca.exe install-menu [--dev] [--allow-insecure-location]
+                                    Ghi menu chuột phải vào HKCU (--dev: thêm thao tác thử dev.copy;
+                                    --allow-insecure-location: cho phép thư mục người khác sửa được hoặc đi qua junction)
 ca.exe uninstall-menu               Gỡ mọi key đã ghi
 ca.exe list-ops                     In danh sách thao tác và loại file áp dụng
 
@@ -97,7 +99,7 @@ Explorer ──"ca.exe run image.to-png <file2>"──▶ B: pipe đã có → g
 A: hết hàng đợi + đang rảnh + 400 ms không có path mới → đóng pipe → 1 thông báo → thoát
 ```
 
-Tên pipe: `ConvertAnything-<SID>-<session>-<khóa>-<op-id>`. Khóa ngẫu nhiên riêng cho mỗi thao tác trong `%LOCALAPPDATA%\ConvertAnything\pipes`, thư mục chỉ user / SYSTEM / Administrators mở được, nhãn medium no-read-up; khóa đổi mỗi khi một lô đóng. Hai đầu kiểm tra tiến trình bên kia chạy cùng file exe, cùng session, integrity không thấp hơn. Lô sống tối thiểu 1,5 s; lô đầy (1000 file) trả `Full` để người gửi tự xử lý. Chi tiết, các bảo đảm và trade-off: [ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md).
+Tên pipe: `ConvertAnything-<SID>-<session>-<khóa>-<op-id>`. Khóa ngẫu nhiên riêng cho mỗi thao tác trong `%LOCALAPPDATA%\ConvertAnything\pipes`, thư mục chỉ user / SYSTEM / Administrators mở được, nhãn medium no-read-up; khóa đổi mỗi khi một lô đóng. Hai đầu kiểm tra tiến trình bên kia chạy cùng file exe, cùng session, integrity không thấp hơn. Lô sống tối thiểu 1,5 s; lô đầy (1000 file) trả `Full`: người gửi đổi khóa và tự làm chủ một lô mới, các tiến trình đến sau vào lô đó. Chi tiết, các bảo đảm và trade-off: [ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md).
 
 ### Menu trong registry
 
@@ -127,6 +129,16 @@ Chỉ ghi HKCU nên không cần admin. Key tool tạo đều có tên bắt đ�
 ### Ngôn ngữ
 
 Menu, thông báo, log, README: tiếng Anh. Tài liệu nội bộ (spec, plan) giữ tiếng Việt.
+
+### Đầu vào bị từ chối
+
+Mỗi file được mở giữ (pin) không cho xóa/đổi tên trong lúc xử lý; thao tác nhận đường dẫn thật lấy từ handle. Bị từ chối, ghi lỗi vào log, các file khác chạy tiếp:
+
+- Đường dẫn thiết bị (`\\.\`, `\\?\GLOBALROOT`, `\??\` ...) và share `pipe` / `IPC$` (mở pipe như file cho phép server mạo danh người dùng).
+- Tên kết thúc bằng dấu chấm hoặc khoảng trắng: Win32 bỏ ký tự đó, nên sẽ đọc nhầm sang file khác.
+- Symlink / junction (reparse point kiểu name surrogate). File OneDrive (placeholder) vẫn chạy.
+- File có hơn một hard link. **Trade-off chấp nhận:** chặn cả vài file hợp lệ (ảnh nền trong `C:\Windows\Web` liên kết sang WinSxS, kho pnpm, công cụ backup dùng hard link); đổi lại hard link không thể làm lộ bản sao của file người khác vào thư mục chung.
+- Đuôi file không thuộc thao tác, kiểm cả trên tên thật sau khi pin.
 
 ### Đặt tên output
 
@@ -179,7 +191,7 @@ public static class OutputPath
 
 ## Success Criteria
 
-1. `ca.exe install-menu --dev` xong, chuột phải file `.txt` trong menu cũ thấy `ConvertAnything > Dev > Copy`.
+1. `ca.exe install-menu --dev --allow-insecure-location` (chạy từ thư mục build) xong, chuột phải file `.txt` trong menu cũ thấy `ConvertAnything > Dev > Copy`.
 2. Bấm vào 1 file: xuất hiện `tên (copy).txt` cạnh file gốc, có thông báo, **không** nháy cửa sổ console.
 3. Chọn 20 file rồi bấm: đúng **một** tiến trình xử lý, **một** thông báo, đủ 20 file output. Chọn 100 file menu vẫn hiện.
 4. File output đã tồn tại thì tên mới có ` (1)`; file gốc không đổi (so sánh hash trước/sau).
@@ -192,7 +204,7 @@ public static class OutputPath
 
 ## Quyết định đã chốt
 
-1. Cài .NET 10 SDK qua winget.
+1. Cài .NET 10 SDK cho riêng user bằng `dotnet-install.ps1` (không cần admin, không kẹt UAC); `scripts/setup-dev.ps1` làm việc này.
 2. Menu, thông báo, README: tiếng Anh.
 3. Cài `gh` CLI, tạo repo GitHub private `ConvertAnything`.
 4. License MIT. Thư viện phụ thuộc chỉ MIT/BSD/Apache/LGPL (LGPL thì liên kết động) để public được.
