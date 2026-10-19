@@ -28,6 +28,23 @@ dotnet format Flevert.sln --verify-no-changes
 powershell -File scripts/build-installer.ps1
 ```
 
+To try the menu without the installer, register a development build. `install-menu` refuses a folder that other accounts can modify, or one reached through a junction, because the menu runs `flevert.exe` as whoever clicks it; `--allow-insecure-location` accepts it on a machine you trust, and `--dev` adds operations that copy `.txt` files to exercise batching and the progress window. Remove it again afterwards:
+
+```
+dotnet publish src/Flevert.Cli -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish
+artifacts\publish\flevert.exe install-menu --dev --allow-insecure-location
+artifacts\publish\flevert.exe uninstall-menu
+```
+
+`tools/MenuProbe` reads and invokes the real Explorer menu from the command line, which is how menu changes are verified without clicking:
+
+```
+dotnet run --project tools/MenuProbe -- list "C:\path\file.txt"
+dotnet run --project tools/MenuProbe -- invoke "Flevert/Dev/Copy" "C:\path\file.txt"
+```
+
+The architecture in four decisions: the menu is a classic entry under `HKCU`, so no administrator rights ([ADR-0001](docs/adr/0001-registry-extendedsubcommandskey.md)); selecting many files starts one `flevert.exe` per file and they join into one batch over a named pipe ([ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md)); the app is a self-contained .NET 10 build ([ADR-0003](docs/adr/0003-self-contained-readytorun-winforms.md)); images go through Magick.NET with an allow-list of formats and resource limits ([ADR-0004](docs/adr/0004-magick-net-for-images.md)). The README's demo animation is drawn by `assets/demo/make_demo_gif.py`.
+
 How the project works:
 
 - Each module has a specification (`docs/specs/<module>.md`) and architecture decisions live in [docs/adr](docs/adr). Read the relevant ones before changing behaviour. Specs and plans are written in Vietnamese; code, UI, commits and the README in English.

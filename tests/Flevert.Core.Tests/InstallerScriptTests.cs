@@ -28,6 +28,16 @@ public sealed class InstallerScriptTests
     }
 
     [Fact]
+    public void Removing_flevert_by_hand_deletes_every_folder_it_writes()
+    {
+        // The documented fallback for when Windows blocks the uninstaller must keep up with AppData.Subfolders.
+        var guide = File.ReadAllText(Path.Combine(RepositoryRoot(), "docs", "install.md"));
+        var loop = Regex.Match(guide, @"for %d in \(([a-z ]+)\) do");
+        Assert.True(loop.Success, "the by-hand removal loop over app data folders is missing");
+        Assert.Equal(AppData.Subfolders.Order(StringComparer.Ordinal), loop.Groups[1].Value.Split(' ').Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Every_command_setup_runs_is_one_flevert_understands()
     {
         var commands = Regex.Matches(Script, @"RunFlevert\('([a-z-]+(?: [a-z]+)?)'").Select(m => m.Groups[1].Value).Distinct().ToList();
