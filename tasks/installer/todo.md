@@ -115,12 +115,12 @@ Cả ba reviewer: không Critical/High/Required (code-reviewer APPROVE). CI xanh
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|
 | CR-L1, DD-L1: `ExtraDiskSpaceRequired` chỉ đổi con số hiển thị, làm Installed apps báo ~290 MB | Low | Hợp lệ | Bỏ; ổ đầy đã có thông báo lỗi giải nén riêng |
-| DD-L5, CR nit: lời lỗi giải nén đổ hết cho dung lượng; lý do dự phòng sai nhánh; `<= 3` thừa | Nit | Hợp lệ | Nhắc cả phần mềm bảo mật; dự phòng riêng cho mã 3 và mã 1–2; `<= 2` |
+| DD-L5, CR nit: lời lỗi giải nén đổ hết cho dung lượng; lý do dự phòng sai nhánh; `<= 3` thừa | Nit | Hợp lệ | Nhắc cả phần mềm bảo mật; dự phòng riêng cho mã 3 và mã 1–2; `<= 2` trong `LocationProblem` (`ReportFailure` giữ `1–3` như một nhóm, `InstallerScriptTests` kiểm chuỗi đó) |
 | DD-L3: thông báo nhắc chính sách chặn chương trình nhưng mục README không nói | Low | Hợp lệ | Thêm đoạn về AppLocker/phần mềm bảo mật ở mục Smart App Control |
-| DD-L4, CR-L6, SA Info: lệnh gỡ tay im lặng khi gỡ dở; lỗi đỏ khi không có khóa `SystemFileAssociations`; AutoRun của cmd | Low/Info | Hợp lệ | Dòng cuối báo "Not fully removed…"; `-ErrorAction SilentlyContinue`; `cmd /d /c`. Kiểm sandbox với file bị khóa: báo, chạy lại thì sạch |
-| DD-L6, CR-L5: bước test thứ hai bị bỏ khi bước đầu đỏ; danh sách project cứng | Low | Hợp lệ | `if: ${{ !cancelled() }}`; chú thích nhắc thêm project mới vào cả hai workflow |
-| DD-L2: hủy ở 800 ms cố định rơi vào lúc decode trên CI | Low | Hợp lệ | Hủy ở thời gian decode đo được + 0.5 s |
-| CR-L4: ngưỡng chặt hơn 5 s cũ | Low | Trade-off | Giữ ngưỡng tương đối (yêu cầu của DD vòng 4); hủy giờ rơi sau decode nên ít dao động |
+| DD-L4, CR-L6, SA Info: lệnh gỡ tay im lặng khi gỡ dở; lỗi đỏ khi không có khóa `SystemFileAssociations`; AutoRun của cmd | Low/Info | Hợp lệ | Dòng cuối báo "Not fully removed…" (chỉ cho thư mục chương trình; log bị khóa trong app data thì im lặng, vô hại); `-ErrorAction SilentlyContinue`; `cmd /d /c`. Kiểm sandbox với file bị khóa: báo, chạy lại thì sạch |
+| DD-L6, CR-L5: bước test thứ hai bị bỏ khi bước đầu đỏ; danh sách project cứng | Low | Hợp lệ | `if: ${{ !cancelled() && steps.build.outcome == 'success' }}` (soát cuối: chỉ `!cancelled()` thì build hỏng cũng chạy test, che lỗi thật); chú thích nhắc thêm project mới vào cả hai workflow |
+| DD-L2: hủy ở 800 ms cố định rơi vào lúc decode trên CI | Low | Hợp lệ | Hủy ở thời gian decode đo được + 0.5 s, và lớp test chạy riêng (`SequentialTimingTests`): CI cho thấy decode của chính operation vẫn có thể chậm hơn decode test đo trước (các lớp khác chạy song song), nên hủy có thể vẫn rơi vào decode |
+| CR-L4: ngưỡng chặt hơn 5 s cũ | Low | Hợp lệ (sau khi CI đỏ) | Ngưỡng tương đối làm CI đỏ (`strip-metadata` dừng 2.4 s sau hủy, ngưỡng 1.7 s). Giờ `max(5 s, 1 s + 2 × decode)`. Soát cuối nghi PNG không báo progress khi encode: đo thật thì PNG, JPEG, WebP đều báo theo hàng (4000 sự kiện), nên không phải lỗi sản phẩm; `strip-metadata` (2 s không hủy) quá ngắn để ngưỡng có ý nghĩa, chỉ kiểm ngoại lệ và không có file dở |
 | CR-L2: test dương skip dựa trên chính hàm đang kiểm | Low | Hợp lệ | Trên CI (`GITHUB_ACTIONS`) không bao giờ skip |
 | CR-L3, SA Info: chưa test CREATOR OWNER/GROUP inherit-only, ACE `OI` (không IO) từ cha | Low/Info | Hợp lệ | Thêm test: CREATOR OWNER an toàn, CREATOR GROUP không; cha có `Users:Write (OI)` → không an toàn |
 | SA-L1: ACE kế thừa của cha chưa lan xuống `{app}` (đặt bằng API không lan truyền) | Low | Trade-off | Cần quyền WRITE_DAC trên thư mục cha (chính người dùng/admin); ghi nhận |
@@ -134,5 +134,6 @@ Cả ba reviewer: không Critical/High/Required (code-reviewer APPROVE). CI xanh
 - [x] Review vòng 3 → reconcile (bảng trên)
 - [x] Review vòng 4 → reconcile (bảng trên)
 - [x] Review vòng 5 → không còn Critical/High/Required
-- [ ] Soát phần sửa Low vòng 5 (một reviewer bối cảnh trống)
-- [ ] HANDOFF; commit + push
+- [x] Soát phần sửa Low vòng 5 (một reviewer bối cảnh trống): 1 Required (CI đỏ ở test hủy Image) đã sửa và kiểm; còn lại Low/Nit đã sửa hoặc thu hẹp câu chữ
+- [x] HANDOFF; commit + push
+- [ ] CI xanh 3 lần liên tiếp (bước phát hành 3.1)
