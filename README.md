@@ -20,6 +20,12 @@ Free, open source and fully offline: your files never leave your computer.
 - Select many files at once: they are converted several at a time as one batch, with one notification at the end.
 - The result is saved next to the original, which is never modified or overwritten.
 
+<p align="center">
+<img src="assets/screenshots/menu.png" width="486" alt="Explorer's right-click menu on a picture, with ConvertAnything open showing Convert, Compress and Remove metadata">
+<br><br>
+<img src="assets/screenshots/progress.png" width="420" alt="The ConvertAnything progress window converting twelve photos to JPG: 8 of 12 done, with a Cancel button">
+</p>
+
 Video, audio and PDF are next ([roadmap](#roadmap)).
 
 ## Install
