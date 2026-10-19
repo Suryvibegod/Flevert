@@ -13,10 +13,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Exe = (Resolve-Path $Exe).Path
-$work = Join-Path ([IO.Path]::GetTempPath()) ("ca-measure-" + [guid]::NewGuid().ToString('N'))
+$work = Join-Path ([IO.Path]::GetTempPath()) ("flevert-measure-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
 
-function Start-Ca([string]$file) {
+function Start-Flevert([string]$file) {
     $start = New-Object Diagnostics.ProcessStartInfo $Exe
     $start.Arguments = "run dev.slow-copy `"$file`""
     $start.UseShellExecute = $false
@@ -27,13 +27,13 @@ function Start-Ca([string]$file) {
 
 try {
     $files = 0..$Runs | ForEach-Object { $f = Join-Path $work "f$_.txt"; Set-Content -LiteralPath $f -Value $_; $f }
-    $leader = Start-Ca $files[0]
+    $leader = Start-Flevert $files[0]
     Start-Sleep -Milliseconds 300 # let the leader create its pipe
 
     # Start-Process -Wait polls about once a second in Windows PowerShell, which hides the real time; wait on the process.
     $times = $files[1..$Runs] | ForEach-Object {
         $timer = [Diagnostics.Stopwatch]::StartNew()
-        (Start-Ca $_).WaitForExit()
+        (Start-Flevert $_).WaitForExit()
         $timer.Elapsed.TotalMilliseconds
     }
 

@@ -9,15 +9,15 @@ public sealed class LogRetentionTests : IDisposable
     [Fact]
     public void Prune_deletes_daily_logs_older_than_the_retention_window_only()
     {
-        _logs.File("ca-20261001.log");
-        _logs.File("ca-20261012.log");
-        _logs.File("ca-20261013.log");
-        _logs.File("ca-20261019.log");
+        _logs.File("flevert-20261001.log");
+        _logs.File("flevert-20261012.log");
+        _logs.File("flevert-20261013.log");
+        _logs.File("flevert-20261019.log");
         _logs.File("notes.txt");
 
         new RunLog(_logs.Path).Prune(TimeSpan.FromDays(7), today: new DateOnly(2026, 10, 19));
 
-        Assert.Equal(["ca-20261013.log", "ca-20261019.log", "notes.txt"], _logs.FileNames());
+        Assert.Equal(["notes.txt", "flevert-20261013.log", "flevert-20261019.log"], _logs.FileNames());
     }
 
     [Fact]

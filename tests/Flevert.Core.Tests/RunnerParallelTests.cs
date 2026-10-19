@@ -58,7 +58,7 @@ public sealed class RunnerParallelTests : IDisposable
 
         Assert.Equal(6, outcome.Results.Count);
         Assert.Equal(["3.txt"], outcome.Results.Where(r => r.Failed).Select(r => Path.GetFileName(r.Input)));
-        Assert.Equal(6, File.ReadAllLines(Assert.Single(Directory.GetFiles(_logs.Path, "ca-*.log"))).Length);
+        Assert.Equal(6, File.ReadAllLines(Assert.Single(Directory.GetFiles(_logs.Path, "flevert-*.log"))).Length);
     }
 
     [Fact]

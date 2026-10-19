@@ -49,7 +49,7 @@ public sealed class RunnerTests : IDisposable
         await new Runner(new RunLog(_logs.Path)).RunAsync(
             new DevCopy(), [good, missing], progress: null, CancellationToken.None);
 
-        var lines = File.ReadAllLines(Assert.Single(Directory.GetFiles(_logs.Path, "ca-*.log")));
+        var lines = File.ReadAllLines(Assert.Single(Directory.GetFiles(_logs.Path, "flevert-*.log")));
         Assert.Equal(2, lines.Length);
         Assert.Contains("\tdev.copy\t", lines[0], StringComparison.Ordinal);
         Assert.Contains("\tok\t", lines[0], StringComparison.Ordinal);
@@ -250,7 +250,7 @@ public sealed class RunnerTests : IDisposable
     public void The_pin_refuses_anything_that_is_not_a_file_on_disk()
     {
         // Every pipe spelling is refused earlier; this is the last line if one ever gets through.
-        var name = $"ca-test-{Guid.NewGuid():N}";
+        var name = $"flevert-test-{Guid.NewGuid():N}";
         using var server = new System.IO.Pipes.NamedPipeServerStream(name, System.IO.Pipes.PipeDirection.InOut, 1,
             System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
         _ = server.WaitForConnectionAsync();

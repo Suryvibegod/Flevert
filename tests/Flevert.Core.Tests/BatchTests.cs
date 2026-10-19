@@ -162,7 +162,7 @@ public sealed class BatchTests
     {
         // Disconnecting discards what the client has not read yet, and a lost "Full" would make the sender retry for 10 s.
         // Unbuffered pipes prevent that (a write completes only once read); this guards against adding buffers.
-        var name = $"ca-test-{Guid.NewGuid():N}";
+        var name = $"flevert-test-{Guid.NewGuid():N}";
         System.IO.Pipes.NamedPipeServerStream Create() => Batch.CreateServer(name);
         var many = Enumerable.Range(0, Batch.MaxFilesPerBatch).Select(i => $@"C:\f{i}.txt").ToList();
         await using var leader = BatchLeader.Start(Create, Create(), many, Idle, onClosed: () => { });
@@ -183,7 +183,7 @@ public sealed class BatchTests
     {
         // The sender writes its paths before reading; on the unbuffered pipe a leader that writes "Refused" without
         // reading first leaves both sides waiting for each other until the 2 s timeout, and the sender never sees it.
-        var name = $"ca-test-{Guid.NewGuid():N}";
+        var name = $"flevert-test-{Guid.NewGuid():N}";
         System.IO.Pipes.NamedPipeServerStream Create() => Batch.CreateServer(name);
         await using var leader = BatchLeader.Start(Create, Create(), [@"C:\a.txt"], Idle, onClosed: () => { }, isTrusted: _ => false);
 
@@ -259,7 +259,7 @@ public sealed class BatchTests
     public async Task A_client_that_vanished_before_the_leader_started_listening_does_not_wedge_it()
     {
         // Deterministic version of the race: the client connects and closes before the first WaitForConnection.
-        var name = $"ca-test-{Guid.NewGuid():N}";
+        var name = $"flevert-test-{Guid.NewGuid():N}";
         System.IO.Pipes.NamedPipeServerStream Create() => new(name, System.IO.Pipes.PipeDirection.InOut, 1,
             System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
         var server = Create();
@@ -330,7 +330,7 @@ public sealed class BatchTests
     public async Task A_batch_still_ends_when_closing_work_throws_an_unexpected_exception()
     {
         // Key rotation sets ACLs, which can throw InvalidOperationException or NotSupportedException, not only IO errors.
-        var name = $"ca-test-{Guid.NewGuid():N}";
+        var name = $"flevert-test-{Guid.NewGuid():N}";
         var server = new System.IO.Pipes.NamedPipeServerStream(name, System.IO.Pipes.PipeDirection.InOut, 1,
             System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
         var leader = BatchLeader.Start(server, [@"C:\a.txt"], Idle, onClosed: () => throw new InvalidOperationException("ACL"));
@@ -349,7 +349,7 @@ public sealed class BatchTests
     [InlineData(typeof(UnauthorizedAccessException))]
     public async Task A_leader_that_lost_its_pipe_name_finishes_without_rotating_the_key(Type error)
     {
-        var name = $"ca-test-{Guid.NewGuid():N}";
+        var name = $"flevert-test-{Guid.NewGuid():N}";
         var server = new System.IO.Pipes.NamedPipeServerStream(name, System.IO.Pipes.PipeDirection.InOut, 1,
             System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
         using (var rogue = new System.IO.Pipes.NamedPipeClientStream(".", name,

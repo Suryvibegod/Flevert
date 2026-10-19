@@ -69,7 +69,7 @@ public sealed class RunLogTests : IDisposable
     [Fact]
     public void Prune_never_throws_when_an_old_log_cannot_be_deleted()
     {
-        var old = _logs.File("ca-20200101.log");
+        var old = _logs.File("flevert-20200101.log");
         File.SetAttributes(old, FileAttributes.ReadOnly);
 
         new RunLog(_logs.Path).Prune(TimeSpan.FromDays(7), today: new DateOnly(2026, 10, 19));

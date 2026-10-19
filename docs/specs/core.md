@@ -158,11 +158,11 @@ Mỗi file được mở giữ (pin) không cho xóa/đổi tên trong lúc xử
 
 - Cùng thư mục với file gốc. Tên do thao tác đề xuất (`anh.png`, `anh (nén).jpg`).
 - Trùng tên thì thêm ` (1)`, ` (2)`...
-- Ghi ra file tạm `.ca-<guid>.partial` (độ dài cố định) rồi đổi tên khi xong: hỏng giữa chừng không để lại file dở. Tên output tự cắt bớt để vừa 255 ký tự; thư mục trùng tên cũng tính là đã có.
+- Ghi ra file tạm `.flevert-<guid>.partial` (độ dài cố định) rồi đổi tên khi xong: hỏng giữa chừng không để lại file dở. Tên output tự cắt bớt để vừa 255 ký tự; thư mục trùng tên cũng tính là đã có.
 
 ### Log
 
-`%LOCALAPPDATA%\Flevert\logs\ca-YYYYMMDD.log`, mỗi dòng: thời gian, pid, op-id, file, kết quả (`ok` / `skipped` / `failed`), thời gian xử lý, output hoặc lý do. Lỗi kèm stack; file bị bỏ qua chỉ ghi lý do; file bị ngắt khi Cancel ghi `failed` với lý do `cancelled`. Giữ 7 ngày. Không ghi nội dung file.
+`%LOCALAPPDATA%\Flevert\logs\flevert-YYYYMMDD.log`, mỗi dòng: thời gian, pid, op-id, file, kết quả (`ok` / `skipped` / `failed`), thời gian xử lý, output hoặc lý do. Lỗi kèm stack; file bị bỏ qua chỉ ghi lý do; file bị ngắt khi Cancel ghi `failed` với lý do `cancelled`. Giữ 7 ngày. Không ghi nội dung file.
 
 ### Bỏ qua (skipped)
 

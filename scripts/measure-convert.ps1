@@ -30,7 +30,7 @@ function Median($xs) { $s = @($xs | Sort-Object); if ($s.Count % 2) { $s[[int][m
 $rows = foreach ($sc in $scenarios) {
     $walls = @(); $ops = @()
     foreach ($r in 1..$Runs) {
-        $work = Join-Path ([IO.Path]::GetTempPath()) ("ca-bench-" + [guid]::NewGuid().ToString('N'))
+        $work = Join-Path ([IO.Path]::GetTempPath()) ("flevert-bench-" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory "$work\logs" | Out-Null
         $inputs = 1..$sc.Count | ForEach-Object { $f = Join-Path $work ("p$_" + [IO.Path]::GetExtension($sc.File)); Copy-Item (Join-Path $Src $sc.File) $f; $f }
         $timer = [Diagnostics.Stopwatch]::StartNew()

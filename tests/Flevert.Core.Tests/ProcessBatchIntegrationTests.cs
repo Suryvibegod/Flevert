@@ -28,7 +28,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         var files = Enumerable.Range(1, 20).Select(i => _dir.File($"ảnh {i}.txt")).ToList();
         var timer = Stopwatch.StartNew();
 
-        var processes = files.Select(f => Ca("dev.copy", f)).ToList();
+        var processes = files.Select(f => StartFlevert("dev.copy", f)).ToList();
         await ExitAllOk(processes);
 
         // Headless: the leader exits as soon as the batch is done instead of waiting for a notification (which would add
@@ -45,10 +45,10 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         _idleWindowMs = "3000";
         var files = Enumerable.Range(1, 6).Select(i => _dir.File($"{i}.txt")).ToList();
 
-        await ExitAllOk(files.Select(f => Ca("dev.slow-copy", f)).ToList());
+        await ExitAllOk(files.Select(f => StartFlevert("dev.slow-copy", f)).ToList());
 
         // Each log line is written when its file is done, with its duration: rebuild when each file ran.
-        var runs = Directory.GetFiles(_logs.Path, "ca-*.log").SelectMany(File.ReadAllLines).Select(line =>
+        var runs = Directory.GetFiles(_logs.Path, "flevert-*.log").SelectMany(File.ReadAllLines).Select(line =>
         {
             var fields = line.Split('\t');
             var end = DateTimeOffset.Parse(fields[0], System.Globalization.CultureInfo.InvariantCulture);
@@ -68,10 +68,10 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         // parallel runner has already asked for the next file).
         _idleWindowMs = "200";
         _slowCopyMs = "6000"; // room for the late process to start slowly; it must arrive while file 1 still runs
-        var leader = Ca("dev.slow-copy", _dir.File("1.txt"));
+        var leader = StartFlevert("dev.slow-copy", _dir.File("1.txt"));
         await Task.Delay(TimeSpan.FromSeconds(2.2));
 
-        var late = Ca("dev.slow-copy", _dir.File("2.txt"));
+        var late = StartFlevert("dev.slow-copy", _dir.File("2.txt"));
         await ExitAllOk([leader, late]);
 
         Assert.Equal(2, Directory.GetFiles(_dir.Path, "* (copy).txt").Length);
@@ -90,7 +90,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         var below = inherited is ProcessPriorityClass.Idle or ProcessPriorityClass.BelowNormal ? inherited : ProcessPriorityClass.BelowNormal;
         Skip.If(lowered && below == inherited, $"This test runs at {inherited}; flevert.exe cannot go lower than that.");
         _slowCopyMs = "3000";
-        var leader = Ca("dev.slow-copy", [.. Enumerable.Range(1, files).Select(i => _dir.File($"{i}.txt"))]);
+        var leader = StartFlevert("dev.slow-copy", [.. Enumerable.Range(1, files).Select(i => _dir.File($"{i}.txt"))]);
         try
         {
             // A cold start can be slow on CI: watch for up to 2.5 s of the 3 s the files take.
@@ -116,7 +116,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         // Peers are matched by executable path; the kernel reports the resolved path, the process its launch path.
         using var links = new TempDir();
         var link = Path.Combine(links.Path, "app");
-        using (var mklink = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{Path.GetDirectoryName(CaExe)}\"")
+        using (var mklink = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{Path.GetDirectoryName(FlevertExe)}\"")
         {
             UseShellExecute = false,
             RedirectStandardOutput = true,
@@ -128,9 +128,9 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
 
         var viaLink = Path.Combine(link, "flevert.exe");
         _idleWindowMs = "3000";
-        var leader = CaVia(viaLink, "dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
+        var leader = StartFlevertVia(viaLink, "dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
         await Task.Delay(TimeSpan.FromSeconds(1.2));
-        var late = CaVia(viaLink, "dev.slow-copy", _dir.File("3.txt"));
+        var late = StartFlevertVia(viaLink, "dev.slow-copy", _dir.File("3.txt"));
 
         // Has failed under heavy parallel load (the image suite encoding at the same time): two batches after ~11 s, once
         // with an empty log. Any failed assertion below carries everything needed to tell why.
@@ -156,7 +156,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         var othersRunning = Mutex.TryOpenExisting(AppMutex.Name, out var before);
         before?.Dispose();
         Skip.If(othersRunning, "Another flevert.exe is running.");
-        var job = Ca("dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
+        var job = StartFlevert("dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
         try
         {
             // The first run of a fresh build can be slow to start (Smart App Control checks new binaries).
@@ -181,7 +181,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         using var squatter = System.Threading.MutexAcl.Create(false, AppMutex.Name, out var created, new System.Security.AccessControl.MutexSecurity());
         Skip.IfNot(created, "A flevert.exe is running; the name is already taken.");
 
-        await ExitAllOk([Ca("dev.copy", _dir.File("1.txt"))]);
+        await ExitAllOk([StartFlevert("dev.copy", _dir.File("1.txt"))]);
 
         Assert.True(File.Exists(_dir.Combine("1 (copy).txt")));
     }
@@ -206,12 +206,12 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
 
         try
         {
-            var start = new ProcessStartInfo(CaExe, "uninstall-menu") { UseShellExecute = false, RedirectStandardError = true };
-            using var ca = Process.Start(start)!;
-            var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
-            await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            var start = new ProcessStartInfo(FlevertExe, "uninstall-menu") { UseShellExecute = false, RedirectStandardError = true };
+            using var flevert = Process.Start(start)!;
+            var stderr = await flevert.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
-            Assert.Equal(1, ca.ExitCode);
+            Assert.Equal(1, flevert.ExitCode);
             Assert.Contains("uninstall-menu", stderr, StringComparison.Ordinal);
         }
         finally
@@ -232,24 +232,24 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     {
         using var links = new TempDir();
         var link = Path.Combine(links.Path, "app");
-        await MakeJunction(link, Path.GetDirectoryName(CaExe)!);
+        await MakeJunction(link, Path.GetDirectoryName(FlevertExe)!);
 
         var start = new ProcessStartInfo(Path.Combine(link, "flevert.exe"), "install-menu") { UseShellExecute = false, RedirectStandardError = true };
-        using var ca = Process.Start(start)!;
+        using var flevert = Process.Start(start)!;
         try
         {
-            var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
-            await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            var stderr = await flevert.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
-            Assert.Equal(ExitCodes.RefusedLocation, ca.ExitCode);
+            Assert.Equal(ExitCodes.RefusedLocation, flevert.ExitCode);
             Assert.Contains("other accounts can modify its folder", stderr, StringComparison.Ordinal);
         }
         finally
         {
             // A regression would leave a real menu pointing into a temp folder that is about to be deleted.
-            if (ca.HasExited && ca.ExitCode == 0)
+            if (flevert.HasExited && flevert.ExitCode == 0)
             {
-                using var uninstall = Process.Start(new ProcessStartInfo(CaExe, "uninstall-menu") { UseShellExecute = false })!;
+                using var uninstall = Process.Start(new ProcessStartInfo(FlevertExe, "uninstall-menu") { UseShellExecute = false })!;
                 await uninstall.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
             }
         }
@@ -266,14 +266,14 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
             System.Security.AccessControl.FileSystemRights.Modify, System.Security.AccessControl.AccessControlType.Allow));
         new DirectoryInfo(dir.Path).SetAccessControl(acl);
 
-        var start = new ProcessStartInfo(CaExe) { UseShellExecute = false, RedirectStandardError = true };
+        var start = new ProcessStartInfo(FlevertExe) { UseShellExecute = false, RedirectStandardError = true };
         start.ArgumentList.Add("check-location");
         start.ArgumentList.Add(dir.Path);
-        using var ca = Process.Start(start)!;
-        var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
-        await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        using var flevert = Process.Start(start)!;
+        var stderr = await flevert.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
-        Assert.Equal(ExitCodes.RefusedLocation, ca.ExitCode);
+        Assert.Equal(ExitCodes.RefusedLocation, flevert.ExitCode);
         Assert.Contains("other accounts can modify", stderr, StringComparison.Ordinal);
     }
 
@@ -283,7 +283,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         // The control for the refusals: under the user's own profile, not %TEMP%, which some machines share with
         // sandbox accounts.
         var dir = Directory.CreateDirectory(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ca-test-" + Guid.NewGuid().ToString("N"))).FullName;
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "flevert-test-" + Guid.NewGuid().ToString("N"))).FullName;
         try
         {
             // Skipping on the function under test would hide a false refusal, so CI runners, whose profile is a plain
@@ -291,14 +291,14 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
             Skip.If(Environment.GetEnvironmentVariable("GITHUB_ACTIONS") != "true"
                 && !Flevert.Core.Menu.InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir),
                 "Other accounts can change %LOCALAPPDATA% or a folder above it on this machine.");
-            var start = new ProcessStartInfo(CaExe) { UseShellExecute = false, RedirectStandardError = true };
+            var start = new ProcessStartInfo(FlevertExe) { UseShellExecute = false, RedirectStandardError = true };
             start.ArgumentList.Add("check-location");
             start.ArgumentList.Add(dir);
-            using var ca = Process.Start(start)!;
-            var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
-            await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            using var flevert = Process.Start(start)!;
+            var stderr = await flevert.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
-            Assert.True(ca.ExitCode == ExitCodes.Ok, $"exit {ca.ExitCode}: {stderr}");
+            Assert.True(flevert.ExitCode == ExitCodes.Ok, $"exit {flevert.ExitCode}: {stderr}");
         }
         finally
         {
@@ -311,14 +311,14 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     {
         using var dir = new TempDir();
 
-        var start = new ProcessStartInfo(CaExe) { UseShellExecute = false, RedirectStandardError = true };
+        var start = new ProcessStartInfo(FlevertExe) { UseShellExecute = false, RedirectStandardError = true };
         start.ArgumentList.Add("check-location");
         start.ArgumentList.Add(Path.Combine(dir.Path, "missing"));
-        using var ca = Process.Start(start)!;
-        await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
-        await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        using var flevert = Process.Start(start)!;
+        await flevert.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
-        Assert.Equal(ExitCodes.RefusedLocation, ca.ExitCode);
+        Assert.Equal(ExitCodes.RefusedLocation, flevert.ExitCode);
     }
 
     private static bool MenuIsRegistered()
@@ -356,11 +356,11 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     [Fact]
     public async Task A_name_ending_in_a_dot_is_not_resolved_to_the_file_without_it()
     {
-        // A decoy "budget.txt." beside a protected budget.txt must not make ca convert budget.txt.
+        // A decoy "budget.txt." beside a protected budget.txt must not make flevert convert budget.txt.
         _dir.File("budget.txt");
 
-        using var ca = Ca("dev.copy", _dir.Combine("budget.txt."));
-        await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        using var flevert = StartFlevert("dev.copy", _dir.Combine("budget.txt."));
+        await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.False(File.Exists(_dir.Combine("budget (copy).txt")));
     }
@@ -373,8 +373,8 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         var decoy = Directory.CreateDirectory(@"\\?\" + _dir.Combine("sub.")).FullName;
         File.WriteAllText(Path.Combine(decoy, "x.txt"), "decoy");
 
-        using var ca = Ca("dev.copy", _dir.Path + @"\sub.\x.txt");
-        await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        using var flevert = StartFlevert("dev.copy", _dir.Path + @"\sub.\x.txt");
+        await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.False(File.Exists(Path.Combine(real, "x (copy).txt")));
     }
@@ -389,8 +389,8 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         var shortPath = new string(buffer, 0, (int)length);
         Skip.If(length == 0 || shortPath == full, "8.3 short names are disabled on this volume.");
 
-        using var ca = Ca("dev.copy", shortPath);
-        await ExitAllOk([ca]);
+        using var flevert = StartFlevert("dev.copy", shortPath);
+        await ExitAllOk([flevert]);
 
         Assert.True(File.Exists(_dir.Combine("Ảnh Đà Lạt rất dài tên (copy).txt")), string.Join(", ", Directory.GetFiles(_dir.Path)));
     }
@@ -403,14 +403,14 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     {
         _dir.File("relative.txt");
 
-        await ExitAllOk([Ca("dev.copy", "relative.txt")]);
+        await ExitAllOk([StartFlevert("dev.copy", "relative.txt")]);
 
         Assert.True(File.Exists(_dir.Combine("relative (copy).txt")));
     }
 
-    private Process Ca(string operation, params string[] files) => CaVia(CaExe, operation, files);
+    private Process StartFlevert(string operation, params string[] files) => StartFlevertVia(FlevertExe, operation, files);
 
-    private Process CaVia(string exe, string operation, params string[] files)
+    private Process StartFlevertVia(string exe, string operation, params string[] files)
     {
         var start = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = _dir.Path };
         start.ArgumentList.Add("run");
@@ -442,10 +442,10 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     private string[] LoggedProcessIds() =>
-        Directory.GetFiles(_logs.Path, "ca-*.log").SelectMany(File.ReadAllLines)
+        Directory.GetFiles(_logs.Path, "flevert-*.log").SelectMany(File.ReadAllLines)
             .Select(line => line.Split('\t')[1]).Distinct().ToArray();
 
-    private static string CaExe
+    private static string FlevertExe
     {
         get
         {

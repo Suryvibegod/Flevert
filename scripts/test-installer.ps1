@@ -119,7 +119,7 @@ if ($elevated) { throw 'Run this test without administrator rights: it checks th
 
 $associationsBefore = AssociationNames
 $userClassicKey = $false
-$work = Join-Path $env:TEMP "ca-installer-test-$([guid]::NewGuid())"
+$work = Join-Path $env:TEMP "flevert-installer-test-$([guid]::NewGuid())"
 New-Item -ItemType Directory $work | Out-Null
 Write-Host "Testing $Setup"
 try {

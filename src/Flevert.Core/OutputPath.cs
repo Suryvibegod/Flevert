@@ -32,7 +32,7 @@ public static class OutputPath
     {
         var dir = Path.GetDirectoryName(desiredPath)!;
         // Fixed-length name: embedding the output name could push a long file name past the 255-character limit.
-        var temp = Path.Combine(dir, $".ca-{Guid.NewGuid():N}.partial");
+        var temp = Path.Combine(dir, $".flevert-{Guid.NewGuid():N}.partial");
 
         try
         {

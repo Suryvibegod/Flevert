@@ -16,35 +16,35 @@ public sealed class CliIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task Ca_converts_a_jpg_to_png()
+    public async Task Flevert_converts_a_jpg_to_png()
     {
         var input = _dir.Combine("ảnh.jpg");
         using (var image = new MagickImage(MagickColors.Orange, 12, 8))
             image.Write(input, MagickFormat.Jpeg);
 
-        var start = new ProcessStartInfo(CaExe) { UseShellExecute = false };
+        var start = new ProcessStartInfo(FlevertExe) { UseShellExecute = false };
         start.ArgumentList.Add("run");
         start.ArgumentList.Add("image.to-png");
         start.ArgumentList.Add(input);
         start.Environment["FLEVERT_LOG_DIR"] = _logs.Path;
         start.Environment["FLEVERT_HEADLESS"] = "1";
-        using var ca = Process.Start(start)!;
+        using var flevert = Process.Start(start)!;
         try
         {
-            await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
         }
         finally
         {
-            if (!ca.HasExited)
-                ca.Kill(entireProcessTree: true);
+            if (!flevert.HasExited)
+                flevert.Kill(entireProcessTree: true);
         }
 
-        Assert.True(ca.ExitCode == 0, string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)));
+        Assert.True(flevert.ExitCode == 0, string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)));
         using var png = new MagickImage(_dir.Combine("ảnh.png"));
         Assert.Equal(MagickFormat.Png, png.Format);
     }
 
-    private static string CaExe
+    private static string FlevertExe
     {
         get
         {

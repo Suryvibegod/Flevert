@@ -44,7 +44,7 @@ public sealed class ImageIoTests : IDisposable
 
         Assert.Equal(dir, Path.GetDirectoryName(output.Replace(@"\\?\", "", StringComparison.Ordinal)));
         Assert.True(File.Exists(output), output);
-        Assert.Empty(Directory.GetFiles(dir, ".ca-*"));
+        Assert.Empty(Directory.GetFiles(dir, ".flevert-*"));
         Assert.Empty(Directory.GetFiles(_dir.Path, "*.partial", SearchOption.AllDirectories));
     }
 
@@ -107,7 +107,7 @@ public sealed class ImageIoTests : IDisposable
 
         var work = Op("image.to-avif").RunAsync(input, CancellationToken.None);
         await Task.Delay(TimeSpan.FromSeconds(1.5)); // decoding takes about half of that; then the long encode starts
-        var duringEncode = Directory.GetFiles(_dir.Path, ".ca-*");
+        var duringEncode = Directory.GetFiles(_dir.Path, ".flevert-*");
         var stillEncoding = !work.IsCompleted;
         await work;
 

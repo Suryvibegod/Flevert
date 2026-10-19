@@ -39,7 +39,7 @@ internal static class Program
         var command = CommandLine.Parse(args);
         if (command is RunCommand run)
         {
-            // SafeStartup moved the current directory, so resolve relative paths against where ca was started.
+            // SafeStartup moved the current directory, so resolve relative paths against where flevert.exe was started.
             // GetFullPath drops trailing dots and spaces from names, which would name another file; keep such paths
             // unchanged for the runner to refuse.
             return RunBatch(run with

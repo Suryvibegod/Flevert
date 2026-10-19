@@ -18,7 +18,7 @@ public sealed class RunLog(string directory)
 
     public string Directory { get; } = directory;
 
-    public string CurrentFile => Path.Combine(Directory, $"ca-{DateTime.Now:yyyyMMdd}.log");
+    public string CurrentFile => Path.Combine(Directory, $"flevert-{DateTime.Now:yyyyMMdd}.log");
 
     public void Write(string operationId, FileResult result, TimeSpan elapsed)
     {
@@ -80,9 +80,9 @@ public sealed class RunLog(string directory)
             return;
 
         var oldestKept = today.AddDays(1 - (int)retention.TotalDays);
-        foreach (var file in System.IO.Directory.EnumerateFiles(Directory, "ca-*.log"))
+        foreach (var file in System.IO.Directory.EnumerateFiles(Directory, "flevert-*.log"))
         {
-            var stamp = Path.GetFileNameWithoutExtension(file)["ca-".Length..];
+            var stamp = Path.GetFileNameWithoutExtension(file)["flevert-".Length..];
             if (DateOnly.TryParseExact(stamp, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) && day < oldestKept)
                 BestEffort(() => File.Delete(file));
         }

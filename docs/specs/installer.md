@@ -80,7 +80,7 @@ File chưa ký tải từ mạng: SmartScreen hiện "Windows protected your PC"
 ```
 powershell -File scripts/build-installer.ps1            # publish + ISCC → artifacts/installer/Flevert-Setup-<ver>.exe
 powershell -File scripts/test-installer.ps1             # cài thật (im lặng) → kiểm → gỡ → kiểm sạch; từ chối chạy nếu máy đã cài sẵn
-ca classic-menu on|off
+flevert.exe classic-menu on|off
 ```
 
 ## Project Structure
