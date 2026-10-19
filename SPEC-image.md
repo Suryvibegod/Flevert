@@ -88,6 +88,14 @@ Quy tắc chung:
 
 Vượt giới hạn → file đó lỗi, ghi log, các file khác chạy tiếp.
 
+### Ngân sách bộ nhớ khi chạy song song (2026-10-19)
+
+Giới hạn 2 GB của ImageMagick tính cho **cả tiến trình**. Khi chủ lô chạy nhiều file cùng lúc (SPEC-core, "Xử lý song song"), vài ảnh cực lớn cùng lúc sẽ tràn sang đĩa (chậm) hoặc vượt giới hạn đĩa 4 GB và lỗi, trong khi chạy lần lượt thì qua. Không được để song song làm hỏng file mà tuần tự làm được:
+
+- Mỗi thao tác ảnh lấy "suất" từ một ngân sách chung bằng `ResourceLimits.Memory` **trước khi giải mã**. Suất = rộng × cao × số khung × 4 byte (Q8, 4 kênh) × 3 (ảnh nguồn, bản đang xử lý, bộ đệm mã hóa), tối đa bằng cả ngân sách. Kích thước lấy bằng ping (chỉ đọc header, cùng đường đọc an toàn: stream, decoder theo chữ ký trong allow-list). Ping lỗi → suất = cả ngân sách (chạy một mình; lỗi thật sẽ do thao tác báo).
+- Cấp theo thứ tự đến (FIFO): một ảnh lớn đang chờ không bị các ảnh nhỏ đến sau chen mãi. Hủy trong lúc chờ: không giữ suất nào.
+- Ảnh điện thoại 12 MP ≈ 144 MB/suất → tối đa 8 cùng lúc; 48 MP ≈ 576 MB → 3; ảnh 400 MP → một mình.
+
 ## Commands
 
 Như `core`. Thêm: test fixture HEIC nhỏ trong `tests/ConvertAnything.Image.Tests/fixtures/` (lấy từ nguồn có giấy phép cho phép phân phối, ghi rõ nguồn trong `fixtures/README.md`).

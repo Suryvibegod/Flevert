@@ -105,6 +105,16 @@ A: hết hàng đợi + đang rảnh + 400 ms không có path mới → đóng p
 
 Tên pipe: `ConvertAnything-<SID>-<session>-<khóa>-<op-id>`. Khóa ngẫu nhiên riêng cho mỗi thao tác trong `%LOCALAPPDATA%\ConvertAnything\pipes`, thư mục chỉ user / SYSTEM / Administrators mở được, nhãn medium no-read-up; khóa đổi mỗi khi một lô đóng. Hai đầu kiểm tra tiến trình bên kia chạy cùng file exe, cùng session, integrity không thấp hơn. Lô sống tối thiểu 1,5 s; lô đầy (1000 file) trả `Full`: người gửi đổi khóa và tự làm chủ một lô mới, các tiến trình đến sau vào lô đó. Chi tiết, các bảo đảm và trade-off: [ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md).
 
+### Xử lý song song trong một lô (2026-10-19)
+
+Đo trên máy 16 nhân, ảnh 12 MP: Magick.NET bản phát hành không có OpenMP (`ResourceLimits.Thread = 1`), mỗi ảnh chỉ dùng một nhân; lô 10 ảnh HEIC→JPG mất 18,9 s vì xử lý **lần lượt** (~1,86 s/ảnh). Vì vậy:
+
+- `Runner.RunAsync` nhận `maxParallel` (mặc định 1 = hành vi cũ). Chủ lô chạy tối đa `maxParallel` file cùng lúc; `ca.exe` dùng `Math.Clamp(Environment.ProcessorCount - 1, 1, 8)` (chừa một nhân cho máy và cửa sổ tiến độ; trên 8 thì lợi ích nhỏ, bộ nhớ tăng).
+- Giữ nguyên mọi bảo đảm: mỗi file một kết quả, trùng thì bỏ, 1 file lỗi không chặn file khác, log mỗi file. `Results` theo thứ tự **xong**, không theo thứ tự nhận. Cancel: không lấy file mới, các file đang chạy nhận token; mỗi file bị hủy giữa chừng tính là chưa xử lý.
+- Chủ lô chỉ đóng pipe khi **không còn file nào đang chạy** (đếm số file đang chạy, không chỉ cờ "đang cầm một file"): đóng sớm lúc vẫn còn file đang chạy sẽ khiến file đến muộn mở lô thứ hai.
+- Hai file cùng muốn một tên output (`photo.png` và `photo.webp` → `photo.jpg`): `OutputPath` vốn đã an toàn khi ghi đồng thời (`File.Move` không ghi đè, trùng thì thử tên kế), nhưng ai được `photo.jpg` và ai được `photo (1).jpg` giờ tùy file nào xong trước.
+- Lô 1 file: không đổi. Thời gian một file không giảm (nằm trong bộ giải mã); tối thiểu 1,5 s của lô (ADR-0002) giữ nguyên.
+
 ### Menu trong registry
 
 Đã kiểm chứng với [Creating Shortcut Menu Handlers](https://learn.microsoft.com/en-us/windows/win32/shell/context-menu-handlers) (Microsoft Learn):
