@@ -8,33 +8,40 @@ namespace ConvertAnything.Image;
 /// files in parallel must never fail a file that one at a time would convert. Shares are granted in arrival order, so a
 /// large image waiting is never overtaken for ever by small ones; a share larger than the budget runs alone.
 /// </summary>
-public sealed class MemoryBudget(ulong capacity)
+public sealed class MemoryBudget
 {
-    // Source image, the copy being processed and the encoder's buffers, at 4 bytes per pixel (Q8, four channels).
-    private const ulong BytesPerPixel = 4 * 3;
+    // The source image, the copy being processed and the encoder's buffers.
+    private const ulong Copies = 3;
 
-    private static readonly Lazy<MemoryBudget> SharedBudget = new(() =>
-    {
-        MagickSetup.EnsureInitialized();
-        return new MemoryBudget(ResourceLimits.Memory);
-    });
+    // Decoders read the whole file into memory and copy its profiles and comments, outside ImageMagick's accounting.
+    private const ulong FileCopies = 2;
 
+    private readonly ulong _capacity;
     private readonly Lock _gate = new();
     private readonly LinkedList<(ulong Need, TaskCompletionSource<IDisposable> Granted)> _waiting = new();
     private ulong _used;
 
-    /// <summary>The budget every image operation in this process shares: ImageMagick's memory limit.</summary>
-    public static MemoryBudget Shared => SharedBudget.Value;
+    public MemoryBudget(ulong capacity)
+    {
+        ArgumentOutOfRangeException.ThrowIfZero(capacity);
+        _capacity = capacity;
+    }
 
     /// <summary>
-    /// The memory converting <paramref name="path"/> needs, from its header only. <see cref="ulong.MaxValue"/> when the
-    /// header cannot be read: the file then runs alone, and the operation reports what is wrong with it.
+    /// The budget every image operation in this process shares: ImageMagick's memory limit, or a quarter of the memory
+    /// this machine has if that is less. Built without touching ImageMagick, so a failed set-up fails one file, not all.
+    /// </summary>
+    public static MemoryBudget Shared { get; } = new(Math.Max(1, Math.Min(MagickSetup.MemoryLimit, (ulong)GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 4)));
+
+    /// <summary>
+    /// The memory converting <paramref name="path"/> needs, from its header and size only. <see cref="ulong.MaxValue"/>
+    /// when the header cannot be read: the file then runs alone, and the operation reports what is wrong with it.
     /// </summary>
     public static ulong EstimateNeed(string path)
     {
         try
         {
-            return checked(ImageFile.PixelCount(path) * BytesPerPixel);
+            return Math.Max(checked(ImageFile.DecodedBytes(path) * Copies), checked((ulong)new FileInfo(path).Length * FileCopies));
         }
         catch (Exception e) when (e is MagickException or IOException or UnauthorizedAccessException or NotSupportedException or OverflowException)
         {
@@ -42,13 +49,18 @@ public sealed class MemoryBudget(ulong capacity)
         }
     }
 
+    /// <summary>
+    /// Waits for <paramref name="bytes"/> of the budget, granted in arrival order (the order estimates finish, which is
+    /// close to the batch order). More than half the budget is taken as all of it: ImageMagick's time limit runs per
+    /// image on the clock, and a large image slowed down by others beside it could pass that limit.
+    /// </summary>
     public Task<IDisposable> AcquireAsync(ulong bytes, CancellationToken ct)
     {
-        var need = Math.Clamp(bytes, 1, capacity);
-        LinkedListNode<(ulong, TaskCompletionSource<IDisposable>)> node;
+        var need = bytes > _capacity / 2 ? _capacity : Math.Max(bytes, 1);
+        LinkedListNode<(ulong Need, TaskCompletionSource<IDisposable> Granted)> node;
         lock (_gate)
         {
-            if (_waiting.Count == 0 && _used + need <= capacity)
+            if (_waiting.Count == 0 && need <= _capacity - _used)
             {
                 _used += need;
                 return Task.FromResult<IDisposable>(new Lease(this, need));
@@ -57,7 +69,7 @@ public sealed class MemoryBudget(ulong capacity)
             node = _waiting.AddLast((need, new TaskCompletionSource<IDisposable>(TaskCreationOptions.RunContinuationsAsynchronously)));
         }
 
-        var granted = node.Value.Item2;
+        var granted = node.Value.Granted;
         if (ct.CanBeCanceled)
         {
             var registration = ct.Register(() =>
@@ -89,7 +101,7 @@ public sealed class MemoryBudget(ulong capacity)
     // Called under the lock. Strictly in order: stops at the first waiter that does not fit.
     private void GrantWaiting()
     {
-        while (_waiting.First is { } first && _used + first.Value.Need <= capacity)
+        while (_waiting.First is { } first && first.Value.Need <= _capacity - _used)
         {
             _waiting.RemoveFirst();
             _used += first.Value.Need;

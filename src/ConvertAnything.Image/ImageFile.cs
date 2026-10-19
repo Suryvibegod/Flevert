@@ -61,10 +61,12 @@ public static class ImageFile
     }
 
     /// <summary>
-    /// Pixels in every frame, from the headers only (ImageMagick's ping), opened and chosen the same safe way as
-    /// <see cref="Read"/>.
+    /// Bytes of pixels every frame takes once decoded, from the headers only (ImageMagick's ping), opened and chosen the
+    /// same safe way as <see cref="Read"/>. A frame counts at its canvas size, which an optimized animation's small
+    /// frames reach once <see cref="Coalesce"/> expands them, and with one channel more than ping reports (at least
+    /// four): ping does not report alpha (a CMYK + alpha TIFF pings as 4 channels and decodes as 5).
     /// </summary>
-    public static ulong PixelCount(string path)
+    public static ulong DecodedBytes(string path)
     {
         MagickSetup.EnsureInitialized();
         var format = FormatOf(Path.GetExtension(path));
@@ -74,10 +76,17 @@ public static class ImageFile
 
         var settings = new MagickReadSettings { Format = format };
         settings.SetDefine(MagickFormat.Tiff, "ignore-layers", "true");
-        ulong pixels = 0;
-        foreach (var frame in MagickImageInfo.ReadCollection(stream, settings))
-            pixels = checked(pixels + ((ulong)frame.Width * frame.Height));
-        return pixels;
+        using var frames = new MagickImageCollection();
+        frames.Ping(stream, settings);
+        ulong bytes = 0;
+        foreach (var frame in frames)
+        {
+            var canvas = frame.Page is { Width: > 0, Height: > 0 } page ? (ulong)page.Width * page.Height : 0;
+            var pixels = Math.Max((ulong)frame.Width * frame.Height, canvas);
+            bytes = checked(bytes + (pixels * Math.Max(4u, frame.ChannelCount + 1)));
+        }
+
+        return bytes;
     }
 
     /// <summary>
