@@ -156,7 +156,7 @@ public sealed class BatchTests
         using var client = new System.IO.Pipes.NamedPipeClientStream(".", name,
             System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
         await client.ConnectAsync(5000);
-        var timer = System.Diagnostics.Stopwatch.StartNew();
+        // Without the fix both sides wait for the leader's 2 s timeout, so this deadline fails it; no stopwatch needed.
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1.5));
         await Batch.WritePathsAsync(client, [@"C:\x.txt"], deadline.Token);
         var reply = new byte[1];
@@ -164,7 +164,6 @@ public sealed class BatchTests
 
         Assert.Equal(1, read);
         Assert.Equal(Batch.Refused, reply[0]);
-        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(1), $"took {timer.Elapsed}");
     }
 
     [Fact]

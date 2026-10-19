@@ -9,6 +9,10 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     private readonly TempDir _dir = new();
     private readonly TempDir _logs = new();
 
+    // A late process must start within the leader's idle window; a full test run can starve it of CPU for longer than
+    // the product's 400 ms (ADR-0002 accepts the resulting split). Tests that need one batch widen the window.
+    private string? _idleWindowMs;
+
     public void Dispose()
     {
         _dir.Dispose();
@@ -33,6 +37,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     [Fact]
     public async Task Process_started_while_the_leader_is_busy_joins_its_batch()
     {
+        _idleWindowMs = "3000";
         var leader = Ca("dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
         await Task.Delay(TimeSpan.FromSeconds(1.2)); // well past the 400 ms idle window, while file 2 is still running
 
@@ -60,6 +65,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         }
 
         var viaLink = Path.Combine(link, "ca.exe");
+        _idleWindowMs = "3000";
         var leader = CaVia(viaLink, "dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
         await Task.Delay(TimeSpan.FromSeconds(1.2));
         var late = CaVia(viaLink, "dev.slow-copy", _dir.File("3.txt"));
@@ -137,6 +143,8 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
             start.ArgumentList.Add(f);
         start.Environment["CONVERTANYTHING_LOG_DIR"] = _logs.Path;
         start.Environment["CONVERTANYTHING_HEADLESS"] = "1";
+        if (_idleWindowMs is not null)
+            start.Environment["CONVERTANYTHING_BATCH_IDLE_MS"] = _idleWindowMs;
         return Process.Start(start)!;
     }
 

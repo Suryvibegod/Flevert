@@ -194,7 +194,8 @@ public sealed class MenuTests
         var used = DriveInfo.GetDrives().Select(d => char.ToUpperInvariant(d.Name[0])).ToHashSet();
         var letter = "ZYXWVUTSRQPONMLKJ".FirstOrDefault(c => !used.Contains(c));
         Skip.If(letter == default, "no free drive letter");
-        Assert.Equal(0, Cmd($"subst {letter}: \"{dir.Path}\""));
+        // GetDrives misses letters mapped in another logon session; then subst fails and the test cannot run.
+        Skip.If(Cmd($"subst {letter}: \"{dir.Path}\"") != 0, $"{letter}: is taken");
         try
         {
             Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir.Path, stopAt: Path.GetDirectoryName(dir.Path)), "control: the folder itself is safe");

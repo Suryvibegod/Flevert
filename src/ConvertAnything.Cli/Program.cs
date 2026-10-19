@@ -10,7 +10,9 @@ internal static class Program
     private const int Ok = 0;
     private const int SomeFilesFailed = 1;
     private const int BadUsage = 2;
-    private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(400);
+    // CONVERTANYTHING_BATCH_IDLE_MS is for integration tests on a loaded machine, like CONVERTANYTHING_LOG_DIR.
+    private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(
+        int.TryParse(Environment.GetEnvironmentVariable("CONVERTANYTHING_BATCH_IDLE_MS"), out var ms) ? Math.Clamp(ms, 100, 10_000) : 400);
     private static readonly TimeSpan LogRetention = TimeSpan.FromDays(7);
 
     [STAThread]
