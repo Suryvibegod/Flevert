@@ -40,7 +40,7 @@ Flevert is not code-signed yet, because a signing certificate costs money and th
 
 **Before** you click **Run anyway**, make sure the file came from this repository's [Releases page](https://github.com/Suryvibegod/Flevert/releases) and is intact:
 
-The commands below use version 0.1.0; put in the version you downloaded. Each release's notes list the exact commands for that version.
+The commands below use version 0.1.0 as an example. Prefer the commands in the notes of the release you downloaded: they name its version and pin the exact commit it was built from.
 
 1. Open PowerShell in your Downloads folder and run `Get-FileHash .\Flevert-Setup-0.1.0.exe`. The hash must match the line in `SHA256SUMS.txt` on the release page (upper or lower case does not matter). This shows the download is complete and unchanged.
 2. To check that GitHub built it from this repository's source code, verify its build provenance with the [GitHub CLI](https://cli.github.com/). It needs a free GitHub account: run `gh auth login` once first.

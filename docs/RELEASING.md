@@ -11,7 +11,7 @@ For maintainers. Releases are built only by [`.github/workflows/release.yml`](..
 
 ## Tag and check the draft
 
-1. `git tag -a vX.Y.Z -m "Flevert X.Y.Z"` and `git push origin vX.Y.Z`. Only repository administrators can create `v*` tags (ruleset "Release tags"). The workflow refuses a tag that is not `vMAJOR.MINOR.PATCH`, does not match `<Version>`, or is not on `main`.
+1. Push `main` first, then `git tag -a vX.Y.Z -m "Flevert X.Y.Z"` and `git push origin vX.Y.Z`. Only repository administrators can create `v*` tags (ruleset "Release tags"). The workflow refuses a tag that is not `vMAJOR.MINOR.PATCH`, does not match `<Version>`, or is not on `main`.
 2. The workflow tests, builds the installer, attests it and attaches it with `SHA256SUMS.txt` to a **draft** release. The release notes are the version's CHANGELOG section plus how to check the download; the workflow fails if the CHANGELOG has no section for the version.
 3. Download the setup from the draft and check it as a user would:
    - `Get-FileHash` matches `SHA256SUMS.txt`.
@@ -21,7 +21,7 @@ For maintainers. Releases are built only by [`.github/workflows/release.yml`](..
    - Microsoft Defender and VirusTotal report nothing. A detection by one or two engines with a generic name is usually a false positive of an unsigned Inno Setup installer: report it to the vendor, and do not publish until it is understood.
 4. Publish the draft.
 
-Until it is published, a draft may be thrown away and rebuilt: `gh release delete vX.Y.Z --cleanup-tag --yes`, then tag again. Delete the old run's artifacts too. The old build's attestation stays valid, but the verify command in the published notes pins the commit (`--source-digest`), so a file built from any other commit fails it; a rebuild from the same commit is the same reviewed source. Once published, the release is immutable (repository setting "Immutable releases"): its assets and tag cannot change, and the tag name can never be used again, even after the release is deleted.
+Until it is published, a draft may be thrown away and rebuilt: `gh release delete vX.Y.Z --cleanup-tag --yes`, then tag again. Delete the old run's artifacts too: the old build's attestation stays valid. The verify command in the release notes pins the commit (`--source-digest`), so a file built from any other commit fails it; the shorter command in the README pins only the tag, which is why the README points readers to the notes. Once published, the release is immutable (repository setting "Immutable releases"): its assets and tag cannot change, and the tag name can never be used again, even after the release is deleted.
 
 ## If the release workflow fails
 

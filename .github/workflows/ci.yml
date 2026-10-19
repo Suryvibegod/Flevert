@@ -26,7 +26,8 @@ jobs:
       - run: dotnet format Flevert.sln --verify-no-changes
       # One project at a time: run together, the image encodes starved the process-batching tests on the runner (a 1 s
       # copy took 15 s). Separate steps, and the second runs even if the first fails, so neither hides the other.
-      # A new test project must be added here and in release.yml.
+      # A new test project must be added here, in release.yml, in scripts/setup-dev.ps1 and in the docs that list the
+      # test commands (git grep "dotnet test tests/").
       - run: dotnet test tests/Flevert.Core.Tests -c Release --no-build
       - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: dotnet test tests/Flevert.Image.Tests -c Release --no-build

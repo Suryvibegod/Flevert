@@ -1,0 +1,8 @@
+# Changes to what runs on maintainers' machines, in CI or in AI agent sessions need the maintainer's review.
+/CLAUDE.md @Suryvibegod
+/.claude/ @Suryvibegod
+/tasks/HANDOFF.md @Suryvibegod
+/scripts/ @Suryvibegod
+/.github/ @Suryvibegod
+/installer/ @Suryvibegod
+/Directory.Build.props @Suryvibegod

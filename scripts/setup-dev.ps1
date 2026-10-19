@@ -3,10 +3,12 @@
   Prepares a Windows machine to work on Flevert and checks that the repository builds and its tests pass.
 .DESCRIPTION
   Safe to run repeatedly; each step is skipped when already done.
-  1. Installs the .NET 10 SDK per user (no admin rights needed) if missing; warns if the GitHub CLI is missing or signed out.
-  2. On the maintainer's machines only (signed in to GitHub as account 79949229): sets this repository's commit
-     identity, repairs a known-broken global git rewrite that breaks plugin installs, and installs the agent-skills
-     plugin for Claude Code. Contributors keep their own identity and global settings; the script only prints advice.
+  1. Installs the .NET 10 SDK per user (no admin rights needed) if missing, for this session (and, for the maintainer,
+     in the user PATH and DOTNET_ROOT); warns if the GitHub CLI is missing or signed out.
+  2. On the maintainer's machines only (signed in to GitHub as account 79949229): installs Inno Setup, sets this
+     repository's commit identity, repairs a known-broken global git rewrite that breaks plugin installs, and installs
+     the agent-skills plugin for Claude Code. Contributors keep their own tools, identity and global settings; for those
+     steps the script only prints advice.
   3. Builds the solution and runs each test project in turn.
 #>
 $ErrorActionPreference = 'Stop'
@@ -22,6 +24,12 @@ function Invoke-Tolerant([scriptblock]$Command) {
     $ErrorActionPreference = 'Continue'
     try { & $Command } catch { $null } finally { $ErrorActionPreference = $saved }
 }
+
+# The maintainer is recognised by GitHub account id, which survives a change of user name (the account was renamed
+# once already). Installing tools other than the SDK, and changing user environment variables, git or Claude Code settings, happens
+# only for them.
+$account = if (Get-Command gh -ErrorAction SilentlyContinue) { Invoke-Tolerant { gh api user --jq '.id,.login' 2>$null } } else { $null }
+$isMaintainer = [bool]($account -and $account[0] -eq '79949229')
 
 Step '.NET 10 SDK'
 # A per-user install needs no UAC prompt, so the script can run unattended.
@@ -52,24 +60,30 @@ if (-not ($sdks -match '^10\.')) {
     finally {
         Remove-Item $download -Recurse -Force -ErrorAction SilentlyContinue
     }
-    # Persist for new shells: user PATH and DOTNET_ROOT.
-    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if ($userPath -notlike "*$userDotnet*") {
-        [Environment]::SetEnvironmentVariable('Path', "$userDotnet;$userPath", 'User')
-    }
-    [Environment]::SetEnvironmentVariable('DOTNET_ROOT', $userDotnet, 'User')
     Use-UserDotnet
+    if ($isMaintainer) {
+        # Persist for new shells: user PATH and DOTNET_ROOT.
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if ($userPath -notlike "*$userDotnet*") {
+            [Environment]::SetEnvironmentVariable('Path', "$userDotnet;$userPath", 'User')
+        }
+        [Environment]::SetEnvironmentVariable('DOTNET_ROOT', $userDotnet, 'User')
+    } else {
+        # A user-wide DOTNET_ROOT holding only .NET 10 can stop other .NET apps from starting, so only this session uses it.
+        "Installed to $userDotnet for this session only. In a new shell first run:"
+        "  `$env:Path = `"$userDotnet;`$env:Path`"; `$env:DOTNET_ROOT = `"$userDotnet`""
+    }
 }
 & dotnet --list-sdks | Select-String '^10\.'
 
 Step 'GitHub CLI'
 # The gh installer is per-machine and would block on a UAC prompt, so only advise here.
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    Write-Warning 'GitHub CLI missing. Run:  winget install --id GitHub.cli -e   then  gh auth login --web --scopes workflow  (account Suryvibegod).'
+    Write-Warning 'GitHub CLI missing. Run:  winget install --id GitHub.cli -e   then  gh auth login --web --scopes workflow'
 } else {
     $auth = Invoke-Tolerant { & gh auth status 2>&1 | Out-String }
     if ($auth -notmatch 'Logged in') {
-        Write-Warning 'Not signed in to GitHub. Run:  gh auth login --web --scopes workflow   (account Suryvibegod), then push works.'
+        Write-Warning 'Not signed in to GitHub. Run:  gh auth login --web --scopes workflow'
     } elseif ($auth -match 'Token scopes' -and $auth -notmatch 'workflow') {
         # Pushing changes under .github/workflows needs the workflow scope.
         Write-Warning 'GitHub token lacks the workflow scope. Run:  gh auth refresh -h github.com -s workflow'
@@ -78,7 +92,9 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 
 Step 'Inno Setup 6.7.3 (builds the installer)'
 $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" | Where-Object { Test-Path $_ }
-if (-not $iscc) {
+if (-not $iscc -and -not $isMaintainer) {
+    'Not installed. Only needed to build the installer:  winget install JRSoftware.InnoSetup -e --version 6.7.3 --scope user'
+} elseif (-not $iscc) {
     # Per-user install: no UAC prompt.
     winget install --id JRSoftware.InnoSetup -e --version 6.7.3 --scope user --silent --accept-package-agreements --accept-source-agreements
     # Only the installer needs it; build and tests go on without it.
@@ -86,11 +102,6 @@ if (-not $iscc) {
 } else {
     $iscc
 }
-
-# The maintainer is recognised by GitHub account id, which survives a change of user name (the account was renamed
-# once already). Everything that changes git or Claude Code settings beyond this script's own build runs only for them.
-$account = if (Get-Command gh -ErrorAction SilentlyContinue) { Invoke-Tolerant { gh api user --jq '.id,.login' 2>$null } } else { $null }
-$isMaintainer = [bool]($account -and $account[0] -eq '79949229')
 
 Step 'Commit identity (this repository only)'
 if ($isMaintainer) {
@@ -138,7 +149,7 @@ Step 'Build and test'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 & dotnet build Flevert.sln -c Debug
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
-# One project at a time: both start real flevert.exe processes and time them, which is flaky when they run together.
+# One project at a time, as on CI: run together, the image encodes starve the process-batching tests of CPU.
 foreach ($project in 'tests\Flevert.Core.Tests', 'tests\Flevert.Image.Tests') {
     & dotnet test $project --no-build
     if ($LASTEXITCODE -ne 0) { throw "Tests failed in $project." }

@@ -34,8 +34,9 @@ jobs:
         shell: pwsh
         run: |
           if ($env:TAG -notmatch '^v(\d+\.\d+\.\d+)$') { throw "Tag $env:TAG is not vMAJOR.MINOR.PATCH; delete it and tag again." }
+          $tagVersion = $Matches[1]
           $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-          if ($Matches[1] -ne $version) { throw "Tag $env:TAG does not match <Version>$version</Version> in Directory.Build.props; fix one of them and tag again." }
+          if ($tagVersion -ne $version) { throw "Tag $env:TAG does not match <Version>$version</Version> in Directory.Build.props; fix one of them and tag again." }
       - name: Check the tag is on main
         shell: pwsh
         run: |
@@ -50,7 +51,7 @@ jobs:
       - name: Build
         id: build
         run: dotnet build Flevert.sln -c Release
-      # One project at a time, as in ci.yml: together they starve the process-batching tests.
+      # One project at a time, as in ci.yml and setup-dev.ps1: together they starve the process-batching tests.
       - name: Test core
         run: dotnet test tests/Flevert.Core.Tests -c Release --no-build
       - name: Test images

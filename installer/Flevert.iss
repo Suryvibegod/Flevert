@@ -115,7 +115,7 @@ end;
 
 // Runs flevert.exe from Folder and waits. False when it could not start or exited with an error. Reason is the first line
 // flevert.exe wrote to stderr, for a message box; the log gets every line.
-function RunCaIn(const Folder, Params: String; var Started: Boolean; var Code: Integer; var Reason: String): Boolean;
+function RunFlevertIn(const Folder, Params: String; var Started: Boolean; var Code: Integer; var Reason: String): Boolean;
 var
   Output: TExecOutput;
   I: Integer;
@@ -143,9 +143,9 @@ begin
   Result := Started and (Code = 0);
 end;
 
-function RunCa(const Params: String; var Started: Boolean; var Code: Integer; var Reason: String): Boolean;
+function RunFlevert(const Params: String; var Started: Boolean; var Code: Integer; var Reason: String): Boolean;
 begin
-  Result := RunCaIn(ExpandConstant('{app}'), Params, Started, Code, Reason);
+  Result := RunFlevertIn(ExpandConstant('{app}'), Params, Started, Code, Reason);
 end;
 
 procedure ReportFailure(const What: String; Started: Boolean; Code: Integer; const Reason: String);
@@ -298,7 +298,7 @@ begin
       GetExceptionMessage + '). Make sure the drive has free space and that security software did not block setup, ' +
       'then run setup again.';
   end;
-  if (Result = '') and not RunCaIn(Checker, 'check-location "' + App + '"', Started, Code, Reason) then
+  if (Result = '') and not RunFlevertIn(Checker, 'check-location "' + App + '"', Started, Code, Reason) then
   begin
     if Started and (Code = ExitRefusedLocation) then
     begin
@@ -358,7 +358,7 @@ var
 begin
   if CurStep <> ssPostInstall then
     Exit;
-  MenuAdded := RunCa('install-menu', Started, Code, Reason);
+  MenuAdded := RunFlevert('install-menu', Started, Code, Reason);
   if not MenuAdded then
   begin
     MenuFailed := True;
@@ -367,8 +367,8 @@ begin
   // Applied both ways, so unticking it on an upgrade undoes it; off only ever removes the key flevert.exe created. Not
   // switched on without a menu to show: it would change every app's menu for nothing.
   if not ClassicMenuChosen then
-    RunCa('classic-menu off', Started, Code, Reason)
-  else if MenuAdded and not RunCa('classic-menu on', Started, Code, Reason) then
+    RunFlevert('classic-menu off', Started, Code, Reason)
+  else if MenuAdded and not RunFlevert('classic-menu on', Started, Code, Reason) then
   begin
     ClassicMenuFailed := True;
     ReportFailure('switching to the classic menu', Started, Code, Reason);
@@ -448,7 +448,7 @@ var
 begin
   if CurUninstallStep <> usUninstall then
     Exit;
-  RunCa('uninstall-menu', Started, Code, Reason);
-  RunCa('classic-menu off', Started, Code, Reason);
+  RunFlevert('uninstall-menu', Started, Code, Reason);
+  RunFlevert('classic-menu off', Started, Code, Reason);
   SweepRegistry;
 end;

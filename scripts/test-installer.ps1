@@ -40,10 +40,10 @@ function MenuKeys {
 
 function AssociationNames { @(Get-ChildItem $associations -ErrorAction SilentlyContinue | ForEach-Object { $_.PSChildName }) }
 
-function RunningCa { @(Get-Process flevert -ErrorAction SilentlyContinue) }
+function RunningFlevert { @(Get-Process flevert -ErrorAction SilentlyContinue) }
 
-function StopInstalledCa {
-    foreach ($p in RunningCa | Where-Object { $_.Path -like "$app\*" }) {
+function StopInstalledFlevert {
+    foreach ($p in RunningFlevert | Where-Object { $_.Path -like "$app\*" }) {
         try { $p.Kill(); $p.WaitForExit(10000) | Out-Null } catch { Write-Warning "could not stop flevert.exe $($p.Id): $_" }
     }
 }
@@ -97,7 +97,7 @@ function AssertClean {
     Assert (-not (Test-Path $classicKey) -or $userClassicKey) 'no classic menu key left'
 }
 
-function RunCaHeadless([string[]]$Arguments, [switch]$NoWait) {
+function RunFlevertHeadless([string[]]$Arguments, [switch]$NoWait) {
     $env:FLEVERT_HEADLESS = '1'
     try { return Start-Process "$app\flevert.exe" -ArgumentList $Arguments -PassThru -WindowStyle Hidden -Wait:(-not $NoWait) }
     finally { Remove-Item Env:\FLEVERT_HEADLESS }
@@ -113,7 +113,7 @@ if (Test-Path $app) { throw "$app exists; remove it before running this test." }
 if (Test-Path $appData) { throw "$appData exists (logs of a development build?); remove it before running this test." }
 if (@(MenuKeys).Count -gt 0) { throw 'A Flevert menu is registered (flevert.exe install-menu?); run flevert.exe uninstall-menu first.' }
 if (Test-Path $classicKey) { throw "The classic-menu key exists already ($classicKey); this test needs to create and remove it." }
-if (@(RunningCa).Count -gt 0) { throw 'flevert.exe is running; a running batch leader would take over the conversions this test checks.' }
+if (@(RunningFlevert).Count -gt 0) { throw 'flevert.exe is running; a running batch leader would take over the conversions this test checks.' }
 $elevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($elevated) { throw 'Run this test without administrator rights: it checks that setup needs none.' }
 
@@ -144,7 +144,7 @@ try {
     $menuCount = @(MenuKeys).Count
 
     Copy-Item $heic "$work\photo.heic"
-    $code = (RunCaHeadless @('run', 'image.to-jpg', "`"$work\photo.heic`"")).ExitCode
+    $code = (RunFlevertHeadless @('run', 'image.to-jpg', "`"$work\photo.heic`"")).ExitCode
     Assert ($code -eq 0) "installed flevert.exe converts HEIC to JPG (exit $code)"
     $jpg = [Drawing.Image]::FromFile("$work\photo.jpg")
     try { Assert ($jpg.RawFormat.Equals([Drawing.Imaging.ImageFormat]::Jpeg) -and $jpg.Width -eq 320 -and $jpg.Height -eq 240) 'photo.jpg is a 320x240 JPEG' }
@@ -205,7 +205,7 @@ try {
     $menuCount = @(MenuKeys).Count
     # About 20 s of work (one second per file): long enough for a slow first start and the uninstaller's hand-over.
     $inputs = 1..20 | ForEach-Object { $f = "$work\slow$_.txt"; Set-Content $f 'x'; "`"$f`"" }
-    $job = RunCaHeadless (@('run', 'dev.slow-copy') + $inputs) -NoWait
+    $job = RunFlevertHeadless (@('run', 'dev.slow-copy') + $inputs) -NoWait
     # The uninstaller only sees flevert.exe once it holds the mutex; a fresh binary can take a while to start.
     $mutex = $null
     $deadline = (Get-Date).AddSeconds(15)
@@ -261,7 +261,7 @@ try {
 }
 finally {
     WaitForUninstaller
-    StopInstalledCa
+    StopInstalledFlevert
     try {
         if (Test-Path "$app\unins000.exe") { Uninstall }
         if (Test-Path $classicKey) { Remove-Item $classicKey -Recurse -Force }
