@@ -22,4 +22,13 @@ internal static class ImageMetadata
         if (colourProfile is not null)
             image.SetProfile(colourProfile);
     }
+
+    /// <summary>Replaces transparency with white, for targets without an alpha channel (JPG, BMP).</summary>
+    public static void FlattenOntoWhite(IMagickImage<byte> image)
+    {
+        if (!image.HasAlpha)
+            return;
+        image.BackgroundColor = MagickColors.White;
+        image.Alpha(AlphaAction.Remove);
+    }
 }

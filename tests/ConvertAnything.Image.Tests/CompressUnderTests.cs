@@ -41,6 +41,42 @@ public sealed class CompressUnderTests : IDisposable
     }
 
     [Fact]
+    public async Task A_48_megapixel_image_gets_below_the_limit_quickly()
+    {
+        // Every round of quality search at full size took seconds; a 108 MP photo ran into ImageMagick's 120 s limit.
+        var input = Noise("big.png", 8000, 6000);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+
+        var output = await Op("image.compress-under-500kb").RunAsync(input, CancellationToken.None);
+
+        Assert.True(new FileInfo(output).Length < 500_000);
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(20), $"took {timer.Elapsed}");
+    }
+
+    [Fact]
+    public async Task A_colour_profile_bigger_than_the_limit_does_not_make_it_unreachable()
+    {
+        // A CMYK print profile can be hundreds of KB; keeping it would leave no room for pixels.
+        var input = _dir.Combine("print.jpg");
+        using (var image = new MagickImage(MagickColors.Gray, 400, 300))
+        {
+            image.SetProfile(ColorProfiles.SRGB);
+            image.TransformColorSpace(ColorProfiles.SRGB, ColorProfiles.USWebCoatedSWOP);
+            image.Write(input, MagickFormat.Jpeg);
+        }
+
+        using (var check = new MagickImage(input))
+            Assert.True(check.GetColorProfile()!.ToByteArray().Length > 500_000, "control: the profile alone exceeds the limit");
+
+        var output = await Op("image.compress-under-500kb").RunAsync(input, CancellationToken.None);
+
+        using var jpg = new MagickImage(output);
+        Assert.True(new FileInfo(output).Length < 500_000);
+        Assert.Equal((400u, 300u), (jpg.Width, jpg.Height));
+        Assert.Equal(ColorSpace.sRGB, jpg.ColorSpace);
+    }
+
+    [Fact]
     public async Task An_image_already_below_the_limit_becomes_a_jpg_of_the_same_size_in_pixels()
     {
         var input = Noise("small.png", 200, 100);
