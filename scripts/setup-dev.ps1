@@ -28,9 +28,22 @@ Use-UserDotnet
 # Under ErrorActionPreference=Stop, invoking a missing dotnet throws, so look it up first.
 $sdks = if (Get-Command dotnet -ErrorAction SilentlyContinue) { & dotnet --list-sdks 2>$null } else { @() }
 if (-not ($sdks -match '^10\.')) {
-    $installer = Join-Path $env:TEMP 'dotnet-install.ps1'
-    Invoke-WebRequest 'https://dot.net/v1/dotnet-install.ps1' -OutFile $installer -UseBasicParsing
-    & $installer -Channel 10.0 -InstallDir $userDotnet -NoPath
+    # A fresh folder of its own: a fixed name in %TEMP% could be swapped between the download and the run.
+    $download = Join-Path $env:TEMP ("dotnet-install-" + [guid]::NewGuid())
+    New-Item -ItemType Directory $download | Out-Null
+    try {
+        $installer = Join-Path $download 'dotnet-install.ps1'
+        Invoke-WebRequest 'https://dot.net/v1/dotnet-install.ps1' -OutFile $installer -UseBasicParsing
+        # Microsoft signs the script; run it only if that signature is intact.
+        $signature = Get-AuthenticodeSignature $installer
+        if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '^CN=Microsoft Corporation,') {
+            throw "dotnet-install.ps1 is not validly signed by Microsoft ($($signature.Status)); not running it."
+        }
+        & $installer -Channel 10.0 -InstallDir $userDotnet -NoPath
+    }
+    finally {
+        Remove-Item $download -Recurse -Force -ErrorAction SilentlyContinue
+    }
     # Persist for new shells: user PATH and DOTNET_ROOT.
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ($userPath -notlike "*$userDotnet*") {
@@ -44,11 +57,11 @@ if (-not ($sdks -match '^10\.')) {
 Step 'GitHub CLI'
 # The gh installer is per-machine and would block on a UAC prompt, so only advise here.
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    Write-Warning 'GitHub CLI missing. Run:  winget install --id GitHub.cli -e   then  gh auth login --web -s workflow  (account Suryvibegod).'
+    Write-Warning 'GitHub CLI missing. Run:  winget install --id GitHub.cli -e   then  gh auth login --web --scopes workflow  (account Suryvibegod).'
 } else {
     $auth = & gh auth status 2>&1 | Out-String
     if ($auth -notmatch 'Logged in') {
-        Write-Warning 'Not signed in to GitHub. Run:  gh auth login --web -s workflow   (account Suryvibegod), then push works.'
+        Write-Warning 'Not signed in to GitHub. Run:  gh auth login --web --scopes workflow   (account Suryvibegod), then push works.'
     } elseif ($auth -notmatch 'workflow') {
         # Pushing changes under .github/workflows needs the workflow scope.
         Write-Warning 'GitHub token lacks the workflow scope. Run:  gh auth refresh -h github.com -s workflow'
