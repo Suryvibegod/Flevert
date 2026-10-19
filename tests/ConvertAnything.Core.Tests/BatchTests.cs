@@ -349,6 +349,20 @@ public sealed class BatchTests
         Assert.Null(ex);
     }
 
+    [Fact]
+    public async Task A_closing_batch_leaves_a_key_that_another_batch_already_replaced()
+    {
+        var op = UniqueOp();
+        var leader = (await Batch.LeadOrJoinAsync(op, [@"C:\a.txt"], Idle, CancellationToken.None))!;
+        var newer = new string('A', 32);
+        File.WriteAllText(Batch.SecretPath(op), newer); // as if this batch's key had been rotated and a new batch started
+
+        await DrainAsync(leader);
+        await leader.DisposeAsync();
+
+        Assert.Equal(newer, File.ReadAllText(Batch.SecretPath(op)));
+    }
+
     private static async Task<List<string>> DrainAsync(BatchLeader leader)
     {
         var files = new List<string>();

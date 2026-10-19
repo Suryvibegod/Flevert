@@ -63,7 +63,8 @@ public static class OutputPath
         }
     }
 
-    // Path.Exists follows links, so a dangling link would read as free although its name is occupied.
+    // A dangling link occupies its name. Path.Exists already reports a dangling junction as present (checked with the
+    // test's fallback removed); the attribute probe is a backstop for link kinds the tests cannot create without admin.
     private static bool IsTaken(string path)
     {
         if (Path.Exists(path))

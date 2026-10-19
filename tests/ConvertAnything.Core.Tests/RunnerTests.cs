@@ -273,6 +273,24 @@ public sealed class RunnerTests : IDisposable
     }
 
     [Fact]
+    public void A_parent_folder_cannot_be_renamed_while_its_file_is_pinned()
+    {
+        // The operation is given the real path on the strength of this: with the input open without delete sharing,
+        // nobody can move a parent folder away and put a junction in its place.
+        var parent = Directory.CreateDirectory(_dir.Combine("sub")).FullName;
+        var file = Path.Combine(parent, "a.txt");
+        File.WriteAllText(file, "x");
+
+        using (var pin = InputPin.TryPin(file, out var reason, out _))
+        {
+            Assert.True(pin is not null, reason);
+            Assert.ThrowsAny<IOException>(() => Directory.Move(parent, _dir.Combine("moved")));
+        }
+
+        Directory.Move(parent, _dir.Combine("moved")); // control: possible once the pin is released
+    }
+
+    [Fact]
     public async Task Runner_rejects_a_file_with_more_than_one_hard_link()
     {
         var target = _dir.File("private.txt", "secret");
