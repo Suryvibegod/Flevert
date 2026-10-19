@@ -59,6 +59,12 @@ Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
 
 ## Việc dở dang cụ thể (làm theo thứ tự)
 
+0. **Làm đầu tiên trên máy mới: đưa workflow về chỗ.** Máy cũ không có token quyền `workflow` nên không push được file trong `.github/workflows`; lịch sử đã được viết lại để các file đó nằm ở `.github/workflows-pending/` (ci.yml, release.yml). Trên máy mới:
+   1. `gh auth refresh -h github.com -s workflow` (hoặc `gh auth login --web -s workflow`), người dùng duyệt trên trình duyệt.
+   2. `git mv .github/workflows-pending .github/workflows`, commit ("ci: move workflows into place now that the token may push them"), push. Kiểm CI chạy trong tab Actions.
+   3. Lịch sử trên GitHub đã bị viết lại (email ẩn, 2026-10-19): bản clone cũ ở máy nào cũng phải clone lại.
+   4. Bản sao lưu lịch sử trước khi viết lại chỉ nằm trên máy cũ (scratchpad của phiên); không cần dùng tới trừ khi có gì mất.
+
 1. **Sửa nốt review vòng 2 của installer.** Đã sửa: mutex là tùy chọn khi bị chiếm tên, lỗi registry trong lệnh menu thoát 1 kèm lý do, `classic-menu on` tự sửa khóa của mình, test mutex chờ, email. Còn lại, mỗi việc viết test trước:
    - `.iss`: mã 3 (thư mục bị từ chối) có thông báo + mục README riêng (gồm trường hợp `%LOCALAPPDATA%` qua junction/ổ khác); câu dự phòng "Windows blocked ConvertAnything or it stopped unexpectedly"; chỉ hiện dòng stderr đầu trong hộp thoại, log phần còn lại; bỏ `(Code = ErrorPolicyBlocked)` thừa; `RunCa` bọc `try/except` (ngoại lệ không được bỏ qua `SweepRegistry`); không chạy `classic-menu on` khi `install-menu` đã lỗi, tách chữ trang cuối cho hai loại lỗi; `[Messages]` ghi đè `SetupAppRunningError`/`UninstallAppRunningError` ("A conversion is still running. Wait a few seconds..."); `PrepareToInstall` từ chối `{app}`/`{userpf}` là reparse point, và `{app}` có sẵn, **không rỗng**, mà không có mục gỡ `_is1` của app.
    - `Program.cs`: giữ mutex tới khi tiến trình thoát (trường static, không `using`); hằng số thay cho `SomeFilesFailed` ở nhánh classic-menu.
