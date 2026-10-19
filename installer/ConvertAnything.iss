@@ -51,8 +51,9 @@ WizardStyle=modern
 SetupIconFile=..\assets\app.ico
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExe}
-; Setup and Uninstall wait while ca.exe runs: a per-user uninstaller cannot remove files in use, and they would stay
-; behind with no uninstaller left. Restart Manager covers the same case for upgrades.
+; While ca.exe runs, Setup and Uninstall ask to wait (OK) or give up (Cancel); silent runs give up. A per-user
+; uninstaller cannot remove files in use, and they would stay behind with no uninstaller left. Restart Manager only
+; matters for a ca.exe that could not open the mutex.
 AppMutex={#AppMutexName}
 CloseApplications=yes
 RestartApplications=no
@@ -61,6 +62,11 @@ ChangesAssociations=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Messages]
+; Shown for AppMutex. The default asks to close ca.exe, which has no window to close; a conversion ends by itself.
+SetupAppRunningError=A ConvertAnything conversion is still running.%n%nWait a few seconds until it has finished, then click OK to continue, or Cancel to exit.
+UninstallAppRunningError=A ConvertAnything conversion is still running.%n%nWait a few seconds until it has finished, then click OK to continue, or Cancel to exit.
 
 ; The classic-menu choice is a check box on a custom page, not a [Tasks] entry: Inno Setup 6.7 clips the check box of the
 ; task list at high DPI (seen at 200%), while a plain check box is drawn by Windows. Silent installs pass /CLASSICMENU=1|0.
@@ -83,14 +89,23 @@ const
   Classes = 'Software\Classes';
   ClassicMenuKey = 'Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}';
   ClassicMenuMarker = 'ConvertAnything';
-  // ERROR_SYSTEM_INTEGRITY_POLICY_VIOLATION: Smart App Control or another application control policy blocked the file.
-  ErrorPolicyBlocked = 4551;
+  // Inno writes it for AppId; PrepareToInstall uses it to recognise an earlier install. InstallerScriptTests checks it.
+  UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{8B7A3F52-2C64-4F0B-9E3D-5A1C7E2B9D40}_is1';
+  // ca.exe's exit code for a folder other accounts can change (Program.RefusedLocation): setup again cannot fix it.
+  ExitRefusedLocation = 3;
   // Setup's exit code when it installed the files but could not set up the menu; Inno's own codes stop at 8.
   ExitMenuFailed = 10;
+  FileAttributeReparsePoint = $400;
+  InvalidFileAttributes = $FFFFFFFF;
 
 var
   ClassicMenuCheck: TNewCheckBox; // nil before Windows 11, where the classic menu is the only one
   MenuFailed: Boolean;
+  ClassicMenuFailed: Boolean;
+  FailureHelp: String; // README link for the last failure, repeated on the last page
+
+function GetFileAttributes(Path: String): Cardinal;
+  external 'GetFileAttributesW@kernel32.dll stdcall';
 
 function IsWindows11: Boolean;
 begin
@@ -98,18 +113,33 @@ begin
   Result := GetWindowsVersion >= $0A0055F0;
 end;
 
-// Runs ca.exe and waits. False when it could not start or exited with an error. Reason holds what it wrote to stderr.
+// Runs ca.exe and waits. False when it could not start or exited with an error. Reason is the first line ca.exe wrote
+// to stderr, for a message box; the log gets every line.
 function RunCa(const Params: String; var Started: Boolean; var Code: Integer; var Reason: String): Boolean;
 var
   Output: TExecOutput;
   I: Integer;
+  Line: String;
 begin
+  Started := False;
+  Code := -1;
   Reason := '';
-  Started := ExecAndCaptureOutput(ExpandConstant('{app}\{#AppExe}'), Params, '', SW_HIDE, ewWaitUntilTerminated, Code, Output);
-  if Started then
-    for I := 0 to GetArrayLength(Output.StdErr) - 1 do
-      Reason := Trim(Reason + ' ' + Output.StdErr[I]);
-  Log(Format('ca.exe %s: started=%d code=%d %s', [Params, Ord(Started), Code, Reason]));
+  // An exception must not end the uninstall step before SweepRegistry, or skip reporting a failed install.
+  try
+    Started := ExecAndCaptureOutput(ExpandConstant('{app}\{#AppExe}'), Params, '', SW_HIDE, ewWaitUntilTerminated, Code, Output);
+    if Started then
+      for I := 0 to GetArrayLength(Output.StdErr) - 1 do
+      begin
+        Line := Trim(Output.StdErr[I]);
+        Log('ca.exe ' + Params + ': ' + Line);
+        if (Reason = '') and (Line <> '') then
+          Reason := Line;
+      end;
+  except
+    Started := False;
+    Log('ca.exe ' + Params + ': ' + GetExceptionMessage);
+  end;
+  Log(Format('ca.exe %s: started=%d code=%d', [Params, Ord(Started), Code]));
   Result := Started and (Code = 0);
 end;
 
@@ -117,16 +147,26 @@ procedure ReportFailure(const What: String; Started: Boolean; Code: Integer; con
 var
   Text: String;
 begin
-  MenuFailed := True;
   Text := Format('ConvertAnything was installed, but %s failed (code %d).', [What, Code]);
   if Reason <> '' then
     Text := Text + #13#10#13#10 + Reason;
   // ca.exe's own failures exit with 1-3. Anything else means it did not run: not started at all, or stopped while
   // loading, which is how Smart App Control blocking one of its DLLs shows up.
-  if (not Started) or (Code = ErrorPolicyBlocked) or (Code < 1) or (Code > 3) then
-    Text := Text + #13#10#13#10 + 'Windows may have blocked ConvertAnything (Smart App Control). See {#AppUrl}#smart-app-control'
+  if Started and (Code = ExitRefusedLocation) then
+  begin
+    FailureHelp := '{#AppUrl}#setup-refused-the-install-folder';
+    Text := Text + #13#10#13#10 + 'Running setup again will not change this. See ' + FailureHelp;
+  end
+  else if Started and (Code >= 1) and (Code <= 3) then
+  begin
+    FailureHelp := '{#AppUrl}#if-the-menu-is-missing';
+    Text := Text + #13#10#13#10 + 'See ' + FailureHelp;
+  end
   else
-    Text := Text + #13#10#13#10 + 'See {#AppUrl}#if-the-menu-is-missing';
+  begin
+    FailureHelp := '{#AppUrl}#smart-app-control';
+    Text := Text + #13#10#13#10 + 'Windows blocked ConvertAnything or it stopped unexpectedly. See ' + FailureHelp;
+  end;
   SuppressibleMsgBox(Text, mbError, MB_OK, IDOK);
 end;
 
@@ -174,38 +214,106 @@ begin
     SetPreviousData(PreviousDataKey, 'ClassicMenu', '0');
 end;
 
-function PrepareToInstall(var NeedsRestart: Boolean): String;
+function IsLink(const Path: String): Boolean;
+var
+  Attributes: Cardinal;
+begin
+  Attributes := GetFileAttributes(Path);
+  Result := (Attributes <> InvalidFileAttributes) and ((Attributes and FileAttributeReparsePoint) <> 0);
+end;
+
+// The first folder from Dir up to its drive that is a junction or symbolic link, or '' if there is none.
+function LinkOnPath(Dir: String): String;
+var
+  Parent: String;
 begin
   Result := '';
-  if CompareText(RemoveBackslash(ExpandConstant('{app}')), ExpandConstant('{userpf}\{#AppName}')) <> 0 then
+  Dir := RemoveBackslash(Dir);
+  while Result = '' do
+  begin
+    if IsLink(Dir) then
+      Result := Dir
+    else
+    begin
+      Parent := ExtractFileDir(Dir);
+      if (Parent = '') or (CompareText(Parent, Dir) = 0) then
+        Break;
+      Dir := RemoveBackslash(Parent);
+    end;
+  end;
+end;
+
+function HoldsAnything(const Dir: String): Boolean;
+var
+  Found: TFindRec;
+  More: Boolean;
+begin
+  Result := False;
+  if not FindFirst(AddBackslash(Dir) + '*', Found) then
+    Exit;
+  try
+    More := True;
+    while More and not Result do
+    begin
+      Result := (Found.Name <> '.') and (Found.Name <> '..');
+      More := FindNext(Found);
+    end;
+  finally
+    FindClose(Found);
+  end;
+end;
+
+// Refused before anything is copied: files copied through a link land wherever it points, and ca.exe would load a
+// DLL that someone placed in the folder beforehand. ca.exe install-menu repeats the link and permission checks later.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  App, Link: String;
+begin
+  Result := '';
+  App := RemoveBackslash(ExpandConstant('{app}'));
+  if CompareText(App, ExpandConstant('{userpf}\{#AppName}')) <> 0 then
+  begin
     Result := 'ConvertAnything installs only into ' + ExpandConstant('{userpf}\{#AppName}') +
       ': another folder may be changeable by other accounts, and the right-click menu would run their code.';
+    Exit;
+  end;
+  Link := LinkOnPath(App);
+  if Link <> '' then
+    Result := 'ConvertAnything cannot be installed: ' + Link + ' is a link to another folder (a junction or symbolic ' +
+      'link), so its files could end up where other accounts can change them. See {#AppUrl}#setup-refused-the-install-folder'
+  else if DirExists(App) and HoldsAnything(App) and not RegKeyExists(HKCU, UninstallKey) then
+    Result := App + ' already holds files that ConvertAnything did not install. Move or delete them, then run setup again.';
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  Started: Boolean;
+  Started, MenuAdded: Boolean;
   Code: Integer;
   Reason: String;
 begin
   if CurStep <> ssPostInstall then
     Exit;
-  if not RunCa('install-menu', Started, Code, Reason) then
-    ReportFailure('adding the right-click menu', Started, Code, Reason);
-  // Applied both ways, so unticking it on an upgrade undoes it; off only ever removes the key ca.exe created.
-  if ClassicMenuChosen then
+  MenuAdded := RunCa('install-menu', Started, Code, Reason);
+  if not MenuAdded then
   begin
-    if not RunCa('classic-menu on', Started, Code, Reason) then
-      ReportFailure('switching to the classic menu', Started, Code, Reason);
-  end
-  else
-    RunCa('classic-menu off', Started, Code, Reason);
+    MenuFailed := True;
+    ReportFailure('adding the right-click menu', Started, Code, Reason);
+  end;
+  // Applied both ways, so unticking it on an upgrade undoes it; off only ever removes the key ca.exe created. Not
+  // switched on without a menu to show: it would change every app's menu for nothing.
+  if not ClassicMenuChosen then
+    RunCa('classic-menu off', Started, Code, Reason)
+  else if MenuAdded and not RunCa('classic-menu on', Started, Code, Reason) then
+  begin
+    ClassicMenuFailed := True;
+    ReportFailure('switching to the classic menu', Started, Code, Reason);
+  end;
 end;
 
 function GetCustomSetupExitCode: Integer;
 begin
   Result := 0;
-  if MenuFailed then
+  if MenuFailed or ClassicMenuFailed then
     Result := ExitMenuFailed;
 end;
 
@@ -216,8 +324,11 @@ begin
   if CurPageID <> wpFinished then
     Exit;
   if MenuFailed then
-    Text := 'Setup copied ConvertAnything to your computer, but could not finish setting up the right-click menu. ' +
-      'See {#AppUrl}#if-the-menu-is-missing'
+    Text := 'Setup copied ConvertAnything to your computer, but could not add it to the right-click menu. ' +
+      'See ' + FailureHelp
+  else if ClassicMenuFailed then
+    Text := 'Setup has finished installing ConvertAnything, but could not switch to the classic right-click menu. ' +
+      'See ' + FailureHelp + #13#10#13#10 + 'Right-click a picture, choose "Show more options", then ConvertAnything.'
   else
   begin
     Text := 'Setup has finished installing ConvertAnything.' + #13#10#13#10;

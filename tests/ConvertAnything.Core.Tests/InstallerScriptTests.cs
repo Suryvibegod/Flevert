@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using ConvertAnything.Core.Menu;
 
 namespace ConvertAnything.Core.Tests;
@@ -31,6 +32,15 @@ public sealed class InstallerScriptTests
     {
         Assert.Contains($"#define AppMutexName \"{AppMutex.Name}\"", Script, StringComparison.Ordinal);
         Assert.Contains("AppMutex={#AppMutexName}", Script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Install_folder_check_looks_for_the_uninstall_entry_of_this_app_id()
+    {
+        // PrepareToInstall accepts a non-empty folder only over an earlier install, found by its uninstall entry.
+        var appId = Regex.Match(Script, @"^AppId=\{\{([0-9A-F-]{36})\}\r?$", RegexOptions.Multiline);
+        Assert.True(appId.Success, "AppId not found");
+        Assert.Contains($@"\Uninstall\{{{appId.Groups[1].Value}}}_is1';", Script, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -2,8 +2,8 @@
 .SYNOPSIS
 End-to-end test of the installer on this machine: installs silently without admin, checks files, menu and a real
 conversion, installs over itself, uninstalls and checks that nothing ConvertAnything wrote is left. Further scenarios
-cover the uninstall safety net, a classic-menu key the user created, a refused install folder, /DIR, and uninstalling
-while ca.exe runs.
+cover the uninstall safety net, a classic-menu key the user created, a refused install folder, /DIR, uninstalling
+while ca.exe runs, an install folder that is a junction, and one that already holds someone else's files.
 
 Uses the real per-user install location and HKCU, so it refuses to run when anything of ConvertAnything is present.
 
@@ -32,14 +32,27 @@ function Assert([bool]$Condition, [string]$Message) {
 }
 
 function MenuKeys {
+    # Every key named after the app, not only the ones today's code writes, so a new kind of key cannot be left behind.
     @(Get-ChildItem $associations -ErrorAction SilentlyContinue |
         Where-Object { Test-Path "$($_.PSPath)\shell\ConvertAnything" }) +
-    @(Get-ChildItem $classes -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'ConvertAnything.Menu*' })
+    @(Get-ChildItem $classes -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'ConvertAnything*' })
 }
 
 function AssociationNames { @(Get-ChildItem $associations -ErrorAction SilentlyContinue | ForEach-Object { $_.PSChildName }) }
 
 function RunningCa { @(Get-Process ca -ErrorAction SilentlyContinue) }
+
+function StopInstalledCa {
+    foreach ($p in RunningCa | Where-Object { $_.Path -like "$app\*" }) {
+        try { $p.Kill(); $p.WaitForExit(10000) | Out-Null } catch { Write-Warning "could not stop ca.exe $($p.Id): $_" }
+    }
+}
+
+function SetupRefused($Run, [string]$Reason) {
+    # Inno's exit code when PrepareToInstall refuses.
+    Assert ($Run.ExitCode -eq 7) "setup refuses with exit code 7 (got $($Run.ExitCode); log $($Run.Log))"
+    Assert ((Get-Content $Run.Log -Raw).Contains($Reason)) "setup logs why: '$Reason'"
+}
 
 function Setup([string[]]$Arguments) {
     $log = Join-Path $work "setup-$([guid]::NewGuid()).log"
@@ -110,6 +123,9 @@ $work = Join-Path $env:TEMP "ca-installer-test-$([guid]::NewGuid())"
 New-Item -ItemType Directory $work | Out-Null
 Write-Host "Testing $Setup"
 try {
+    $size = (Get-Item $Setup).Length / 1MB
+    Assert ($size -le 60) ("the setup file is at most 60 MB ({0:N1} MB)" -f $size)
+
     Write-Host 'Scenario 1: install, convert, install again, uninstall'
     $run = Install '1'
     Assert ($run.Seconds -lt 30) 'installs in under 30 s'
@@ -167,41 +183,72 @@ try {
     $acl = Get-Acl $app
     $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Users', 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
     Set-Acl $app $acl
-    $run = Setup @('/CLASSICMENU=0')
+    $run = Setup @('/CLASSICMENU=1')
     Assert ($run.ExitCode -eq $exitMenuFailed) "setup exits with $exitMenuFailed when the menu is refused (got $($run.ExitCode))"
-    Assert ((Get-Content $run.Log -Raw).Contains('other accounts can modify its folder')) "ca.exe's reason reaches setup"
+    $log = Get-Content $run.Log -Raw
+    Assert ($log.Contains('other accounts can modify its folder')) "ca.exe's reason reaches setup"
+    Assert ($log.Contains('#setup-refused-the-install-folder')) 'the message points to the README section for a refused folder'
     Assert (@(MenuKeys).Count -eq 0) 'no menu registered'
+    Assert (-not (Test-Path $classicKey)) 'no classic menu switched on for a menu that is not there'
     Uninstall
     AssertClean
 
     Write-Host 'Scenario 5: /DIR cannot move the install elsewhere'
     $elsewhere = Join-Path $work 'elsewhere'
     $run = Setup @("/DIR=`"$elsewhere`"")
-    Assert ($run.ExitCode -ne 0) "setup refuses /DIR (exit $($run.ExitCode))"
+    SetupRefused $run 'installs only into'
     Assert (-not (Test-Path "$elsewhere\ca.exe")) 'nothing installed there'
     AssertClean
 
-    Write-Host 'Scenario 6: uninstalling while ca.exe runs never leaves a partial install'
+    Write-Host 'Scenario 6: uninstalling while ca.exe runs is cancelled, never left half done'
     Install '0' | Out-Null
+    $menuCount = @(MenuKeys).Count
     $inputs = 1..6 | ForEach-Object { $f = "$work\slow$_.txt"; Set-Content $f 'x'; "`"$f`"" }
     $job = RunCaHeadless (@('run', 'dev.slow-copy') + $inputs) -NoWait
     Start-Sleep -Seconds 1
     Assert (-not $job.HasExited) 'ca.exe is running'
     Uninstall
+    # A silent uninstall answers the "still running" question with Cancel, so everything must still be there.
+    Assert (Test-Path $arpKey) 'still listed in Installed apps'
+    Assert (Test-Path "$app\ca.exe") 'ca.exe still installed'
+    Assert (@(MenuKeys).Count -eq $menuCount) 'menu still registered'
     $job.WaitForExit()
-    # Either the uninstaller waited for ca.exe and removed everything, or it declined and left everything; never half.
-    if ((Test-Path $arpKey) -and (Test-Path "$app\ca.exe") -and @(MenuKeys).Count -gt 0) {
-        Write-Host '      the uninstaller declined while ca.exe ran; uninstalling again'
-        Uninstall
-    }
+    Uninstall
+    AssertClean
+
+    Write-Host 'Scenario 7: an install folder that is a junction is refused before anything is copied'
+    $target = Join-Path $work 'junction-target'
+    New-Item -ItemType Directory $target | Out-Null
+    New-Item -ItemType Junction -Path $app -Target $target | Out-Null
+    $run = Setup @('/CLASSICMENU=0')
+    SetupRefused $run 'is a link'
+    Assert (@(Get-ChildItem $target).Count -eq 0) 'nothing copied through the junction'
+    (Get-Item $app).Delete()
+    AssertClean
+
+    Write-Host 'Scenario 8: a folder that already holds files from something else is refused'
+    New-Item -ItemType Directory $app | Out-Null
+    Set-Content "$app\planted.dll" 'not ours'
+    $run = Setup @('/CLASSICMENU=0')
+    SetupRefused $run 'already holds files'
+    Assert (-not (Test-Path "$app\ca.exe")) 'nothing installed beside them'
+    Assert ((Get-Content "$app\planted.dll") -eq 'not ours') 'their files are left alone'
+    Remove-Item $app -Recurse -Force
     AssertClean
 
     Write-Host 'PASS'
 }
 finally {
     WaitForUninstaller
-    if (Test-Path "$app\unins000.exe") { Uninstall }
-    if (Test-Path $classicKey) { Remove-Item $classicKey -Recurse -Force }
-    if (Test-Path $app) { Remove-Item $app -Recurse -Force }
+    StopInstalledCa
+    try {
+        if (Test-Path "$app\unins000.exe") { Uninstall }
+        if (Test-Path $classicKey) { Remove-Item $classicKey -Recurse -Force }
+        $item = Get-Item $app -Force -ErrorAction SilentlyContinue
+        # Delete a junction itself, never what it points to.
+        if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { $item.Delete() }
+        elseif ($item) { Remove-Item $app -Recurse -Force }
+    }
+    catch { Write-Warning "cleanup failed, check $app and $classicKey by hand: $_" }
     Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
 }
