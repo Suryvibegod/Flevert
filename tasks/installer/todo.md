@@ -82,6 +82,8 @@ Ký hiệu: CR, SA, DD (F = finding của doubt-driven).
 | SA Info: SHA pin action chưa đối chiếu | Info | Hợp lệ | Đã đối chiếu bằng `gh api` (2026-10-19): cả 5 action khớp tag ghi trong chú thích |
 | CR-10 nit: `AppMutex.cs` chú thích cũ, HANDOFF cũ, spec thiếu test tích hợp, `args[0]`, `winget` không kiểm mã thoát, cảnh báo scope sai với token không có dòng scope | Nit | Hợp lệ | Sửa hết |
 
+Commit: `26ea77b` (check-location), `9d75744` (**chứa cả** bản sửa `.iss` + `test-installer.ps1` cho SA H-1 và F1, dù message chỉ nói `setup-dev.ps1`: commit riêng của chúng hỏng vì dấu `"` trong message qua PowerShell 5.1; đã push nên không viết lại lịch sử), `3faf0d1`, `ea145b9`. E2E 9 kịch bản xanh; test 182+204 xanh.
+
 ## Checkpoint
 - [x] Review vòng 1 → reconcile (bảng trên)
 - [x] Review vòng 2 → đã sửa

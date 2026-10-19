@@ -56,6 +56,8 @@ Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
 - Inno Setup 6.7.3 cài cho riêng user: `winget install JRSoftware.InnoSetup -e --version 6.7.3 --scope user`.
 - Ghi file có dấu `\` qua heredoc/Python dễ bị biến `\a`, `\b` thành ký tự điều khiển (đã làm hỏng `BatchTests.cs` một lần). Sửa text có backslash bằng công cụ Edit.
 - Kiểm `dotnet format --verify-no-changes` thành **lệnh riêng**, đọc exit code rồi mới commit; đừng gộp chung một lệnh với `git commit`.
+- Message commit có dấu `"` truyền qua here-string của **Windows PowerShell 5.1** bị tách thành nhiều đối số (git báo "pathspec ... did not match", commit không xảy ra, file đã stage lọt vào commit sau). Viết message ra file rồi `git commit -F <file>`, và mỗi commit một lệnh riêng, kiểm kết quả trước khi commit tiếp.
+- Máy Windows 11 Pro (2026-10-19): test `dotnet test` tạo `%LOCALAPPDATA%\ConvertAnything` (magick, pipes); `test-installer.ps1` từ chối chạy khi thư mục này có. Xóa nó trước khi chạy test đầu-cuối, và đừng chạy `dotnet test` song song với nó.
 
 ## Việc dở dang cụ thể (làm theo thứ tự)
 
