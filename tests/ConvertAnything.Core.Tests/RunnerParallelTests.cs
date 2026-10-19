@@ -29,12 +29,22 @@ public sealed class RunnerParallelTests : IDisposable
     [Fact]
     public async Task One_at_a_time_by_default()
     {
+        // Each file takes a while, so files run in parallel would be seen overlapping.
         var files = Enumerable.Range(1, 4).Select(i => _dir.File($"{i}.txt")).ToList();
-        var op = new GatedOp(openWhenRunning: 1);
+        var op = new GatedOp(openWhenRunning: int.MaxValue, hold: TimeSpan.FromMilliseconds(150));
 
         await new Runner(new RunLog(_logs.Path)).RunAsync(op, files, progress: null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.Equal(1, op.MaxRunning);
+    }
+
+    [Fact]
+    public void An_operation_runs_one_file_at_a_time_unless_it_says_otherwise()
+    {
+        // Future media operations call ffmpeg, which already uses every core; images use one core each.
+        Assert.Equal(1, ((IOperation)new GatedOp(1)).MaxParallel);
+        Assert.True(new Operations.DevSlowCopy().MaxParallel > 1);
+        Assert.True(new Operations.DevCopy().MaxParallel > 1);
     }
 
     [Fact]
@@ -103,7 +113,7 @@ public sealed class RunnerParallelTests : IDisposable
     /// Holds every file until <paramref name="openWhenRunning"/> run at the same time (or 5 s pass), so concurrency is
     /// observed directly rather than inferred from timing.
     /// </summary>
-    private sealed class GatedOp(int openWhenRunning, string? failOn = null, Action<int>? onRunning = null) : IOperation
+    private sealed class GatedOp(int openWhenRunning, string? failOn = null, Action<int>? onRunning = null, TimeSpan? hold = null) : IOperation
     {
         private readonly TaskCompletionSource _open = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _running;
@@ -134,7 +144,7 @@ public sealed class RunnerParallelTests : IDisposable
                 onRunning?.Invoke(running);
                 if (running >= openWhenRunning)
                     _open.TrySetResult();
-                await Task.WhenAny(_open.Task, Task.Delay(TimeSpan.FromSeconds(5), ct)).ConfigureAwait(false);
+                await Task.WhenAny(_open.Task, Task.Delay(hold ?? TimeSpan.FromSeconds(5), ct)).ConfigureAwait(false);
                 ct.ThrowIfCancellationRequested();
                 if (Path.GetFileName(inputPath) == failOn)
                     throw new IOException("bad file");

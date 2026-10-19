@@ -14,7 +14,8 @@ public sealed record FileResult(string Input, string? Output, string? Error, boo
 
 public sealed record BatchProgress(int Completed, int Total, string? Current);
 
-/// <param name="Results">Finished files, in processing order. A file interrupted by cancellation is not included.</param>
+/// <param name="Results">Finished files, in the order they finished (files may run in parallel). A file interrupted by
+/// cancellation is not included; one that was already writing its output when cancelled may still have produced it.</param>
 /// <param name="Total">Every distinct file the batch received, including those left unprocessed by cancellation.</param>
 public sealed record BatchOutcome(IReadOnlyList<FileResult> Results, int Total)
 {
@@ -36,7 +37,9 @@ public sealed class Runner(RunLog log)
     /// <param name="maxParallel">How many files run at once. Image decoders use one core each, so a batch gains from
     /// running several (SPEC-core, "Xử lý song song trong một lô"); results then come in the order files finish.</param>
     /// <param name="running">Told how many files are running: raised before the next file is requested, lowered after
-    /// a result is recorded, so a batch leader never sees the batch idle while a file is still being converted.</param>
+    /// a result is recorded, so a batch leader never sees the batch idle while a file is still being converted. Required
+    /// with a <see cref="BatchLeader"/> as the source and <paramref name="maxParallel"/> above 1 (pass
+    /// <see cref="BatchLeader.ReportRunning"/>), or the batch can close early and a late file start a second batch.</param>
     public async Task<BatchOutcome> RunAsync(
         IOperation operation,
         IAsyncEnumerable<string> files,
@@ -53,13 +56,15 @@ public sealed class Runner(RunLog log)
         var interrupted = 0;
         var runningCount = 0;
         var inFlight = new List<Task>();
+        var gate = new Lock();
 
-        // Results, counts and progress change together under one lock, so every report is consistent and counts only
-        // ever move in order. The callbacks only record or post the numbers.
+        // Results, counts and progress change together under one lock, so the running count only ever moves in order.
+        // The total can dip by one for a moment: the queue hands out a file before it is counted as running. The
+        // callbacks only record or post the numbers.
         async Task RunAndRecordAsync(string file)
         {
             var result = await RunOneAsync(operation, file, ct).ConfigureAwait(false);
-            lock (results)
+            lock (gate)
             {
                 if (result is null)
                     interrupted++;
@@ -77,7 +82,7 @@ public sealed class Runner(RunLog log)
                 if (!seen.Add(file))
                     continue;
 
-                lock (results)
+                lock (gate)
                 {
                     running?.Invoke(++runningCount);
                     progress?.Report(new BatchProgress(results.Count, results.Count + runningCount + pending(), file));
@@ -85,7 +90,12 @@ public sealed class Runner(RunLog log)
 
                 inFlight.Add(RunAndRecordAsync(file));
                 if (inFlight.Count >= maxParallel)
-                    inFlight.Remove(await Task.WhenAny(inFlight).ConfigureAwait(false));
+                {
+                    var done = await Task.WhenAny(inFlight).ConfigureAwait(false);
+                    inFlight.Remove(done);
+                    await done.ConfigureAwait(false); // surfaces a fault instead of dropping it
+                }
+
                 if (ct.IsCancellationRequested)
                     break;
             }
@@ -93,9 +103,13 @@ public sealed class Runner(RunLog log)
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
         }
+        finally
+        {
+            // Files already started finish (or stop at the cancel) before the outcome is known, also when the source
+            // failed: the batch must not report and exit while files are still being written.
+            await Task.WhenAll(inFlight).ConfigureAwait(false);
+        }
 
-        // Files already started finish (or stop at the cancel) before the outcome is known.
-        await Task.WhenAll(inFlight).ConfigureAwait(false);
         return new BatchOutcome(results, results.Count + interrupted + pending());
     }
 

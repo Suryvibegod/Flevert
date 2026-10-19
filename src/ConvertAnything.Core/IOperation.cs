@@ -11,6 +11,12 @@ public interface IOperation
     /// <summary>Lower-case file extensions with leading dot this operation accepts.</summary>
     IReadOnlyCollection<string> Extensions { get; }
 
+    /// <summary>
+    /// How many files of a batch this operation may convert at once (ca.exe also caps it by the cores it has). One unless
+    /// the operation says otherwise: work that already uses every core, such as ffmpeg, gains nothing from more.
+    /// </summary>
+    int MaxParallel => 1;
+
     /// <summary>Processes one file and returns the path of the file it produced.</summary>
     /// <remarks>
     /// Contract for implementations:

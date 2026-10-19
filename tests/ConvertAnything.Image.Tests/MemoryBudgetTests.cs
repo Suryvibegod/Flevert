@@ -220,6 +220,12 @@ public sealed class MemoryBudgetTests
     }
 
     [Fact]
+    public void Image_operations_run_several_files_at_once()
+    {
+        Assert.All(ImageOperations.All, op => Assert.True(op.MaxParallel > 1, op.Id));
+    }
+
+    [Fact]
     public async Task Disposing_a_lease_twice_returns_its_share_once()
     {
         var budget = new MemoryBudget(100);

@@ -16,9 +16,10 @@ internal static class Program
     private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(
         int.TryParse(Environment.GetEnvironmentVariable("CONVERTANYTHING_BATCH_IDLE_MS"), out var ms) ? Math.Clamp(ms, 100, 10_000) : 400);
     private static readonly TimeSpan LogRetention = TimeSpan.FromDays(7);
-    // Image decoders use one core each; leave one core for the machine and the progress window. Beyond 8 the gain is
-    // small and memory grows (MemoryBudget keeps it within ImageMagick's limit). SPEC-core, "Xử lý song song".
-    private static readonly int MaxParallel = Math.Clamp(Environment.ProcessorCount - 1, 1, 8);
+    // Up to what the operation allows, leaving one core for the machine and the progress window; beyond 8 the gain is
+    // small and memory grows. SPEC-core, "Xử lý song song trong một lô".
+    private static int MaxParallelFor(IOperation operation) =>
+        Math.Clamp(Math.Min(operation.MaxParallel, Environment.ProcessorCount - 1), 1, 8);
 
     // Never disposed: Inno's AppMutex expects it to exist until the process has fully terminated, which is after Main
     // returns (a using declaration released it there). Windows closes it on exit. See AppMutex.
@@ -162,9 +163,12 @@ internal static class Program
             // Logs hold every path processed; keep the whole app-data folder private to this user, like the batch keys.
             SecureDirectory.TrySecure(AppData.Root);
             log.Prune(LogRetention, DateOnly.FromDateTime(DateTime.Now));
+            var maxParallel = MaxParallelFor(operation);
+            if (maxParallel > 1)
+                LowerPriority();
             if (Environment.GetEnvironmentVariable("CONVERTANYTHING_HEADLESS") == "1")
-                return RunHeadless(operation, leader, log);
-            return BatchUi.Run(operation, leader, log, MaxParallel) ? Ok : SomeFilesFailed;
+                return RunHeadless(operation, leader, log, maxParallel);
+            return BatchUi.Run(operation, leader, log, maxParallel) ? Ok : SomeFilesFailed;
         }
         finally
         {
@@ -172,12 +176,26 @@ internal static class Program
         }
     }
 
+    // Several conversions at once would otherwise compete with what the user is doing in the foreground. Best effort:
+    // a batch still runs if Windows refuses.
+    private static void LowerPriority()
+    {
+        try
+        {
+            using var self = System.Diagnostics.Process.GetCurrentProcess();
+            self.PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal;
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+        }
+    }
+
     /// <summary>Same batch without progress window or notification, for scripts and integration tests.</summary>
-    private static int RunHeadless(IOperation operation, BatchLeader leader, RunLog log)
+    private static int RunHeadless(IOperation operation, BatchLeader leader, RunLog log, int maxParallel)
     {
         var outcome = new Runner(log)
             .RunAsync(operation, leader.ReadAllAsync(CancellationToken.None), () => leader.Pending, progress: null, CancellationToken.None,
-                MaxParallel, leader.ReportRunning)
+                maxParallel, leader.ReportRunning)
             .GetAwaiter().GetResult();
         return outcome.NoFailures ? Ok : SomeFilesFailed;
     }

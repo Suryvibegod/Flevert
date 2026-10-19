@@ -11,6 +11,9 @@ public sealed class BudgetedOperation(IOperation inner, MemoryBudget? budget = n
 
     public IReadOnlyCollection<string> Extensions => inner.Extensions;
 
+    // ImageMagick here has no OpenMP: each image uses one core (libheif adds a few threads of its own for HEIC tiles).
+    public int MaxParallel => 8;
+
     // The header is read off the caller's thread, like every image operation reads its file.
     public Task<string> RunAsync(string inputPath, CancellationToken ct) => Task.Run(async () =>
     {

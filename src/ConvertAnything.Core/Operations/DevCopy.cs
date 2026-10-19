@@ -9,6 +9,9 @@ public sealed class DevCopy : IOperation
 
     public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
 
+    // Mostly waiting on the disk; parallel like the image operations, so batching is exercised the same way.
+    public int MaxParallel => 8;
+
     public Task<string> RunAsync(string inputPath, CancellationToken ct)
     {
         var desired = Path.Combine(

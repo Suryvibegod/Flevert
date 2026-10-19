@@ -9,8 +9,10 @@
 .EXAMPLE
   powershell -File scripts/measure-convert.ps1 -Src C:\bench -Exe artifacts\publish\ca.exe
 #>
-param([string]$Exe = (Join-Path $PSScriptRoot '..\artifacts\publish\ca.exe'), [Parameter(Mandatory)][string]$Src, [int]$Runs = 5, [string]$Out)
+param([string]$Exe, [Parameter(Mandatory)][string]$Src, [int]$Runs = 5, [string]$Out)
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 has no $PSScriptRoot in parameter defaults.
+if (-not $Exe) { $Exe = Join-Path $PSScriptRoot '..\artifacts\publish\ca.exe' }
 $Exe = (Resolve-Path $Exe).Path
 
 $scenarios = @(

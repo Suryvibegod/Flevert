@@ -13,6 +13,9 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     // the product's 400 ms (ADR-0002 accepts the resulting split). Tests that need one batch widen the window.
     private string? _idleWindowMs;
 
+    // How long dev.slow-copy takes per file (CONVERTANYTHING_SLOW_COPY_MS; 1 s by default).
+    private string? _slowCopyMs;
+
     public void Dispose()
     {
         _dir.Dispose();
@@ -60,15 +63,38 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     [Fact]
     public async Task Process_started_while_the_leader_is_busy_joins_its_batch()
     {
-        _idleWindowMs = "3000";
-        var leader = Ca("dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
-        await Task.Delay(TimeSpan.FromSeconds(1.2)); // while file 2 is still running (the unit test in BatchTests owns the busy-leader rule)
+        // The late process starts after both the idle window and the batch's minimum lifetime, while the leader's only
+        // file is still converting: only ca.exe telling the leader that a file is running keeps the batch open (a
+        // parallel runner has already asked for the next file).
+        _idleWindowMs = "200";
+        _slowCopyMs = "4000";
+        var leader = Ca("dev.slow-copy", _dir.File("1.txt"));
+        await Task.Delay(TimeSpan.FromSeconds(2.2));
 
-        var late = Ca("dev.slow-copy", _dir.File("3.txt"));
+        var late = Ca("dev.slow-copy", _dir.File("2.txt"));
         await ExitAllOk([leader, late]);
 
-        Assert.Equal(3, Directory.GetFiles(_dir.Path, "* (copy).txt").Length);
+        Assert.Equal(2, Directory.GetFiles(_dir.Path, "* (copy).txt").Length);
         Assert.Equal([leader.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)], LoggedProcessIds());
+    }
+
+    [SkippableFact]
+    public async Task A_leader_running_files_in_parallel_lowers_its_priority()
+    {
+        // Several conversions at once must not make the rest of the PC sluggish.
+        Skip.If(Environment.ProcessorCount < 3, "ca.exe runs files in parallel only with three or more cores.");
+        _slowCopyMs = "3000";
+        var leader = Ca("dev.slow-copy", _dir.File("1.txt"));
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            leader.Refresh();
+            Assert.Equal(ProcessPriorityClass.BelowNormal, leader.PriorityClass);
+        }
+        finally
+        {
+            await ExitAllOk([leader]);
+        }
     }
 
     [Fact]
@@ -382,6 +408,8 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         start.Environment["CONVERTANYTHING_HEADLESS"] = "1";
         if (_idleWindowMs is not null)
             start.Environment["CONVERTANYTHING_BATCH_IDLE_MS"] = _idleWindowMs;
+        if (_slowCopyMs is not null)
+            start.Environment["CONVERTANYTHING_SLOW_COPY_MS"] = _slowCopyMs;
         return Process.Start(start)!;
     }
 
