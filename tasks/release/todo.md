@@ -41,7 +41,7 @@ Ba audit (cấu trúc/vệ sinh repo, quy trình phát hành, quyền riêng tư
 - [x] LICENSE, `Directory.Build.props`: "Flevert contributors"
 - [x] core.md: thêm `FLEVERT_SLOW_COPY_MS`; `tasks/todo.md`: ghi chú là nhật ký lịch sử
 - [x] Đổi tác giả và người commit của mọi commit thành Suryvibegod (email ẩn), thay tên tài khoản cũ trong text/message, xóa tọa độ GPS cũ và blob fixture cũ khỏi lịch sử (git-filter-repo, 2026-10-20; mã commit trong tài liệu đã đổi theo)
-- [ ] Xóa và tạo lại repo, cài lại cấu hình (chủ repo đã duyệt; chỉ chủ repo làm)
+- [x] Xóa và tạo lại repo, cài lại cấu hình (2026-10-20; link commit cũ 404; ruleset main cần PR + code owner, admin bypass; tag `v*` chỉ admin; immutable releases; Dependabot, secret scanning, push protection, báo lỗ hổng riêng; chỉ Actions của GitHub, ghim SHA; CodeQL; squash-only; 20 topics)
 - [x] Tên hồ sơ GitHub đã xóa (API, theo yêu cầu người dùng)
 - [ ] 2FA: chỉ người dùng bật được; đã nhắc
 
@@ -66,11 +66,11 @@ Ba audit (cấu trúc/vệ sinh repo, quy trình phát hành, quyền riêng tư
 ## Việc còn lại trước khi Publish
 
 - [x] Repo mới, cấu hình, CI (CI xanh 3/3 trên 6dd8b29; làm lại sau khi tạo lại repo)
-- [ ] CI xanh 3 lần liên tiếp trên repo tạo lại
-- [ ] Tag `v0.1.0` → bản nháp → kiểm theo RELEASING (hash, attestation, `test-installer.ps1`, runtime)
-- [ ] Người dùng: cài bản nháp, kiểm ảnh iPhone dọc có GPS; chụp lại menu chuột phải (tên mới) cho README
-- [ ] Quét VirusTotal
-- [ ] Người dùng Publish
+- [x] CI xanh 3 lần liên tiếp trên repo tạo lại (`d429924`)
+- [x] Tag `v0.1.0` → bản nháp → kiểm theo RELEASING: SHA256 `aa85392b…92e3` khớp; attestation đúng tag + commit `d429924`, runner GitHub (đối chứng commit sai: thất bại); `test-installer.ps1` trên file tải về PASS 9/9; runtime 10.0.13 (mới nhất, 13/10)
+- [x] Ảnh iPhone dọc có GPS: thay bằng test tự động (`PhonePortraitTests`, mọi thao tác); README dùng ảnh động minh họa thay cho ảnh chụp menu
+- [x] Quét: Defender sạch; VirusTotal 1/73 (DeepInstinct, học máy, nhãn chung "MALICIOUS"; mọi engine lớn sạch): dương tính giả thường gặp với bộ cài chưa ký, ghi minh bạch trong release notes
+- [x] Publish 2026-10-20 (người dùng ủy quyền): https://github.com/Suryvibegod/Flevert/releases/tag/v0.1.0, latest, immutable
 
 ## Sau v0.1.0 (test-engineer đề xuất)
 

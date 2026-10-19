@@ -33,14 +33,11 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 
 Test: Core 269 (+1 skip), Image 240. Test đầu-cuối installer: `scripts/test-installer.ps1` (9 kịch bản, chạy tay trên máy thật, `%LOCALAPPDATA%\Flevert` phải không tồn tại). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` + [docs/RELEASING.md](../docs/RELEASING.md).
 
-## Việc đang làm: phát hành v0.1.0 (người dùng: "hôm nay chỉ cần release xong v0.1.0 và spec rõ v0.2, v0.3")
+## v0.1.0 đã phát hành (2026-10-20)
 
-Việc còn lại theo thứ tự: [release/todo.md](release/todo.md).
+https://github.com/Suryvibegod/Flevert/releases/tag/v0.1.0 (latest, immutable). Kết quả kiểm: [release/todo.md](release/todo.md).
 
-1. Đổi tác giả mọi commit thành Suryvibegod (email ẩn), xóa và tạo lại `Suryvibegod/Flevert`, cài lại cấu hình (ruleset main cần PR + code owner, chủ repo bypass; tag `v*` chỉ admin; immutable releases; Dependabot, secret scanning, push protection; SHA pinning; fork PR cần duyệt), topics, mô tả.
-2. CI xanh 3 lần → tag `v0.1.0` → kiểm bản nháp theo RELEASING (hash, attestation, `test-installer.ps1 -Setup <file tải về>`, runtime).
-3. Quét VirusTotal (API key người dùng đưa trong chat, chỉ dùng trong lệnh, **không ghi vào file nào**; nhắc người dùng tạo key mới sau đó).
-4. Người dùng bấm Publish (việc ra bên ngoài, không đảo ngược: chỉ người dùng làm). Người dùng tự bật 2FA cho tài khoản GitHub (tên thật đã xóa khỏi hồ sơ qua API).
+Người dùng cần tự làm: bật 2FA cho tài khoản GitHub; tạo API key VirusTotal mới (key cũ đã nằm trong lịch sử chat); nếu muốn, báo dương tính giả cho DeepInstinct. Hai PR Dependabot (#1 Test SDK 18, #2 xunit runner 4) chờ xem xét theo RELEASING.
 
 ## Sau v0.1.0
 
