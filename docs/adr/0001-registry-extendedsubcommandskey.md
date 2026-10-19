@@ -48,6 +48,6 @@ Uninstall deletes every `shell\ConvertAnything` key under `SystemFileAssociation
 - No admin rights; install and uninstall are plain registry writes.
 - Verified with `tools/MenuProbe` against the real Explorer menu: the cascade appears, `Dev > Copy` runs `ca.exe`, the entry is shown for 100 selected files and hidden for 101. This matches Microsoft's documented limits for command-line verbs (Document: 15 items, Player: 100 items).
 - Explorer starts one process per selected file, so batching has to happen in our process (see ADR-0002).
-- For paths longer than MAX_PATH Explorer passes 8.3 short names in `%1`; inputs are expanded with `GetLongPathNameW`.
+- For paths longer than MAX_PATH Explorer passes 8.3 short names in `%1`. `Path.GetFullPath` expands them (through `GetLongPathNameW`, which touches the path before the runner's checks; accepted, since no route to a pipe was found), and outputs are named from the pinned file's real path, so a name that stays short (a `\\?\` argument) still works; its file type is judged after pinning.
 
 Source: [Creating Shortcut Menu Handlers](https://learn.microsoft.com/en-us/windows/win32/shell/context-menu-handlers), Microsoft Learn.

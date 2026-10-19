@@ -298,6 +298,37 @@ public sealed class RunnerTests : IDisposable
     }
 
     [SkippableFact]
+    public async Task A_short_name_with_a_truncated_extension_is_judged_by_the_real_name()
+    {
+        // 8.3 names cut 4-letter extensions (.webp -> .WEB, .jpeg -> .JPE, .heic -> .HEI). Normalisation expands them, but
+        // not for \\?\ paths, which reach the runner as given.
+        var file = _dir.File("averylongname.webp");
+        var buffer = new char[1024];
+        var length = GetShortPathNameW(file, buffer, (uint)buffer.Length);
+        var shortPath = new string(buffer, 0, (int)length);
+        Skip.If(length == 0 || shortPath == file, "this volume does not create 8.3 names");
+        var op = new WebpOp();
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(op, [@"\\?\" + shortPath], progress: null, CancellationToken.None);
+
+        Assert.True(Assert.Single(outcome.Results).Succeeded, outcome.Results[0].Error);
+        Assert.EndsWith("averylongname.webp", op.Received, StringComparison.Ordinal);
+    }
+
+    private sealed class WebpOp : IOperation
+    {
+        public string? Received { get; private set; }
+        public string Id => "test.webp";
+        public string MenuPath => "Test/WebP";
+        public IReadOnlyCollection<string> Extensions { get; } = [".webp"];
+        public Task<string> RunAsync(string inputPath, CancellationToken ct)
+        {
+            Received = inputPath;
+            return Task.FromResult(inputPath);
+        }
+    }
+
+    [SkippableFact]
     public async Task Runner_checks_the_file_type_of_the_real_name_not_of_a_short_name()
     {
         var file = _dir.File("abcdefghij.txtx");

@@ -39,7 +39,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     {
         _idleWindowMs = "3000";
         var leader = Ca("dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
-        await Task.Delay(TimeSpan.FromSeconds(1.2)); // well past the 400 ms idle window, while file 2 is still running
+        await Task.Delay(TimeSpan.FromSeconds(1.2)); // while file 2 is still running (the unit test in BatchTests owns the busy-leader rule)
 
         var late = Ca("dev.slow-copy", _dir.File("3.txt"));
         await ExitAllOk([leader, late]);

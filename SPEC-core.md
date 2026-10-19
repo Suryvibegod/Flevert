@@ -60,7 +60,7 @@ ca.exe install-menu [--dev] [--allow-insecure-location]
 ca.exe uninstall-menu               Gỡ mọi key đã ghi
 ca.exe list-ops                     In danh sách thao tác và loại file áp dụng
 
-Biến môi trường: CONVERTANYTHING_HEADLESS=1 (chạy lô không UI), CONVERTANYTHING_LOG_DIR (đổi thư mục log)
+Biến môi trường: CONVERTANYTHING_HEADLESS=1 (chạy lô không UI), CONVERTANYTHING_LOG_DIR (đổi thư mục log), CONVERTANYTHING_BATCH_IDLE_MS (cửa sổ rảnh của lô, 100–10 000 ms; chỉ cho test tích hợp trên máy bận)
 ```
 
 ## Project Structure

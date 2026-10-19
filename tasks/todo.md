@@ -365,9 +365,9 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `75fdc99..HEAD`. **K
 | Thông báo lỗi với thư mục mang đuôi ảnh đổi thành "Access is denied." (CR6) | Nit | Chấp nhận | — |
 
 ## Việc
-- [x] H1: Bỏ `ToLongPath` trong Program; test: đường dẫn ngắn 8.3 qua runner và qua ca.exe vẫn ra tên dài
+- [x] H1: Bỏ `ToLongPath` trong Program (vòng 7: vô tác dụng vì `Path.GetFullPath` vẫn mở rộng 8.3; xem Phase 8 P1)
 - [x] H2: `FinalPath` giữ `\\?\` khi bỏ nó làm đổi đường dẫn
-- [x] H3: Test FILE_TYPE_DISK; một helper bỏ tiền tố; hằng thông báo ở InputPath; kiểm dot/stream trước kiểm absolute
+- [x] H3: Test FILE_TYPE_DISK; một helper bỏ tiền tố; hằng thông báo ở InputPath; đường dẫn tương đối có tên kết thúc bằng dấu chấm nhận thông báo dấu chấm (kiểm stream vẫn sau kiểm absolute)
 - [x] H4: Bỏ đồng hồ trong test untrusted; test subst skip khi `subst` lỗi; `CONVERTANYTHING_BATCH_IDLE_MS` cho test gom lô qua junction
 - [x] H5: install-menu yêu cầu volume có ACL
 - [ ] Review vòng 7 trên Phase 7 (bỏ ToLongPath, Shorten, ACL volume) cùng review vòng 2 module image
@@ -384,6 +384,7 @@ Nguồn: 1 reviewer bối cảnh trống, 3 góc (code, bảo mật, doubt), 202
 | H5 không có test | Low | Chấp nhận: không có volume FAT; đối chứng đảo điều kiện đã chạy | — |
 
 ## Việc
-- [ ] P1: Sửa ghi nhận H1 (comment Program, todo, ADR-0001)
-- [ ] P2: Bỏ kiểm đuôi trước pin khi tên có `~` (kiểm lại trên đường dẫn thật); test với đuôi 4 chữ
-- [ ] P3: SPEC biến môi trường; comment test; todo H3
+- [x] P1: Sửa ghi nhận H1 (comment Program, todo, ADR-0001)
+- [x] P2: Bỏ kiểm đuôi trước pin khi tên có `~` (kiểm lại trên đường dẫn thật); test với đuôi 4 chữ
+- [x] P3: SPEC biến môi trường; comment test; todo H3
+- [ ] Test gom lô qua junction hỏng một lần nữa khi chạy cả solution (bộ image mã hóa song song), log rỗng; không tái hiện trong 5 lần chạy sau; test giờ in mã thoát, file log, output khi hỏng

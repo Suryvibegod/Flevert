@@ -125,7 +125,8 @@ public sealed class Runner(RunLog log)
             return InputPath.StreamNameMessage;
         if (InputPath.HasNameEndingInDotOrSpace(file))
             return InputPath.NameEndsInDotOrSpaceMessage;
-        return Unsupported(operation, file);
+        // A short 8.3 name cuts a 4-letter extension (.webp -> .WEB); its type is judged on the real name after pinning.
+        return Path.GetFileName(file).Contains('~', StringComparison.Ordinal) ? null : Unsupported(operation, file);
     }
 
     // Checked again on the real path after pinning: a short 8.3 name that could not be expanded ends in a truncated

@@ -92,8 +92,9 @@ internal static class Program
             return BadUsage;
         }
 
-        // Paths are passed on untouched: expanding 8.3 names here (GetLongPathNameW) would open the path before any check,
-        // without SQOS and following links. Outputs are named from the pinned file's real, long path anyway.
+        // No separate 8.3 expansion here: Path.GetFullPath above already expands short names (it calls GetLongPathNameW,
+        // which touches the path before any check; accepted, see tasks/todo.md Phase 8), and outputs are named from the
+        // pinned file's real, long path in any case.
         var inputs = run.Files.ToList();
         // No synchronization context exists yet, so blocking here cannot deadlock. Followers exit without loading WinForms.
         var leader = Batch.LeadOrJoinAsync(run.OperationId, inputs, BatchIdleWindow, CancellationToken.None).GetAwaiter().GetResult();
