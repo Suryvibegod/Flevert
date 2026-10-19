@@ -89,7 +89,10 @@ public sealed class StripMetadataTests : IDisposable
         }
 
         using (var check = new MagickImage(input))
+        {
             Assert.True(check.GetExifProfile()?.GetValue(ExifTag.GPSLatitude) is not null, $"control: {format} input carries GPS");
+            Assert.True(check.GetXmpProfile() is not null, $"control: {format} input carries XMP");
+        }
         Assert.Contains("SecretCamMake", Latin1(input), StringComparison.Ordinal);
 
         var output = await StripOp().RunAsync(input, CancellationToken.None);

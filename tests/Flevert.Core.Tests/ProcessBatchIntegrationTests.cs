@@ -148,7 +148,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     [SkippableFact]
-    public async Task A_running_ca_holds_the_app_mutex_the_installer_waits_for()
+    public async Task A_running_flevert_holds_the_app_mutex_the_installer_waits_for()
     {
         // Without it, uninstalling during a batch left flevert.exe and its DLLs behind with no uninstaller to remove them.
         // Another suite may run flevert.exe at the same time; only a mutex that appears with this job proves anything.
@@ -174,7 +174,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     [SkippableFact]
-    public async Task A_mutex_someone_else_holds_with_no_access_for_us_does_not_stop_ca()
+    public async Task A_mutex_someone_else_holds_with_no_access_for_us_does_not_stop_flevert()
     {
         // Another process in the session (elevated, or another account via runas) can create the name first; the mutex
         // is advisory, so flevert.exe must still work rather than crash on every click.
@@ -399,7 +399,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     private static extern uint GetShortPathNameW(string longPath, [System.Runtime.InteropServices.Out] char[] shortPath, uint length);
 
     [Fact]
-    public async Task Relative_paths_resolve_against_the_directory_ca_was_started_in()
+    public async Task Relative_paths_resolve_against_the_directory_flevert_was_started_in()
     {
         _dir.File("relative.txt");
 

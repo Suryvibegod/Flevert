@@ -3,7 +3,7 @@ using Flevert.Core;
 
 namespace Flevert.Image.Tests;
 
-// A portrait photo as an iPhone writes it: pixels stored 320x240 with a HEIF rotation (irot) and EXIF Orientation 6 both
+// A portrait photo with the rotation layout an iPhone uses: pixels stored 320x240 with a HEIF rotation (irot) and EXIF Orientation 6 both
 // present, plus GPS and camera details. Upright it is 240x320 with a white block at the top-left.
 public sealed class PhonePortraitTests : IDisposable
 {
@@ -15,9 +15,11 @@ public sealed class PhonePortraitTests : IDisposable
 
     private static IOperation Op(string id) => ImageOperations.All.Single(op => op.Id == id);
 
+    public static TheoryData<string> OperationsOnHeic() =>
+        [.. ImageOperations.All.Where(op => op.Extensions.Contains(".heic")).Select(op => op.Id)];
+
     [Theory]
-    [InlineData("image.to-jpg")]
-    [InlineData("image.strip-metadata")]
+    [MemberData(nameof(OperationsOnHeic))]
     public async Task A_portrait_phone_photo_comes_out_upright_and_turned_only_once(string id)
     {
         var input = _dir.Combine("IMG_0001.HEIC");
@@ -57,7 +59,8 @@ public sealed class PhonePortraitTests : IDisposable
 
     private static bool IsWhite(MagickImage image, int x, int y)
     {
-        var c = image.GetPixels().GetPixel(x, y).ToColor()!;
+        using var pixels = image.GetPixels();
+        var c = pixels.GetPixel(x, y).ToColor()!;
         return c.R > 230 && c.G > 230 && c.B > 230;
     }
 }

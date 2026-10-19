@@ -28,7 +28,7 @@ public sealed class InstallerScriptTests
     }
 
     [Fact]
-    public void Installer_waits_on_the_mutex_ca_holds()
+    public void Installer_waits_on_the_mutex_flevert_holds()
     {
         Assert.Contains($"#define AppMutexName \"{AppMutex.Name}\"", Script, StringComparison.Ordinal);
         Assert.Contains("AppMutex={#AppMutexName}", Script, StringComparison.Ordinal);
@@ -44,7 +44,7 @@ public sealed class InstallerScriptTests
     }
 
     [Fact]
-    public void Exit_codes_setup_tells_apart_match_ca()
+    public void Exit_codes_setup_tells_apart_match_flevert()
     {
         Assert.Contains($"ExitRefusedLocation = {ExitCodes.RefusedLocation};", Script, StringComparison.Ordinal);
         Assert.Contains($"(Code >= {ExitCodes.Failed}) and (Code <= {ExitCodes.RefusedLocation})", Script, StringComparison.Ordinal);
@@ -79,7 +79,7 @@ public sealed class InstallerScriptTests
         Regex.Replace(heading.ToLowerInvariant().Replace(' ', '-'), @"[^a-z0-9\-_]", "");
 
     [Fact]
-    public void Uninstall_removes_each_folder_ca_writes_under_local_app_data()
+    public void Uninstall_removes_each_folder_flevert_writes_under_local_app_data()
     {
         Assert.Equal(MenuInstaller.Title, AppData.FolderName);
         foreach (var folder in AppData.Subfolders)
