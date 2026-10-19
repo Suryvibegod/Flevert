@@ -35,9 +35,17 @@ public sealed class RunLogTests : IDisposable
         var log = new RunLog(_logs.Path);
         Directory.CreateDirectory(_logs.Path);
         var holder = new FileStream(log.CurrentFile, FileMode.Append, FileAccess.Write, FileShare.Read);
-        _ = Task.Delay(300).ContinueWith(_ => holder.Dispose());
+        // A dedicated thread, not a thread-pool timer: on a busy CI runner the pool was starved for longer than Write's
+        // 2 s wait, so the file was still held when Write gave up.
+        var release = new Thread(() =>
+        {
+            Thread.Sleep(300);
+            holder.Dispose();
+        });
+        release.Start();
 
         await Task.Run(() => log.Write("dev.copy", new FileResult("a.txt", "b.txt", null), TimeSpan.Zero));
+        release.Join();
 
         Assert.Single(File.ReadAllLines(log.CurrentFile));
     }
