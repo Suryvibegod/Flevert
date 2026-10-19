@@ -246,6 +246,42 @@ public sealed class RunnerTests : IDisposable
         Assert.Contains("dot or space", reason, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void The_pin_refuses_anything_that_is_not_a_file_on_disk()
+    {
+        // Every pipe spelling is refused earlier; this is the last line if one ever gets through.
+        var name = $"ca-test-{Guid.NewGuid():N}";
+        using var server = new System.IO.Pipes.NamedPipeServerStream(name, System.IO.Pipes.PipeDirection.InOut, 1,
+            System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
+        _ = server.WaitForConnectionAsync();
+
+        using var pin = InputPin.TryPin($@"\\?\pipe\{name}", out var reason, out _);
+
+        Assert.Null(pin);
+        Assert.Contains("on disk", reason, StringComparison.Ordinal);
+    }
+
+    // The \\?\ prefix is dropped only where Win32 normalisation would leave the path unchanged.
+    [Theory]
+    [InlineData(@"\\?\C:\a\b.txt", @"C:\a\b.txt")]
+    [InlineData(@"\\?\UNC\server\share\x.txt", @"\\server\share\x.txt")]
+    [InlineData(@"\\?\C:\a\NUL", @"\\?\C:\a\NUL")]
+    [InlineData(@"\\?\C:\a\b.txt ", @"\\?\C:\a\b.txt ")]
+    [InlineData(@"\\?\Volume{0a1b2c3d-0000-0000-0000-000000000000}\x.txt", @"\\?\Volume{0a1b2c3d-0000-0000-0000-000000000000}\x.txt")]
+    public void The_real_path_keeps_its_prefix_when_dropping_it_would_name_something_else(string final, string expected)
+    {
+        Assert.Equal(expected, InputPin.Shorten(final));
+    }
+
+    [Fact]
+    public async Task A_relative_path_through_a_dotted_folder_is_refused_for_the_dot()
+    {
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [@"sub.\x.txt"], progress: null, CancellationToken.None);
+
+        Assert.Contains("dot or space", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(@"C:\a\sub.\x.txt", true)]
     [InlineData(@"C:\a\sub \x.txt", true)]
@@ -255,6 +291,7 @@ public sealed class RunnerTests : IDisposable
     [InlineData(@".\dir\x.txt", false)]
     [InlineData(@"C:\a\.hidden\x.txt", false)]
     [InlineData(@"\\?\UNC\server\share\x.txt", false)]
+    [InlineData(@"\??\C:\a\x.\y.txt", true)]
     public void Names_ending_in_a_dot_or_space_are_found_in_any_part_of_a_path(string path, bool expected)
     {
         Assert.Equal(expected, InputPath.HasNameEndingInDotOrSpace(path));

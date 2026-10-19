@@ -100,19 +100,23 @@ public sealed class Runner(RunLog log)
         return result;
     }
 
-    internal const string NameEndsInDotOrSpace = "Names ending in a dot or space are not supported.";
-    internal const string StreamName = "Alternate data streams are not supported.";
-
-    // Nothing here opens or probes the path: the pin is the first and only open, with SQOS and without following links.
+    // Nothing here opens or probes the path: the pin is the first and only open of the file, with SQOS and without
+    // following links.
     private static string? Reject(IOperation operation, string file)
     {
-        // Paths also arrive over the batch pipe; accept only plain absolute file paths, not device namespaces.
+        // Paths also arrive over the batch pipe; accept only plain absolute file paths, not device namespaces. ca.exe
+        // keeps a relative path with a dotted name unresolved, so say what is actually wrong with it.
         if (!IsPlainFilePath(file))
-            return "Only absolute file paths are accepted.";
+        {
+            return !Path.IsPathFullyQualified(file) && InputPath.HasNameEndingInDotOrSpace(file)
+                ? InputPath.NameEndsInDotOrSpaceMessage
+                : "Only absolute file paths are accepted.";
+        }
+
         if (InputPath.HasStreamName(file))
-            return StreamName;
+            return InputPath.StreamNameMessage;
         if (InputPath.HasNameEndingInDotOrSpace(file))
-            return NameEndsInDotOrSpace;
+            return InputPath.NameEndsInDotOrSpaceMessage;
         return Unsupported(operation, file);
     }
 

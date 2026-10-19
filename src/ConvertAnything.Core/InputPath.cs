@@ -43,13 +43,7 @@ public static partial class InputPath
     /// </summary>
     public static bool HasNameEndingInDotOrSpace(string path)
     {
-        var p = path.Replace('/', '\\');
-        if (p.StartsWith(LongUncPrefix, StringComparison.OrdinalIgnoreCase))
-            p = p[LongUncPrefix.Length..];
-        else if (p.StartsWith(LongPrefix, StringComparison.Ordinal) || p.StartsWith(@"\??\", StringComparison.Ordinal))
-            p = p[LongPrefix.Length..];
-
-        foreach (var name in p.Split('\\', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var name in WithoutLongPrefix(path).Split('\\', StringSplitOptions.RemoveEmptyEntries))
         {
             if (name is "." or ".." || name.Length == 0)
                 continue;
@@ -63,14 +57,24 @@ public static partial class InputPath
     /// <summary>Whether the path names an NTFS alternate data stream (<c>a.txt:s.png</c>) rather than a file.</summary>
     public static bool HasStreamName(string path)
     {
-        var p = path.Replace('/', '\\');
-        if (p.StartsWith(LongUncPrefix, StringComparison.OrdinalIgnoreCase))
-            p = p[LongUncPrefix.Length..];
-        else if (p.StartsWith(LongPrefix, StringComparison.Ordinal))
-            p = p[LongPrefix.Length..];
+        var p = WithoutLongPrefix(path);
         if (p.Length >= 2 && char.IsAsciiLetter(p[0]) && p[1] == ':')
             p = p[2..]; // the drive letter's colon
         return p.Contains(':', StringComparison.Ordinal);
+    }
+
+    internal const string NameEndsInDotOrSpaceMessage = "Names ending in a dot or space are not supported.";
+    internal const string StreamNameMessage = "Alternate data streams are not supported.";
+
+    /// <summary>Either slash, without a <c>\\?\UNC\</c>, <c>\\?\</c> or <c>\??\</c> prefix.</summary>
+    private static string WithoutLongPrefix(string path)
+    {
+        var p = path.Replace('/', '\\');
+        if (p.StartsWith(LongUncPrefix, StringComparison.OrdinalIgnoreCase))
+            return p[LongUncPrefix.Length..];
+        if (p.StartsWith(LongPrefix, StringComparison.Ordinal) || p.StartsWith(@"\??\", StringComparison.Ordinal))
+            return p[LongPrefix.Length..];
+        return p;
     }
 
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]

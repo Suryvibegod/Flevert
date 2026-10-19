@@ -60,9 +60,9 @@ internal static partial class InputPin
         // A link can lead into a folder named "x." although the path given was clean; the operation reopens the real
         // path, and anything that normalises it would read "x\…", which was never pinned or checked.
         if (InputPath.HasNameEndingInDotOrSpace(final))
-            return Fail(handle, Runner.NameEndsInDotOrSpace, out reason);
+            return Fail(handle, InputPath.NameEndsInDotOrSpaceMessage, out reason);
         if (InputPath.HasStreamName(final))
-            return Fail(handle, Runner.StreamName, out reason);
+            return Fail(handle, InputPath.StreamNameMessage, out reason);
 
         realPath = final;
         reason = null;
@@ -88,16 +88,27 @@ internal static partial class InputPin
     {
         // The drive-letter form fails for a volume mounted only into a folder; its \\?\Volume{guid}\ form still opens.
         var final = FinalPath(handle, flags: 0) ?? FinalPath(handle, VolumeNameGuid);
-        if (final is null)
-            return null;
+        return final is null ? null : Shorten(final);
+    }
 
-        // Keep the extended form only where it is needed, so ordinary paths look ordinary in names and logs. Tools
-        // launched later with this path (ffmpeg, qpdf) do not add the prefix themselves.
+    /// <summary>
+    /// Drops the extended-path prefix where it is not needed, so ordinary paths look ordinary in names and logs and tools
+    /// launched later with them (ffmpeg, qpdf) can open them. Only where Win32 normalisation leaves the shorter path
+    /// unchanged: otherwise it would name something else (a device such as NUL on Windows 10, a trailing dot or space).
+    /// </summary>
+    internal static string Shorten(string final)
+    {
+        string shorter;
         if (final.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
-            return final.Length - 6 < MaxPath ? @"\\" + final[8..] : final;
-        if (final.StartsWith(@"\\?\", StringComparison.Ordinal) && final.Length > 6 && final[5] == ':')
-            return final.Length - 4 < MaxPath ? final[4..] : final;
-        return final;
+            shorter = @"\\" + final[8..];
+        else if (final.StartsWith(@"\\?\", StringComparison.Ordinal) && final.Length > 6 && final[5] == ':')
+            shorter = final[4..];
+        else
+            return final; // \\?\Volume{guid}\ has no shorter form
+
+        return shorter.Length < MaxPath && string.Equals(Path.GetFullPath(shorter), shorter, StringComparison.Ordinal)
+            ? shorter
+            : final;
     }
 
     private static string? FinalPath(SafeFileHandle handle, uint flags)
