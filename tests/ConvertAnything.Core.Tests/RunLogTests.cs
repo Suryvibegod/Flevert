@@ -43,6 +43,22 @@ public sealed class RunLogTests : IDisposable
     }
 
     [Fact]
+    public void A_log_held_open_by_a_viewer_delays_the_batch_at_most_once()
+    {
+        // Spreadsheet apps open a tab-separated log without write sharing and keep it open.
+        var log = new RunLog(_logs.Path);
+        Directory.CreateDirectory(_logs.Path);
+        using var viewer = new FileStream(log.CurrentFile, FileMode.OpenOrCreate, FileAccess.Read, FileShare.Read);
+        log.Write("dev.copy", new FileResult("a.txt", "b.txt", null), TimeSpan.Zero);
+
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        for (var i = 0; i < 3; i++)
+            log.Write("dev.copy", new FileResult("a.txt", "b.txt", null), TimeSpan.Zero);
+
+        Assert.True(timer.Elapsed < TimeSpan.FromMilliseconds(500), $"took {timer.Elapsed}");
+    }
+
+    [Fact]
     public void Prune_never_throws_when_an_old_log_cannot_be_deleted()
     {
         var old = _logs.File("ca-20200101.log");

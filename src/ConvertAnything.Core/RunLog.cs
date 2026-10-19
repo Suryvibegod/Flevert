@@ -38,9 +38,16 @@ public sealed class RunLog(string directory)
         });
     }
 
+    private const int ErrorSharingViolation = 32;
+    private const int ErrorLockViolation = 33;
+
+    // Set once a wait timed out: something keeps the file open (a viewer, a stuck writer), so later lines in this process
+    // try once instead of adding the full wait to every file.
+    private volatile bool _held;
+
     // FileMode.Append is not an atomic append across processes. Opening without write sharing serialises writers; the
     // file lives in a folder only this user can open, so no other account can hold it (unlike a named mutex).
-    private static void AppendExclusively(string path, byte[] bytes)
+    private void AppendExclusively(string path, byte[] bytes)
     {
         var waited = System.Diagnostics.Stopwatch.StartNew();
         for (var attempt = 1; ; attempt++)
@@ -49,10 +56,18 @@ public sealed class RunLog(string directory)
             {
                 using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
                 stream.Write(bytes);
+                _held = false;
                 return;
             }
-            catch (IOException) when (waited.Elapsed < LockTimeout)
+            // Only "another handle has it" is worth waiting for; disk full or a bad path will not clear up in 2 s.
+            catch (IOException ex) when ((ex.HResult & 0xFFFF) is ErrorSharingViolation or ErrorLockViolation && !_held)
             {
+                if (waited.Elapsed >= LockTimeout)
+                {
+                    _held = true;
+                    throw;
+                }
+
                 Thread.Sleep(Math.Min(5 * attempt, 50)); // another writer holds the file
             }
         }
