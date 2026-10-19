@@ -1,10 +1,18 @@
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using Microsoft.Win32.SafeHandles;
 
 namespace ConvertAnything.Core.Menu;
 
-public static class InstallLocation
+public static partial class InstallLocation
 {
+    private const uint FileReadAttributes = 0x80;
+    private const uint FileShareAll = 0x7;
+    private const uint OpenExisting = 3;
+    private const uint FileFlagBackupSemantics = 0x02000000;
+    private const uint DriveFixed = 3;
+
     private const FileSystemRights GenericAll = (FileSystemRights)0x10000000;
     private const FileSystemRights GenericWrite = (FileSystemRights)0x40000000;
 
@@ -41,11 +49,15 @@ public static class InstallLocation
         };
 
         var root = new DirectoryInfo(directory);
+        if (!IsOnLocalFixedDriveAsWritten(root.FullName))
+            return false;
         if (IsLink(root) || !IsSafe(root.GetAccessControl(), WriteRights, trusted))
             return false;
 
         foreach (var entry in root.EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
         {
+            if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
+                return false; // its ACL check would follow the link to a target whose parents are never checked
             FileSystemSecurity acl = entry is DirectoryInfo d ? d.GetAccessControl() : ((FileInfo)entry).GetAccessControl();
             if (!IsSafe(acl, WriteRights, trusted))
                 return false;
@@ -64,7 +76,41 @@ public static class InstallLocation
 
     // GetAccessControl follows links, so it reports the target's ACL. The link itself is a separate entry in its parent
     // that other accounts may be able to delete and recreate, and the registry would keep pointing through it.
+    // Deliberately broad (any reparse point, OneDrive folders too): an install folder has no reason to be one.
     private static bool IsLink(DirectoryInfo directory) => (directory.Attributes & FileAttributes.ReparsePoint) != 0;
+
+    /// <summary>
+    /// The parent walk and the ACLs only mean something for the folder's real location on a local fixed disk. A subst
+    /// drive hides its real parents (and the letter can later belong to a USB stick); a network path is governed by the
+    /// server's accounts and share permissions, which this check cannot see.
+    /// </summary>
+    private static bool IsOnLocalFixedDriveAsWritten(string fullPath)
+    {
+        if (fullPath.StartsWith(@"\\", StringComparison.Ordinal) || Path.GetPathRoot(fullPath) is not { Length: > 0 } root
+            || GetDriveTypeW(root) != DriveFixed)
+            return false;
+
+        using var handle = CreateFileW(@"\\?\" + fullPath, FileReadAttributes, FileShareAll, 0, OpenExisting, FileFlagBackupSemantics, 0);
+        if (handle.IsInvalid)
+            return false;
+        var buffer = new char[short.MaxValue];
+        var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, 0);
+        if (length == 0 || length >= buffer.Length)
+            return false;
+
+        var real = new string(buffer, 4, (int)length - 4); // drop \\?\
+        return string.Equals(real.TrimEnd('\\'), InputPath.ToLongPath(fullPath).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial uint GetDriveTypeW(string root);
+
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static partial SafeFileHandle CreateFileW(
+        string name, uint access, uint share, nint security, uint disposition, uint flags, nint template);
+
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static partial uint GetFinalPathNameByHandleW(SafeFileHandle file, [Out] char[] path, uint length, uint flags);
 
     private static bool IsSafe(FileSystemSecurity acl, FileSystemRights dangerous, HashSet<SecurityIdentifier> trusted)
     {

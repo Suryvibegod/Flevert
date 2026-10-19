@@ -184,6 +184,56 @@ public sealed class MenuTests
         Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(installed, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
+    [SkippableFact]
+    public void Install_location_on_a_subst_drive_is_unsafe()
+    {
+        // The parent walk stops at the drive root, so the real parents of a subst target are never checked; subst
+        // drives also vanish on reboot and the letter can later belong to a USB stick.
+        using var dir = new TempDir();
+        ProtectToOwnerAndAdmins(dir.Path);
+        var used = DriveInfo.GetDrives().Select(d => char.ToUpperInvariant(d.Name[0])).ToHashSet();
+        var letter = "ZYXWVUTSRQPONMLKJ".FirstOrDefault(c => !used.Contains(c));
+        Skip.If(letter == default, "no free drive letter");
+        Assert.Equal(0, Cmd($"subst {letter}: \"{dir.Path}\""));
+        try
+        {
+            Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir.Path, stopAt: Path.GetDirectoryName(dir.Path)), "control: the folder itself is safe");
+            Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins($@"{letter}:\"));
+        }
+        finally
+        {
+            Cmd($"subst {letter}: /d");
+        }
+    }
+
+    [Fact]
+    public void Install_location_containing_a_junction_is_unsafe()
+    {
+        // The ACL check of an entry follows its link, so a junction inside would be judged by its target, whose own
+        // parents are never checked.
+        using var parent = new TempDir();
+        ProtectToOwnerAndAdmins(parent.Path);
+        var app = Directory.CreateDirectory(Path.Combine(parent.Path, "app")).FullName;
+        var elsewhere = Directory.CreateDirectory(Path.Combine(parent.Path, "elsewhere")).FullName;
+        Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)), "control");
+
+        Junction(Path.Combine(app, "plugins"), elsewhere);
+
+        Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
+    }
+
+    private static int Cmd(string arguments)
+    {
+        using var cmd = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + arguments)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+        })!;
+        cmd.WaitForExit();
+        return cmd.ExitCode;
+    }
+
     private static void Junction(string link, string target)
     {
         using var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
