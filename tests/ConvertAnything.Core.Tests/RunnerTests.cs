@@ -177,6 +177,8 @@ public sealed class RunnerTests : IDisposable
     [InlineData(@"\\localhost\pipe\x.txt")]
     [InlineData(@"\\?\UNC\localhost\PIPE\x.txt")]
     [InlineData("//localhost/pipe/x.txt")]
+    [InlineData(@"\\;LanmanRedirector\localhost\pipe\x.txt")] // the redirector's own name, which shifts the share
+    [InlineData(@"\\?\UNC\;LanmanRedirector\localhost\IPC$\x.txt")]
     public async Task Runner_rejects_named_pipe_paths(string path)
     {
         var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
@@ -214,6 +216,19 @@ public sealed class RunnerTests : IDisposable
 
         Assert.Contains("dot or space", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(real, "x (copy).txt")));
+    }
+
+    [Fact]
+    public async Task Runner_rejects_an_alternate_data_stream()
+    {
+        // "a.txt:s.txt" passes the extension check but names a hidden stream of a.txt, not a file.
+        var file = _dir.File("a.txt", "visible");
+        File.WriteAllText(file + ":s.txt", "hidden");
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [file + ":s.txt"], progress: null, CancellationToken.None);
+
+        Assert.Contains("stream", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -34,7 +34,7 @@ internal static partial class PipePeer
         try
         {
             // Both sides read the same way: the kernel reports the resolved path, which differs from the launch path
-            // (Environment.ProcessPath) when ca.exe is started through a junction, a subst drive or an 8.3 name.
+            // (Environment.ProcessPath) when ca.exe is started through a junction or a subst drive.
             return ImagePath(process) is { } theirImage
                 && string.Equals(theirImage, OwnImagePath.Value, StringComparison.OrdinalIgnoreCase)
                 && ProcessIdToSessionId(processId, out var theirs) && ProcessIdToSessionId((uint)Environment.ProcessId, out var ours)

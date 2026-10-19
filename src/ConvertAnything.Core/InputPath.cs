@@ -60,6 +60,19 @@ public static partial class InputPath
         return false;
     }
 
+    /// <summary>Whether the path names an NTFS alternate data stream (<c>a.txt:s.png</c>) rather than a file.</summary>
+    public static bool HasStreamName(string path)
+    {
+        var p = path.Replace('/', '\\');
+        if (p.StartsWith(LongUncPrefix, StringComparison.OrdinalIgnoreCase))
+            p = p[LongUncPrefix.Length..];
+        else if (p.StartsWith(LongPrefix, StringComparison.Ordinal))
+            p = p[LongPrefix.Length..];
+        if (p.Length >= 2 && char.IsAsciiLetter(p[0]) && p[1] == ':')
+            p = p[2..]; // the drive letter's colon
+        return p.Contains(':', StringComparison.Ordinal);
+    }
+
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     private static partial uint GetLongPathNameW(string shortPath, [Out] char[] longPath, uint bufferLength);
 }

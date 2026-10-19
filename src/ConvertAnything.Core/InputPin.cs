@@ -15,7 +15,9 @@ internal static partial class InputPin
     private const uint FileShareRead = 0x00000001;
     private const uint OpenExisting = 3;
     private const uint FileFlagOpenReparsePoint = 0x00200000;
-    // If a path still reaches a named pipe, its server may only identify the user, never impersonate them.
+    // If a path still reaches a named pipe, its server may only identify the user, never impersonate them. The bit is
+    // shared with FILE_FLAG_OPEN_NO_RECALL; the pin reads no data, so a cloud placeholder is not downloaded by it (the
+    // operation's own open recalls it). Behaviour on OneDrive placeholders is still to be checked by hand.
     private const uint SecuritySqosPresent = 0x00100000;
     private const uint SecurityIdentification = 0x00010000;
     private const uint VolumeNameGuid = 0x1;
@@ -23,6 +25,7 @@ internal static partial class InputPin
     private const uint FileAttributeReparsePoint = 0x400;
     private const uint NameSurrogateBit = 0x20000000; // symlinks, mount points and other name-redirecting reparse tags
     private const int MaxPath = 260;
+    private const uint FileTypeDisk = 1;
 
     /// <returns>A handle to keep open while processing, or <c>null</c> with <paramref name="reason"/> set.</returns>
     public static SafeFileHandle? TryPin(string path, out string? reason, out string realPath)
@@ -32,6 +35,10 @@ internal static partial class InputPin
             FileFlagOpenReparsePoint | SecuritySqosPresent | SecurityIdentification, 0);
         if (handle.IsInvalid)
             return Fail(handle, new Win32Exception(Marshal.GetLastPInvokeError()).Message, out reason);
+
+        // Whatever spelling got this far, only an ordinary file on disk is processed (not a pipe or device).
+        if (GetFileType(handle) != FileTypeDisk)
+            return Fail(handle, "Only files on disk are accepted.", out reason);
 
         if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfoClass, out var tag, (uint)Marshal.SizeOf<FileAttributeTagInfo>()))
             return Fail(handle, new Win32Exception(Marshal.GetLastPInvokeError()).Message, out reason);
@@ -54,6 +61,8 @@ internal static partial class InputPin
         // path, and anything that normalises it would read "x\…", which was never pinned or checked.
         if (InputPath.HasNameEndingInDotOrSpace(final))
             return Fail(handle, Runner.NameEndsInDotOrSpace, out reason);
+        if (InputPath.HasStreamName(final))
+            return Fail(handle, Runner.StreamName, out reason);
 
         realPath = final;
         reason = null;
@@ -129,4 +138,7 @@ internal static partial class InputPin
 
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint GetFinalPathNameByHandleW(SafeFileHandle file, [Out] char[] path, uint length, uint flags);
+
+    [LibraryImport("kernel32.dll")]
+    private static partial uint GetFileType(SafeFileHandle file);
 }

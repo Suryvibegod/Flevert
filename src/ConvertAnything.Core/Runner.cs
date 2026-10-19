@@ -101,18 +101,18 @@ public sealed class Runner(RunLog log)
     }
 
     internal const string NameEndsInDotOrSpace = "Names ending in a dot or space are not supported.";
+    internal const string StreamName = "Alternate data streams are not supported.";
 
+    // Nothing here opens or probes the path: the pin is the first and only open, with SQOS and without following links.
     private static string? Reject(IOperation operation, string file)
     {
         // Paths also arrive over the batch pipe; accept only plain absolute file paths, not device namespaces.
         if (!IsPlainFilePath(file))
             return "Only absolute file paths are accepted.";
+        if (InputPath.HasStreamName(file))
+            return StreamName;
         if (InputPath.HasNameEndingInDotOrSpace(file))
             return NameEndsInDotOrSpace;
-
-        var info = new FileInfo(file);
-        if (!info.Exists)
-            return "Input file not found.";
         return Unsupported(operation, file);
     }
 
@@ -145,11 +145,12 @@ public sealed class Runner(RunLog log)
         return p.Length > 2 && char.IsAsciiLetter(p[0]) && p[1] == ':' && p[2] == '\\';
     }
 
-    /// <param name="serverAndShare"><c>server\share\…</c></param>
+    /// <param name="serverAndShare"><c>server\share\…</c>. A server starting with <c>;</c> is a redirector's own name
+    /// (<c>\\;LanmanRedirector\host\pipe\…</c>), which shifts the real share one place along.</param>
     private static bool IsFileShare(string serverAndShare)
     {
         var parts = serverAndShare.Split('\\');
-        return parts.Length > 2 && parts[1] is { Length: > 0 } share
+        return parts.Length > 2 && parts[0] is { Length: > 0 } server && server[0] != ';' && parts[1] is { Length: > 0 } share
             && !share.Equals("pipe", StringComparison.OrdinalIgnoreCase)
             && !share.Equals("IPC$", StringComparison.OrdinalIgnoreCase);
     }
