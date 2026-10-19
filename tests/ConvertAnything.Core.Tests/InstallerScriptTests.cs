@@ -14,9 +14,8 @@ public sealed class InstallerScriptTests
     public void Menu_key_names_match_the_menu_installer()
     {
         Assert.Contains($"#define AppName \"{MenuInstaller.Title}\"", Script, StringComparison.Ordinal);
-        Assert.Equal(MenuInstaller.Title + ".Menu", MenuInstaller.MenuKeyPrefix);
         Assert.Contains("'{#AppName}.Menu'", Script, StringComparison.Ordinal);
-        Assert.Contains(@"'\SystemFileAssociations\'", Script, StringComparison.Ordinal);
+        Assert.Contains($@"'\{MenuInstaller.Associations}\'", Script, StringComparison.Ordinal);
         Assert.Contains(@"'\shell\{#AppName}'", Script, StringComparison.Ordinal);
     }
 
@@ -37,7 +36,8 @@ public sealed class InstallerScriptTests
     [Fact]
     public void Uninstall_removes_each_folder_ca_writes_under_local_app_data()
     {
-        foreach (var folder in new[] { "logs", "pipes", "magick" })
+        Assert.Equal(MenuInstaller.Title, AppData.FolderName);
+        foreach (var folder in AppData.Subfolders)
             Assert.Contains($@"Type: filesandordirs; Name: ""{{localappdata}}\{{#AppName}}\{folder}""", Script, StringComparison.Ordinal);
     }
 

@@ -10,7 +10,7 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath)
 {
     internal const string Title = "ConvertAnything";
     internal const string MenuKeyPrefix = Title + ".Menu";
-    private const string Associations = "SystemFileAssociations";
+    internal const string Associations = "SystemFileAssociations";
 
     public void Install(IEnumerable<IOperation> operations)
     {

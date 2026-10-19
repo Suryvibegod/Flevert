@@ -14,7 +14,7 @@ public sealed class RunLog(string directory)
     public static string DefaultDirectory { get; } =
         Environment.GetEnvironmentVariable("CONVERTANYTHING_LOG_DIR") is { Length: > 0 } overridden
             ? overridden
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConvertAnything", "logs");
+            : Path.Combine(AppData.Root, AppData.LogsFolder);
 
     public string Directory { get; } = directory;
 

@@ -34,8 +34,7 @@ public static class MagickSetup
     private static readonly Lock Gate = new();
     private static bool _initialized;
 
-    public static string ConfigurationDirectory { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConvertAnything", "magick");
+    public static string ConfigurationDirectory { get; } = Path.Combine(AppData.Root, AppData.MagickFolder);
 
     /// <summary>
     /// Writes ImageMagick's configuration files, always replacing what is there. MagickNET.Initialize(files, path) keeps

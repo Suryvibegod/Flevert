@@ -72,8 +72,7 @@ public static class Batch
 
     internal static string PipeName(string operationId) => PipeName(operationId, ReadOrCreateSecret(SecretPath(operationId)));
 
-    internal static string SecretPath(string operationId) => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConvertAnything", "pipes", operationId + ".key");
+    internal static string SecretPath(string operationId) => Path.Combine(AppData.Root, AppData.PipesFolder, operationId + ".key");
 
     /// <summary>
     /// A random part of the pipe name, readable only by this user at medium integrity or above, and replaced whenever a
