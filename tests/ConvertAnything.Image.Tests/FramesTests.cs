@@ -95,6 +95,32 @@ public sealed class FramesTests : IDisposable
         }
     }
 
+    // ImageMagick reports a TIFF's compression but writes uncompressed unless told: 2 KB became 2 MB, and a crafted few-KB
+    // TIFF could fill the disk.
+    [Theory]
+    [InlineData("image.strip-metadata", "scan.tiff")]
+    [InlineData("image.to-tiff", "scan.png")]
+    public async Task Tiff_output_stays_compressed(string operationId, string name)
+    {
+        var input = _dir.Combine(name);
+        using (var pages = new MagickImageCollection())
+        {
+            pages.Add(new MagickImage(MagickColors.White, 2000, 1500));
+            pages.Add(new MagickImage(MagickColors.LightGray, 2000, 1500));
+            foreach (var page in pages)
+                page.Settings.Compression = CompressionMethod.Zip;
+            if (name.EndsWith(".tiff", StringComparison.Ordinal))
+                pages.Write(input, MagickFormat.Tiff);
+            else
+                pages[0].Write(input, MagickFormat.Png);
+        }
+
+        var output = await Op(operationId).RunAsync(input, CancellationToken.None);
+
+        // Uncompressed, one 2000x1500 RGB page alone is 9 MB.
+        Assert.True(new FileInfo(output).Length < 500_000, $"{new FileInfo(output).Length} bytes from {new FileInfo(input).Length}");
+    }
+
     [Fact]
     public async Task Removing_metadata_keeps_every_page_of_a_tiff()
     {

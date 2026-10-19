@@ -45,6 +45,9 @@ public sealed class ImageStripMetadata : IOperation
                     frame.Quality = HighQuality;
                 if (target != source)
                     ImageMetadata.FlattenOntoWhite(frame); // HEIC/HEIF with transparency becoming JPG
+                // The TIFF writer ignores the compression the file was read with and writes uncompressed: 2 KB became 2 MB.
+                if (target == MagickFormat.Tiff)
+                    frame.Settings.Compression = frame.Compression;
             }
 
             if (images.Count > 1)

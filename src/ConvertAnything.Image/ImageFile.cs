@@ -163,6 +163,12 @@ public static class ImageFile
     /// <summary>Writes every frame (an animation or pages) to a new file through a stream.</summary>
     public static void Write(MagickImageCollection images, string path, MagickFormat format)
     {
+        // The pages are encoded in memory below, outside ImageMagick's limits; each page is within the area limit, but
+        // many of them need not be.
+        var area = images.Aggregate(0UL, (sum, image) => sum + ((ulong)image.Width * image.Height));
+        if (area > MagickSetup.MaxArea)
+            throw new InvalidOperationException("The image has too many large pages to process.");
+
         // Multi-page TIFF cannot be written to a .NET stream (libtiff fails linking directories); an in-memory blob works.
         var bytes = images.ToByteArray(format);
         using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
