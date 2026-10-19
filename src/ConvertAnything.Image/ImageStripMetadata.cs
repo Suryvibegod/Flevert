@@ -27,17 +27,27 @@ public sealed class ImageStripMetadata : IOperation
 
         return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => Task.Run(() =>
         {
+            var lossless = target == MagickFormat.WebP && ImageFile.IsLosslessWebP(inputPath);
             using var images = ImageFile.Read(inputPath);
             foreach (var frame in images)
             {
                 frame.AutoOrient();
                 ImageMetadata.StripExceptColourProfile(frame);
+                // The pixels are re-encoded; for WebP and AVIF ImageMagick has no estimate of the source quality and would
+                // fall back to its default (visibly worse than Compress > Light), so use a high one. JPEG keeps its own
+                // estimate of the source quality.
+                if (lossless)
+                    frame.Settings.SetDefine(MagickFormat.WebP, "lossless", "true");
+                else if (target is MagickFormat.WebP or MagickFormat.Avif)
+                    frame.Quality = HighQuality;
             }
 
-            if (images.Count > 1 && target is MagickFormat.Gif or MagickFormat.WebP)
+            if (images.Count > 1 && (target is MagickFormat.Gif or MagickFormat.WebP))
                 ImageFile.Write(images, temp, target);
             else
                 ImageFile.Write(images[0], temp, target);
         }, token), ct);
     }
+
+    private const uint HighQuality = 95;
 }

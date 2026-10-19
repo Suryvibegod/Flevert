@@ -44,6 +44,28 @@ public static class ImageFile
         return new MagickImageCollection(stream, settings);
     }
 
+    /// <summary>Whether a WebP file stores its pixels losslessly (a VP8L chunk), which ImageMagick does not report.</summary>
+    public static bool IsLosslessWebP(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        Span<byte> header = stackalloc byte[12];
+        if (stream.Read(header) != 12 || !header[..4].SequenceEqual("RIFF"u8) || !header[8..].SequenceEqual("WEBP"u8))
+            return false;
+
+        Span<byte> chunk = stackalloc byte[8];
+        while (stream.Read(chunk) == 8)
+        {
+            if (chunk[..4].SequenceEqual("VP8L"u8))
+                return true;
+            if (chunk[..4].SequenceEqual("VP8 "u8))
+                return false;
+            var size = BitConverter.ToUInt32(chunk[4..]);
+            stream.Seek(size + (size & 1), SeekOrigin.Current); // chunks are padded to an even size
+        }
+
+        return false;
+    }
+
     /// <summary>Writes one image to a new file through a stream, for the same reason as <see cref="Read"/>.</summary>
     public static void Write(IMagickImage<byte> image, string path, MagickFormat format)
     {

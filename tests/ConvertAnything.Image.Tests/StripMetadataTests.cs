@@ -82,6 +82,52 @@ public sealed class StripMetadataTests : IDisposable
         Assert.Equal(expected, Path.GetFileName(output));
     }
 
+    // Removing metadata must not cost visible quality: the re-encode has to beat Compress > Light on the same file.
+    [Theory]
+    [InlineData(".webp", MagickFormat.WebP)]
+    [InlineData(".avif", MagickFormat.Avif)]
+    [InlineData(".jpg", MagickFormat.Jpeg)]
+    public async Task Removing_metadata_keeps_more_quality_than_light_compression(string extension, MagickFormat format)
+    {
+        var input = _dir.Combine("photo" + extension);
+        using (var image = new MagickImage(MagickColors.SteelBlue, 600, 400))
+        {
+            image.Draw(new ImageMagick.Drawing.Drawables().FillColor(MagickColors.Orange).Ellipse(200, 200, 150, 120, 0, 360));
+            image.GaussianBlur(0, 4);
+            image.AddNoise(NoiseType.Gaussian, 0.3);
+            image.Quality = 95;
+            image.Write(input, format);
+        }
+
+        var stripped = await Op().RunAsync(input, CancellationToken.None);
+        var light = await ImageOperations.All.Single(op => op.Id == "image.compress-light").RunAsync(input, CancellationToken.None);
+
+        using var source = new MagickImage(input);
+        using var afterStrip = new MagickImage(stripped);
+        using var afterLight = new MagickImage(light);
+        var stripError = source.Compare(afterStrip, ErrorMetric.RootMeanSquared);
+        var lightError = source.Compare(afterLight, ErrorMetric.RootMeanSquared);
+        Assert.True(stripError < lightError, $"strip error {stripError:F5}, light error {lightError:F5}");
+    }
+
+    [Fact]
+    public async Task A_lossless_webp_stays_lossless()
+    {
+        var input = _dir.Combine("art.webp");
+        using (var image = new MagickImage(MagickColors.Purple, 64, 64))
+        {
+            image.AddNoise(NoiseType.Random);
+            image.Settings.SetDefine(MagickFormat.WebP, "lossless", "true");
+            image.Write(input, MagickFormat.WebP);
+        }
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        using var before = new MagickImage(input);
+        using var after = new MagickImage(output);
+        Assert.Equal(0, before.Compare(after, ErrorMetric.Absolute));
+    }
+
     [Fact]
     public async Task An_animated_gif_keeps_its_frames()
     {
