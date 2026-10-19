@@ -24,10 +24,10 @@ Mỗi task xong khi đạt acceptance criteria **và** Definition of Done.
 
 ## Task 3: Ma trận convert
 - Acceptance:
-  - [ ] Mọi nguồn × đích trong spec chuyển được, đọc lại đúng định dạng (magic bytes)
-  - [ ] PNG có alpha → JPG/BMP nền trắng
-  - [ ] GIF động → WebP / GIF giữ số frame; → PNG lấy frame đầu
-  - [ ] HEIC fixture → JPG đúng kích thước
+  - [x] Mọi nguồn × đích trong spec chuyển được, đọc lại đúng định dạng (magic bytes)
+  - [x] PNG có alpha → JPG/BMP nền trắng
+  - [x] GIF động → WebP / GIF giữ số frame; → PNG lấy frame đầu
+  - [x] HEIC fixture → JPG đúng kích thước
 - Verify: `dotnet test --filter Convert`
 - Scope: M
 
