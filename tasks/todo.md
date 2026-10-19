@@ -277,7 +277,7 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19. Cross-model bị bỏ qua 
 
 # Phase 5: Review vòng 4 (xác minh các bản sửa vòng 3)
 
-Nguồn: 3 reviewer bối cảnh trống, chỉ đọc, 2026-10-19, trên diff `221392d..HEAD`. Không có Critical/High. Cross-model bỏ qua.
+Nguồn: 3 reviewer bối cảnh trống, chỉ đọc, 2026-10-19, trên diff `630167f..HEAD`. Không có Critical/High. Cross-model bỏ qua.
 Viết tắt: CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
 
 ## Đối chiếu (reconcile)
@@ -323,7 +323,7 @@ Viết tắt: CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
 
 # Phase 6: Review vòng 5
 
-Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `7cac441..HEAD`. Không có Critical/High. CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
+Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `4d347d5..HEAD`. Không có Critical/High. CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
 
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|
@@ -344,12 +344,12 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `7cac441..HEAD`. Kh�
 - [x] G3: install-menu: thư mục phải ở ổ cố định cục bộ và đường dẫn thật (từ handle) trùng đường dẫn đưa vào; không reparse point bên trong thư mục
 - [x] G4: Chặn tên server bắt đầu bằng `;`; sau khi pin yêu cầu `FILE_TYPE_DISK`; bỏ `FileInfo.Exists` trước pin; chặn `:` ngoài ký tự ổ; sửa comment PipePeer; ghi chú bit SQOS
 - [x] G5: Tài liệu (ADR-0002 tách lô dưới tải, SPEC-core đầu vào)
-- [x] Review vòng 6 trên phần sửa (`47fa6ff..HEAD`, core + cli): không còn Critical/High/Required (Phase 7)
+- [x] Review vòng 6 trên phần sửa (`34a8c40..HEAD`, core + cli): không còn Critical/High/Required (Phase 7)
 - [x] Test gom lô qua junction hỏng 1/6: DD vòng 6 xác định là CPU bị chiếm khi chạy cả bộ, follower lỡ cửa sổ 400 ms (trade-off đã ghi ở ADR-0002); sửa ở test (Phase 7)
 
 # Phase 7: Review vòng 6 (core)
 
-Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `47fa6ff..HEAD`. **Không có Critical/High/Required**; mọi claim vòng 5 đứng vững (test hỏng khi gỡ fix). Còn Low/Nit:
+Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `34a8c40..HEAD`. **Không có Critical/High/Required**; mọi claim vòng 5 đứng vững (test hỏng khi gỡ fix). Còn Low/Nit:
 
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|
@@ -374,7 +374,7 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `47fa6ff..HEAD`. **K
 
 # Phase 8: Review vòng 7 (core)
 
-Nguồn: 1 reviewer bối cảnh trống, 3 góc (code, bảo mật, doubt), 2026-10-19, trên `921abd7..HEAD`.
+Nguồn: 1 reviewer bối cảnh trống, 3 góc (code, bảo mật, doubt), 2026-10-19, trên `deec83a..HEAD`.
 
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|
@@ -391,7 +391,7 @@ Nguồn: 1 reviewer bối cảnh trống, 3 góc (code, bảo mật, doubt), 202
 
 # Phase 9: Review vòng 8 (core)
 
-Nguồn: 1 reviewer bối cảnh trống, 3 góc, 2026-10-19, trên `6964408..HEAD`. Không có Critical/High/Required; kết luận "ship". Medium/Low đã xử lý:
+Nguồn: 1 reviewer bối cảnh trống, 3 góc, 2026-10-19, trên `fb7cfa4..HEAD`. Không có Critical/High/Required; kết luận "ship". Medium/Low đã xử lý:
 
 - [x] Quy tắc "không lỗi" (mã thoát) chuyển vào `BatchOutcome.NoFailures`, có test; CLI dùng chung
 - [x] Cả lô bị bỏ qua: nói lý do chung, hoặc chỉ tới log (và bấm thông báo mở log) khi lý do khác nhau
@@ -399,11 +399,11 @@ Nguồn: 1 reviewer bối cảnh trống, 3 góc, 2026-10-19, trên `6964408..HE
 - [x] Hợp đồng bỏ qua: "đầu vào đã đáp ứng yêu cầu"; yêu cầu không làm được là lỗi; ném trực tiếp, trước khi ghi output (doc + SPEC-core)
 - [x] SPEC-core: trạng thái `skipped` trong log, cách thông báo, ý nghĩa mã thoát
 - [x] Chẩn đoán của test gom lô qua junction chạy được cả khi assert trước đó hỏng
-- [x] TIFF nhiều trang trong Compress chuyển từ "skipped" sang lỗi (`2904b6d`)
+- [x] TIFF nhiều trang trong Compress chuyển từ "skipped" sang lỗi (`905b6be`)
 
 # Phase 10: Review vòng 9 (core)
 
-1 reviewer, 3 góc, trên `3838a98..HEAD`. Không Critical/High/Required; "ship" sau khi sửa 2 Medium:
+1 reviewer, 3 góc, trên `5f86ed2..HEAD`. Không Critical/High/Required; "ship" sau khi sửa 2 Medium:
 
 - [x] Lô bị hủy có file lỗi mất đường dẫn log và bấm-mở-log (hồi quy do `ShowsLog`): nay `Cancelled after X of Y files, N failed. Details: …`
 - [x] SPEC-core: mã thoát chỉ do tiến trình chủ lô báo; tiến trình giao file thoát 0; file bị hủy ghi `failed`/`cancelled`; khi nào bấm mở log

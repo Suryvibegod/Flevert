@@ -52,7 +52,7 @@ Ký hiệu: CR = code review, SA = security audit, DD = doubt-driven.
 
 ## Review vòng 2: đã sửa (2026-10-19)
 
-Danh sách gốc ở mục 1 "Việc dở dang" của HANDOFF. Phần mutex/registry/email sửa trên máy trước; phần còn lại ở `e6d915a`..`e490910`: `.iss` (mã 3 riêng + mục README, câu dự phòng, dòng stderr đầu, bỏ 4551, `try/except` quanh `flevert.exe`, không bật menu cổ điển khi menu lỗi, `[Messages]`, `PrepareToInstall` từ chối link và thư mục có file lạ), mutex static, hằng số tên thư mục, test junction `finally`, `test-installer.ps1` (≤ 60 MB, mã 7, kịch bản 6 chỉ nhận nhánh hủy, `finally`, mọi khóa `Flevert*`, kịch bản 7–8), workflow (job attest riêng, tag trên `main`, `ISCC` theo đường dẫn, `10.0.x`, dependabot), `setup-dev.ps1` (chữ ký Authenticode), README/CONTRIBUTING/mẫu bug, spec/ADR-0005.
+Danh sách gốc ở mục 1 "Việc dở dang" của HANDOFF. Phần mutex/registry/email sửa trên máy trước; phần còn lại ở `44db5ee`..`1681f60`: `.iss` (mã 3 riêng + mục README, câu dự phòng, dòng stderr đầu, bỏ 4551, `try/except` quanh `flevert.exe`, không bật menu cổ điển khi menu lỗi, `[Messages]`, `PrepareToInstall` từ chối link và thư mục có file lạ), mutex static, hằng số tên thư mục, test junction `finally`, `test-installer.ps1` (≤ 60 MB, mã 7, kịch bản 6 chỉ nhận nhánh hủy, `finally`, mọi khóa `Flevert*`, kịch bản 7–8), workflow (job attest riêng, tag trên `main`, `ISCC` theo đường dẫn, `10.0.x`, dependabot), `setup-dev.ps1` (chữ ký Authenticode), README/CONTRIBUTING/mẫu bug, spec/ADR-0005.
 
 ## Review vòng 3 (code-reviewer, security-auditor, doubt-driven): reconcile
 
@@ -82,9 +82,9 @@ Ký hiệu: CR, SA, DD (F = finding của doubt-driven).
 | SA Info: SHA pin action chưa đối chiếu | Info | Hợp lệ | Đã đối chiếu bằng `gh api` (2026-10-19): cả 5 action khớp tag ghi trong chú thích |
 | CR-10 nit: `AppMutex.cs` chú thích cũ, HANDOFF cũ, spec thiếu test tích hợp, `args[0]`, `winget` không kiểm mã thoát, cảnh báo scope sai với token không có dòng scope | Nit | Hợp lệ | Sửa hết |
 
-Commit: `26ea77b` (check-location), `9d75744` (**chứa cả** bản sửa `.iss` + `test-installer.ps1` cho SA H-1 và F1, dù message chỉ nói `setup-dev.ps1`: commit riêng của chúng hỏng vì dấu `"` trong message qua PowerShell 5.1; đã push nên không viết lại lịch sử), `3faf0d1`, `ea145b9`. E2E 9 kịch bản xanh; test 182+204 xanh.
+Commit: `572da9a` (check-location), `f49090f` (**chứa cả** bản sửa `.iss` + `test-installer.ps1` cho SA H-1 và F1, dù message chỉ nói `setup-dev.ps1`: commit riêng của chúng hỏng vì dấu `"` trong message qua PowerShell 5.1; đã push nên không viết lại lịch sử), `5cd348e`, `c5d440c`. E2E 9 kịch bản xanh; test 182+204 xanh.
 
-## Review vòng 4 (trên `478f3cb..6d63d00`): reconcile
+## Review vòng 4 (trên `39e706b..973198f`): reconcile
 
 Code-reviewer: APPROVE, chỉ Low/Nit. Security: không còn Critical/High/Required, H-1 vòng 3 đã đóng. Doubt-driven: 1 High + 1 Medium Required.
 
@@ -108,7 +108,7 @@ Code-reviewer: APPROVE, chỉ Low/Nit. Security: không còn Critical/High/Requi
 | SA I-3: Smart App Control giờ chặn cả bản cài (mã 7) thay vì cài thiếu menu (mã 10) | Info | Hợp lệ | Ghi trong spec, ADR-0005 |
 | CI: `Processes_started_through_a_junction…` quá thời gian, `Twenty_processes…` 22.9 s | (CI) | Không phải lỗi sản phẩm | Log cho thấy đúng một lô, đủ file, nhưng `dev.slow-copy` 1 s mất 15 s: hai assembly test chạy song song trên runner. CI/release chạy từng project ở bước riêng |
 
-## Review vòng 5 (trên `6d63d00..c9207f1`): **không còn Critical/High/Required**
+## Review vòng 5 (trên `973198f..55e5fff`): **không còn Critical/High/Required**
 
 Cả ba reviewer: không Critical/High/Required (code-reviewer APPROVE). CI xanh 2 lần liên tiếp trên `main`. Các Low rẻ đã sửa; phần sửa này được một reviewer bối cảnh trống soát lại (dưới).
 

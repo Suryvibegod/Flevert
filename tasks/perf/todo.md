@@ -2,14 +2,14 @@
 
 Plan: [plan.md](plan.md).
 
-- [x] Task 1: Runner song song (`880ceca`; đối chứng: ép tuần tự thì 4/6 test đỏ)
-- [x] Task 2: chủ lô đếm file đang chạy (`321291b`; test đỏ với `IsIdle` cũ)
-- [x] Task 3: ngân sách bộ nhớ ảnh (`ff2d400`; đối chứng FIFO và cấp sau khi hủy đều đỏ)
+- [x] Task 1: Runner song song (`ffe9748`; đối chứng: ép tuần tự thì 4/6 test đỏ)
+- [x] Task 2: chủ lô đếm file đang chạy (`c9f9844`; test đỏ với `IsIdle` cũ)
+- [x] Task 3: ngân sách bộ nhớ ảnh (`689ccfd`; đối chứng FIFO và cấp sau khi hủy đều đỏ)
 - [x] Task 4: nối vào flevert.exe, đo lại (test tích hợp tiến trình thật đỏ → xanh; số đo dưới)
 - [x] Task 5: review 3 góc (vòng 1, bảng dưới), docs, soát phần sửa (vòng 2: không còn Critical/High/Required; Medium/Low đã sửa, bảng dưới)
 - [ ] Build lại bản nháp v0.1.0 (HANDOFF mục 3.5)
 
-## Review vòng 2 (một reviewer bối cảnh trống, 3 góc, trên `7c354dd..3994e7d`): không còn Critical/High/Required
+## Review vòng 2 (một reviewer bối cảnh trống, 3 góc, trên `9ad3215..2a162f0`): không còn Critical/High/Required
 
 | Finding | Mức | Xử lý |
 |---|---|---|
@@ -65,7 +65,7 @@ Lô 10 ảnh: 8 file cùng lúc (`Clamp(16 − 1, 1, 8)`), tức 2 đợt. Mỗi
 | Ý tưởng | Nền → Kết quả | Quyết định | Vì sao |
 |---|---|---|---|
 | Chạy song song các file trong một lô | lô 10 HEIC 18,9 s → 4,7 s | **giữ** | Vượt xa dao động (±0,4 s); test xanh |
-| (đo lại khi máy bận ~52% CPU) tuần tự `04f5890` vs bản sau review | 23,9 s → 6,85 s (×3,5); commit `0bc2530` lúc đó 6,4 s | giữ | Cùng điều kiện; bản sau review không chậm hơn bản đầu |
+| (đo lại khi máy bận ~52% CPU) tuần tự `bdcf9f7` vs bản sau review | 23,9 s → 6,85 s (×3,5); commit `d30c5e6` lúc đó 6,4 s | giữ | Cùng điều kiện; bản sau review không chậm hơn bản đầu |
 | Ảnh iPhone thật (reviewer đo, 16 ảnh) | 8,7 s → 2,1 s (×4,1) | — | libheif tự dùng ~2,8 nhân/ảnh; máy 4 nhân dự kiến ~×2 |
 | Hạ ưu tiên BelowNormal khi song song | 6381 → 6414 ms (trong nhiễu) | **giữ** | Không nhằm tăng tốc mà để máy mượt; không tốn thời gian lô |
 | Giảm `MinimumLifetime` 1,5 s cho lô 1 file nhanh | đo qua menu Explorer thật (MenuProbe, bản publish ấm, 5 lần mỗi cỡ): 1/2/10/50/100 file đều 1 lô; Explorer khởi chạy tiến trình cách nhau ~27 ms (2 file: 7–10 ms; 100 file: 2,7 s); file xong → tiến trình thoát ~1,5 s với 1–2 file | **giữ 1,5 s** (người dùng chọn "đo rồi quyết", 2026-10-19) | File kết quả xuất hiện ngay khi convert xong; mức sàn chỉ làm thông báo và tiến trình thoát muộn ~1 s. Lúc ấm cửa sổ idle 400 ms đã đủ, nhưng chưa đo khởi động lạnh (Defender/Smart App Control quét exe lần đầu), là trường hợp mức sàn này bảo vệ. Không đáng đổi ADR-0002 để thông báo sớm ~1 s. Đo lại nếu có cách tái hiện khởi động lạnh |
