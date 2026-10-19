@@ -52,7 +52,8 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
         if (quality is { } q)
             image.Quality = q;
 
-        // The TIFF writer defaults to no compression: an 8 KB PNG of 8000x8000 would become a 190 MB TIFF.
+        // The TIFF writer defaults to no compression: an 8 KB PNG of 8000x8000 became an 8 MB TIFF (measured; far more
+        // for photos).
         if (format == MagickFormat.Tiff)
             image.Settings.Compression = CompressionMethod.Zip;
     }

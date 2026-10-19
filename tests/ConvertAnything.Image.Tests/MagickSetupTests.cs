@@ -90,6 +90,8 @@ public sealed class MagickSetupTests : IDisposable
     [Theory]
     [InlineData("policy.xml")]
     [InlineData("delegates.xml")]
+    [InlineData("colors.xml")] // a planted one redefined "white" (round-3 review)
+    [InlineData("type.xml")]
     public void Configuration_planted_in_an_imagemagick_search_folder_is_found(string name)
     {
         var planted = Path.Combine(_dir.Path, "ImageMagick");
@@ -107,6 +109,8 @@ public sealed class MagickSetupTests : IDisposable
         var folders = MagickSetup.ConfigurationSearchFolders();
 
         Assert.Contains(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ImageMagick"), folders);
+        Assert.Contains(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ImageMagick"), folders);
+        Assert.Contains(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ImageMagick"), folders);
         Assert.Contains(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "ImageMagick"), folders);
     }
 

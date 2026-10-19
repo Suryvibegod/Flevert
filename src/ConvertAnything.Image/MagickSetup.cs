@@ -76,6 +76,10 @@ public static class MagickSetup
             // redirect temporary files (decoded pixels) or enable delegates while the coder probes below still pass, so
             // refuse to start if any exists. The working directory is one of those folders (Explorer starts verbs in the
             // clicked file's folder, e.g. Downloads): load with ours as the working directory instead.
+            // Relative only if the user's app-data folder could not be resolved; the folder then depends on the working
+            // directory, which is exactly what must not decide the configuration.
+            if (!Path.IsPathFullyQualified(ConfigurationDirectory))
+                throw new InvalidOperationException("Cannot locate the user's local application data folder.");
             if (ForeignConfiguration(ConfigurationSearchFolders()) is { } foreign)
                 throw new InvalidOperationException($"Found ImageMagick configuration at {foreign}; refusing to process images with it.");
 
@@ -113,6 +117,8 @@ public static class MagickSetup
         var folders = new List<string>
         {
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ImageMagick"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ImageMagick"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ImageMagick"),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "ImageMagick"),
         };
         foreach (var variable in new[] { "MAGICK_HOME", "MAGICK_CONFIGURE_PATH" })
@@ -130,7 +136,15 @@ public static class MagickSetup
         return folders;
     }
 
-    /// <returns>The first policy.xml or delegates.xml found in <paramref name="folders"/>, or <c>null</c>.</returns>
+    // Every file ImageMagick reads from its configuration folders: besides policy and delegates, a planted colors.xml
+    // redefined "white", and type.xml points at font files.
+    private static readonly string[] KnownConfigurationFiles =
+    [
+        "policy.xml", "delegates.xml", "colors.xml", "configure.xml", "english.xml", "locale.xml", "log.xml", "mime.xml",
+        "thresholds.xml", "type.xml", "type-ghostscript.xml", "coder.xml", "magic.xml",
+    ];
+
+    /// <returns>The first ImageMagick configuration file found in <paramref name="folders"/>, or <c>null</c>.</returns>
     internal static string? ForeignConfiguration(IEnumerable<string> folders)
     {
         foreach (var folder in folders)
@@ -138,7 +152,7 @@ public static class MagickSetup
             // Magick.NET points MAGICK_CONFIGURE_PATH at our folder, and child processes inherit it.
             if (string.Equals(Path.GetFullPath(folder).TrimEnd('\\'), ConfigurationDirectory.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
                 continue;
-            foreach (var name in new[] { "policy.xml", "delegates.xml" })
+            foreach (var name in KnownConfigurationFiles)
             {
                 var path = Path.Combine(folder, name);
                 if (File.Exists(path))
