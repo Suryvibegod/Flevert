@@ -69,6 +69,14 @@ internal static class Program
                 ShellNotify.AssociationsChanged();
                 return Ok;
 
+            case ClassicMenuCommand classic:
+                var classicMenu = new ClassicMenu(new WindowsRegistry());
+                if (classic.On)
+                    classicMenu.On();
+                else
+                    classicMenu.Off();
+                return Ok;
+
             case ListOpsCommand:
                 foreach (var op in catalog.All)
                     Console.WriteLine($"{op.Id}\t{op.MenuPath}\t{string.Join(' ', op.Extensions)}");

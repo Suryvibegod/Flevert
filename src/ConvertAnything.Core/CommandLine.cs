@@ -10,6 +10,8 @@ public sealed record UninstallMenuCommand : Command;
 
 public sealed record ListOpsCommand : Command;
 
+public sealed record ClassicMenuCommand(bool On) : Command;
+
 public sealed record InvalidCommand(string Message) : Command;
 
 public static class CommandLine
@@ -20,6 +22,7 @@ public static class CommandLine
           ca install-menu [--dev] [--allow-insecure-location]
           ca uninstall-menu
           ca list-ops
+          ca classic-menu on|off
         """;
 
     public static Command Parse(string[] args) => args switch
@@ -31,6 +34,8 @@ public static class CommandLine
                 AllowInsecureLocation: flags.Contains("--allow-insecure-location")),
         ["uninstall-menu"] => new UninstallMenuCommand(),
         ["list-ops"] => new ListOpsCommand(),
+        ["classic-menu", "on"] => new ClassicMenuCommand(On: true),
+        ["classic-menu", "off"] => new ClassicMenuCommand(On: false),
         _ => new InvalidCommand(Usage),
     };
 }

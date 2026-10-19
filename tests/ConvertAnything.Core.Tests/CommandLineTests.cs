@@ -17,9 +17,19 @@ public sealed class CommandLineTests
     [InlineData("run")]
     [InlineData("run", "dev.copy")]
     [InlineData("frobnicate")]
+    [InlineData("classic-menu")]
+    [InlineData("classic-menu", "yes")]
+    [InlineData("classic-menu", "on", "off")]
     public void Rejects_incomplete_or_unknown_commands(params string[] args)
     {
         Assert.IsType<InvalidCommand>(CommandLine.Parse(args));
+    }
+
+    [Fact]
+    public void Parses_classic_menu_on_and_off()
+    {
+        Assert.Equal(new ClassicMenuCommand(On: true), CommandLine.Parse(["classic-menu", "on"]));
+        Assert.Equal(new ClassicMenuCommand(On: false), CommandLine.Parse(["classic-menu", "off"]));
     }
 
     [Fact]

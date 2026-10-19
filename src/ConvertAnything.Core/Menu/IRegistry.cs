@@ -5,6 +5,9 @@ public interface IRegistry
 {
     void SetValue(string key, string name, string value);
 
+    /// <summary>The value as a string, or null when the key or the value is missing.</summary>
+    string? GetValue(string key, string name);
+
     /// <summary>Deletes the key and its subtree, then removes ancestors left empty. Missing keys are ignored.</summary>
     void DeleteTree(string key);
 

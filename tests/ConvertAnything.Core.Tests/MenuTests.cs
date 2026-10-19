@@ -16,9 +16,9 @@ public sealed class MenuTests
         foreach (var ext in new[] { ".jpg", ".heic" })
         {
             var key = $@"SystemFileAssociations\{ext}\shell\ConvertAnything";
-            Assert.Equal("ConvertAnything", _registry.Value(key, "MUIVerb"));
-            Assert.Equal($"\"{Exe}\",0", _registry.Value(key, "Icon"));
-            Assert.Equal($"ConvertAnything.Menu{ext}", _registry.Value(key, "ExtendedSubCommandsKey"));
+            Assert.Equal("ConvertAnything", _registry.GetValue(key, "MUIVerb"));
+            Assert.Equal($"\"{Exe}\",0", _registry.GetValue(key, "Icon"));
+            Assert.Equal($"ConvertAnything.Menu{ext}", _registry.GetValue(key, "ExtendedSubCommandsKey"));
         }
     }
 
@@ -28,9 +28,9 @@ public sealed class MenuTests
         Install(new DevCopy());
 
         var leaf = _registry.KeysUnder(@"ConvertAnything.Menu.txt\Dev\shell").Single();
-        Assert.Equal("Copy", _registry.Value(leaf, "MUIVerb"));
-        Assert.Equal("Player", _registry.Value(leaf, "MultiSelectModel"));
-        Assert.Equal($"\"{Exe}\" run dev.copy \"%1\"", _registry.Value($@"{leaf}\command", ""));
+        Assert.Equal("Copy", _registry.GetValue(leaf, "MUIVerb"));
+        Assert.Equal("Player", _registry.GetValue(leaf, "MultiSelectModel"));
+        Assert.Equal($"\"{Exe}\" run dev.copy \"%1\"", _registry.GetValue($@"{leaf}\command", ""));
     }
 
     [Fact]
@@ -42,11 +42,11 @@ public sealed class MenuTests
             new FakeOp("image.strip", "Remove metadata", ".jpg"));
 
         var top = _registry.KeysUnder(@"ConvertAnything.Menu.jpg\shell");
-        Assert.Equal(["Convert", "Remove metadata"], top.Select(k => _registry.Value(k, "MUIVerb")));
-        Assert.Equal(@"ConvertAnything.Menu.jpg\Convert", _registry.Value(top[0], "ExtendedSubCommandsKey"));
+        Assert.Equal(["Convert", "Remove metadata"], top.Select(k => _registry.GetValue(k, "MUIVerb")));
+        Assert.Equal(@"ConvertAnything.Menu.jpg\Convert", _registry.GetValue(top[0], "ExtendedSubCommandsKey"));
 
         var convert = _registry.KeysUnder(@"ConvertAnything.Menu.jpg\Convert\shell");
-        Assert.Equal(["PNG", "WEBP"], convert.Select(k => _registry.Value(k, "MUIVerb")));
+        Assert.Equal(["PNG", "WEBP"], convert.Select(k => _registry.GetValue(k, "MUIVerb")));
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public sealed class MenuTests
         Install(new FakeOp("image.to-png", "Convert/PNG", ".jpg"), new DevCopy());
 
         Assert.Empty(_registry.KeysUnder(@"ConvertAnything.Menu.txt\Convert\shell"));
-        Assert.Equal(["Convert"], _registry.KeysUnder(@"ConvertAnything.Menu.jpg\shell").Select(k => _registry.Value(k, "MUIVerb")));
+        Assert.Equal(["Convert"], _registry.KeysUnder(@"ConvertAnything.Menu.jpg\shell").Select(k => _registry.GetValue(k, "MUIVerb")));
     }
 
     [Fact]

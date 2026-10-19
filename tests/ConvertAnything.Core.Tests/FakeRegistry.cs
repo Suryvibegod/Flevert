@@ -31,7 +31,7 @@ public sealed class FakeRegistry : IRegistry
             .ToList();
     }
 
-    public string? Value(string key, string name) =>
+    public string? GetValue(string key, string name) =>
         _keys.TryGetValue(key, out var values) && values.TryGetValue(name, out var v) ? v : null;
 
     /// <summary>Full paths of direct child keys, in registry (ordinal, case-insensitive) order.</summary>

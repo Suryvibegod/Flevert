@@ -10,6 +10,12 @@ public sealed class WindowsRegistry(string root = @"Software\Classes") : IRegist
         k.SetValue(name, value, RegistryValueKind.String);
     }
 
+    public string? GetValue(string key, string name)
+    {
+        using var k = Registry.CurrentUser.OpenSubKey(Full(key));
+        return k?.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames)?.ToString();
+    }
+
     public void DeleteTree(string key)
     {
         Registry.CurrentUser.DeleteSubKeyTree(Full(key), throwOnMissingSubKey: false);
