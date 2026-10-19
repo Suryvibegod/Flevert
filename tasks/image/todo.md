@@ -41,8 +41,8 @@ Mỗi task xong khi đạt acceptance criteria **và** Definition of Done.
 
 ## Task 5: Compress dưới N
 - Acceptance:
-  - [ ] Ảnh nhiễu 12 MP → < 1 000 000 byte; < 500 000 byte
-  - [ ] Ảnh đã nhỏ hơn N vẫn ra JPG hợp lệ (không phóng to)
+  - [x] Ảnh nhiễu 12 MP → < 1 000 000 byte; < 500 000 byte
+  - [x] Ảnh đã nhỏ hơn N vẫn ra JPG hợp lệ (không phóng to)
 - Verify: `dotnet test --filter Under`
 - Scope: S
 

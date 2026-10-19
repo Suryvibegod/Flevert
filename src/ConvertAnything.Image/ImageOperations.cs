@@ -18,5 +18,8 @@ public static class ImageOperations
         new ImageCompress(CompressLevel.Light),
         new ImageCompress(CompressLevel.Balanced),
         new ImageCompress(CompressLevel.Strong),
+        new ImageCompressUnder(500_000, "500 KB"),
+        new ImageCompressUnder(1_000_000, "1 MB"),
+        new ImageCompressUnder(5_000_000, "5 MB"),
     ];
 }

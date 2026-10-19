@@ -76,10 +76,7 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
     private void Prepare(IMagickImage<byte> image, MagickFormat target)
     {
         image.AutoOrient();
-        var colourProfile = image.GetColorProfile();
-        image.Strip(); // EXIF, GPS, XMP, IPTC, comments
-        if (colourProfile is not null)
-            image.SetProfile(colourProfile);
+        ImageMetadata.StripExceptColourProfile(image);
 
         if (target == MagickFormat.Png)
         {
