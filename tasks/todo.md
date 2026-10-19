@@ -320,3 +320,27 @@ Viết tắt: CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
 - [x] F9: Test: sửa ký tự điều khiển; xoay khóa có điều kiện; thư mục cha không đổi tên được khi pin; kiểm lại test dangling link bằng đối chứng âm
 - [x] F10: Tài liệu: ADR-0002 (`Full`, hard link), SPEC-core, README lệnh cài dev
 - [ ] Review vòng 5 trên phần sửa
+
+# Phase 6: Review vòng 5
+
+Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `9fd5cf4..HEAD`. Không có Critical/High. CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| Thư mục (không chỉ tên file) kết thúc bằng `.` làm đọc/ghi nhầm thư mục khác: qua `GetFullPath` trong Program, và qua `FinalPath` bỏ `\\?\` sau khi pin (CR-R1, DD1 tái hiện bằng ca.exe thật, SA3) | Required | Hợp lệ | G1 |
+| Leader ghi `Refused` trước khi đọc yêu cầu; pipe không buffer nên hai bên chờ nhau tới timeout 2 s, follower không bao giờ nhận `Refused` (CR-M1) | Medium | Hợp lệ (bằng chứng mới, khác DD-M1 vòng 4) | G2 |
+| Kiểm tra nơi cài tin vào chuỗi đường dẫn: ổ `subst`, ổ mạng, UNC qua mặt (SA1) | Medium | Hợp lệ | G3 |
+| `\\;LanmanRedirector\host\pipe\…` qua mặt chặn pipe/IPC$; `FileInfo.Exists` trước khi pin đã kết nối tới pipe (SA2, DD2) | Low/Medium | Hợp lệ (SQOS và không ghi gì nên không mạo danh được) | G4 |
+| Alternate data stream `a:s.png` được nhận (SA4) | Low | Hợp lệ | G4 |
+| Link bên trong thư mục cài không bị kiểm (SA5) | Low | Hợp lệ | G3 |
+| `IsLink` chặn cả reparse không phải link (OneDrive) (CR-L2, SA5) | Low | Trade-off chấp nhận: thư mục cài không nằm trong OneDrive; chặn rộng an toàn hơn | ghi chú |
+| `SECURITY_SQOS_PRESENT` trùng bit `FILE_FLAG_OPEN_NO_RECALL` (CR-L1, DD3) | Low | Hợp lệ, chưa kiểm OneDrive | ghi chú code + kiểm tay OneDrive (HANDOFF) |
+| Follower chậm dưới tải có thể tách lô (không mất, không trùng) (DD4) | Low | Trade-off chấp nhận | ghi ADR |
+| Comment PipePeer nói 8.3 làm đổi đường dẫn kernel (DD5) | Nit | Hợp lệ | G4 |
+
+## Việc
+- [ ] G1: Từ chối mọi đoạn đường dẫn kết thúc bằng `.` hoặc khoảng trắng (trừ `.`/`..`): trong Program trước `GetFullPath`, trong Runner, và trên đường dẫn thật sau khi pin
+- [ ] G2: Leader đọc (bỏ) yêu cầu của client không tin cậy rồi mới trả `Refused`; test qua seam tin cậy
+- [ ] G3: install-menu: thư mục phải ở ổ cố định cục bộ và đường dẫn thật (từ handle) trùng đường dẫn đưa vào; không reparse point bên trong thư mục
+- [ ] G4: Chặn tên server bắt đầu bằng `;`; sau khi pin yêu cầu `FILE_TYPE_DISK`; bỏ `FileInfo.Exists` trước pin; chặn `:` ngoài ký tự ổ; sửa comment PipePeer; ghi chú bit SQOS
+- [ ] G5: Tài liệu (ADR-0002 tách lô dưới tải, SPEC-core đầu vào) và review vòng 6

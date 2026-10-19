@@ -50,6 +50,11 @@ internal static partial class InputPin
         if (FinalPath(handle) is not { } final)
             return Fail(handle, new Win32Exception(Marshal.GetLastPInvokeError()).Message, out reason);
 
+        // A link can lead into a folder named "x." although the path given was clean; the operation reopens the real
+        // path, and anything that normalises it would read "x\…", which was never pinned or checked.
+        if (InputPath.HasNameEndingInDotOrSpace(final))
+            return Fail(handle, Runner.NameEndsInDotOrSpace, out reason);
+
         realPath = final;
         reason = null;
         return handle;

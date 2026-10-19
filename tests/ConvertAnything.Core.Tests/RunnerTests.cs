@@ -200,6 +200,51 @@ public sealed class RunnerTests : IDisposable
         Assert.False(File.Exists(_dir.Combine("a (copy).txt")));
     }
 
+    // Win32 drops trailing dots from every folder in a path, so "sub.\x.txt" would be read from "sub\x.txt".
+    [Fact]
+    public async Task Runner_rejects_a_folder_name_ending_in_a_dot()
+    {
+        var real = Directory.CreateDirectory(_dir.Combine("sub")).FullName;
+        File.WriteAllText(Path.Combine(real, "x.txt"), "protected");
+        var decoy = Directory.CreateDirectory(@"\\?\" + _dir.Combine("sub.")).FullName;
+        File.WriteAllText(Path.Combine(decoy, "x.txt"), "decoy");
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [_dir.Path + @"\sub.\x.txt"], progress: null, CancellationToken.None);
+
+        Assert.Contains("dot or space", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(real, "x (copy).txt")));
+    }
+
+    [Fact]
+    public void The_pin_refuses_a_real_location_with_a_folder_ending_in_a_dot()
+    {
+        // A junction can lead a clean-looking path into "x."; the pin then sees "x." in the real path. The operation
+        // reopens that path, and anything that normalises it would read "x\a.txt", which was never pinned or checked.
+        // (mklink normalises its target, so the test reaches "x." through \\?\, which the pin opens verbatim.)
+        var dotted = Directory.CreateDirectory(@"\\?\" + _dir.Combine("x.")).FullName;
+        File.WriteAllText(Path.Combine(dotted, "a.txt"), "pinned");
+
+        using var pin = InputPin.TryPin(Path.Combine(dotted, "a.txt"), out var reason, out _);
+
+        Assert.Null(pin);
+        Assert.Contains("dot or space", reason, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(@"C:\a\sub.\x.txt", true)]
+    [InlineData(@"C:\a\sub \x.txt", true)]
+    [InlineData(@"\\?\C:\a\x.\y.txt", true)]
+    [InlineData(@"\\server\share.\x.txt", true)]
+    [InlineData(@"..\x.txt", false)]
+    [InlineData(@".\dir\x.txt", false)]
+    [InlineData(@"C:\a\.hidden\x.txt", false)]
+    [InlineData(@"\\?\UNC\server\share\x.txt", false)]
+    public void Names_ending_in_a_dot_or_space_are_found_in_any_part_of_a_path(string path, bool expected)
+    {
+        Assert.Equal(expected, InputPath.HasNameEndingInDotOrSpace(path));
+    }
+
     [SkippableFact]
     public async Task Runner_checks_the_file_type_of_the_real_name_not_of_a_short_name()
     {

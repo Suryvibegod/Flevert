@@ -82,6 +82,20 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_folder_name_ending_in_a_dot_is_not_resolved_to_the_folder_without_it()
+    {
+        var real = Directory.CreateDirectory(_dir.Combine("sub")).FullName;
+        File.WriteAllText(Path.Combine(real, "x.txt"), "protected");
+        var decoy = Directory.CreateDirectory(@"\\?\" + _dir.Combine("sub.")).FullName;
+        File.WriteAllText(Path.Combine(decoy, "x.txt"), "decoy");
+
+        using var ca = Ca("dev.copy", _dir.Path + @"\sub.\x.txt");
+        await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.False(File.Exists(Path.Combine(real, "x (copy).txt")));
+    }
+
+    [Fact]
     public async Task Relative_paths_resolve_against_the_directory_ca_was_started_in()
     {
         _dir.File("relative.txt");

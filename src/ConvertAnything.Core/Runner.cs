@@ -100,14 +100,15 @@ public sealed class Runner(RunLog log)
         return result;
     }
 
+    internal const string NameEndsInDotOrSpace = "Names ending in a dot or space are not supported.";
+
     private static string? Reject(IOperation operation, string file)
     {
         // Paths also arrive over the batch pipe; accept only plain absolute file paths, not device namespaces.
         if (!IsPlainFilePath(file))
             return "Only absolute file paths are accepted.";
-        // Win32 drops a trailing dot or space, so such a name would be read as a different file than the one selected.
-        if (file.EndsWith('.') || file.EndsWith(' '))
-            return "Names ending in a dot or space are not supported.";
+        if (InputPath.HasNameEndingInDotOrSpace(file))
+            return NameEndsInDotOrSpace;
 
         var info = new FileInfo(file);
         if (!info.Exists)

@@ -31,10 +31,11 @@ internal static class Program
         {
             case RunCommand run:
                 // SafeStartup moved the current directory, so resolve relative paths against where ca was started.
-                // GetFullPath drops a trailing dot or space, which would name another file; keep those for the runner to refuse.
+                // GetFullPath drops trailing dots and spaces from names, which would name another file; keep such paths
+                // unchanged for the runner to refuse.
                 return RunBatch(run with
                 {
-                    Files = [.. run.Files.Select(f => f.EndsWith('.') || f.EndsWith(' ') ? f : Path.GetFullPath(f, invocationDirectory))],
+                    Files = [.. run.Files.Select(f => InputPath.HasNameEndingInDotOrSpace(f) ? f : Path.GetFullPath(f, invocationDirectory))],
                 }, catalog, log);
 
             case InstallMenuCommand install:

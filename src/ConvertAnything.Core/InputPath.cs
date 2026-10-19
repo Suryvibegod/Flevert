@@ -36,6 +36,30 @@ public static partial class InputPath
             : expanded[LongPrefix.Length..];
     }
 
+    /// <summary>
+    /// Whether any file or folder name in the path ends in a dot or a space. Win32 path normalisation drops those
+    /// characters (dots from every name), so such a path names a different file once anything normalises it: a decoy
+    /// <c>sub.\x.txt</c> would be read as <c>sub\x.txt</c>. The relative names <c>.</c> and <c>..</c> are fine.
+    /// </summary>
+    public static bool HasNameEndingInDotOrSpace(string path)
+    {
+        var p = path.Replace('/', '\\');
+        if (p.StartsWith(LongUncPrefix, StringComparison.OrdinalIgnoreCase))
+            p = p[LongUncPrefix.Length..];
+        else if (p.StartsWith(LongPrefix, StringComparison.Ordinal) || p.StartsWith(@"\??\", StringComparison.Ordinal))
+            p = p[LongPrefix.Length..];
+
+        foreach (var name in p.Split('\\', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (name is "." or ".." || name.Length == 0)
+                continue;
+            if (name[^1] is '.' or ' ')
+                return true;
+        }
+
+        return false;
+    }
+
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     private static partial uint GetLongPathNameW(string shortPath, [Out] char[] longPath, uint bufferLength);
 }
