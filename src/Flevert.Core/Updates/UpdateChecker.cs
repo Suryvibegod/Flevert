@@ -14,7 +14,10 @@ public sealed class UpdateChecker(
     private const int MaxAnswerBytes = 1024 * 1024;
     private static readonly TimeSpan Interval = TimeSpan.FromDays(1);
 
-    private readonly TimeSpan _timeout = timeout ?? TimeSpan.FromSeconds(5);
+    private readonly TimeSpan _timeout = timeout ?? DefaultTimeout;
+
+    /// <summary>Short enough that the answer arrives while the batch's notification is still showing (BatchUi).</summary>
+    public static TimeSpan DefaultTimeout { get; } = TimeSpan.FromSeconds(5);
 
     /// <summary>Ignores drafts and pre-releases, so a release withdrawn by marking it pre-release is not offered.</summary>
     public static Uri LatestReleaseApi { get; } = new("https://api.github.com/repos/Suryvibegod/Flevert/releases/latest");
@@ -36,10 +39,20 @@ public sealed class UpdateChecker(
         return latest is { } version && version > current && version.ToString() != state.Skipped ? version : null;
     }
 
-    public void Skip(ReleaseVersion version) => TrySave(store.Load() with { Skipped = version.ToString() });
+    /// <summary>Remembers "Skip this version"; a state file that cannot be read is left alone (it counts as turned off).</summary>
+    public void Skip(ReleaseVersion version)
+    {
+        var state = store.Load();
+        if (!ReferenceEquals(state, UpdateState.Unreadable))
+            TrySave(state with { Skipped = version.ToString() });
+    }
 
     /// <summary>For update-check on|off: throws if the setting cannot be saved, so the command can say so.</summary>
-    public void SetEnabled(bool enabled) => store.Save(store.Load() with { Enabled = enabled });
+    public static void SetEnabled(UpdateStateStore store, bool enabled)
+    {
+        var state = store.Load();
+        store.Save((ReferenceEquals(state, UpdateState.Unreadable) ? UpdateState.Default : state) with { Enabled = enabled });
+    }
 
     /// <summary>
     /// FLEVERT_UPDATE_URL, for tests that run a fake GitHub: plain http to a loopback IP address only, so that no name
@@ -76,7 +89,9 @@ public sealed class UpdateChecker(
                 ? version
                 : null;
         }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException or IOException)
+#pragma warning disable CA1031 // Any failure (network, proxy, TLS, a malformed answer) just means nothing to offer today.
+        catch (Exception)
+#pragma warning restore CA1031
         {
             return null;
         }

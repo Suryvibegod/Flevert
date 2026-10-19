@@ -4,7 +4,7 @@
 
 <p align="center">
 <b>Right-click a photo in Windows Explorer to convert it, shrink it or strip its location.</b><br>
-Free, open source, offline. Your files never leave your computer.
+Free and open source. Your files never leave your computer.
 </p>
 
 <p align="center">
@@ -54,7 +54,7 @@ Colour profiles are kept. Batches that take more than two seconds show a progres
 
 ## Privacy
 
-Everything happens on your computer: no account, no telemetry, no upload. The only network use is a check for a new version: after a conversion, at most once a day, Flevert asks GitHub for the newest version number and, if there is one, offers to open its download page. GitHub sees your IP address and your Flevert version, nothing about your files. Nothing is downloaded or installed by itself. Turn it off in setup or with `flevert.exe update-check off`.
+Everything happens on your computer: no account, no telemetry, no upload. The only network use is a check for a new version: after a conversion, at most once a day, Flevert asks GitHub for the newest version number and, if there is one, offers to open its download page. GitHub sees your IP address, your Flevert version and the time, nothing about your files. Nothing is downloaded or installed by itself. Turn it off in setup or with `flevert.exe update-check off`.
 
 ## Roadmap
 

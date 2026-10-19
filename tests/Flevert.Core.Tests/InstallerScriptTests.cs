@@ -56,6 +56,15 @@ public sealed class InstallerScriptTests
     }
 
     [Fact]
+    public void Setup_keeps_an_update_check_turned_off_with_the_command()
+    {
+        // An upgrade without /UPDATECHECK must not turn the check back on after update-check off: setup reads the state
+        // file flevert.exe writes, by the same path and marker.
+        Assert.Contains(@"'{localappdata}\{#AppName}\" + AppData.UpdateFolder + @"\state.json'", Script, StringComparison.Ordinal);
+        Assert.Contains($"'{Flevert.Core.Updates.UpdateStateStore.TurnedOffMarker}'", Script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Installer_waits_on_the_mutex_flevert_holds()
     {
         Assert.Contains($"#define AppMutexName \"{AppMutex.Name}\"", Script, StringComparison.Ordinal);
@@ -114,7 +123,7 @@ public sealed class InstallerScriptTests
             Assert.Contains($@"Type: filesandordirs; Name: ""{{localappdata}}\{{#AppName}}\{folder}""", Script, StringComparison.Ordinal);
     }
 
-    private static string RepositoryRoot()
+    internal static string RepositoryRoot()
     {
         // tests/<project>/bin/<Configuration>/<tfm>/ → repository root is five levels up.
         var output = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));

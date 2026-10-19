@@ -9,19 +9,21 @@ internal sealed class BatchUi : ApplicationContext
 {
     private static readonly TimeSpan ShowProgressAfter = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan NotificationLifetime = TimeSpan.FromSeconds(6);
+    // Past the notification, how long the process still waits for the update check: its own timeout bounds it, but a
+    // proxy auto-detection Windows runs synchronously may not.
+    private static readonly TimeSpan UpdateGrace = UpdateChecker.DefaultTimeout + TimeSpan.FromSeconds(5);
 
     private readonly CancellationTokenSource _cancellation = new();
     private readonly ProgressForm _form;
     private readonly string _logFile; // fixed at batch start so a batch crossing midnight opens its own log
-    private readonly UpdateChecker _checker;
-    private readonly Task<ReleaseVersion?> _update;
+    private readonly Task<UpdateFound?> _update;
     private NotifyIcon? _tray;
     private bool _askingAboutUpdate;
+    private bool _exitWhenChecked;
 
     private BatchUi(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running,
-        UpdateChecker checker, Task<ReleaseVersion?> update)
+        Task<UpdateFound?> update)
     {
-        _checker = checker;
         _update = update;
         _logFile = log.CurrentFile;
         _form = new ProgressForm(operation.MenuPath.Replace('/', ' '), leader.Pending, _cancellation);
@@ -62,11 +64,11 @@ internal sealed class BatchUi : ApplicationContext
     /// <param name="running">Passed to the runner: tells the leader, and the process priority, how many files run.</param>
     /// <param name="update">The check for a new version started with the batch; asked about after it if it finds one in time.</param>
     public static bool Run(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running,
-        UpdateChecker checker, Task<ReleaseVersion?> update)
+        Task<UpdateFound?> update)
     {
         Application.EnableVisualStyles();
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        using var ui = new BatchUi(operation, leader, log, maxParallel, running, checker, update);
+        using var ui = new BatchUi(operation, leader, log, maxParallel, running, update);
         Application.Run(ui);
         return ui.NoFailures;
     }
@@ -79,12 +81,17 @@ internal sealed class BatchUi : ApplicationContext
         exit.Tick += (_, _) =>
         {
             exit.Dispose();
-            // The update question ends the process itself when it closes.
-            if (!_askingAboutUpdate)
-                ExitThread();
+            TryExit();
         };
         exit.Start();
-        // A check still running when the process exits is dropped; it runs again tomorrow.
+        // The last resort if the update check never ends; a check still running then is dropped and runs again tomorrow.
+        var deadline = new System.Windows.Forms.Timer { Interval = (int)(NotificationLifetime + UpdateGrace).TotalMilliseconds };
+        deadline.Tick += (_, _) =>
+        {
+            deadline.Dispose();
+            TryExit(evenIfChecking: true);
+        };
+        deadline.Start();
         _update.ContinueWith(t => AskAboutUpdate(t), CancellationToken.None, TaskContinuationOptions.None,
             TaskScheduler.FromCurrentSynchronizationContext());
 
@@ -98,11 +105,7 @@ internal sealed class BatchUi : ApplicationContext
             _tray = new NotifyIcon { Icon = _form.Icon, Text = "Flevert", Visible = true };
             if (summary.ShowsLog)
                 _tray.BalloonTipClicked += (_, _) => OpenLog();
-            _tray.BalloonTipClosed += (_, _) =>
-            {
-                if (!_askingAboutUpdate)
-                    ExitThread();
-            };
+            _tray.BalloonTipClosed += (_, _) => TryExit();
             _tray.ShowBalloonTip((int)NotificationLifetime.TotalMilliseconds, "Flevert", summary.Text,
                 summary.HasFailures ? ToolTipIcon.Warning : ToolTipIcon.Info);
         }
@@ -114,14 +117,37 @@ internal sealed class BatchUi : ApplicationContext
         }
     }
 
-    private void AskAboutUpdate(Task<ReleaseVersion?> check)
+    /// <summary>
+    /// Ends the process once the notification has gone, except while the update question is open (closing it exits) or
+    /// while the update check is still running (its answer exits), unless that has taken too long.
+    /// </summary>
+    private void TryExit(bool evenIfChecking = false)
     {
-        if (!check.IsCompletedSuccessfully || check.Result is not { } available)
+        if (_askingAboutUpdate)
             return;
+        if (!_update.IsCompleted && !evenIfChecking)
+        {
+            _exitWhenChecked = true;
+            return;
+        }
+
+        ExitThread();
+    }
+
+    private void AskAboutUpdate(Task<UpdateFound?> check)
+    {
+        if (!check.IsCompletedSuccessfully || check.Result is not { } found)
+        {
+            _ = check.Exception; // observed: a failed check only means nothing to offer
+            if (_exitWhenChecked)
+                ExitThread();
+            return;
+        }
+
         _askingAboutUpdate = true;
         try
         {
-            UpdateOffer.Ask(_checker, available);
+            UpdateOffer.Ask(found);
         }
 #pragma warning disable CA1031 // The question is optional; whatever fails, the process must still exit.
         catch (Exception)

@@ -25,3 +25,25 @@ Plan: [plan.md](plan.md). Spec: core.md "Báo bản mới". ADR-0006.
 | Hộp thoại mở sau cửa sổ đang dùng, dễ không thấy | `SetWindowPos(HWND_TOPMOST, SWP_NOACTIVATE)` khi tạo |
 | Cửa sổ chủ top-most ẩn: hộp thoại đóng ngay | Bỏ cửa sổ chủ |
 | Hộp thoại nhận phím người dùng đang gõ ở cửa sổ khác: Enter/Space bấm Download, mở trình duyệt | Nút mặc định là **Later** (vô hại, mai hỏi lại) |
+
+## Review bối cảnh trống (commit 0f1f79d) và reconcile
+
+| Finding | Nguồn | Mức | Xử lý |
+|---|---|---|---|
+| File trạng thái không đọc được coi như "bật", rồi ghi đè lựa chọn tắt | code (Required), security (M1) | Required | Thiếu/nội dung hỏng: mặc định (bật, vì yêu cầu của chủ repo là luôn được báo; file đã flush trước khi thay nên hỏng không do Flevert). Đang bị khóa: lần này không kiểm, không ghi; Skip cũng không ghi. Test: file bị giữ không request không ghi (đỏ trước), Skip không ghi đè |
+| Cài đè làm bật lại kiểm tra đã tắt bằng lệnh; cài im lặng bật mà không báo | code (Required), security (M2), doubt (Required) | Required | Setup đọc `state.json` (dấu `"enabled":false`, test giữ dấu này khớp serializer) trước lựa chọn lần cài trước; test-installer: tắt bằng lệnh rồi cài đè vẫn tắt. Kịch bản này viết sau khi sửa: lỗi ở script cũ do reviewer chỉ ra bằng đọc code |
+| Hướng dẫn gỡ tay thiếu thư mục `update` | doubt | Required | Sửa ở commit README; test đỏ trước |
+| Không có test nối từ `Program` tới bộ kiểm | doubt | Required | `UpdateCheckIntegrationTests`: flevert.exe thật có UI, GitHub giả trên loopback; đối chứng âm: bỏ dòng nối → test đỏ |
+| `update-check off` thất bại thì im lặng | security L1, code | Low/Suggestion | Setup báo lỗi kèm lệnh tự tắt |
+| Hộp thoại không trả lời giữ tiến trình (và AppMutex) mãi | security L3, code, doubt | Low/Suggestion | Tự đóng sau 10 phút (= Later); thông báo AppMutex của setup nhắc tới câu hỏi |
+| Thông báo đóng sớm làm mất kết quả kiểm (mất một ngày) | code, doubt | Suggestion | Chờ kết quả, tối đa thêm 10 giây sau thời gian thông báo |
+| `/UPDATECHECK` giá trị lạ bật kiểm tra | code | Suggestion | Chỉ nhận 0/1; giá trị khác bị bỏ qua, ghi log; test-installer kiểm |
+| Đổi tên/xóa tài khoản: người khác lấy tên và phát hành "bản mới" | security L2 | Low | ADR-0006 và RELEASING: không bao giờ đổi tên/xóa; "Set as latest" |
+| Lọc exception hẹp hơn doc | code | Suggestion | Bắt mọi lỗi (CA1031), quan sát `Exception` của task |
+| Dựng `SocketsHttpHandler` trên luồng UI | code | Suggestion | `UpdateOffer.Start()` dựng trong `Task.Run` |
+| Endpoint test cho redirect | security I1 | Info | `AllowAutoRedirect = false` khi dùng endpoint test |
+| Test phiên bản chép lại code; không ghim timeout 5 s; thiếu test stream > 1 MB, lưu giờ trước request | doubt, code | Suggestion | So với `Directory.Build.props`; test `DefaultTimeout`; thêm hai test |
+| Văn bản: "offline", Accept header, "within a day", thời điểm bị lộ | doubt, code, security I3 | Nit | Sửa README, ADR, RELEASING, capability-map, trang setup |
+| Hai leader cùng kiểm cùng lúc | security I2, code | Info | Chấp nhận (hiếm, chỉ là hỏi hai lần) |
+| Trang setup trên Windows 10 chưa xem | code | Suggestion | Chưa có máy Windows 10; logic trang dùng chung, test-installer chạy đường im lặng |
+| Người không convert gì thì không được hỏi | doubt | Suggestion (sản phẩm) | Theo spec: chỉ kiểm sau khi dùng, không có tiến trình nền |

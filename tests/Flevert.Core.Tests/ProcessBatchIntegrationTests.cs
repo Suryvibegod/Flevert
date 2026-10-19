@@ -445,7 +445,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         Directory.GetFiles(_logs.Path, "flevert-*.log").SelectMany(File.ReadAllLines)
             .Select(line => line.Split('\t')[1]).Distinct().ToArray();
 
-    private static string FlevertExe
+    internal static string FlevertExe
     {
         get
         {

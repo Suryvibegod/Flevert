@@ -1,6 +1,6 @@
 # Capability Map: Flevert
 
-Tool Windows miễn phí: chuột phải vào file ảnh / video-audio / PDF để convert, nén, xử lý ngay tại chỗ. Chạy offline 100%, file kết quả nằm cạnh file gốc.
+Tool Windows miễn phí: chuột phải vào file ảnh / video-audio / PDF để convert, nén, xử lý ngay tại chỗ. Xử lý hoàn toàn trên máy, không gửi file đi đâu; mạng chỉ dùng để kiểm phiên bản mới (tắt được, [ADR-0006](../adr/0006-update-check-against-github-releases.md)). File kết quả nằm cạnh file gốc.
 
 | Module id | Trách nhiệm | Phụ thuộc |
 |-----------|-------------|-----------|

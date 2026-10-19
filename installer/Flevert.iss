@@ -65,8 +65,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
 ; Shown for AppMutex. The default asks to close the program; a conversion ends by itself, or from its progress window.
-SetupAppRunningError=A Flevert conversion is still running.%n%nWait until it has finished (or click Cancel in its progress window), then click OK to continue, or Cancel to exit.
-UninstallAppRunningError=A Flevert conversion is still running.%n%nWait until it has finished (or click Cancel in its progress window), then click OK to continue, or Cancel to exit.
+SetupAppRunningError=Flevert is still running: a conversion, or its question about a new version.%n%nWait until the conversion has finished (or click Cancel in its progress window) and answer the question, then click OK to continue, or Cancel to exit.
+UninstallAppRunningError=Flevert is still running: a conversion, or its question about a new version.%n%nWait until the conversion has finished (or click Cancel in its progress window) and answer the question, then click OK to continue, or Cancel to exit.
 
 ; The classic-menu choice is a check box on a custom page, not a [Tasks] entry: Inno Setup 6.7 clips the check box of the
 ; task list at high DPI (seen at 200%), while a plain check box is drawn by Windows. Silent installs pass /CLASSICMENU=1|0.
@@ -183,6 +183,7 @@ var
   Page: TWizardPage;
   Explanation: TNewStaticText;
   Choice: String;
+  State: AnsiString;
 begin
   Page := CreateCustomPage(AfterID, 'New versions', 'Should Flevert tell you about new versions?');
 
@@ -191,7 +192,7 @@ begin
   Explanation.Width := Page.SurfaceWidth;
   Explanation.WordWrap := True;
   Explanation.Caption := 'After a conversion, at most once a day, Flevert can ask GitHub for the number of the newest ' +
-    'version and offer to open its download page. GitHub sees your IP address and your Flevert version; nothing ' +
+    'version and offer to open its download page. GitHub sees your IP address, your Flevert version and the time; nothing ' +
     'about your files is sent, and nothing is downloaded or installed by itself. This is the only time Flevert uses ' +
     'the network.';
 
@@ -202,8 +203,21 @@ begin
   UpdateCheck.Height := ScaleY(24);
   UpdateCheck.Caption := 'Tell me when a new version is out';
 
-  // /UPDATECHECK=1|0 for silent installs; otherwise keep the choice of the previous install (on the first time).
+  // /UPDATECHECK=1|0 for silent installs. Otherwise keep the current choice, which flevert.exe update-check off may
+  // have changed since the last setup, so read the file it writes; then the previous setup's; on the first time, on.
   Choice := ExpandConstant('{param:UPDATECHECK|}');
+  if (Choice <> '') and (Choice <> '0') and (Choice <> '1') then
+  begin
+    Log('Ignoring /UPDATECHECK=' + Choice + ': only 0 and 1 are understood.');
+    Choice := '';
+  end;
+  if (Choice = '') and LoadStringFromFile(ExpandConstant('{localappdata}\{#AppName}\update\state.json'), State) then
+  begin
+    if Pos('"enabled":false', State) > 0 then
+      Choice := '0'
+    else
+      Choice := '1';
+  end;
   if Choice = '' then
     Choice := GetPreviousData('UpdateCheck', '1');
   UpdateCheck.Checked := Choice <> '0';
@@ -421,11 +435,13 @@ begin
     ClassicMenuFailed := True;
     ReportFailure('switching to the classic menu', Started, Code, Reason);
   end;
-  // Applied both ways, like the classic menu. A failure only leaves the previous setting; not worth an error message.
+  // Applied both ways, like the classic menu. A failed "on" only leaves the check off; a failed "off" would leave it on
+  // against the user's choice, so that one is reported.
   if UpdateCheckChosen then
     RunFlevert('update-check on', Started, Code, Reason)
-  else
-    RunFlevert('update-check off', Started, Code, Reason);
+  else if not RunFlevert('update-check off', Started, Code, Reason) then
+    ReportFailure('turning off the check for new versions (run "flevert.exe update-check off" in ' +
+      ExpandConstant('{app}') + ' to try again)', Started, Code, Reason);
 end;
 
 function GetCustomSetupExitCode: Integer;

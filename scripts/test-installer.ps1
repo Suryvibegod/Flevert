@@ -169,6 +169,13 @@ try {
     Assert (-not (UpdateCheckEnabled)) 'installing again without /UPDATECHECK keeps it off'
     Install -UpdateCheck '1' | Out-Null
     Assert (UpdateCheckEnabled) 'installing with /UPDATECHECK=1 turns it back on'
+    $off = Start-Process "$app\flevert.exe" -ArgumentList 'update-check', 'off' -PassThru -Wait -WindowStyle Hidden
+    Assert ($off.ExitCode -eq 0 -and -not (UpdateCheckEnabled)) 'flevert.exe update-check off turns it off'
+    Install | Out-Null
+    Assert (-not (UpdateCheckEnabled)) 'installing again without /UPDATECHECK keeps a check turned off with the command'
+    Install -UpdateCheck 'yes' | Out-Null
+    Assert (-not (UpdateCheckEnabled)) 'an /UPDATECHECK value other than 0 or 1 changes nothing'
+    Install -UpdateCheck '1' | Out-Null
 
     Uninstall
     AssertClean

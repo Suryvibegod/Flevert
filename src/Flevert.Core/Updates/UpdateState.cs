@@ -9,6 +9,9 @@ namespace Flevert.Core.Updates;
 public sealed record UpdateState(bool Enabled, DateTimeOffset? LastCheck, string? Skipped)
 {
     public static UpdateState Default { get; } = new(true, null, null);
+
+    /// <summary>A state file that exists but cannot be read right now: check nothing and write nothing this time.</summary>
+    public static UpdateState Unreadable { get; } = new(false, null, null);
 }
 
 /// <summary>
@@ -19,20 +22,46 @@ public sealed class UpdateStateStore(string path)
 {
     public static string DefaultPath { get; } = Path.Combine(AppData.Root, AppData.UpdateFolder, "state.json");
 
+    /// <summary>How a turned-off check appears in the file; setup looks for it to keep the choice on an upgrade.</summary>
+    public const string TurnedOffMarker = "\"enabled\":false";
+
+    /// <summary>
+    /// No file, or one whose content makes no sense: the defaults (on). Save flushes to disk before replacing the file,
+    /// so damaged content does not come from Flevert, and keeping the check off for good would leave the user on an
+    /// old version. A file that exists but cannot be read now (another program holds it): <see cref="UpdateState.Unreadable"/>,
+    /// which checks nothing and writes nothing, so a turned-off check is never turned back on by accident.
+    /// </summary>
     public UpdateState Load()
     {
+        byte[] content;
         try
         {
-            var file = JsonSerializer.Deserialize(File.ReadAllBytes(path), UpdateStateJson.Default.StoredState);
+            content = File.ReadAllBytes(path);
+        }
+        catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return UpdateState.Default;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return UpdateState.Unreadable;
+        }
+
+        try
+        {
+            var file = JsonSerializer.Deserialize(content, UpdateStateJson.Default.StoredState);
             return file is null ? UpdateState.Default : new UpdateState(file.Enabled ?? true, file.LastCheck, file.Skipped);
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
+        catch (Exception e) when (e is JsonException or NotSupportedException)
         {
             return UpdateState.Default;
         }
     }
 
-    /// <summary>Writes a temporary file and moves it over the old one, so a crash never leaves half a file.</summary>
+    /// <summary>
+    /// Writes a temporary file, flushes it to disk and moves it over the old one, so neither a crash nor a power cut leaves
+    /// half a file.
+    /// </summary>
     public void Save(UpdateState state)
     {
         var directory = Path.GetDirectoryName(path)!;
@@ -40,8 +69,13 @@ public sealed class UpdateStateStore(string path)
         var temporary = Path.Combine(directory, $".state-{Guid.NewGuid():N}.tmp");
         try
         {
-            File.WriteAllBytes(temporary, JsonSerializer.SerializeToUtf8Bytes(
-                new StoredState(state.Enabled, state.LastCheck, state.Skipped), UpdateStateJson.Default.StoredState));
+            using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+            {
+                file.Write(JsonSerializer.SerializeToUtf8Bytes(
+                    new StoredState(state.Enabled, state.LastCheck, state.Skipped), UpdateStateJson.Default.StoredState));
+                file.Flush(flushToDisk: true);
+            }
+
             File.Move(temporary, path, overwrite: true);
         }
         finally

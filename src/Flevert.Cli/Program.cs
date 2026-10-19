@@ -1,6 +1,7 @@
 using Flevert.Core;
 using Flevert.Core.Menu;
 using Flevert.Core.Operations;
+using Flevert.Core.Updates;
 using Flevert.Image;
 
 namespace Flevert.Cli;
@@ -128,7 +129,7 @@ internal static class Program
 
             case UpdateCheckCommand updateCheck:
                 // Run by setup with its check box; a failure is reported but setup carries on.
-                UpdateOffer.CreateChecker().SetEnabled(updateCheck.On);
+                UpdateChecker.SetEnabled(new UpdateStateStore(UpdateStateStore.DefaultPath), updateCheck.On);
                 return Ok;
 
             case ListOpsCommand:
@@ -177,9 +178,7 @@ internal static class Program
             if (Environment.GetEnvironmentVariable("FLEVERT_HEADLESS") == "1")
                 return RunHeadless(operation, leader, log, maxParallel, running);
             // Alongside the batch, so it costs no time; asked about after the batch, if a newer version is out.
-            var checker = UpdateOffer.CreateChecker();
-            var update = Task.Run(() => checker.CheckAsync(CancellationToken.None));
-            return BatchUi.Run(operation, leader, log, maxParallel, running, checker, update) ? Ok : SomeFilesFailed;
+            return BatchUi.Run(operation, leader, log, maxParallel, running, UpdateOffer.Start()) ? Ok : SomeFilesFailed;
         }
         finally
         {

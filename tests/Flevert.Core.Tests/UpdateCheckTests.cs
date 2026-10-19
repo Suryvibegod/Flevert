@@ -45,10 +45,14 @@ public sealed class ReleaseVersionTests
     }
 
     [Fact]
-    public void The_running_version_comes_from_the_build()
+    public void The_running_version_is_the_one_the_release_is_tagged_with()
     {
-        var expected = typeof(ReleaseVersion).Assembly.GetName().Version!;
-        Assert.Equal(new ReleaseVersion(expected.Major, expected.Minor, expected.Build), ReleaseVersion.Current);
+        // release.yml refuses a tag that does not match <Version>; the check compares the release with this.
+        var props = System.Xml.Linq.XDocument.Load(Path.Combine(InstallerScriptTests.RepositoryRoot(), "Directory.Build.props"));
+        var version = props.Descendants("Version").Single().Value;
+
+        Assert.True(ReleaseVersion.TryParseTag("v" + version, out var expected), version);
+        Assert.Equal(expected, ReleaseVersion.Current);
     }
 }
 
@@ -74,9 +78,34 @@ public sealed class UpdateStateStoreTests : IDisposable
     [InlineData("{\"lastCheck\": \"tomorrow\"}")]
     public void A_damaged_file_means_the_defaults(string content)
     {
+        // Flevert flushes before replacing the file, so damage comes from elsewhere; staying off for good would leave
+        // the user on an old version.
         var path = _dir.File("state.json", content);
 
-        Assert.Equal(new UpdateState(true, null, null), new UpdateStateStore(path).Load());
+        Assert.Equal(UpdateState.Default, new UpdateStateStore(path).Load());
+    }
+
+    [Fact]
+    public void A_file_another_program_holds_is_unreadable_not_the_defaults()
+    {
+        var path = _dir.File("state.json", "{\"enabled\":false}");
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.Same(UpdateState.Unreadable, new UpdateStateStore(path).Load());
+    }
+
+    [Fact]
+    public void Turned_off_is_saved_in_the_exact_form_setup_looks_for()
+    {
+        // installer/Flevert.iss reads state.json itself to keep the user's choice on an upgrade (InstallerScriptTests).
+        var path = _dir.Combine("state.json");
+        var store = new UpdateStateStore(path);
+
+        store.Save(new UpdateState(false, DateTimeOffset.UnixEpoch, "0.2.0"));
+        Assert.Contains(UpdateStateStore.TurnedOffMarker, File.ReadAllText(path), StringComparison.Ordinal);
+
+        store.Save(new UpdateState(true, null, null));
+        Assert.DoesNotContain(UpdateStateStore.TurnedOffMarker, File.ReadAllText(path), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -171,13 +200,13 @@ public sealed class UpdateCheckerTests : IDisposable
     public async Task Turned_off_means_no_request_at_all()
     {
         var checker = Checker();
-        checker.SetEnabled(false);
+        UpdateChecker.SetEnabled(_store, false);
         _github.Tag = "v0.2.0";
 
         Assert.Null(await checker.CheckAsync(CancellationToken.None));
         Assert.Empty(_github.Requests);
 
-        checker.SetEnabled(true);
+        UpdateChecker.SetEnabled(_store, true);
         Assert.Equal(new ReleaseVersion(0, 2, 0), await checker.CheckAsync(CancellationToken.None));
     }
 
@@ -219,6 +248,44 @@ public sealed class UpdateCheckerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_streamed_answer_over_one_megabyte_is_not_read_either()
+    {
+        // No Content-Length up front: the limit has to hold while reading.
+        _github.Stream = new NonSeekableStream(Encoding.UTF8.GetBytes("{\"tag_name\":\"v0.2.0\",\"body\":\"" + new string('x', 2 * 1024 * 1024) + "\"}"));
+
+        Assert.Null(await Checker().CheckAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task The_time_of_the_check_is_saved_before_asking()
+    {
+        _github.Tag = "v0.2.0";
+        DateTimeOffset? savedWhenAsked = null;
+        _github.OnSend = () => savedWhenAsked = _store.Load().LastCheck;
+
+        await Checker().CheckAsync(CancellationToken.None);
+
+        Assert.Equal(Now, savedWhenAsked);
+    }
+
+    [Fact]
+    public async Task A_state_file_held_by_another_program_means_no_request_and_no_write()
+    {
+        _store.Save(new UpdateState(false, null, "0.2.0"));
+        _github.Tag = "v0.3.0";
+        var checker = Checker();
+
+        using (new FileStream(_dir.Combine(@"update\state.json"), FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Null(await checker.CheckAsync(CancellationToken.None));
+            checker.Skip(new ReleaseVersion(0, 3, 0));
+        }
+
+        Assert.Empty(_github.Requests);
+        Assert.Equal(new UpdateState(false, null, "0.2.0"), _store.Load());
+    }
+
+    [Fact]
     public async Task No_network_offers_nothing()
     {
         _github.Throw = new HttpRequestException("no route to host");
@@ -238,10 +305,17 @@ public sealed class UpdateCheckerTests : IDisposable
     }
 
     [Fact]
+    public void The_check_gives_up_before_the_notification_closes()
+    {
+        // The process waits for the answer only this long after the batch (BatchUi); a longer timeout loses the answer.
+        Assert.Equal(TimeSpan.FromSeconds(5), UpdateChecker.DefaultTimeout);
+    }
+
+    [Fact]
     public async Task A_state_file_that_cannot_be_written_still_lets_the_check_run()
     {
-        // A folder where the state file should be: saving fails, checking must not.
-        Directory.CreateDirectory(_dir.Combine(@"update\state.json"));
+        // A file where the state folder should be: there is no state yet, saving fails, checking must not.
+        File.WriteAllText(_dir.Combine("update"), "");
         _github.Tag = "v0.2.0";
 
         Assert.Equal(new ReleaseVersion(0, 2, 0), await Checker().CheckAsync(CancellationToken.None));
@@ -281,15 +355,29 @@ public sealed class UpdateCheckerTests : IDisposable
 
         public Exception? Throw { get; set; }
 
+        public Stream? Stream { get; set; }
+
+        public Action? OnSend { get; set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Requests.Add(request);
+            OnSend?.Invoke();
             if (Throw is not null)
                 throw Throw;
             if (Delay > TimeSpan.Zero)
                 await Task.Delay(Delay, cancellationToken);
+            if (Stream is not null)
+                return new HttpResponseMessage(Status) { Content = new StreamContent(Stream) };
             var body = Body ?? $"{{\"tag_name\":\"{Tag}\",\"draft\":false,\"prerelease\":false}}";
             return new HttpResponseMessage(Status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
         }
+    }
+
+    private sealed class NonSeekableStream(byte[] data) : MemoryStream(data)
+    {
+        public override bool CanSeek => false;
+
+        public override long Length => throw new NotSupportedException();
     }
 }
