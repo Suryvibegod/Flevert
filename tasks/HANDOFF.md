@@ -26,8 +26,8 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 
 | Module | Trạng thái |
 |---|---|
-| core | Xong. Review vòng 4–6 đã sửa hết (Phase 5–7 trong [todo.md](todo.md)); vòng 6 không còn Critical/High/Required, đã sửa thêm các mục Low (Phase 7). **Review vòng 7 (Phase 7) đang chạy / chạy lại nếu mất kết quả.** 145 test core pass, 1 skip (symlink cần admin). Test gom lô hay hỏng dưới tải đã được giải thích (CPU bị chiếm) và sửa ở test. |
-| image | Task 1–6 xong; Task 7: review vòng 1 tìm 2 Required + 4 High, **đã sửa hết K1–K12** ([tasks/image/todo.md](image/todo.md)); README + ADR-0004 xong. **Review vòng 2 đang chạy / chạy lại nếu mất kết quả.** 157 test pass. |
+| core | Xong. Review vòng 4–7 đã sửa hết (Phase 5–8 trong [todo.md](todo.md)); thêm kết quả "skipped" (`OperationSkippedException`) cho thao tác bỏ qua file có lý do. **Review vòng 8 đang chạy / chạy lại nếu mất kết quả.** 150 test core pass, 1 skip. Còn mở: test gom lô qua junction hỏng hiếm khi chạy cả solution (đã cho in đủ chẩn đoán). |
+| image | Task 1–6 xong; Task 7: review vòng 1 và 2 đã sửa hết (K1–K12, crash GC, L1–L9 trong [tasks/image/todo.md](image/todo.md)); README + ADR-0004 xong. **Review vòng 3 đang chạy / chạy lại nếu mất kết quả.** 178 test pass. |
 | installer, media, pdf | Chưa làm. Spec nháp: [SPEC-media.md](../SPEC-media.md), [SPEC-pdf.md](../SPEC-pdf.md). |
 
 Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói). Kế hoạch core: [plan.md](plan.md), [todo.md](todo.md) (Phase 4–5 = sửa theo review).
@@ -52,7 +52,7 @@ Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
 
 ## Việc dở dang cụ thể (làm theo thứ tự)
 
-1. Đối chiếu review vòng 2 module image (3 reviewer trên `git diff db1dd67..HEAD -- src/ConvertAnything.Image tests/ConvertAnything.Image.Tests SPEC-image.md docs/adr/0004-magick-net-for-images.md`) và review vòng 7 core (`git diff 4c0646d..HEAD -- src/ConvertAnything.Core src/ConvertAnything.Cli tests/ConvertAnything.Core.Tests SPEC-core.md`); sửa nếu còn Critical/High/Required; đánh dấu checkpoint.
+1. Đối chiếu review vòng 3 module image (3 reviewer trên `git diff 37a6037..HEAD -- src/ConvertAnything.Image tests/ConvertAnything.Image.Tests SPEC-image.md docs/adr/0004-magick-net-for-images.md`) và review vòng 8 core (`git diff 37a6037..HEAD -- src/ConvertAnything.Core src/ConvertAnything.Cli tests/ConvertAnything.Core.Tests SPEC-core.md`); sửa nếu còn Critical/High/Required; đánh dấu checkpoint.
 2. Module installer (v0.1): spec + plan theo quy trình; tính code signing vì Smart App Control.
 3. Khi bấm thử menu trên máy thật: `install-menu --allow-insecure-location` (thêm `--dev` nếu cần) khi chạy từ thư mục build; nhớ `uninstall-menu`.
 4. Đẩy commit lên GitHub khi đã đăng nhập (xem lưu ý môi trường).
