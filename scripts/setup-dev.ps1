@@ -3,7 +3,7 @@
   Prepares a Windows machine to work on ConvertAnything and checks that the repository builds and its tests pass.
 .DESCRIPTION
   Safe to run repeatedly; each step is skipped when already done.
-  1. Installs the .NET 10 SDK and the GitHub CLI with winget if missing.
+  1. Installs the .NET 10 SDK per user (no admin rights needed) if missing; warns if the GitHub CLI is missing or signed out.
   2. Sets this repository's commit identity.
   3. Repairs a known-broken global git rewrite (https://github.com without the trailing slash) that breaks plugin installs.
   4. Installs the agent-skills plugin for Claude Code (project scope) if the claude CLI is available.
@@ -14,26 +14,42 @@ $repo = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $repo
 
 function Step($text) { Write-Host "`n== $text" -ForegroundColor Cyan }
-function Refresh-Path {
-    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
-}
 
 Step '.NET 10 SDK'
-$sdks = & dotnet --list-sdks 2>$null
+# A per-user install needs no UAC prompt, so the script can run unattended.
+$userDotnet = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
+function Use-UserDotnet {
+    if ((Test-Path (Join-Path $userDotnet 'dotnet.exe')) -and ($env:Path -notlike "*$userDotnet*")) {
+        $env:Path = "$userDotnet;$env:Path"
+        $env:DOTNET_ROOT = $userDotnet
+    }
+}
+Use-UserDotnet
+# Under ErrorActionPreference=Stop, invoking a missing dotnet throws, so look it up first.
+$sdks = if (Get-Command dotnet -ErrorAction SilentlyContinue) { & dotnet --list-sdks 2>$null } else { @() }
 if (-not ($sdks -match '^10\.')) {
-    winget install --id Microsoft.DotNet.SDK.10 -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-    Refresh-Path
+    $installer = Join-Path $env:TEMP 'dotnet-install.ps1'
+    Invoke-WebRequest 'https://dot.net/v1/dotnet-install.ps1' -OutFile $installer -UseBasicParsing
+    & $installer -Channel 10.0 -InstallDir $userDotnet -NoPath
+    # Persist for new shells: user PATH and DOTNET_ROOT.
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($userPath -notlike "*$userDotnet*") {
+        [Environment]::SetEnvironmentVariable('Path', "$userDotnet;$userPath", 'User')
+    }
+    [Environment]::SetEnvironmentVariable('DOTNET_ROOT', $userDotnet, 'User')
+    Use-UserDotnet
 }
 & dotnet --list-sdks | Select-String '^10\.'
 
 Step 'GitHub CLI'
+# The gh installer is per-machine and would block on a UAC prompt, so only advise here.
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    winget install --id GitHub.cli -e --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
-    Refresh-Path
-}
-$auth = & gh auth status 2>&1 | Out-String
-if ($auth -notmatch 'Logged in') {
-    Write-Warning 'Not signed in to GitHub. Run:  gh auth login --web   (account Suryvibegod), then push works.'
+    Write-Warning 'GitHub CLI missing. Run:  winget install --id GitHub.cli -e   then  gh auth login --web  (account Suryvibegod).'
+} else {
+    $auth = & gh auth status 2>&1 | Out-String
+    if ($auth -notmatch 'Logged in') {
+        Write-Warning 'Not signed in to GitHub. Run:  gh auth login --web   (account Suryvibegod), then push works.'
+    }
 }
 
 Step 'Commit identity (this repository only)'
