@@ -82,6 +82,9 @@ try {
     $elapsed = Install 'classicmenu'
     Assert ($elapsed.TotalSeconds -lt 30) 'installs in under 30 s'
     Assert (Test-Path "$app\ca.exe") 'ca.exe is installed'
+    Assert (Test-Path "$app\LICENSE.txt") 'LICENSE.txt is installed'
+    $notices = Get-Content "$app\THIRD-PARTY-NOTICES.txt" -Raw -ErrorAction SilentlyContinue
+    Assert ($notices -and $notices.Contains('ImageMagick License') -and $notices.Contains('.NET Foundation')) 'third-party notices cover ImageMagick and .NET'
     Assert (Test-Path $arpKey) 'listed in Installed apps'
     $command = (Get-ChildItem "$classes\ConvertAnything.Menu.heic" -Recurse |
         Where-Object { $_.PSChildName -eq 'command' } | Select-Object -First 1).GetValue('')

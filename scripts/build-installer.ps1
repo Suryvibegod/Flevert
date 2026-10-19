@@ -26,6 +26,27 @@ if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
     -p:PublishReadyToRun=true -o $publish
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 
+# Redistributing the .NET runtime and Magick.NET (ImageMagick and the libraries it bundles) requires shipping their
+# notices. Every package and runtime pack in ca.deps.json is what the publish folder contains, so collect from each one
+# and fail rather than ship a package without its licence.
+$packages = ((& $dotnet nuget locals global-packages --list) -replace '^global-packages:\s*', '').Trim()
+$deps = Get-Content (Join-Path $publish 'ca.deps.json') -Raw | ConvertFrom-Json
+$licenceNames = 'Notice.txt', 'Copyright.txt', 'LICENSE.TXT', 'LICENSE', 'THIRD-PARTY-NOTICES.TXT'
+$notices = [Text.StringBuilder]::new()
+[void]$notices.AppendLine('ConvertAnything includes the following third-party software.')
+foreach ($library in $deps.libraries.PSObject.Properties | Where-Object { $_.Value.type -ne 'project' }) {
+    $id, $version = $library.Name -replace '^runtimepack\.', '' -split '/'
+    $folder = Join-Path $packages "$($id.ToLowerInvariant())\$version"
+    $files = @(Get-ChildItem $folder -File | Where-Object { $licenceNames -contains $_.Name })
+    if ($files.Count -eq 0) { throw "No licence or notice file for $id $version in $folder" }
+    foreach ($file in $files) {
+        [void]$notices.AppendLine().AppendLine(('=' * 78)).AppendLine("$id $version - $($file.Name)").AppendLine(('=' * 78))
+        [void]$notices.AppendLine((Get-Content $file.FullName -Raw))
+    }
+}
+[IO.File]::WriteAllText((Join-Path $publish 'THIRD-PARTY-NOTICES.txt'), $notices.ToString(), [Text.UTF8Encoding]::new($false))
+Copy-Item (Join-Path $root 'LICENSE') (Join-Path $publish 'LICENSE.txt')
+
 & $iscc /Qp "/DSourceDir=$publish" (Join-Path $root 'installer\ConvertAnything.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
 
