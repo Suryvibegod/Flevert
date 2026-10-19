@@ -47,5 +47,6 @@ ImageMagick reads many formats, including scripts and formats that reach other f
 ## Consequences
 
 - About 25 MB of native code ships with the app; the installer compresses it.
+- Magick.Native bundles an HEVC decoder (libheif with libde265) to read HEIC. Its software licences allow free redistribution, but HEVC is covered by patents in some countries; "free" in this project refers to software licences, not patent rights. Windows' own HEIF/HEVC extensions are the alternative a user can choose.
 - Known limitations, recorded in SPEC-image: ImageMagick's TIFF writer drops EXIF on `Convert > TIFF`; the "not smaller" log note for Compress waits for a core change that lets operations add a note to their log line.
 - Security depends on the policy staying an allow-list; any new format must be added to it explicitly, and tests check that dangerous coders stay blocked even when named explicitly.
