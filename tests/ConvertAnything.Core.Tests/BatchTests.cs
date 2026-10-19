@@ -286,6 +286,60 @@ public sealed class BatchTests
         await leader.DisposeAsync();
     }
 
+    // Recreating the instance fails when another process took the name in between: a newer ca.exe leading a batch with
+    // the same key (rotating would strand its followers) or another account (which must not crash the leader).
+    [Theory]
+    [InlineData(typeof(IOException))]
+    [InlineData(typeof(UnauthorizedAccessException))]
+    public async Task A_leader_that_lost_its_pipe_name_finishes_without_rotating_the_key(Type error)
+    {
+        var name = $"ca-test-{Guid.NewGuid():N}";
+        var server = new System.IO.Pipes.NamedPipeServerStream(name, System.IO.Pipes.PipeDirection.InOut, 1,
+            System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
+        using (var rogue = new System.IO.Pipes.NamedPipeClientStream(".", name,
+                   System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous))
+            await rogue.ConnectAsync(1000); // vanishes before the first wait, forcing a replacement
+        var rotated = false;
+        System.IO.Pipes.NamedPipeServerStream Taken() => throw (Exception)Activator.CreateInstance(error, "name taken")!;
+
+        var leader = BatchLeader.Start(Taken, server, [@"C:\a.txt"], Idle, onClosed: () => rotated = true);
+
+        var drained = DrainAsync(leader);
+        Assert.Same(drained, await Task.WhenAny(drained, Task.Delay(TimeSpan.FromSeconds(10))));
+        Assert.Equal([@"C:\a.txt"], await drained);
+        Assert.False(rotated);
+        await leader.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Connections_that_never_deliver_a_message_do_not_keep_the_batch_open()
+    {
+        var op = UniqueOp();
+        var leader = (await Batch.LeadOrJoinAsync(op, [@"C:\a.txt"], Idle, CancellationToken.None))!;
+        var name = Batch.PipeName(op);
+        using var stop = new CancellationTokenSource();
+        var pester = Task.Run(async () =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                using var rogue = new System.IO.Pipes.NamedPipeClientStream(".", name,
+                    System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+                try { await rogue.ConnectAsync(100); }
+                catch (TimeoutException) { }
+                await Task.Delay(150);
+            }
+        });
+
+        var drained = DrainAsync(leader);
+        var closedInTime = drained == await Task.WhenAny(drained, Task.Delay(TimeSpan.FromSeconds(4)));
+        await stop.CancelAsync();
+        await pester;
+        await drained;
+        await leader.DisposeAsync();
+
+        Assert.True(closedInTime, "the batch stayed open while a client kept connecting without sending");
+    }
+
     [Fact]
     public void Securing_the_app_data_folder_never_throws()
     {

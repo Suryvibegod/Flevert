@@ -377,41 +377,50 @@ public sealed class BatchLeader : IAsyncDisposable
     private async Task ListenAsync(Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed)
     {
         var ct = _stop.Token;
+        // Restarted only when a trusted sender delivered paths, measured from the end of that exchange: connections that
+        // carry nothing (a vanished, silent or untrusted client) must not keep the batch open.
         var sinceActivity = Stopwatch.StartNew();
+        var nameLost = false;
         Task? connecting = null;
         try
         {
             while (!ct.IsCancellationRequested)
             {
+                // Checked after every connection too, so clients that keep connecting cannot hold the batch open.
+                if (sinceActivity.Elapsed >= idle && _age.Elapsed >= MinimumLifetime && IsIdle)
+                    break;
+
                 connecting ??= server.WaitForConnectionAsync(ct);
                 var wait = idle - sinceActivity.Elapsed;
                 if (wait < ReplaceBackoff)
-                    wait = ReplaceBackoff;
+                    wait = IsIdle ? ReplaceBackoff : idle; // while a long conversion runs, check once per window
 
                 if (await Task.WhenAny(connecting, Task.Delay(wait, ct)).ConfigureAwait(false) != connecting)
-                {
-                    if (sinceActivity.Elapsed >= idle && _age.Elapsed >= MinimumLifetime && IsIdle)
-                        break;
                     continue; // still working, too young, or recently active: keep the batch open so late files join it
-                }
 
                 var finished = connecting;
                 connecting = null;
-                sinceActivity.Restart();
                 if (finished.IsFaulted || finished.IsCanceled)
                 {
                     _ = finished.Exception; // observed
                     if (ct.IsCancellationRequested)
                         break;
                     // A client vanished before the connection completed; the instance cannot be trusted to recover.
-                    server = await ReplaceAsync(server, createServer).ConfigureAwait(false);
+                    if (await TryReplaceAsync(server, createServer).ConfigureAwait(false) is not { } replacement)
+                    {
+                        nameLost = true;
+                        break;
+                    }
+
+                    server = replacement;
                     await Task.Delay(ReplaceBackoff, ct).ConfigureAwait(false);
                     continue;
                 }
 
+                var delivered = false;
                 try
                 {
-                    await ServeAsync(server, ct).ConfigureAwait(false);
+                    delivered = await ServeAsync(server, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is IOException or OperationCanceledException && !ct.IsCancellationRequested)
                 {
@@ -424,24 +433,31 @@ public sealed class BatchLeader : IAsyncDisposable
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or IOException)
                 {
-                    server = await ReplaceAsync(server, createServer).ConfigureAwait(false);
+                    if (await TryReplaceAsync(server, createServer).ConfigureAwait(false) is not { } replacement)
+                    {
+                        nameLost = true;
+                        break;
+                    }
+
+                    server = replacement;
                 }
+
+                if (delivered)
+                    sinceActivity.Restart();
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
         }
-        catch (IOException)
-        {
-            // No replacement instance could be created; finish with the files already queued.
-        }
         finally
         {
             // Rotate before the name is released, so nobody can claim the old name in between. Whatever it throws, the
-            // queue must complete, or the consumer would wait for ever.
+            // queue must complete, or the consumer would wait for ever. If the name was lost, whoever holds it now may be
+            // a newer batch using the same key: rotating would send its followers elsewhere.
             try
             {
-                onClosed?.Invoke();
+                if (!nameLost)
+                    onClosed?.Invoke();
             }
 #pragma warning disable CA1031 // Closing must always finish; rotation is best effort.
             catch (Exception)
@@ -456,13 +472,22 @@ public sealed class BatchLeader : IAsyncDisposable
         }
     }
 
-    private static async Task<NamedPipeServerStream> ReplaceAsync(NamedPipeServerStream server, Func<NamedPipeServerStream> createServer)
+    /// <returns>A new instance, or <c>null</c> when the name was taken while it was free (another process or account).</returns>
+    private static async Task<NamedPipeServerStream?> TryReplaceAsync(NamedPipeServerStream server, Func<NamedPipeServerStream> createServer)
     {
         await server.DisposeAsync().ConfigureAwait(false);
-        return createServer();
+        try
+        {
+            return createServer();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
-    private async Task ServeAsync(NamedPipeServerStream server, CancellationToken ct)
+    /// <returns>Whether a trusted sender delivered a message (accepted or refused as full).</returns>
+    private async Task<bool> ServeAsync(NamedPipeServerStream server, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(Batch.IoTimeout);
@@ -470,7 +495,7 @@ public sealed class BatchLeader : IAsyncDisposable
         if (!PipePeer.IsTrusted(PipePeer.ClientProcessId(server)))
         {
             await server.WriteAsync(new[] { Batch.Refused }, timeout.Token).ConfigureAwait(false);
-            return;
+            return false;
         }
 
         var files = await Batch.ReadPathsAsync(server, timeout.Token).ConfigureAwait(false);
@@ -478,7 +503,7 @@ public sealed class BatchLeader : IAsyncDisposable
         {
             // Refuse the whole message so its sender processes those files itself; never ack what will not be processed.
             await server.WriteAsync(new[] { Batch.Full }, timeout.Token).ConfigureAwait(false);
-            return;
+            return true;
         }
 
         // Queue before acking: if the reply is lost the sender retries and the duplicate is dropped; no file is lost.
@@ -492,5 +517,7 @@ public sealed class BatchLeader : IAsyncDisposable
         while (await server.ReadAsync(eof, timeout.Token).ConfigureAwait(false) > 0)
         {
         }
+
+        return true;
     }
 }
