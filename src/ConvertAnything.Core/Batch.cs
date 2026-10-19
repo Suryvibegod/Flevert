@@ -126,9 +126,11 @@ public static class Batch
         return $"ConvertAnything-{identity.User}-{self.SessionId}-{key}-{operationId}";
     }
 
-    private static NamedPipeServerStream CreateServer(string name) =>
+    // Zero-size buffers are load-bearing: a write completes only once the client has read it, so a reply is never left
+    // unread when the leader disconnects (Disconnect discards unread data).
+    internal static NamedPipeServerStream CreateServer(string name) =>
         new(name, PipeDirection.InOut, maxNumberOfServerInstances: 1,
-            PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, inBufferSize: 0, outBufferSize: 0);
 
     private static NamedPipeServerStream? TryCreateServer(string name, out bool foreignOwner)
     {
@@ -154,19 +156,22 @@ public static class Batch
         return left < IoTimeout ? (left > TimeSpan.Zero ? left : TimeSpan.FromMilliseconds(1)) : IoTimeout;
     }
 
-    private static async Task<SendResult> TrySendAsync(string name, IReadOnlyList<string> files, TimeSpan timeout, CancellationToken ct)
+    /// <param name="connectTimeout">Bounded by the join deadline. Once connected, the exchange keeps the full
+    /// <see cref="IoTimeout"/>: cutting it short could drop an ack for files the leader already queued, and the sender
+    /// would then process them a second time.</param>
+    private static async Task<SendResult> TrySendAsync(string name, IReadOnlyList<string> files, TimeSpan connectTimeout, CancellationToken ct)
     {
         var client = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         await using (client.ConfigureAwait(false))
         {
             try
             {
-                await client.ConnectAsync(timeout, ct).ConfigureAwait(false);
+                await client.ConnectAsync(connectTimeout, ct).ConfigureAwait(false);
                 if (!PipePeer.IsTrusted(PipePeer.ServerProcessId(client)))
                     return SendResult.Refused;
 
                 using var io = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                io.CancelAfter(timeout);
+                io.CancelAfter(IoTimeout);
                 await WritePathsAsync(client, files, io.Token).ConfigureAwait(false);
                 var reply = new byte[1];
                 if (await client.ReadAsync(reply, io.Token).ConfigureAwait(false) != 1)

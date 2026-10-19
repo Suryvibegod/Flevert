@@ -124,6 +124,27 @@ public sealed class BatchTests
     }
 
     [Fact]
+    public async Task A_full_reply_reaches_a_sender_that_reads_it_late()
+    {
+        // Disconnecting discards what the client has not read yet, and a lost "Full" would make the sender retry for 10 s.
+        // Unbuffered pipes prevent that (a write completes only once read); this guards against adding buffers.
+        var name = $"ca-test-{Guid.NewGuid():N}";
+        System.IO.Pipes.NamedPipeServerStream Create() => Batch.CreateServer(name);
+        var many = Enumerable.Range(0, Batch.MaxFilesPerBatch).Select(i => $@"C:\f{i}.txt").ToList();
+        await using var leader = BatchLeader.Start(Create, Create(), many, Idle, onClosed: () => { });
+
+        using var client = new System.IO.Pipes.NamedPipeClientStream(".", name,
+            System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+        await client.ConnectAsync(5000);
+        await Batch.WritePathsAsync(client, [@"C:\x.txt"], CancellationToken.None);
+        await Task.Delay(300);
+
+        var reply = new byte[1];
+        Assert.Equal(1, await client.ReadAsync(reply));
+        Assert.Equal(Batch.Full, reply[0]);
+    }
+
+    [Fact]
     public void An_empty_or_corrupt_pipe_secret_is_regenerated()
     {
         using var dir = new TempDir();
