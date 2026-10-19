@@ -131,5 +131,5 @@ Thứ tự TDD: viết `ClassicMenuTests` và `test-installer.ps1` trước, ch�
 ## Open Questions
 
 - SignPath Foundation cần repo public + build trên CI; sẽ nộp đơn sau khi public (người dùng phải tự điền đơn bằng tài khoản của họ).
-- Menu cổ điển mới chỉ kiểm ở mức registry. Khóa này không chính thức; cần người dùng kiểm tay trên Windows 11 thật (đăng xuất/đăng nhập rồi chuột phải) và ghi kết quả vào ADR-0005.
+- ~~Menu cổ điển mới chỉ kiểm ở mức registry~~ Đã kiểm tay (2026-10-19, Windows 11 Pro 26H2 build 26300.9711): sau khi cài có tick và đăng xuất/đăng nhập, menu kiểu cũ hiện ConvertAnything ngay ngoài, đủ Convert/Compress/Remove metadata (ghi trong ADR-0005). Khóa vẫn không chính thức: bản Windows sau có thể bỏ nó.
 - Bộ giải mã HEVC (libheif/libde265 trong Magick.Native) có thể vướng bằng sáng chế ở vài nước; "miễn phí" chỉ nói về giấy phép phần mềm. Ghi trong ADR-0004.
