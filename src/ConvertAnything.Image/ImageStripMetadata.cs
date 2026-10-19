@@ -35,9 +35,9 @@ public sealed class ImageStripMetadata : IOperation
             }
 
             if (images.Count > 1 && target is MagickFormat.Gif or MagickFormat.WebP)
-                images.Write(temp, target);
+                ImageFile.Write(images, temp, target);
             else
-                images[0].Write(temp, target);
+                ImageFile.Write(images[0], temp, target);
         }, token), ct);
     }
 }

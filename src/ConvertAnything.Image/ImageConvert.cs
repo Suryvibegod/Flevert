@@ -30,13 +30,13 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
                 images.Coalesce();
                 foreach (var frame in images)
                     Prepare(frame);
-                images.Write(temp, format);
+                ImageFile.Write(images, temp, format);
                 return;
             }
 
             var image = images[0];
             Prepare(image);
-            image.Write(temp, format);
+            ImageFile.Write(image, temp, format);
         }, token), ct);
     }
 

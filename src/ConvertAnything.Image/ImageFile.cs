@@ -28,7 +28,8 @@ public static class ImageFile
 
     /// <summary>
     /// Reads all frames. The coder is chosen from the extension, never sniffed from the content, so a ".jpg" that really
-    /// holds a script or another format fails instead of being interpreted.
+    /// holds a script or another format fails instead of being interpreted. The file is opened here and handed to
+    /// ImageMagick as a stream: given a path, it would read "%d", "[0]" and similar in it as patterns.
     /// </summary>
     public static MagickImageCollection Read(string path)
     {
@@ -39,6 +40,21 @@ public static class ImageFile
         var settings = new MagickReadSettings { Format = format };
         // Photoshop layers embedded in a TIFF are parsed by a separate, larger decoder; the composite image is enough.
         settings.SetDefine(MagickFormat.Tiff, "ignore-layers", "true");
-        return new MagickImageCollection(path, settings);
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return new MagickImageCollection(stream, settings);
+    }
+
+    /// <summary>Writes one image to a new file through a stream, for the same reason as <see cref="Read"/>.</summary>
+    public static void Write(IMagickImage<byte> image, string path, MagickFormat format)
+    {
+        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        image.Write(stream, format);
+    }
+
+    /// <summary>Writes every frame (an animation or pages) to a new file through a stream.</summary>
+    public static void Write(MagickImageCollection images, string path, MagickFormat format)
+    {
+        using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        images.Write(stream, format);
     }
 }

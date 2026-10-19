@@ -52,13 +52,13 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
                         Prepare(frame, target);
                     if (target == MagickFormat.Gif)
                         images.Optimize();
-                    images.Write(temp, target);
+                    ImageFile.Write(images, temp, target);
                 }
                 else
                 {
                     var image = images[0];
                     Prepare(image, target);
-                    image.Write(temp, target);
+                    ImageFile.Write(image, temp, target);
                 }
 
                 return Task.CompletedTask;
