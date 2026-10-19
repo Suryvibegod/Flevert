@@ -24,7 +24,7 @@ Thêm project `ConvertAnything.Image` (Magick.NET) với 14 thao tác: convert s
 
 ### Phase 2: Tính năng
 - [x] Task 3: Ma trận convert (7 đích; alpha → nền trắng; giữ animation; HEIC nguồn)
-- [ ] Task 4: Compress 3 mức
+- [x] Task 4: Compress 3 mức
 - [ ] Task 5: Compress dưới N
 - [ ] Task 6: Remove metadata
 

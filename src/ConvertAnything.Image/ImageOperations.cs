@@ -15,5 +15,8 @@ public static class ImageOperations
         new ImageConvert(".gif", MagickFormat.Gif),
         new ImageConvert(".bmp", MagickFormat.Bmp),
         new ImageConvert(".tiff", MagickFormat.Tiff),
+        new ImageCompress(CompressLevel.Light),
+        new ImageCompress(CompressLevel.Balanced),
+        new ImageCompress(CompressLevel.Strong),
     ];
 }

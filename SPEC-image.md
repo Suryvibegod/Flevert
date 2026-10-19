@@ -59,7 +59,7 @@ Quy tắc chung:
   - PNG: Light/Balanced = nén lossless mức cao nhất; Strong = giảm còn 256 màu.
   - GIF/BMP/TIFF: ghi ra JPG theo mức tương ứng (BMP/TIFF thường không nén; GIF giữ nguyên nếu là ảnh động).
   - Xóa metadata trừ profile màu ICC.
-  - Nếu file nén **không nhỏ hơn** file gốc thì vẫn ghi, nhưng báo trong log `not smaller`.
+  - Nếu file nén **không nhỏ hơn** file gốc thì vẫn ghi, nhưng báo trong log `not smaller`. **Hoãn:** `IOperation` chỉ trả về đường dẫn output, chưa có kênh ghi chú vào dòng log; làm khi mở rộng hợp đồng core (cùng lúc với thông báo cho người dùng), không tự đổi interface trong task này.
 - **Under N**: luôn ra JPG. Tìm nhị phân quality 40–92; nếu quality 40 vẫn quá lớn thì thu kích thước 15% mỗi bước rồi tìm lại. Kết quả phải < N (1 MB = 1 000 000 byte cho dễ hiểu với người dùng).
 - **Remove metadata**: xóa EXIF, GPS, XMP, IPTC, comment; giữ ICC; giữ định dạng (trừ HEIC → JPG).
 - **Convert** giữ metadata (trừ khi định dạng đích không chứa được). Giới hạn đã biết: bộ ghi TIFF của ImageMagick bỏ khối EXIF, nên `Convert > TIFF` mất EXIF (không ảnh hưởng ảnh; chấp nhận, vì vá phải tự chép từng thẻ EXIF sang thẻ TIFF).

@@ -1,0 +1,107 @@
+using ConvertAnything.Core;
+using ImageMagick;
+
+namespace ConvertAnything.Image;
+
+public enum CompressLevel
+{
+    Light,
+    Balanced,
+    Strong,
+}
+
+/// <summary>
+/// <c>Compress/&lt;Level&gt;</c>: a smaller copy in the same format where that format compresses well, otherwise JPG.
+/// Metadata is removed except the colour profile, which changes how the image looks.
+/// </summary>
+public sealed class ImageCompress(CompressLevel level) : IOperation
+{
+    private const uint StrongMaxEdge = 2560;
+
+    public string Id => $"image.compress-{level.ToString().ToLowerInvariant()}";
+
+    public string MenuPath => "Compress/" + level;
+
+    public IReadOnlyCollection<string> Extensions { get; } = [.. ImageFile.ReadableExtensions];
+
+    private uint Quality => level switch
+    {
+        CompressLevel.Light => 85,
+        CompressLevel.Balanced => 75,
+        _ => 60,
+    };
+
+    public Task<string> RunAsync(string inputPath, CancellationToken ct)
+    {
+        var sourceExtension = Path.GetExtension(inputPath);
+        return Task.Run(async () =>
+        {
+            using var images = ImageFile.Read(inputPath);
+            var target = Target(ImageFile.FormatOf(sourceExtension), animated: images.Count > 1);
+            // Keep the user's spelling (.jpeg, .JPG) when the format stays the same.
+            var extension = target == ImageFile.FormatOf(sourceExtension) ? sourceExtension : ".jpg";
+            var desired = Path.Combine(
+                Path.GetDirectoryName(inputPath)!, $"{Path.GetFileNameWithoutExtension(inputPath)} (compressed){extension}");
+
+            return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) =>
+            {
+                if (target is MagickFormat.Gif or MagickFormat.WebP && images.Count > 1)
+                {
+                    images.Coalesce();
+                    foreach (var frame in images)
+                        Prepare(frame, target);
+                    if (target == MagickFormat.Gif)
+                        images.Optimize();
+                    images.Write(temp, target);
+                }
+                else
+                {
+                    var image = images[0];
+                    Prepare(image, target);
+                    image.Write(temp, target);
+                }
+
+                return Task.CompletedTask;
+            }, ct).ConfigureAwait(false);
+        }, ct);
+    }
+
+    private static MagickFormat Target(MagickFormat source, bool animated) => source switch
+    {
+        MagickFormat.Jpeg or MagickFormat.Png or MagickFormat.WebP or MagickFormat.Avif => source,
+        MagickFormat.Gif when animated => MagickFormat.Gif,
+        _ => MagickFormat.Jpeg, // HEIC/HEIF cannot be written here; GIF, BMP and TIFF compress far better as JPG
+    };
+
+    private void Prepare(IMagickImage<byte> image, MagickFormat target)
+    {
+        image.AutoOrient();
+        var colourProfile = image.GetColorProfile();
+        image.Strip(); // EXIF, GPS, XMP, IPTC, comments
+        if (colourProfile is not null)
+            image.SetProfile(colourProfile);
+
+        if (target == MagickFormat.Png)
+        {
+            if (level == CompressLevel.Strong)
+                image.Quantize(new QuantizeSettings { Colors = 256, DitherMethod = DitherMethod.FloydSteinberg });
+            image.Settings.SetDefine(MagickFormat.Png, "compression-level", "9");
+            image.Settings.SetDefine(MagickFormat.Png, "compression-filter", "5");
+            return;
+        }
+
+        if (target == MagickFormat.Gif)
+            return; // palette format; frames were coalesced and are optimised as a whole
+
+        if (image.HasAlpha && target == MagickFormat.Jpeg)
+        {
+            image.BackgroundColor = MagickColors.White;
+            image.Alpha(AlphaAction.Remove);
+        }
+
+        if (level == CompressLevel.Strong && Math.Max(image.Width, image.Height) > StrongMaxEdge)
+            image.Resize(new MagickGeometry(StrongMaxEdge, StrongMaxEdge)); // keeps the aspect ratio, only shrinks here
+
+        image.Quality = Quality;
+    }
+}

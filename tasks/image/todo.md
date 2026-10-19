@@ -33,9 +33,9 @@ Mỗi task xong khi đạt acceptance criteria **và** Definition of Done.
 
 ## Task 4: Compress 3 mức
 - Acceptance:
-  - [ ] Balanced trên JPG 12 MP nhỏ hơn ≥ 40%
-  - [ ] PNG Strong giảm còn ≤ 256 màu; PNG Light/Balanced lossless (so pixel)
-  - [ ] HEIC → JPG; metadata trừ ICC bị xóa
+  - [x] Balanced trên JPG 12 MP nhỏ hơn ≥ 40%
+  - [x] PNG Strong giảm còn ≤ 256 màu; PNG Light/Balanced lossless (so pixel)
+  - [x] HEIC → JPG; metadata trừ ICC bị xóa
 - Verify: `dotnet test --filter Compress`
 - Scope: M
 
