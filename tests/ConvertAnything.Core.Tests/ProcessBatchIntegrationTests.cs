@@ -50,10 +50,10 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         using var links = new TempDir();
         var link = Path.Combine(links.Path, "app");
         using (var mklink = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{Path.GetDirectoryName(CaExe)}\"")
-               {
-                   UseShellExecute = false,
-                   RedirectStandardOutput = true,
-               })!)
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+        })!)
         {
             await mklink.WaitForExitAsync();
             Assert.Equal(0, mklink.ExitCode);
