@@ -14,7 +14,7 @@ Free, open source and fully offline: your files never leave your computer.
 </p>
 
 - **iPhone photos (HEIC) to JPG** in one click, turned the right way up.
-- **Compress photos** to send over Zalo, Messenger or email, or squeeze them **under 500 KB, 1 MB or 5 MB**.
+- **Compress photos** to send over chat apps (Zalo, Messenger, WhatsApp) or email, or squeeze them **under 500 KB, 1 MB or 5 MB**.
 - **Convert** between JPG, PNG, WebP, AVIF, GIF, BMP and TIFF.
 - **Remove location and camera details** (EXIF, GPS) before you share a photo.
 - Select many files at once: they are processed as one batch, several at a time on PCs with more than two cores, with one notification at the end.
@@ -40,6 +40,8 @@ Flevert is not code-signed yet, because a signing certificate costs money and th
 
 **Before** you click **Run anyway**, make sure the file came from this repository's [Releases page](https://github.com/Suryvibegod/Flevert/releases) and is intact:
 
+The commands below use version 0.1.0; put in the version you downloaded. Each release's notes list the exact commands for that version.
+
 1. Open PowerShell in your Downloads folder and run `Get-FileHash .\Flevert-Setup-0.1.0.exe`. The hash must match the line in `SHA256SUMS.txt` on the release page (upper or lower case does not matter). This shows the download is complete and unchanged.
 2. To check that GitHub built it from this repository's source code, verify its build provenance with the [GitHub CLI](https://cli.github.com/). It needs a free GitHub account: run `gh auth login` once first.
 
@@ -47,7 +49,7 @@ Flevert is not code-signed yet, because a signing certificate costs money and th
    gh attestation verify Flevert-Setup-0.1.0.exe --repo Suryvibegod/Flevert --signer-workflow Suryvibegod/Flevert/.github/workflows/release.yml --source-ref refs/tags/v0.1.0 --deny-self-hosted-runners
    ```
 
-A matching hash alone does not prove where the file came from: anyone who replaced the file could replace the hash beside it. The provenance check shows that this repository's release workflow built the file from the tag `v0.1.0` on GitHub's own machines.
+A matching hash alone does not prove where the file came from: anyone who replaced the file could replace the hash beside it. The provenance check shows that this repository's release workflow built the file from the version's tag (here `v0.1.0`) on GitHub's own machines.
 
 ### Smart App Control
 
@@ -138,7 +140,8 @@ Requires Windows 10 or 11 and the [.NET 10 SDK](https://dotnet.microsoft.com/dow
 
 ```
 dotnet build Flevert.sln
-dotnet test Flevert.sln
+dotnet test tests/Flevert.Core.Tests          # run the test projects one after the other:
+dotnet test tests/Flevert.Image.Tests         # both time real flevert.exe processes
 dotnet format Flevert.sln --verify-no-changes
 powershell -File scripts/build-installer.ps1     # artifacts\installer\Flevert-Setup-<version>.exe
 powershell -File scripts/test-installer.ps1      # installs it for real, checks, uninstalls

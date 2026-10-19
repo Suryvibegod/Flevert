@@ -22,7 +22,8 @@ You need Windows 10 or 11 and the [.NET 10 SDK](https://dotnet.microsoft.com/dow
 
 ```
 dotnet build Flevert.sln
-dotnet test Flevert.sln
+dotnet test tests/Flevert.Core.Tests
+dotnet test tests/Flevert.Image.Tests
 dotnet format Flevert.sln --verify-no-changes
 powershell -File scripts/build-installer.ps1
 ```

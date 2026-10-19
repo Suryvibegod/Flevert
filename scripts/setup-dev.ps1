@@ -4,10 +4,10 @@
 .DESCRIPTION
   Safe to run repeatedly; each step is skipped when already done.
   1. Installs the .NET 10 SDK per user (no admin rights needed) if missing; warns if the GitHub CLI is missing or signed out.
-  2. Sets this repository's commit identity.
-  3. Repairs a known-broken global git rewrite (https://github.com without the trailing slash) that breaks plugin installs.
-  4. Installs the agent-skills plugin for Claude Code (project scope) if the claude CLI is available.
-  5. Builds the solution and runs the tests.
+  2. On the maintainer's machines only (signed in to GitHub as account 79949229): sets this repository's commit
+     identity, repairs a known-broken global git rewrite that breaks plugin installs, and installs the agent-skills
+     plugin for Claude Code. Contributors keep their own identity and global settings; the script only prints advice.
+  3. Builds the solution and runs each test project in turn.
 #>
 $ErrorActionPreference = 'Stop'
 $repo = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -87,31 +87,41 @@ if (-not $iscc) {
     $iscc
 }
 
-Step 'Commit identity (this repository only)'
-# Only on the maintainer's machines: contributors keep their own identity. The GitHub no-reply address keeps personal
-# email out of the public history.
-# Matched by account id, which survives a change of user name (the account was renamed once already).
+# The maintainer is recognised by GitHub account id, which survives a change of user name (the account was renamed
+# once already). Everything that changes git or Claude Code settings beyond this script's own build runs only for them.
 $account = if (Get-Command gh -ErrorAction SilentlyContinue) { Invoke-Tolerant { gh api user --jq '.id,.login' 2>$null } } else { $null }
-if ($account -and $account[0] -eq '79949229') {
-    git config user.name 'Suryvibegod'
-    # GitHub links no-reply addresses to the account by the number in front.
+$isMaintainer = [bool]($account -and $account[0] -eq '79949229')
+
+Step 'Commit identity (this repository only)'
+if ($isMaintainer) {
+    # The GitHub no-reply address keeps personal email out of the public history; GitHub links it to the account by
+    # the number in front.
+    git config user.name $account[1]
     git config user.email "79949229+$($account[1])@users.noreply.github.com"
+} else {
+    'Left as is. Commit with an address you are happy to publish, for example your GitHub no-reply address.'
 }
 "{0} <{1}>" -f (git config user.name), (git config user.email)
 
 Step 'Global git URL rewrite'
-$rewrites = git config --global --get-regexp '^url\..*\.insteadof$' 2>$null
-if ($rewrites -match '^url\.https://github\.com\.insteadof git@github\.com:$') {
-    # Missing trailing slash: git@github.com:owner/repo became https://github.comowner/repo.
-    git config --global --unset 'url.https://github.com.insteadof'
-    git config --global 'url.https://github.com/.insteadOf' 'git@github.com:'
-    'Repaired url.https://github.com/.insteadOf git@github.com:'
+if (-not $isMaintainer) {
+    'Skipped (changes global git settings; maintainer machines only).'
 } else {
-    'OK'
+    $rewrites = git config --global --get-regexp '^url\..*\.insteadof$' 2>$null
+    if ($rewrites -match '^url\.https://github\.com\.insteadof git@github\.com:$') {
+        # Missing trailing slash: git@github.com:owner/repo became https://github.comowner/repo.
+        git config --global --unset 'url.https://github.com.insteadof'
+        git config --global 'url.https://github.com/.insteadOf' 'git@github.com:'
+        'Repaired url.https://github.com/.insteadOf git@github.com:'
+    } else {
+        'OK'
+    }
 }
 
 Step 'Claude Code plugin: agent-skills@addy-agent-skills'
-if (Get-Command claude -ErrorAction SilentlyContinue) {
+if (-not $isMaintainer) {
+    'Skipped. To follow the same process with Claude Code: /plugin install agent-skills@addy-agent-skills'
+} elseif (Get-Command claude -ErrorAction SilentlyContinue) {
     $plugins = & claude plugin list 2>&1 | Out-String
     if ($plugins -notmatch 'agent-skills@addy-agent-skills') {
         & claude plugin marketplace add addyosmani/agent-skills
@@ -128,6 +138,9 @@ Step 'Build and test'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 & dotnet build Flevert.sln -c Debug
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
-& dotnet test Flevert.sln --no-build
-if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
+# One project at a time: both start real flevert.exe processes and time them, which is flaky when they run together.
+foreach ($project in 'tests\Flevert.Core.Tests', 'tests\Flevert.Image.Tests') {
+    & dotnet test $project --no-build
+    if ($LASTEXITCODE -ne 0) { throw "Tests failed in $project." }
+}
 Write-Host "`nReady." -ForegroundColor Green

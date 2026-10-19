@@ -5,6 +5,6 @@
 ## Checklist
 
 - [ ] A test covers the change (written first and seen failing)
-- [ ] `dotnet test Flevert.sln` passes
+- [ ] `dotnet test tests/Flevert.Core.Tests` and `dotnet test tests/Flevert.Image.Tests` pass (run one after the other)
 - [ ] `dotnet format Flevert.sln --verify-no-changes` passes
 - [ ] Specs, ADRs or the README are updated if behaviour changed

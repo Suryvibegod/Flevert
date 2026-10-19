@@ -4,6 +4,8 @@ Windows right-click converter for images, video/audio and PDF (C#/.NET 10). Read
 
 ## When the user says "làm tiếp", "làm tiếp đi", "tiếp tục", "continue" (or similar)
 
+This section is for the maintainer's own sessions (GitHub account Suryvibegod, id 79949229; `gh api user --jq .id` prints it). For anyone else, work on a branch, commit only when asked, and open a pull request instead of pushing to `main`.
+
 Continue the project without asking questions:
 
 1. Run `powershell -ExecutionPolicy Bypass -File scripts/setup-dev.ps1` once per machine. It installs what is missing (.NET 10 SDK, GitHub CLI, the agent-skills plugin), sets the commit identity, builds and runs the tests. If a step needs the user (for example `gh auth login`), tell them the exact command and continue with everything else.
@@ -19,7 +21,8 @@ Per module and per task: spec → plan/tasks → test first (see it fail, then p
 ## Conventions
 
 - UI, README, commit messages: English. Specs and plans: Vietnamese.
-- One logical change per commit; the message explains why. Commit identity is set by the setup script.
+- One logical change per commit; the message explains why. Commit identity is set by the setup script on the maintainer's machines; never commit with a personal email address.
+- Run the two test projects one after the other, not `dotnet test Flevert.sln`: both start real `flevert.exe` processes and time them, which is flaky in parallel.
 - Check `dotnet format Flevert.sln --verify-no-changes` by its exit code before committing (never through a pipe that hides it).
 - Never commit binaries (ffmpeg, qpdf, pdfium); they are fetched by scripts into `deps/`.
 - After trying the context menu on a real machine, run `flevert.exe uninstall-menu`.
@@ -28,7 +31,8 @@ Per module and per task: spec → plan/tasks → test first (see it fail, then p
 
 ```
 dotnet build Flevert.sln
-dotnet test Flevert.sln
+dotnet test tests/Flevert.Core.Tests
+dotnet test tests/Flevert.Image.Tests
 dotnet format Flevert.sln --verify-no-changes
 dotnet publish src/Flevert.Cli -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish
 powershell -File scripts/measure-startup.ps1
