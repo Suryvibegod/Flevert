@@ -180,11 +180,13 @@ internal static class Program
     }
 
     private static bool _lowered;
+    private static System.Diagnostics.ProcessPriorityClass? _startPriority;
 
     // Below normal while two or more files convert at once, so they do not compete with the user's foreground work.
-    // Normal otherwise: ImageMagick's time limit runs per image on the clock, and a large image converting alone (or a
-    // process started from here, such as Explorer opening the log) must not be starved. Called in order by the runner.
-    // Best effort: a batch still runs if Windows refuses.
+    // Back to the priority ca.exe started with otherwise (normal from Explorer): ImageMagick's time limit runs per image
+    // on the clock, and a large image converting alone (or Explorer opening the log, which inherits it) must not be
+    // starved. Never raised: a ca.exe started at idle stays there. Called in order by the runner. Best effort: a batch
+    // still runs if Windows refuses.
     private static void FollowRunningCount(int count)
     {
         var lower = count > 1;
@@ -194,7 +196,11 @@ internal static class Program
         try
         {
             using var self = System.Diagnostics.Process.GetCurrentProcess();
-            self.PriorityClass = lower ? System.Diagnostics.ProcessPriorityClass.BelowNormal : System.Diagnostics.ProcessPriorityClass.Normal;
+            _startPriority ??= self.PriorityClass;
+            var below = _startPriority is System.Diagnostics.ProcessPriorityClass.Idle or System.Diagnostics.ProcessPriorityClass.BelowNormal
+                ? _startPriority.Value
+                : System.Diagnostics.ProcessPriorityClass.BelowNormal;
+            self.PriorityClass = lower ? below : _startPriority.Value;
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {

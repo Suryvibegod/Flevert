@@ -79,25 +79,30 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     [SkippableTheory]
-    [InlineData(2, ProcessPriorityClass.BelowNormal)] // several conversions at once must not make the PC sluggish
-    [InlineData(1, ProcessPriorityClass.Normal)] // one alone must not be starved past ImageMagick's per-image time limit
-    public async Task A_leader_lowers_its_priority_only_while_files_run_in_parallel(int files, ProcessPriorityClass expected)
+    [InlineData(2, true)] // several conversions at once must not make the PC sluggish
+    [InlineData(1, false)] // one alone must not be starved past ImageMagick's per-image time limit
+    public async Task A_leader_lowers_its_priority_only_while_files_run_in_parallel(int files, bool lowered)
     {
         Skip.If(Environment.ProcessorCount < 3, "ca.exe runs files in parallel only with three or more cores.");
+        // ca.exe inherits this process's priority (below normal on CI runners) and only ever lowers it.
+        using var self = Process.GetCurrentProcess();
+        var inherited = self.PriorityClass;
+        var below = inherited is ProcessPriorityClass.Idle or ProcessPriorityClass.BelowNormal ? inherited : ProcessPriorityClass.BelowNormal;
+        Skip.If(lowered && below == inherited, $"This test runs at {inherited}; ca.exe cannot go lower than that.");
         _slowCopyMs = "3000";
         var leader = Ca("dev.slow-copy", [.. Enumerable.Range(1, files).Select(i => _dir.File($"{i}.txt"))]);
         try
         {
             // A cold start can be slow on CI: watch for up to 2.5 s of the 3 s the files take.
-            var seen = ProcessPriorityClass.Normal;
-            for (var waited = 0; waited < 50 && seen != ProcessPriorityClass.BelowNormal && !leader.HasExited; waited++)
+            var seen = inherited;
+            for (var waited = 0; waited < 50 && seen == inherited && !leader.HasExited; waited++)
             {
                 await Task.Delay(50);
                 leader.Refresh();
                 seen = leader.PriorityClass;
             }
 
-            Assert.Equal(expected, seen);
+            Assert.Equal(lowered ? below : inherited, seen);
         }
         finally
         {
