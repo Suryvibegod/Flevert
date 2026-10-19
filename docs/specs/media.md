@@ -1,6 +1,6 @@
 # Spec: media
 
-Module `media` trong [docs/specs/capability-map.md](capability-map.md). Phụ thuộc `core`. Bản nháp: chốt sau khi `image` xong.
+Module `media` trong [docs/specs/capability-map.md](capability-map.md) (v0.3). Phụ thuộc `core`. Bản nháp: chốt sau khi `pdf` (v0.2) xong.
 
 ## Objective
 

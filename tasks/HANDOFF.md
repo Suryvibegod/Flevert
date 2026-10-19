@@ -15,7 +15,7 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 
 ## Mục tiêu và cách làm việc (người dùng đã chốt)
 
-- Làm **đủ 5 module** theo [docs/specs/capability-map.md](../docs/specs/capability-map.md): core → image → installer (v0.1) → media (v0.2) → pdf (v0.3).
+- Làm **đủ 5 module** theo [docs/specs/capability-map.md](../docs/specs/capability-map.md): core → image → installer (v0.1) → pdf (v0.2) → media (v0.3).
 - **Không hỏi người dùng** những gì tự quyết được, ghi lý do vào spec/ADR; hỏi trước việc khó đảo ngược hoặc ra bên ngoài (xóa repo, publish, gửi file lên dịch vụ khác, dùng file cá nhân của người dùng).
 - Mọi thứ **miễn phí** (Inno Setup; không mua chứng chỉ; ký mã sau qua SignPath Foundation, người dùng tự nộp đơn).
 - Repo **public cho cộng đồng**, tên **Flevert**. Ngôn ngữ: UI/README/commit tiếng Anh; spec/plan nội bộ tiếng Việt.
@@ -38,7 +38,7 @@ Dự án đã đổi tên thành **Flevert** (người dùng chọn); tài kho�
 
 Tiếp theo: CI xanh 3 lần trên repo mới → tag `v0.1.0` → kiểm bản nháp theo RELEASING → người dùng cài bản nháp, kiểm ảnh iPhone dọc có GPS, chụp lại menu (tên mới) cho README → quét VirusTotal (người dùng đưa API key trong chat; **không ghi key vào file nào**; nhắc tạo key mới sau khi quét) → người dùng Publish.
 
-Sau v0.1.0: nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview trên web, soạn bài giới thiệu (Reddit, nhóm dev VN). Rồi media (v0.2): giữ setup 0.1.0 làm fixture test nâng cấp; bật `RestorePackagesWithLockFile` + `--locked-mode`; ffmpeg đặt `MaxParallel = 1`.
+Sau v0.1.0: nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview trên web, soạn bài giới thiệu (Reddit, nhóm dev VN). Rồi pdf (v0.2): hoàn thiện spec `docs/specs/pdf.md`, mở rộng `IOperation` cho batch operations (chọn nhiều ảnh bất kỳ sang 1 PDF, ghép PDF), tích hợp qpdf (Apache-2.0) và Docnet.Core/PDFiumCore. Sau đó mới tới media (v0.3).
 
 ## Dựng máy mới
 
