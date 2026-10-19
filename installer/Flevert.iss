@@ -70,6 +70,7 @@ UninstallAppRunningError=A Flevert conversion is still running.%n%nWait until it
 
 ; The classic-menu choice is a check box on a custom page, not a [Tasks] entry: Inno Setup 6.7 clips the check box of the
 ; task list at high DPI (seen at 200%), while a plain check box is drawn by Windows. Silent installs pass /CLASSICMENU=1|0.
+; The same goes for the update-check choice (/UPDATECHECK=1|0).
 
 [Files]
 Source: "{#SourceDir}\*"; Excludes: "*.pdb"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -80,6 +81,7 @@ Source: "{#SourceDir}\*"; Excludes: "*.pdb"; DestDir: "{app}"; Flags: ignorevers
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\logs"
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\pipes"
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\magick"
+Type: filesandordirs; Name: "{localappdata}\{#AppName}\update"
 Type: dirifempty; Name: "{localappdata}\{#AppName}"
 ; Inno removes only folders it created; this also removes an empty install folder that existed before.
 Type: dirifempty; Name: "{app}"
@@ -100,6 +102,7 @@ const
 
 var
   ClassicMenuCheck: TNewCheckBox; // nil before Windows 11, where the classic menu is the only one
+  UpdateCheck: TNewCheckBox;
   MenuFailed: Boolean;
   ClassicMenuFailed: Boolean;
   FailureHelp: String; // README link for the last failure, repeated on the last page
@@ -175,6 +178,37 @@ begin
   SuppressibleMsgBox(Text, mbError, MB_OK, IDOK);
 end;
 
+procedure CreateUpdatePage(AfterID: Integer);
+var
+  Page: TWizardPage;
+  Explanation: TNewStaticText;
+  Choice: String;
+begin
+  Page := CreateCustomPage(AfterID, 'New versions', 'Should Flevert tell you about new versions?');
+
+  Explanation := TNewStaticText.Create(Page);
+  Explanation.Parent := Page.Surface;
+  Explanation.Width := Page.SurfaceWidth;
+  Explanation.WordWrap := True;
+  Explanation.Caption := 'After a conversion, at most once a day, Flevert can ask GitHub for the number of the newest ' +
+    'version and offer to open its download page. GitHub sees your IP address and your Flevert version; nothing ' +
+    'about your files is sent, and nothing is downloaded or installed by itself. This is the only time Flevert uses ' +
+    'the network.';
+
+  UpdateCheck := TNewCheckBox.Create(Page);
+  UpdateCheck.Parent := Page.Surface;
+  UpdateCheck.Top := Explanation.Top + Explanation.Height + ScaleY(16);
+  UpdateCheck.Width := Page.SurfaceWidth;
+  UpdateCheck.Height := ScaleY(24);
+  UpdateCheck.Caption := 'Tell me when a new version is out';
+
+  // /UPDATECHECK=1|0 for silent installs; otherwise keep the choice of the previous install (on the first time).
+  Choice := ExpandConstant('{param:UPDATECHECK|}');
+  if Choice = '' then
+    Choice := GetPreviousData('UpdateCheck', '1');
+  UpdateCheck.Checked := Choice <> '0';
+end;
+
 procedure InitializeWizard;
 var
   Page: TWizardPage;
@@ -182,7 +216,10 @@ var
   Choice: String;
 begin
   if not IsWindows11 then
+  begin
+    CreateUpdatePage(wpWelcome);
     Exit;
+  end;
   Page := CreateCustomPage(wpWelcome, 'Right-click menu', 'Where should Flevert appear?');
 
   Explanation := TNewStaticText.Create(Page);
@@ -204,11 +241,18 @@ begin
   if Choice = '' then
     Choice := GetPreviousData('ClassicMenu', '0');
   ClassicMenuCheck.Checked := Choice = '1';
+
+  CreateUpdatePage(Page.ID);
 end;
 
 function ClassicMenuChosen: Boolean;
 begin
   Result := (ClassicMenuCheck <> nil) and ClassicMenuCheck.Checked;
+end;
+
+function UpdateCheckChosen: Boolean;
+begin
+  Result := (UpdateCheck = nil) or UpdateCheck.Checked;
 end;
 
 procedure RegisterPreviousData(PreviousDataKey: Integer);
@@ -217,6 +261,10 @@ begin
     SetPreviousData(PreviousDataKey, 'ClassicMenu', '1')
   else
     SetPreviousData(PreviousDataKey, 'ClassicMenu', '0');
+  if UpdateCheckChosen then
+    SetPreviousData(PreviousDataKey, 'UpdateCheck', '1')
+  else
+    SetPreviousData(PreviousDataKey, 'UpdateCheck', '0');
 end;
 
 function IsLink(const Path: String): Boolean;
@@ -373,6 +421,11 @@ begin
     ClassicMenuFailed := True;
     ReportFailure('switching to the classic menu', Started, Code, Reason);
   end;
+  // Applied both ways, like the classic menu. A failure only leaves the previous setting; not worth an error message.
+  if UpdateCheckChosen then
+    RunFlevert('update-check on', Started, Code, Reason)
+  else
+    RunFlevert('update-check off', Started, Code, Reason);
 end;
 
 function GetCustomSetupExitCode: Integer;

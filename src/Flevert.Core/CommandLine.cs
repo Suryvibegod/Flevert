@@ -12,6 +12,9 @@ public sealed record ListOpsCommand : Command;
 
 public sealed record ClassicMenuCommand(bool On) : Command;
 
+/// <summary>Turns asking GitHub for new versions on or off (setup's check box). docs/specs/core.md "Báo bản mới".</summary>
+public sealed record UpdateCheckCommand(bool On) : Command;
+
 /// <summary>Setup's check of the install folder before it copies anything there.</summary>
 public sealed record CheckLocationCommand(string Directory) : Command;
 
@@ -27,6 +30,7 @@ public static class CommandLine
           flevert list-ops
           flevert classic-menu on|off
           flevert check-location <folder>
+          flevert update-check on|off
         """;
 
     public static Command Parse(string[] args) => args switch
@@ -41,6 +45,8 @@ public static class CommandLine
         ["classic-menu", "on"] => new ClassicMenuCommand(On: true),
         ["classic-menu", "off"] => new ClassicMenuCommand(On: false),
         ["check-location", var directory] => new CheckLocationCommand(directory),
+        ["update-check", "on"] => new UpdateCheckCommand(On: true),
+        ["update-check", "off"] => new UpdateCheckCommand(On: false),
         _ => new InvalidCommand(Usage),
     };
 }

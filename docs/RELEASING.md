@@ -19,7 +19,7 @@ For maintainers. Releases are built only by [`.github/workflows/release.yml`](..
    - `powershell -File scripts/test-installer.ps1 -Setup <setup>` passes on a machine without Flevert. Running the tests leaves `%LOCALAPPDATA%\Flevert` behind, and the script refuses to run while it exists: delete it first, and do not run the tests at the same time.
    - The runtime in the installed `flevert.deps.json` (`runtimepack.Microsoft.NETCore.App.Runtime.win-x64/...`) is the newest .NET 10 patch.
    - Microsoft Defender and VirusTotal report nothing. A detection by one or two engines with a generic name is usually a false positive of an unsigned Inno Setup installer: report it to the vendor, and do not publish until it is understood.
-4. Publish the draft.
+4. Publish the draft. From then on, every installed Flevert that checks for new versions offers it within a day (it asks GitHub for the latest release, which never includes drafts or pre-releases).
 
 Until it is published, a draft may be thrown away and rebuilt: `gh release delete vX.Y.Z --cleanup-tag --yes`, then tag again. Delete the old run's artifacts too: the old build's attestation stays valid. The verify command in the release notes pins the commit (`--source-digest`), so a file built from any other commit fails it; the shorter command in the README pins only the tag, which is why the README points readers to the notes. Once published, the release is immutable (repository setting "Immutable releases"): its assets and tag cannot change, and the tag name can never be used again, even after the release is deleted.
 
@@ -33,7 +33,7 @@ Until it is published, a draft may be thrown away and rebuilt: `gh release delet
 
 Stop new downloads first, then fix forward. Users who already installed it keep working until they update or uninstall.
 
-1. **Stop downloads:** the assets of a published release cannot be removed (immutable releases), so edit the release: mark it as a pre-release, which takes it off "latest", and put a warning at the top of its notes. If it must disappear, delete the release; its tag name stays burnt. For the very first release the README's download link then shows no download until the fix is out.
+1. **Stop downloads:** the assets of a published release cannot be removed (immutable releases), so edit the release: mark it as a pre-release, which takes it off "latest" and stops installed copies offering it, and put a warning at the top of its notes. If it must disappear, delete the release; its tag name stays burnt. For the very first release the README's download link then shows no download until the fix is out.
 2. **Tell users:** pin an issue (and a Discussions announcement) saying which version is affected, what goes wrong and what to do: usually "uninstall it from Settings > Apps", or the manual removal in the README if the uninstaller itself is the problem. For a security problem, publish a GitHub security advisory instead of an issue.
 3. **Fix forward:** fix on `main` with a test that reproduces the problem, bump the patch version, add a CHANGELOG entry, and release it through the steps above. A published tag is never moved or reused.
 4. If the release published something it must not (a secret, a private file), delete the release, rotate the secret, ask GitHub Support to purge cached copies, and treat it as a security incident: downloads and attestations already made cannot be recalled.

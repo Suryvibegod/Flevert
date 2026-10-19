@@ -15,6 +15,7 @@ Cho phép người dùng Windows chuột phải vào file, chọn một thao tá
 - Lô chạy lâu hơn 2 giây thì hiện cửa sổ tiến độ nhỏ (file thứ mấy / tổng, nút Cancel). Nén video mất vài phút; chạy im lặng thì người dùng tưởng treo. Cancel dừng **ngay** file đang chạy (bỏ file dở) và không xử lý các file còn lại.
 - Ghi log lỗi để người dùng gửi lại khi báo bug.
 - Định nghĩa hợp đồng `IOperation` để các module khác cắm thao tác vào.
+- Báo khi GitHub có bản phát hành mới hơn và mời người dùng cập nhật (xem "Báo bản mới").
 
 ### User stories
 
@@ -22,6 +23,7 @@ Cho phép người dùng Windows chuột phải vào file, chọn một thao tá
 - Là người dùng, tôi chọn 30 file, chuột phải → thao tác, và nhận **một** thông báo "Xong 30 file" chứ không phải 30 cửa sổ / 30 thông báo.
 - Là người dùng, khi 2 trong 30 file lỗi, 28 file kia vẫn xong và thông báo nói rõ có 2 file lỗi, kèm chỗ xem log.
 - Là người dùng, tôi gỡ tool và menu chuột phải biến mất hoàn toàn.
+- Là người dùng bản cũ, khi có bản mới tôi được hỏi có muốn tải không, nhiều nhất một lần mỗi ngày, và có thể bỏ qua bản đó hoặc tắt hẳn việc kiểm.
 
 ## Tech Stack
 
@@ -60,7 +62,7 @@ flevert.exe install-menu [--dev] [--allow-insecure-location]
 flevert.exe uninstall-menu               Gỡ mọi key đã ghi
 flevert.exe list-ops                     In danh sách thao tác và loại file áp dụng
 
-Biến môi trường: FLEVERT_HEADLESS=1 (chạy lô không UI), FLEVERT_LOG_DIR (đổi thư mục log), FLEVERT_BATCH_IDLE_MS (cửa sổ rảnh của lô, 100–10 000 ms; chỉ cho test tích hợp trên máy bận), FLEVERT_SLOW_COPY_MS (thời gian của thao tác dev Slow copy, 0–60 000 ms, mặc định 1 000; chỉ cho test tích hợp)
+Biến môi trường: FLEVERT_HEADLESS=1 (chạy lô không UI), FLEVERT_LOG_DIR (đổi thư mục log), FLEVERT_BATCH_IDLE_MS (cửa sổ rảnh của lô, 100–10 000 ms; chỉ cho test tích hợp trên máy bận), FLEVERT_SLOW_COPY_MS (thời gian của thao tác dev Slow copy, 0–60 000 ms, mặc định 1 000; chỉ cho test tích hợp), FLEVERT_UPDATE_URL (GitHub giả cho test báo bản mới; chỉ nhận `http://` tới địa chỉ IP loopback)
 ```
 
 ## Project Structure
@@ -164,6 +166,19 @@ Mỗi file được mở giữ (pin) không cho xóa/đổi tên trong lúc xử
 
 `%LOCALAPPDATA%\Flevert\logs\flevert-YYYYMMDD.log`, mỗi dòng: thời gian, pid, op-id, file, kết quả (`ok` / `skipped` / `failed`), thời gian xử lý, output hoặc lý do. Lỗi kèm stack; file bị bỏ qua chỉ ghi lý do; file bị ngắt khi Cancel ghi `failed` với lý do `cancelled`. Giữ 7 ngày. Không ghi nội dung file.
 
+### Báo bản mới
+
+Người dùng cài từ file setup, không có kho ứng dụng tự cập nhật; không báo thì bản cũ (có thể có lỗi bảo mật đã sửa) ở lại mãi. Quyết định: [ADR-0006](../adr/0006-update-check-against-github-releases.md).
+
+- **Khi nào:** chỉ tiến trình chủ lô có giao diện (không headless, không lệnh cài đặt, không tiến trình giao file), bắt đầu song song khi lô bắt đầu, nhiều nhất **một lần mỗi 24 giờ** (giờ kiểm ghi lại *trước* khi gửi, nên lỗi mạng cũng tính; giờ ghi ở tương lai coi như đến hạn).
+- **Hỏi gì:** `GET https://api.github.com/repos/Suryvibegod/Flevert/releases/latest`, `User-Agent: Flevert/<phiên bản>`, không cookie, không thông tin máy hay file; timeout 5 giây; đọc tối đa 1 MB; chỉ đọc `tag_name`. Endpoint này bỏ qua bản nháp và pre-release, nên một bản bị rút (đánh dấu pre-release theo RELEASING) không được mời cài.
+- **So sánh:** tag phải đúng `vMAJOR.MINOR.PATCH` (chữ số ASCII, mỗi phần ≤ 5 chữ số); khác dạng thì bỏ qua. Lớn hơn phiên bản đang chạy và không phải bản người dùng đã bỏ qua thì hỏi.
+- **Hỏi người dùng:** sau khi lô xong (thông báo kết quả vẫn hiện như cũ), một hộp thoại Windows: "Flevert X.Y.Z is available" / "You have A.B.C. Download the new setup from GitHub and run it; it installs over this version." Nút **Download** (mở `https://github.com/Suryvibegod/Flevert/releases/latest` bằng trình duyệt mặc định; **không** dùng URL nào lấy từ phản hồi), **Later**, **Skip this version**. Kết quả về sau khi tiến trình đã thoát thì bỏ, lần sau kiểm lại.
+- **Không bao giờ** tự tải hay chạy gì: người dùng tự tải setup và kiểm như README hướng dẫn.
+- **Tắt/bật:** `flevert.exe update-check off|on`; setup có ô chọn "Tell me when a new version is out" (mặc định bật, `/UPDATECHECK=0|1` khi cài im lặng, nhớ lựa chọn lần trước).
+- **Trạng thái:** `%LOCALAPPDATA%\Flevert\update\state.json` (`enabled`, `lastCheck`, `skipped`); hỏng hoặc thiếu thì dùng mặc định (bật, chưa kiểm); ghi qua file tạm rồi thay. Gỡ cài đặt xóa thư mục này.
+- Mọi lỗi (mạng, JSON, ghi file) đều im lặng: không bao giờ làm lô lỗi hay chặn tiến trình thoát.
+
 ### Bỏ qua (skipped)
 
 Thao tác ném `OperationSkippedException` khi đầu vào đã đáp ứng yêu cầu, không có gì đáng ghi (ví dụ ảnh đã nén tốt); yêu cầu không làm được là lỗi, không phải bỏ qua. File bị bỏ qua không tính là lỗi. Thông báo: `Done: 2 files, 30 skipped`; cả lô bị bỏ qua: `Nothing to do: 3 files skipped (<lý do>)`, hoặc chỉ tới log nếu lý do khác nhau; một file: `Skipped: <lý do>`.
@@ -209,7 +224,7 @@ public static class OutputPath
 
 - **Always:** chạy test trước khi commit; chỉ ghi registry trong HKCU; không bao giờ sửa hoặc xóa file gốc; dùng `ArgumentList` khi gọi tiến trình ngoài.
 - **Ask first:** thêm package NuGet; ghi HKLM; đổi module id hoặc op-id đã phát hành; cài phần mềm lên máy; push lên GitHub.
-- **Never:** commit file nhị phân (ffmpeg, pdfium) vào git; gửi file hay dữ liệu ra mạng; thêm telemetry.
+- **Never:** commit file nhị phân (ffmpeg, pdfium) vào git; gửi file hay dữ liệu ra mạng (ngoại lệ duy nhất: request kiểm phiên bản ở mục "Báo bản mới", tắt được); thêm telemetry; tự tải hay chạy bản cập nhật.
 
 ## Success Criteria
 
@@ -223,6 +238,9 @@ public static class OutputPath
 8. Đường dẫn tiếng Việt có dấu, dấu cách, dài > 260 ký tự đều chạy.
 9. `dotnet test` và `dotnet format --verify-no-changes` đều qua.
 10. Lô chạy > 2 giây hiện cửa sổ tiến độ; bấm Cancel thì dừng ngay, không để lại file `.partial`.
+11. Bản 0.1.0 thấy tag `v0.2.0` trên GitHub: sau một lô có giao diện thì hiện hộp thoại mời cập nhật; Download mở trang Releases; trong 24 giờ không hỏi lại; Skip this version thì không hỏi lại bản đó nhưng vẫn hỏi `v0.2.1`.
+12. `update-check off` thì không có request nào (test bằng handler giả); mất mạng hay GitHub trả lỗi thì lô vẫn xong và tiến trình thoát như thường.
+13. Tag sai dạng (`v0.2`, `v0.2.0-rc1`, chữ số không phải ASCII, phần quá dài) không bao giờ gây hỏi.
 
 ## Quyết định đã chốt
 

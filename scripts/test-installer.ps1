@@ -2,7 +2,7 @@
 .SYNOPSIS
 End-to-end test of the installer on this machine: installs silently without admin, checks files, menu and a real
 conversion, installs over itself, uninstalls and checks that nothing Flevert wrote is left. Further scenarios
-cover the uninstall safety net, a classic-menu key the user created, a refused install folder, /DIR, uninstalling
+cover the update-check choice, the uninstall safety net, a classic-menu key the user created, a refused install folder, /DIR, uninstalling
 while flevert.exe runs, an install folder that is a junction, one that already holds someone else's files, and setup
 started from a junction.
 
@@ -62,9 +62,10 @@ function Setup([string[]]$Arguments, [string]$WorkingDirectory = $work) {
     return [pscustomobject]@{ ExitCode = $p.ExitCode; Log = $log; Seconds = $timer.Elapsed.TotalSeconds }
 }
 
-function Install([string]$ClassicMenu = '') {
+function Install([string]$ClassicMenu = '', [string]$UpdateCheck = '') {
     $arguments = @()
     if ($ClassicMenu) { $arguments += "/CLASSICMENU=$ClassicMenu" }
+    if ($UpdateCheck) { $arguments += "/UPDATECHECK=$UpdateCheck" }
     $run = Setup $arguments
     Assert ($run.ExitCode -eq 0) "setup exits with 0 (got $($run.ExitCode); log $($run.Log))"
     Write-Host ("      installed in {0:N0} s" -f $run.Seconds)
@@ -95,6 +96,11 @@ function AssertClean {
     $added = @(AssociationNames | Where-Object { $associationsBefore -notcontains $_ })
     Assert ($added.Count -eq 0) "no SystemFileAssociations keys left behind ($($added -join ', '))"
     Assert (-not (Test-Path $classicKey) -or $userClassicKey) 'no classic menu key left'
+}
+
+function UpdateCheckEnabled {
+    $state = Get-Content "$appData\update\state.json" -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json
+    return [bool]($state -and $state.enabled)
 }
 
 function RunFlevertHeadless([string[]]$Arguments, [switch]$NoWait) {
@@ -141,6 +147,7 @@ try {
     Assert ($command -like "`"$app\flevert.exe`" run *") "the .heic menu runs the installed flevert.exe ($command)"
     Assert (Test-Path "$associations\.jpg\shell\Flevert") 'menu entry for .jpg'
     Assert ((Get-ItemProperty $classicKey).Flevert -eq '1') 'classic menu key created and marked'
+    Assert (UpdateCheckEnabled) 'the check for new versions is on by default'
     $menuCount = @(MenuKeys).Count
 
     Copy-Item $heic "$work\photo.heic"
@@ -156,6 +163,12 @@ try {
     Assert (Test-Path $classicKey) 'installing again without /CLASSICMENU keeps the earlier choice'
     Install '0' | Out-Null
     Assert (-not (Test-Path $classicKey)) 'installing again with /CLASSICMENU=0 removes the classic menu key'
+    Install -UpdateCheck '0' | Out-Null
+    Assert (-not (UpdateCheckEnabled)) 'installing with /UPDATECHECK=0 turns the check for new versions off'
+    Install | Out-Null
+    Assert (-not (UpdateCheckEnabled)) 'installing again without /UPDATECHECK keeps it off'
+    Install -UpdateCheck '1' | Out-Null
+    Assert (UpdateCheckEnabled) 'installing with /UPDATECHECK=1 turns it back on'
 
     Uninstall
     AssertClean

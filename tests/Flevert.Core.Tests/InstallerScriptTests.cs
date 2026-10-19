@@ -28,6 +28,24 @@ public sealed class InstallerScriptTests
     }
 
     [Fact]
+    public void Every_command_setup_runs_is_one_flevert_understands()
+    {
+        var commands = Regex.Matches(Script, @"RunFlevert\('([a-z-]+(?: [a-z]+)?)'").Select(m => m.Groups[1].Value).Distinct().ToList();
+
+        Assert.NotEmpty(commands);
+        Assert.All(commands, c => Assert.IsNotType<InvalidCommand>(CommandLine.Parse(c.Split(' '))));
+    }
+
+    [Fact]
+    public void Setup_applies_the_update_check_choice_both_ways()
+    {
+        // Applied on every install, so unticking it on an upgrade turns the check off, and ticking it turns it back on.
+        Assert.Contains("RunFlevert('update-check on'", Script, StringComparison.Ordinal);
+        Assert.Contains("RunFlevert('update-check off'", Script, StringComparison.Ordinal);
+        Assert.Contains("{param:UPDATECHECK|}", Script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Installer_waits_on_the_mutex_flevert_holds()
     {
         Assert.Contains($"#define AppMutexName \"{AppMutex.Name}\"", Script, StringComparison.Ordinal);

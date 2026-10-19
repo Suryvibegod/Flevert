@@ -20,9 +20,19 @@ public sealed class CommandLineTests
     [InlineData("classic-menu")]
     [InlineData("classic-menu", "yes")]
     [InlineData("classic-menu", "on", "off")]
+    [InlineData("update-check")]
+    [InlineData("update-check", "maybe")]
+    [InlineData("update-check", "on", "off")]
     public void Rejects_incomplete_or_unknown_commands(params string[] args)
     {
         Assert.IsType<InvalidCommand>(CommandLine.Parse(args));
+    }
+
+    [Fact]
+    public void Parses_update_check_on_and_off()
+    {
+        Assert.Equal(new UpdateCheckCommand(On: true), CommandLine.Parse(["update-check", "on"]));
+        Assert.Equal(new UpdateCheckCommand(On: false), CommandLine.Parse(["update-check", "off"]));
     }
 
     [Fact]

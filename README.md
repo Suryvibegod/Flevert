@@ -4,7 +4,7 @@
 
 <p align="center">
 Right-click a picture in Windows Explorer to convert it, compress it or strip its metadata.<br>
-Free, open source and fully offline: your files never leave your computer.
+Free, open source and offline: your files never leave your computer.
 </p>
 
 <p align="center">
@@ -116,7 +116,7 @@ Compress and Remove metadata keep the colour profile and drop all other metadata
 
 ## Privacy
 
-Flevert works entirely on your computer. It has no account, no telemetry and does not connect to the internet.
+Flevert converts everything on your computer. It has no account and no telemetry. Its only network use: after a conversion, at most once a day, it asks GitHub for the number of the newest release, so it can offer you an update. GitHub sees your IP address and your Flevert version; nothing about your files is sent, and nothing is downloaded or installed by itself. Turn it off in setup, or with `flevert.exe update-check off` (in `%LOCALAPPDATA%\Programs\Flevert`).
 
 ## Roadmap
 

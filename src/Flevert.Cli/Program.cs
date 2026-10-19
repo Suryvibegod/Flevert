@@ -126,6 +126,11 @@ internal static class Program
                 Console.Error.WriteLine($"Refusing to install into {check.Directory}: other accounts can modify it or a folder above it, or it is reached through a link, so they could run code as you (or its permissions could not be read, or it is not on a local NTFS drive).");
                 return RefusedLocation;
 
+            case UpdateCheckCommand updateCheck:
+                // Run by setup with its check box; a failure is reported but setup carries on.
+                UpdateOffer.CreateChecker().SetEnabled(updateCheck.On);
+                return Ok;
+
             case ListOpsCommand:
                 foreach (var op in catalog.All)
                     Console.WriteLine($"{op.Id}\t{op.MenuPath}\t{string.Join(' ', op.Extensions)}");
@@ -171,7 +176,10 @@ internal static class Program
             };
             if (Environment.GetEnvironmentVariable("FLEVERT_HEADLESS") == "1")
                 return RunHeadless(operation, leader, log, maxParallel, running);
-            return BatchUi.Run(operation, leader, log, maxParallel, running) ? Ok : SomeFilesFailed;
+            // Alongside the batch, so it costs no time; asked about after the batch, if a newer version is out.
+            var checker = UpdateOffer.CreateChecker();
+            var update = Task.Run(() => checker.CheckAsync(CancellationToken.None));
+            return BatchUi.Run(operation, leader, log, maxParallel, running, checker, update) ? Ok : SomeFilesFailed;
         }
         finally
         {

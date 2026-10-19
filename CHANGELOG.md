@@ -17,7 +17,7 @@ The first release: pictures, and an installer.
 - Select many files at once: they are processed as one batch, several at a time on PCs with more than two cores, with one notification at the end. Batches that take more than two seconds show a progress window with **Cancel**.
 - Results are saved next to the original, which is never changed or overwritten; names never clash (`photo (1).jpg`).
 - A per-user installer that needs no administrator rights, with an option to bring back the classic Windows 10 style right-click menu on Windows 11. Uninstalling removes everything Flevert created.
-- Works entirely offline: no account, no telemetry, no network access.
+- Works offline: no account, no telemetry. The only network use is a check for a new version on GitHub, at most once a day after a conversion; when one is out, Flevert offers to open its download page (Download, Later, Skip this version). Nothing is downloaded or installed by itself. Setup has a check box to turn it off, as does `flevert.exe update-check off`.
 - The progress window works with screen readers (named progress bar and Cancel button; Esc cancels).
 
 ### Security

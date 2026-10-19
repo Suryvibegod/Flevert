@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Flevert.Core;
+using Flevert.Core.Updates;
 
 namespace Flevert.Cli;
 
@@ -12,10 +13,16 @@ internal sealed class BatchUi : ApplicationContext
     private readonly CancellationTokenSource _cancellation = new();
     private readonly ProgressForm _form;
     private readonly string _logFile; // fixed at batch start so a batch crossing midnight opens its own log
+    private readonly UpdateChecker _checker;
+    private readonly Task<ReleaseVersion?> _update;
     private NotifyIcon? _tray;
+    private bool _askingAboutUpdate;
 
-    private BatchUi(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running)
+    private BatchUi(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running,
+        UpdateChecker checker, Task<ReleaseVersion?> update)
     {
+        _checker = checker;
+        _update = update;
         _logFile = log.CurrentFile;
         _form = new ProgressForm(operation.MenuPath.Replace('/', ' '), leader.Pending, _cancellation);
         _ = _form.Handle; // installs the WinForms synchronization context so Progress<T> reports on this thread
@@ -53,11 +60,13 @@ internal sealed class BatchUi : ApplicationContext
     public bool NoFailures { get; private set; }
 
     /// <param name="running">Passed to the runner: tells the leader, and the process priority, how many files run.</param>
-    public static bool Run(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running)
+    /// <param name="update">The check for a new version started with the batch; asked about after it if it finds one in time.</param>
+    public static bool Run(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running,
+        UpdateChecker checker, Task<ReleaseVersion?> update)
     {
         Application.EnableVisualStyles();
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        using var ui = new BatchUi(operation, leader, log, maxParallel, running);
+        using var ui = new BatchUi(operation, leader, log, maxParallel, running, checker, update);
         Application.Run(ui);
         return ui.NoFailures;
     }
@@ -67,8 +76,17 @@ internal sealed class BatchUi : ApplicationContext
         // Scheduled first: whatever fails below, the process still exits. BalloonTipClosed is not raised when the system
         // suppresses the balloon (e.g. Focus Assist), so the timer is also the normal way out in that case.
         var exit = new System.Windows.Forms.Timer { Interval = (int)NotificationLifetime.TotalMilliseconds };
-        exit.Tick += (_, _) => ExitThread();
+        exit.Tick += (_, _) =>
+        {
+            exit.Dispose();
+            // The update question ends the process itself when it closes.
+            if (!_askingAboutUpdate)
+                ExitThread();
+        };
         exit.Start();
+        // A check still running when the process exits is dropped; it runs again tomorrow.
+        _update.ContinueWith(t => AskAboutUpdate(t), CancellationToken.None, TaskContinuationOptions.None,
+            TaskScheduler.FromCurrentSynchronizationContext());
 
         NoFailures = outcome.NoFailures;
         try
@@ -80,13 +98,37 @@ internal sealed class BatchUi : ApplicationContext
             _tray = new NotifyIcon { Icon = _form.Icon, Text = "Flevert", Visible = true };
             if (summary.ShowsLog)
                 _tray.BalloonTipClicked += (_, _) => OpenLog();
-            _tray.BalloonTipClosed += (_, _) => ExitThread();
+            _tray.BalloonTipClosed += (_, _) =>
+            {
+                if (!_askingAboutUpdate)
+                    ExitThread();
+            };
             _tray.ShowBalloonTip((int)NotificationLifetime.TotalMilliseconds, "Flevert", summary.Text,
                 summary.HasFailures ? ToolTipIcon.Warning : ToolTipIcon.Info);
         }
 #pragma warning disable CA1031 // A failed notification must not keep the process alive; the log has the details.
         catch (Exception)
 #pragma warning restore CA1031
+        {
+            ExitThread();
+        }
+    }
+
+    private void AskAboutUpdate(Task<ReleaseVersion?> check)
+    {
+        if (!check.IsCompletedSuccessfully || check.Result is not { } available)
+            return;
+        _askingAboutUpdate = true;
+        try
+        {
+            UpdateOffer.Ask(_checker, available);
+        }
+#pragma warning disable CA1031 // The question is optional; whatever fails, the process must still exit.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
+        finally
         {
             ExitThread();
         }
