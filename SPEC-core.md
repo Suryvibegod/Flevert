@@ -107,10 +107,10 @@ Tên pipe: `ConvertAnything-<SID>-<session>-<khóa>-<op-id>`. Khóa ngẫu nhiê
 
 ### Xử lý song song trong một lô (2026-10-19)
 
-Đo trên máy 16 nhân, ảnh 12 MP: Magick.NET bản phát hành không có OpenMP (`ResourceLimits.Thread = 1`), mỗi ảnh chỉ dùng một nhân; lô 10 ảnh HEIC→JPG mất 18,9 s vì xử lý **lần lượt** (~1,86 s/ảnh). Vì vậy:
+Đo trên máy 16 nhân, ảnh 12 MP: Magick.NET bản phát hành không có OpenMP (`ResourceLimits.Thread = 1`), phần ImageMagick của mỗi ảnh chỉ dùng một nhân (libheif tự giải mã các tile HEIC song song, ~2,8 nhân với ảnh iPhone thật); lô 10 ảnh HEIC→JPG chạy **lần lượt**. Vì vậy:
 
-- `Runner.RunAsync` nhận `maxParallel` (mặc định 1 = hành vi cũ). Chủ lô chạy tối đa `maxParallel` file cùng lúc; `ca.exe` dùng `Math.Clamp(Environment.ProcessorCount - 1, 1, 8)` (chừa một nhân cho máy và cửa sổ tiến độ; trên 8 thì lợi ích nhỏ, bộ nhớ tăng).
-- Giữ nguyên mọi bảo đảm: mỗi file một kết quả, trùng thì bỏ, 1 file lỗi không chặn file khác, log mỗi file. `Results` theo thứ tự **xong**, không theo thứ tự nhận. Cancel: không lấy file mới, các file đang chạy nhận token; mỗi file bị hủy giữa chừng tính là chưa xử lý.
+- `Runner.RunAsync` nhận `maxParallel` (mặc định 1 = hành vi cũ). `IOperation.MaxParallel` mặc định 1: thao tác tự chọn chạy song song (ảnh, dev: 8); ffmpeg ở v0.2 vốn đã dùng mọi nhân nên giữ 1. `ca.exe` dùng `Clamp(min(MaxParallel, số nhân logic − 1), 1, 8)` và hạ ưu tiên tiến trình xuống BelowNormal khi chạy song song (để máy vẫn mượt; đo: thời gian lô không đổi trong nhiễu).
+- Giữ nguyên mọi bảo đảm: mỗi file một kết quả, trùng thì bỏ, 1 file lỗi không chặn file khác, log mỗi file. `Results` theo thứ tự **xong**, không theo thứ tự nhận. Cancel: không lấy file mới, các file đang chạy nhận token; mỗi file bị hủy giữa chừng tính là chưa xử lý (một file đã qua bước kiểm token cuối trước khi đổi tên vẫn có thể có output, như trước đây với một file, giờ tối đa 8). Runner luôn chờ các file đang chạy xong rồi mới báo kết quả, kể cả khi nguồn file lỗi.
 - Chủ lô chỉ đóng pipe khi **không còn file nào đang chạy** (đếm số file đang chạy, không chỉ cờ "đang cầm một file"): đóng sớm lúc vẫn còn file đang chạy sẽ khiến file đến muộn mở lô thứ hai.
 - Hai file cùng muốn một tên output (`photo.png` và `photo.webp` → `photo.jpg`): `OutputPath` vốn đã an toàn khi ghi đồng thời (`File.Move` không ghi đè, trùng thì thử tên kế), nhưng ai được `photo.jpg` và ai được `photo (1).jpg` giờ tùy file nào xong trước.
 - Lô 1 file: không đổi. Thời gian một file không giảm (nằm trong bộ giải mã); tối thiểu 1,5 s của lô (ADR-0002) giữ nguyên.

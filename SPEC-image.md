@@ -92,9 +92,14 @@ Vượt giới hạn → file đó lỗi, ghi log, các file khác chạy tiếp
 
 Giới hạn 2 GB của ImageMagick tính cho **cả tiến trình**. Khi chủ lô chạy nhiều file cùng lúc (SPEC-core, "Xử lý song song"), vài ảnh cực lớn cùng lúc sẽ tràn sang đĩa (chậm) hoặc vượt giới hạn đĩa 4 GB và lỗi, trong khi chạy lần lượt thì qua. Không được để song song làm hỏng file mà tuần tự làm được:
 
-- Mỗi thao tác ảnh lấy "suất" từ một ngân sách chung bằng `ResourceLimits.Memory` **trước khi giải mã**. Suất = rộng × cao × số khung × 4 byte (Q8, 4 kênh) × 3 (ảnh nguồn, bản đang xử lý, bộ đệm mã hóa), tối đa bằng cả ngân sách. Kích thước lấy bằng ping (chỉ đọc header, cùng đường đọc an toàn: stream, decoder theo chữ ký trong allow-list). Ping lỗi → suất = cả ngân sách (chạy một mình; lỗi thật sẽ do thao tác báo).
-- Cấp theo thứ tự đến (FIFO): một ảnh lớn đang chờ không bị các ảnh nhỏ đến sau chen mãi. Hủy trong lúc chờ: không giữ suất nào.
-- Ảnh điện thoại 12 MP ≈ 144 MB/suất → tối đa 8 cùng lúc; 48 MP ≈ 576 MB → 3; ảnh 400 MP → một mình.
+- Mỗi thao tác ảnh lấy "suất" từ một ngân sách chung **trước khi giải mã**. Ngân sách = `min(ResourceLimits.Memory (2 GB), 1/4 bộ nhớ máy)`, dựng từ hằng số chứ không khởi tạo ImageMagick (một lỗi khởi tạo chỉ làm hỏng một file). Suất = max(byte pixel × 3, kích thước file × 2):
+  - byte pixel: mỗi khung tính theo **canvas** (khung tối ưu của GIF/WebP động bị `Coalesce` bung ra cả canvas: GIF 200 khung 1×1 trên canvas 1000×1000 cần ~800 MB, ping từng khung chỉ thấy 2,4 KB) × max(4, số kênh ping báo + 1) byte (ping không báo alpha: TIFF CMYK + alpha ping ra 4 kênh, giải mã ra 5); × 3 = ảnh nguồn, bản đang xử lý, bộ đệm mã hóa.
+  - kích thước file × 2: bộ giải mã WebP/HEIC đọc cả file vào bộ nhớ, profile và comment được chép, ngoài phần ImageMagick đếm.
+  - Kích thước lấy bằng ping (chỉ đọc header, cùng đường đọc an toàn: stream, decoder theo chữ ký trong allow-list). Ping lỗi → suất = cả ngân sách (chạy một mình; lỗi thật sẽ do thao tác báo).
+- Suất lớn hơn nửa ngân sách → lấy cả ngân sách (chạy một mình): giới hạn thời gian 120 s của ImageMagick tính theo đồng hồ cho từng ảnh, ảnh lớn chạy cạnh ảnh khác có thể vượt.
+- Cấp theo thứ tự đến (FIFO): một ảnh lớn đang chờ không bị các ảnh nhỏ đến sau chen mãi. Hủy trong lúc chờ: không giữ suất nào, và người chờ phía sau được xét lại.
+- Ảnh điện thoại 12 MP ≈ 144 MB/suất → tối đa 8 cùng lúc; 48 MP ≈ 576 MB → 1 (hơn nửa ngân sách 1 GB của máy 4 GB) đến 3; ảnh 400 MP → một mình.
+- Đã biết, chấp nhận: TIFF nhiều trang tính mọi trang dù Convert/Compress chỉ đọc một trang (chỉ chậm hơn, không sai).
 
 ## Commands
 

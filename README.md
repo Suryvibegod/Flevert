@@ -17,7 +17,7 @@ Free, open source and fully offline: your files never leave your computer.
 - **Compress photos** to send over Zalo, Messenger or email, or squeeze them **under 500 KB, 1 MB or 5 MB**.
 - **Convert** between JPG, PNG, WebP, AVIF, GIF, BMP and TIFF.
 - **Remove location and camera details** (EXIF, GPS) before you share a photo.
-- Select many files at once: they are processed as one batch, with one notification at the end.
+- Select many files at once: they are converted several at a time as one batch, with one notification at the end.
 - The result is saved next to the original, which is never modified or overwritten.
 
 Video, audio and PDF are next ([roadmap](#roadmap)).
