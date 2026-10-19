@@ -67,7 +67,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         // file is still converting: only ca.exe telling the leader that a file is running keeps the batch open (a
         // parallel runner has already asked for the next file).
         _idleWindowMs = "200";
-        _slowCopyMs = "4000";
+        _slowCopyMs = "6000"; // room for the late process to start slowly; it must arrive while file 1 still runs
         var leader = Ca("dev.slow-copy", _dir.File("1.txt"));
         await Task.Delay(TimeSpan.FromSeconds(2.2));
 
@@ -78,18 +78,26 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         Assert.Equal([leader.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)], LoggedProcessIds());
     }
 
-    [SkippableFact]
-    public async Task A_leader_running_files_in_parallel_lowers_its_priority()
+    [SkippableTheory]
+    [InlineData(2, ProcessPriorityClass.BelowNormal)] // several conversions at once must not make the PC sluggish
+    [InlineData(1, ProcessPriorityClass.Normal)] // one alone must not be starved past ImageMagick's per-image time limit
+    public async Task A_leader_lowers_its_priority_only_while_files_run_in_parallel(int files, ProcessPriorityClass expected)
     {
-        // Several conversions at once must not make the rest of the PC sluggish.
         Skip.If(Environment.ProcessorCount < 3, "ca.exe runs files in parallel only with three or more cores.");
         _slowCopyMs = "3000";
-        var leader = Ca("dev.slow-copy", _dir.File("1.txt"));
+        var leader = Ca("dev.slow-copy", [.. Enumerable.Range(1, files).Select(i => _dir.File($"{i}.txt"))]);
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(1));
-            leader.Refresh();
-            Assert.Equal(ProcessPriorityClass.BelowNormal, leader.PriorityClass);
+            // A cold start can be slow on CI: watch for up to 2.5 s of the 3 s the files take.
+            var seen = ProcessPriorityClass.Normal;
+            for (var waited = 0; waited < 50 && seen != ProcessPriorityClass.BelowNormal && !leader.HasExited; waited++)
+            {
+                await Task.Delay(50);
+                leader.Refresh();
+                seen = leader.PriorityClass;
+            }
+
+            Assert.Equal(expected, seen);
         }
         finally
         {

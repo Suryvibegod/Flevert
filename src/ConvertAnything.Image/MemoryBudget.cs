@@ -6,7 +6,7 @@ namespace ConvertAnything.Image;
 /// Shares ImageMagick's one memory limit between files converted at the same time (SPEC-image, "Ngân sách bộ nhớ khi
 /// chạy song song"). Over the limit ImageMagick moves pixels to disk, and past its disk limit the file fails, so running
 /// files in parallel must never fail a file that one at a time would convert. Shares are granted in arrival order, so a
-/// large image waiting is never overtaken for ever by small ones; a share larger than the budget runs alone.
+/// large image waiting is never overtaken for ever by small ones; a share over half the budget runs alone.
 /// </summary>
 public sealed class MemoryBudget
 {
@@ -41,9 +41,22 @@ public sealed class MemoryBudget
     {
         try
         {
-            return Math.Max(checked(ImageFile.DecodedBytes(path) * Copies), checked((ulong)new FileInfo(path).Length * FileCopies));
+            return Math.Max(checked(ImageFile.DecodedBytes(path) * Copies), FileNeed(path));
         }
         catch (Exception e) when (e is MagickException or IOException or UnauthorizedAccessException or NotSupportedException or OverflowException)
+        {
+            return ulong.MaxValue;
+        }
+    }
+
+    /// <summary>What reading <paramref name="path"/> takes before any pixel is decoded: decoders load the whole file.</summary>
+    public static ulong FileNeed(string path)
+    {
+        try
+        {
+            return checked((ulong)new FileInfo(path).Length * FileCopies);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or OverflowException)
         {
             return ulong.MaxValue;
         }

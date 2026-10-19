@@ -99,7 +99,12 @@ Giới hạn 2 GB của ImageMagick tính cho **cả tiến trình**. Khi chủ 
 - Suất lớn hơn nửa ngân sách → lấy cả ngân sách (chạy một mình): giới hạn thời gian 120 s của ImageMagick tính theo đồng hồ cho từng ảnh, ảnh lớn chạy cạnh ảnh khác có thể vượt.
 - Cấp theo thứ tự đến (FIFO): một ảnh lớn đang chờ không bị các ảnh nhỏ đến sau chen mãi. Hủy trong lúc chờ: không giữ suất nào, và người chờ phía sau được xét lại.
 - Ảnh điện thoại 12 MP ≈ 144 MB/suất → tối đa 8 cùng lúc; 48 MP ≈ 576 MB → 1 (hơn nửa ngân sách 1 GB của máy 4 GB) đến 3; ảnh 400 MP → một mình.
-- Đã biết, chấp nhận: TIFF nhiều trang tính mọi trang dù Convert/Compress chỉ đọc một trang (chỉ chậm hơn, không sai).
+- Ping lấy kích thước cũng có thể đọc cả file (bộ giải mã WebP làm vậy): trong lúc ping giữ một suất bằng kích thước file × 2, trả lại trước khi xin suất đầy đủ (giữ trong lúc chờ có thể kẹt hàng đợi FIFO).
+- Đã biết, chấp nhận:
+  - TIFF nhiều trang tính mọi trang dù Convert/Compress chỉ đọc một trang (chỉ chậm hơn, không sai).
+  - Ping không thấy hết kênh: hầu hết định dạng RGB báo 0 kênh (dùng sàn 4), CMYK + alpha báo 4 (cộng 1 → 5); TIFF có nhiều extra sample hơn nữa vẫn bị tính thiếu.
+  - File từ 1000 khung/trang trở lên: ping vượt `ListLength` → suất cả ngân sách → chạy một mình (đúng như trước khi có song song).
+- Ưu tiên tiến trình: BelowNormal chỉ khi từ 2 file chạy cùng lúc; về Normal khi còn 1 (ảnh lớn chạy một mình không bị bỏ đói tới giới hạn 120 s; Explorer mở log không thừa hưởng BelowNormal).
 
 ## Commands
 

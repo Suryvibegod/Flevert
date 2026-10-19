@@ -14,7 +14,7 @@ internal sealed class BatchUi : ApplicationContext
     private readonly string _logFile; // fixed at batch start so a batch crossing midnight opens its own log
     private NotifyIcon? _tray;
 
-    private BatchUi(IOperation operation, BatchLeader leader, RunLog log, int maxParallel)
+    private BatchUi(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running)
     {
         _logFile = log.CurrentFile;
         _form = new ProgressForm(operation.MenuPath.Replace('/', ' '), leader.Pending, _cancellation);
@@ -27,7 +27,7 @@ internal sealed class BatchUi : ApplicationContext
             {
                 return await new Runner(log).RunAsync(
                     operation, leader.ReadAllAsync(_cancellation.Token), () => leader.Pending, progress, _cancellation.Token,
-                    maxParallel, leader.ReportRunning);
+                    maxParallel, running);
             }
 #pragma warning disable CA1031 // Whatever happens, the batch must end with a notification and the process must exit.
             catch (Exception ex)
@@ -52,11 +52,12 @@ internal sealed class BatchUi : ApplicationContext
 
     public bool NoFailures { get; private set; }
 
-    public static bool Run(IOperation operation, BatchLeader leader, RunLog log, int maxParallel)
+    /// <param name="running">Passed to the runner: tells the leader, and the process priority, how many files run.</param>
+    public static bool Run(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running)
     {
         Application.EnableVisualStyles();
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        using var ui = new BatchUi(operation, leader, log, maxParallel);
+        using var ui = new BatchUi(operation, leader, log, maxParallel, running);
         Application.Run(ui);
         return ui.NoFailures;
     }

@@ -164,11 +164,14 @@ internal static class Program
             SecureDirectory.TrySecure(AppData.Root);
             log.Prune(LogRetention, DateOnly.FromDateTime(DateTime.Now));
             var maxParallel = MaxParallelFor(operation);
-            if (maxParallel > 1)
-                LowerPriority();
+            Action<int> running = count =>
+            {
+                leader.ReportRunning(count);
+                FollowRunningCount(count);
+            };
             if (Environment.GetEnvironmentVariable("CONVERTANYTHING_HEADLESS") == "1")
-                return RunHeadless(operation, leader, log, maxParallel);
-            return BatchUi.Run(operation, leader, log, maxParallel) ? Ok : SomeFilesFailed;
+                return RunHeadless(operation, leader, log, maxParallel, running);
+            return BatchUi.Run(operation, leader, log, maxParallel, running) ? Ok : SomeFilesFailed;
         }
         finally
         {
@@ -176,14 +179,22 @@ internal static class Program
         }
     }
 
-    // Several conversions at once would otherwise compete with what the user is doing in the foreground. Best effort:
-    // a batch still runs if Windows refuses.
-    private static void LowerPriority()
+    private static bool _lowered;
+
+    // Below normal while two or more files convert at once, so they do not compete with the user's foreground work.
+    // Normal otherwise: ImageMagick's time limit runs per image on the clock, and a large image converting alone (or a
+    // process started from here, such as Explorer opening the log) must not be starved. Called in order by the runner.
+    // Best effort: a batch still runs if Windows refuses.
+    private static void FollowRunningCount(int count)
     {
+        var lower = count > 1;
+        if (lower == _lowered)
+            return;
+        _lowered = lower;
         try
         {
             using var self = System.Diagnostics.Process.GetCurrentProcess();
-            self.PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal;
+            self.PriorityClass = lower ? System.Diagnostics.ProcessPriorityClass.BelowNormal : System.Diagnostics.ProcessPriorityClass.Normal;
         }
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -191,11 +202,11 @@ internal static class Program
     }
 
     /// <summary>Same batch without progress window or notification, for scripts and integration tests.</summary>
-    private static int RunHeadless(IOperation operation, BatchLeader leader, RunLog log, int maxParallel)
+    private static int RunHeadless(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running)
     {
         var outcome = new Runner(log)
             .RunAsync(operation, leader.ReadAllAsync(CancellationToken.None), () => leader.Pending, progress: null, CancellationToken.None,
-                maxParallel, leader.ReportRunning)
+                maxParallel, running)
             .GetAwaiter().GetResult();
         return outcome.NoFailures ? Ok : SomeFilesFailed;
     }

@@ -63,8 +63,9 @@ public static class ImageFile
     /// <summary>
     /// Bytes of pixels every frame takes once decoded, from the headers only (ImageMagick's ping), opened and chosen the
     /// same safe way as <see cref="Read"/>. A frame counts at its canvas size, which an optimized animation's small
-    /// frames reach once <see cref="Coalesce"/> expands them, and with one channel more than ping reports (at least
-    /// four): ping does not report alpha (a CMYK + alpha TIFF pings as 4 channels and decodes as 5).
+    /// frames reach once <see cref="Coalesce"/> expands them, at four bytes per pixel, or one channel more than ping
+    /// reports when that is more. Ping reports no channels for most RGB formats and misses alpha: a CMYK + alpha TIFF
+    /// pings as 4 channels and decodes as 5. Extra TIFF samples beyond that are not seen (accepted, SPEC-image).
     /// </summary>
     public static ulong DecodedBytes(string path)
     {

@@ -17,7 +17,13 @@ public sealed class BudgetedOperation(IOperation inner, MemoryBudget? budget = n
     // The header is read off the caller's thread, like every image operation reads its file.
     public Task<string> RunAsync(string inputPath, CancellationToken ct) => Task.Run(async () =>
     {
-        using var share = await (budget ?? MemoryBudget.Shared).AcquireAsync(MemoryBudget.EstimateNeed(inputPath), ct).ConfigureAwait(false);
+        var shared = budget ?? MemoryBudget.Shared;
+        ulong need;
+        // Reading the header can itself load the whole file (the WebP decoder does), so it holds a share for that.
+        // Released before the full share is requested: holding it while waiting could deadlock the in-order queue.
+        using (await shared.AcquireAsync(MemoryBudget.FileNeed(inputPath), ct).ConfigureAwait(false))
+            need = MemoryBudget.EstimateNeed(inputPath);
+        using var share = await shared.AcquireAsync(need, ct).ConfigureAwait(false);
         return await inner.RunAsync(inputPath, ct).ConfigureAwait(false);
     }, ct);
 }
