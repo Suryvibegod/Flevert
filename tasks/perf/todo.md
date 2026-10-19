@@ -6,7 +6,20 @@ Plan: [plan.md](plan.md).
 - [x] Task 2: chủ lô đếm file đang chạy (`321291b`; test đỏ với `IsIdle` cũ)
 - [x] Task 3: ngân sách bộ nhớ ảnh (`ff2d400`; đối chứng FIFO và cấp sau khi hủy đều đỏ)
 - [x] Task 4: nối vào ca.exe, đo lại (test tích hợp tiến trình thật đỏ → xanh; số đo dưới)
-- [ ] Task 5: review 3 góc (vòng 1 xong, bảng dưới), docs (xong), soát phần sửa, build lại bản nháp
+- [x] Task 5: review 3 góc (vòng 1, bảng dưới), docs, soát phần sửa (vòng 2: không còn Critical/High/Required; Medium/Low đã sửa, bảng dưới)
+- [ ] Build lại bản nháp v0.1.0 (HANDOFF mục 3.5)
+
+## Review vòng 2 (một reviewer bối cảnh trống, 3 góc, trên `7c354dd..3994e7d`): không còn Critical/High/Required
+
+| Finding | Mức | Xử lý |
+|---|---|---|
+| M1: ping chạy ngoài ngân sách mà có thể đọc cả file (WebP đệm 300 MB → +300 MB khi ping), tới 8 cái cùng lúc | Medium | Giữ suất kích thước file × 2 trong lúc ping, trả trước khi xin suất đầy đủ (tránh kẹt FIFO). Chưa có test riêng: hành vi chỉ thấy qua bộ nhớ đỉnh |
+| M2, L4: BelowNormal cho mọi lô; ảnh lớn chạy một mình có thể bị bỏ đói tới giới hạn 120 s; Explorer mở log thừa hưởng | Medium/Low | Ưu tiên theo số file đang chạy: BelowNormal khi ≥ 2, Normal khi ≤ 1. Test tiến trình 2 ca (đối chứng: hạ từ 1 file → ca 1 file đỏ) |
+| L1: câu chữ về số kênh sai (ping báo 0 kênh cho hầu hết RGB) | Low | Sửa chú thích, spec "Đã biết" |
+| L2: test ưu tiên lấy mẫu một lần sau 1 s | Low | Thăm dò 50 ms tới 2,5 s |
+| L3: test đến muộn biên hẹp | Low | `dev.slow-copy` 6 s |
+| L5: ≥ 1000 khung/trang → chạy một mình | Low | Ghi spec "Đã biết" |
+| Nit: tóm tắt lớp `MemoryBudget`; AVIF không đọc cả file khi ping; lỗi kép trong `finally`; chưa test thao tác `MaxParallel = 1` qua ca.exe | Nit | Sửa tóm tắt; còn lại ghi nhận (test sẽ có khi v0.2 thêm ffmpeg) |
 
 ## Review vòng 1 (code-reviewer, security-auditor, doubt-driven): reconcile
 
