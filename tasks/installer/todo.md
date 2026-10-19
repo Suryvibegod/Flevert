@@ -50,7 +50,41 @@ Ký hiệu: CR = code review, SA = security audit, DD = doubt-driven.
 | DD-11: PDB, admin khác, ARM64, "restart Explorer", hậu tố prerelease, bằng sáng chế HEVC | Low | Hợp lệ | Bỏ `*.pdb`; README dặn không "Run as administrator"; ARM64 ghi "chưa kiểm"; câu chữ "sign out / restart your PC"; prerelease: chưa dùng, bỏ qua; HEVC: ADR-0004 |
 | SA-6..10, SA-12 | Info | Không cần làm | Ghi nhận |
 
+## Review vòng 2: đã sửa (2026-10-19)
+
+Danh sách gốc ở mục 1 "Việc dở dang" của HANDOFF. Phần mutex/registry/email sửa trên máy trước; phần còn lại ở `e6d915a`..`e490910`: `.iss` (mã 3 riêng + mục README, câu dự phòng, dòng stderr đầu, bỏ 4551, `try/except` quanh `ca.exe`, không bật menu cổ điển khi menu lỗi, `[Messages]`, `PrepareToInstall` từ chối link và thư mục có file lạ), mutex static, hằng số tên thư mục, test junction `finally`, `test-installer.ps1` (≤ 60 MB, mã 7, kịch bản 6 chỉ nhận nhánh hủy, `finally`, mọi khóa `ConvertAnything*`, kịch bản 7–8), workflow (job attest riêng, tag trên `main`, `ISCC` theo đường dẫn, `10.0.x`, dependabot), `setup-dev.ps1` (chữ ký Authenticode), README/CONTRIBUTING/mẫu bug, spec/ADR-0005.
+
+## Review vòng 3 (code-reviewer, security-auditor, doubt-driven): reconcile
+
+Ký hiệu: CR, SA, DD (F = finding của doubt-driven).
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| SA H-1: setup chạy `ca.exe` từ `{app}` rồi `ca.exe` mới kiểm quyền; DLL người khác đặt vào đã chạy rồi; README bảo chạy uninstaller trong thư mục bị từ chối | High, Required | Hợp lệ | Lệnh mới `ca check-location <dir>` (cùng `InstallLocation`); `PrepareToInstall` tạo `{app}` nếu chưa có, `ExtractTemporaryFiles('{app}\*')` (Inno bung vào thư mục tên nguyên văn `{tmp}\{app}`, ~1 s), chạy kiểm từ đó, từ chối (mã 7) trước khi chép; không chạy được thì cũng từ chối. Kịch bản 4 đổi thành "từ chối, không chép gì" (đỏ với `.iss` cũ: mã 10). README: từ chối thì không có gì để gỡ; nếu đã cài mà menu bị từ chối thì gỡ tay, không chạy uninstaller. Trade-off: `{tmp}` nằm trong `%TEMP%`, nơi Inno vốn đã chạy `setup.tmp`; quyền bị nới **sau** khi cài cần chính người dùng hoặc admin, uninstall không kiểm lại |
+| DD F1, CR-1, SA-L: `LinkOnPath` kiểm `C:` (thư mục hiện tại) thay vì `C:\` | Medium, Required (DD) | Hợp lệ | `RemoveBackslashUnlessRoot`; kịch bản 9 chạy setup từ junction. Không tái hiện được lỗi qua `Start-Process -WorkingDirectory` (setup không giữ thư mục làm việc của người gọi), nhưng gốc ổ trước đó không bao giờ được kiểm |
+| CR-2, DD F9: test registry-error chạy `uninstall-menu` thật, xóa menu đã cài | Medium | Hợp lệ | Skip khi có khóa menu `ConvertAnything*` |
+| CR-3: `setup-dev.ps1` chết khi `gh` ghi stderr (PS 5.1 + Stop) | Medium | Hợp lệ, đã tái hiện | `Invoke-Tolerant`; đối chứng: không bọc thì ném lỗi |
+| CR-4, DD F8: kịch bản 6 có thể gỡ trước khi `ca.exe` giữ mutex / sau khi xong | Medium/Low | Hợp lệ | Chờ mutex tới 15 s, 20 file (~20 s), assert `ca.exe` vẫn chạy sau khi uninstaller xong |
+| CR-5: test mutex rò handle khi skip | Medium | Hợp lệ | `before?.Dispose()` trước `Skip.If` |
+| CR-6: không đọc được ACL → mã 1 thay vì 3 | Low | Hợp lệ | `InstallLocation` bắt `UnauthorizedAccessException`/`IOException` → không an toàn. Không có test: cần quyền admin để tạo thư mục mà chủ sở hữu không đọc được ACL |
+| CR-7: mã thoát/link README trong `.iss` không được ràng | Low | Hợp lệ | `ExitCodes` trong Core; `InstallerScriptTests` kiểm mã và mọi `{#AppUrl}#anchor` có heading trong README |
+| CR-8, DD F2: câu "file ConvertAnything không cài" sai khi là đồ sót của lần cài dở | Low/Medium | Hợp lệ | "perhaps left by an earlier ConvertAnything install that did not finish. Delete the folder…" |
+| DD F3: "silent hủy" chỉ đúng với `/SUPPRESSMSGBOXES`; có cửa sổ tiến trình | Low | Hợp lệ | Sửa chú thích, spec, ADR; `[Messages]` nhắc Cancel trong cửa sổ tiến trình, bỏ "a few seconds" |
+| DD F4: chú thích mutex static nói sai lý do | Low | Hợp lệ | Sửa: Inno cần mutex tới khi tiến trình kết thúc hẳn |
+| DD F5, SA-L2: tag ngoài `main` chạy `release.yml` của chính nó; provenance nói quá | Low | Hợp lệ | README thêm `--source-ref refs/tags/v0.1.0 --deny-self-hosted-runners`, câu chữ chính xác hơn. Ruleset cho tag `v*` và `main`: làm ở bước public (HANDOFF mục 3) |
+| DD F6: SDK trôi | Low | Trade-off | Hỏng thì hỏng kín; release in `dotnet --info` |
+| DD F7, SA-L3: lệnh gỡ tay xóa khóa menu cổ điển không kiểm đánh dấu, đường dẫn wildcard, xóa đệ quy app data | Low | Hợp lệ | `-LiteralPath`, chỉ xóa khóa có đánh dấu, xóa từng thư mục con |
+| DD F10: ngoại lệ ngoài bộ lọc; xung đột menu cổ điển trỏ sai mục | Low | Một phần | Mục README riêng cho xung đột menu cổ điển; giữ bộ lọc ngoại lệ (stderr đã vào log) |
+| SA Info: mutex bị chiếm tên trong cùng phiên | Info | Trade-off | Đã ghi ở ADR-0005 |
+| SA Info: NuGet không khóa (`packages.lock.json`) | Info | Hoãn | Ghi HANDOFF: làm trước v0.2 |
+| SA Info: Dependabot không cooldown | Info | Hợp lệ | `cooldown: default-days: 7` |
+| SA Info, CR-9: kiểm chữ ký chỉ theo tên chủ thể | Info/Low | Trade-off | Script chỉ cho máy dev; giữ |
+| SA Info: SHA pin action chưa đối chiếu | Info | Hợp lệ | Đã đối chiếu bằng `gh api` (2026-10-19): cả 5 action khớp tag ghi trong chú thích |
+| CR-10 nit: `AppMutex.cs` chú thích cũ, HANDOFF cũ, spec thiếu test tích hợp, `args[0]`, `winget` không kiểm mã thoát, cảnh báo scope sai với token không có dòng scope | Nit | Hợp lệ | Sửa hết |
+
 ## Checkpoint
 - [x] Review vòng 1 → reconcile (bảng trên)
-- [ ] Review vòng 2 trên phần thay đổi → không còn Critical/High/Required
+- [x] Review vòng 2 → đã sửa
+- [x] Review vòng 3 → reconcile (bảng trên)
+- [ ] Review vòng 4 trên phần sửa vòng 3 → không còn Critical/High/Required
 - [ ] HANDOFF; commit + push

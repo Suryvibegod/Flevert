@@ -28,7 +28,7 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 |---|---|
 | core | Xong. Review vòng 4–9 đã sửa hết (Phase 5–10 trong [todo.md](todo.md)). Còn mở: test gom lô qua junction hỏng hiếm khi chạy cả solution (đã cho in đủ chẩn đoán). |
 | image | **Xong** (Task 1–7): review 5 vòng, README + ADR-0004. 204 test pass. |
-| installer (v0.1) | **Gần xong.** Code + test đầu-cuối 6 kịch bản xanh; review vòng 1 đã reconcile ([installer/todo.md](installer/todo.md)); review vòng 2 đã có kết quả, **mới sửa một phần** (xem "Việc dở dang"). ADR-0005, README mới, hồ sơ cộng đồng, CI/release workflow đã có. Core 176 test pass + 1 skip, image 204. |
+| installer (v0.1) | **Gần xong.** Review vòng 1–2 đã sửa, vòng 3 đã reconcile và sửa ([installer/todo.md](installer/todo.md)): setup giờ kiểm quyền thư mục bằng `ca check-location` chạy từ `{tmp}` **trước khi chép**. Test đầu-cuối 9 kịch bản. Còn: review vòng 4 trên phần sửa vòng 3. CI/release workflow đã ở `.github/workflows`. |
 | media, pdf | Chưa làm. Spec nháp: [SPEC-media.md](../SPEC-media.md), [SPEC-pdf.md](../SPEC-pdf.md). |
 
 Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói, 0004 Magick.NET, 0005 installer/ký mã). Spec installer: [SPEC-installer.md](../SPEC-installer.md).
@@ -61,7 +61,7 @@ Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
 
 0. ~~Đưa workflow về chỗ~~ **Xong** (2026-10-19, máy Windows 11 Pro): `.github/workflows/` đã push, CI chạy. Máy này có clone cũ trước khi viết lại lịch sử: đã `git reset --hard origin/main`, bản cũ giữ ở nhánh local `backup/pre-rewrite-main` (chỉ khác email, có thể xóa).
 
-1. **Sửa nốt review vòng 2 của installer: XONG** (commit `e6d915a`..`e490910`). E2E 8 kịch bản xanh, test 177+204 xanh. CI lần đầu đỏ vì `RunLogTests` chập chờn trên runner (đã sửa `d662498`). Junction unit test cho `InstallLocation` đã có sẵn (`MenuTests`). **Đang làm: review vòng 3** (3 reviewer bối cảnh trống trên `48fccfa..HEAD`); reconcile vào [installer/todo.md](installer/todo.md). Danh sách vòng 2 gốc (để đối chiếu):
+1. **Review installer.** Vòng 2 đã sửa (`e6d915a`..`e490910`); vòng 3 đã chạy, reconcile và sửa (bảng trong [installer/todo.md](installer/todo.md)). CI: hai test thời gian chập chờn trên runner đã sửa (`RunLogTests`, `ImageIoTests` Cancel). **Việc tiếp theo: review vòng 4** (3 reviewer bối cảnh trống, chỉ đọc) trên phần sửa vòng 3 (từ commit `26ea77b`), reconcile tới khi không còn Critical/High/Required. Danh sách vòng 2 gốc (đã làm hết, để đối chiếu):
    - `.iss`: mã 3 (thư mục bị từ chối) có thông báo + mục README riêng (gồm trường hợp `%LOCALAPPDATA%` qua junction/ổ khác); câu dự phòng "Windows blocked ConvertAnything or it stopped unexpectedly"; chỉ hiện dòng stderr đầu trong hộp thoại, log phần còn lại; bỏ `(Code = ErrorPolicyBlocked)` thừa; `RunCa` bọc `try/except` (ngoại lệ không được bỏ qua `SweepRegistry`); không chạy `classic-menu on` khi `install-menu` đã lỗi, tách chữ trang cuối cho hai loại lỗi; `[Messages]` ghi đè `SetupAppRunningError`/`UninstallAppRunningError` ("A conversion is still running. Wait a few seconds..."); `PrepareToInstall` từ chối `{app}`/`{userpf}` là reparse point, và `{app}` có sẵn, **không rỗng**, mà không có mục gỡ `_is1` của app.
    - `Program.cs`: giữ mutex tới khi tiến trình thoát (trường static, không `using`); hằng số thay cho `SomeFilesFailed` ở nhánh classic-menu.
    - `InstallerScriptTests`: lấy tên thư mục `logs`/`pipes`/`magick` và `SystemFileAssociations` từ hằng số C# (thêm hằng số `internal`), bỏ assert hiển nhiên `Title + ".Menu"`.
@@ -75,11 +75,11 @@ Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
 2. **Kiểm tay menu cổ điển** (người dùng làm): cài setup trong `artifacts\installer`, tick "Use the classic (Windows 10 style) right-click menu for all apps", đăng xuất/đăng nhập, chuột phải ảnh: menu kiểu cũ phải có ConvertAnything ngay ngoài. Ghi kết quả + bản Windows vào ADR-0005. Không xác nhận được thì ẩn trang này ở v0.1.
 3. **Phát hành v0.1.0, đúng thứ tự** (attestation chỉ chạy khi repo public; mọi link trong README/setup trỏ vào release):
    1. Push; CI xanh **3 lần liên tiếp** (Actions, Re-run). Nới test thời gian nếu chỉ đỏ trên CI.
-   2. Đổi repo sang public: `gh repo edit Suryvibegod/ConvertAnything --visibility public --accept-visibility-change-consequences`.
+   2. Đổi repo sang public: `gh repo edit Suryvibegod/ConvertAnything --visibility public --accept-visibility-change-consequences`. Ngay sau đó (review vòng 3, DD F5/SA-L2): ruleset cho tag `refs/tags/v*` (chỉ maintainer được tạo/sửa/xóa) và cho `main` (cấm force-push, cấm xóa), qua `gh api repos/Suryvibegod/ConvertAnything/rulesets`.
    3. Bật private vulnerability reporting: `gh api -X PUT repos/Suryvibegod/ConvertAnything/private-vulnerability-reporting`; bấm thử link `/security/advisories/new`.
    4. Mô tả repo (chỉ nói ảnh ở v0.1; video/PDF là "coming"), homepage = trang releases, topics (tối đa 20: windows, context-menu, image-converter, heic, heic-to-jpg, image-compression, webp, avif, exif, metadata-remover, file-converter, explorer, windows-11, dotnet, csharp, imagemagick, offline, privacy, inno-setup, open-source), bật Discussions; nhờ người dùng đặt ảnh social preview (chỉ làm được trên web).
    5. Tag `v0.1.0`; workflow release tạo bản **nháp**. Tải file exe trong bản nháp, chạy `scripts/test-installer.ps1 -Setup <exe>` trên máy thật + cài tay một lần; so `runtimepack` trong `ca.deps.json` với bản vá .NET 10 mới nhất; quét VirusTotal. Đạt thì Publish.
    6. README: thêm ảnh/GIF demo (menu chuột phải, cửa sổ tiến trình); soạn bài giới thiệu cho người dùng tự đăng.
    7. Nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply).
-4. Media (v0.2), PDF (v0.3) theo [CAPABILITY-MAP.md](../CAPABILITY-MAP.md). v0.2: giữ setup 0.1.0 làm fixture để test nâng cấp thật.
+4. Media (v0.2), PDF (v0.3) theo [CAPABILITY-MAP.md](../CAPABILITY-MAP.md). v0.2: giữ setup 0.1.0 làm fixture để test nâng cấp thật. Trước v0.2 (SA Info vòng 3): bật `RestorePackagesWithLockFile` + `--locked-mode` trên CI/release và package source mapping về nuget.org.
 5. Khi bấm thử menu bằng bản build (không qua installer): `install-menu --allow-insecure-location` (thêm `--dev` nếu cần); nhớ `uninstall-menu`. `test-installer.ps1` từ chối chạy nếu còn menu/app data của bản dev.
