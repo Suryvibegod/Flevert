@@ -37,12 +37,13 @@ jobs:
       - name: Show the SDK and runtime that will ship
         run: dotnet --info
       - name: Build
+        id: build
         run: dotnet build ConvertAnything.sln -c Release
       # One project at a time, as in ci.yml: together they starve the process-batching tests.
       - name: Test core
         run: dotnet test tests/ConvertAnything.Core.Tests -c Release --no-build
       - name: Test images
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: dotnet test tests/ConvertAnything.Image.Tests -c Release --no-build
       - name: No known-vulnerable packages
         shell: pwsh
