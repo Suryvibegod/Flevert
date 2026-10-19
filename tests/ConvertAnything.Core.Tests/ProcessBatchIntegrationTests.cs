@@ -35,6 +35,28 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         Assert.Single(LoggedProcessIds());
     }
 
+    [SkippableFact]
+    public async Task A_batch_converts_several_files_at_once_and_stays_one_batch()
+    {
+        Skip.If(Environment.ProcessorCount < 3, "ca.exe runs files in parallel only with three or more cores.");
+        _idleWindowMs = "3000";
+        var files = Enumerable.Range(1, 6).Select(i => _dir.File($"{i}.txt")).ToList();
+
+        await ExitAllOk(files.Select(f => Ca("dev.slow-copy", f)).ToList());
+
+        // Each log line is written when its file is done, with its duration: rebuild when each file ran.
+        var runs = Directory.GetFiles(_logs.Path, "ca-*.log").SelectMany(File.ReadAllLines).Select(line =>
+        {
+            var fields = line.Split('\t');
+            var end = DateTimeOffset.Parse(fields[0], System.Globalization.CultureInfo.InvariantCulture);
+            return (Start: end - TimeSpan.FromMilliseconds(double.Parse(fields[5], System.Globalization.CultureInfo.InvariantCulture)), End: end);
+        }).OrderBy(r => r.Start).ToList();
+        Assert.Equal(6, runs.Count);
+        Assert.Single(LoggedProcessIds());
+        Assert.True(runs.Zip(runs.Skip(1)).Any(pair => pair.Second.Start < pair.First.End),
+            "no two files ran at the same time: " + string.Join(", ", runs.Select(r => $"{r.Start:HH:mm:ss.fff}-{r.End:HH:mm:ss.fff}")));
+    }
+
     [Fact]
     public async Task Process_started_while_the_leader_is_busy_joins_its_batch()
     {

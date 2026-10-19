@@ -16,6 +16,9 @@ internal static class Program
     private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(
         int.TryParse(Environment.GetEnvironmentVariable("CONVERTANYTHING_BATCH_IDLE_MS"), out var ms) ? Math.Clamp(ms, 100, 10_000) : 400);
     private static readonly TimeSpan LogRetention = TimeSpan.FromDays(7);
+    // Image decoders use one core each; leave one core for the machine and the progress window. Beyond 8 the gain is
+    // small and memory grows (MemoryBudget keeps it within ImageMagick's limit). SPEC-core, "Xử lý song song".
+    private static readonly int MaxParallel = Math.Clamp(Environment.ProcessorCount - 1, 1, 8);
 
     // Never disposed: Inno's AppMutex expects it to exist until the process has fully terminated, which is after Main
     // returns (a using declaration released it there). Windows closes it on exit. See AppMutex.
@@ -161,7 +164,7 @@ internal static class Program
             log.Prune(LogRetention, DateOnly.FromDateTime(DateTime.Now));
             if (Environment.GetEnvironmentVariable("CONVERTANYTHING_HEADLESS") == "1")
                 return RunHeadless(operation, leader, log);
-            return BatchUi.Run(operation, leader, log) ? Ok : SomeFilesFailed;
+            return BatchUi.Run(operation, leader, log, MaxParallel) ? Ok : SomeFilesFailed;
         }
         finally
         {
@@ -173,7 +176,8 @@ internal static class Program
     private static int RunHeadless(IOperation operation, BatchLeader leader, RunLog log)
     {
         var outcome = new Runner(log)
-            .RunAsync(operation, leader.ReadAllAsync(CancellationToken.None), () => leader.Pending, progress: null, CancellationToken.None)
+            .RunAsync(operation, leader.ReadAllAsync(CancellationToken.None), () => leader.Pending, progress: null, CancellationToken.None,
+                MaxParallel, leader.ReportRunning)
             .GetAwaiter().GetResult();
         return outcome.NoFailures ? Ok : SomeFilesFailed;
     }
