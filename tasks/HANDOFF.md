@@ -26,8 +26,8 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 
 | Module | Trạng thái |
 |---|---|
-| core | Xong. Review vòng 4–8 đã sửa hết (Phase 5–9 trong [todo.md](todo.md)); vòng 8 kết luận "ship". Có kết quả "skipped" (`OperationSkippedException`, mã thoát 0). **Review vòng 9 (Phase 9) đang chạy / chạy lại nếu mất kết quả.** 154 test core pass, 1 skip. Còn mở: test gom lô qua junction hỏng hiếm khi chạy cả solution (đã cho in đủ chẩn đoán). |
-| image | Task 1–6 xong; Task 7: review vòng 1–3 đã sửa hết ([tasks/image/todo.md](image/todo.md)); README + ADR-0004 xong. **Review vòng 4 đang chạy / chạy lại nếu mất kết quả.** 197 test pass. |
+| core | Xong. Review vòng 4–9 đã sửa hết (Phase 5–10 trong [todo.md](todo.md)); checkpoint đạt (vòng 9 không còn Critical/High/Required). 156 test pass, 1 skip. Còn mở: test gom lô qua junction hỏng hiếm khi chạy cả solution (đã cho in đủ chẩn đoán). |
+| image | **Xong** (Task 1–7): review 5 vòng, vòng 5 không còn Critical/High/Required; README + ADR-0004. 204 test pass. |
 | installer, media, pdf | Chưa làm. Spec nháp: [SPEC-media.md](../SPEC-media.md), [SPEC-pdf.md](../SPEC-pdf.md). |
 
 Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói). Kế hoạch core: [plan.md](plan.md), [todo.md](todo.md) (Phase 4–5 = sửa theo review).
@@ -46,13 +46,12 @@ Lưu ý môi trường của máy cũ (có thể gặp lại):
 Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
 - SDK cài cho riêng user. Shell mở **trước** khi chạy setup không có `dotnet` trong PATH: trong PowerShell đặt `$env:Path = "$env:LOCALAPPDATA\Microsoft\dotnet;$env:Path"; $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"`. Bản Debug `ca.exe` (framework-dependent) chạy thiếu `DOTNET_ROOT` sẽ bật hộp thoại đòi tải .NET Desktop Runtime: không cần tải, chỉ là thiếu biến môi trường. Explorer chỉ thấy biến mới sau khi đăng xuất/đăng nhập.
 - Smart App Control đang bật (enforce). Nó chặn theo **hash** từng file mới build, ngẫu nhiên: lúc chặn `MenuProbe.exe`, lúc chặn `ConvertAnything.Image.dll` ("An Application Control policy has blocked this file", test host thoát mã 255). Đổi nhẹ mã nguồn để ra hash mới thường qua được. MenuProbe chạy qua host đã ký: `dotnet tools/MenuProbe/bin/Debug/net10.0-windows/MenuProbe.dll list <file>`. **Hệ quả cho bản phát hành:** người dùng bật Smart App Control có thể bị chặn ca.exe/DLL chưa ký; module installer phải tính chuyện ký mã (code signing) hoặc ghi rõ trong README.
-- Máy này chưa đăng nhập GitHub (`git ls-remote` báo "Repository not found" vì repo private): commit đã có ở local, **chưa push**. Cần người dùng chạy `winget install --id GitHub.cli -e`, `gh auth login --web` (tài khoản Suryvibegod), `gh auth setup-git`, rồi `git push`.
+- GitHub CLI đã cài và đăng nhập tài khoản Suryvibegod trên máy này (2026-10-19); `gh auth setup-git` đã chạy, `git push` dùng được.
 - Ghi file có dấu `\` qua heredoc/Python dễ bị biến `\a`, `\b` thành ký tự điều khiển (đã làm hỏng `BatchTests.cs` một lần). Sửa text có backslash bằng công cụ Edit.
 - Kiểm `dotnet format --verify-no-changes` thành **lệnh riêng**, đọc exit code rồi mới commit; đừng gộp chung một lệnh với `git commit`.
 
 ## Việc dở dang cụ thể (làm theo thứ tự)
 
-1. Đối chiếu review vòng 4 module image (`git diff ef7ef4f..HEAD -- src/ConvertAnything.Image tests/ConvertAnything.Image.Tests SPEC-image.md docs/adr/0004-magick-net-for-images.md`) và vòng 9 core (`git diff ef7ef4f..HEAD -- src/ConvertAnything.Core src/ConvertAnything.Cli tests/ConvertAnything.Core.Tests SPEC-core.md`); sửa nếu còn Critical/High/Required; đóng Task 7 image và checkpoint core.
-2. Module installer (v0.1): spec + plan theo quy trình; tính code signing vì Smart App Control.
+1. Module installer (v0.1): spec + plan theo quy trình; quyết định code signing (Smart App Control chặn file chưa ký). Người dùng muốn public repo sớm: đề xuất public ở v0.1 (core + image + installer), **hỏi người dùng trước khi đổi repo sang public**.
+2. Media (v0.2), PDF (v0.3) theo [CAPABILITY-MAP.md](../CAPABILITY-MAP.md).
 3. Khi bấm thử menu trên máy thật: `install-menu --allow-insecure-location` (thêm `--dev` nếu cần) khi chạy từ thư mục build; nhớ `uninstall-menu`.
-4. Đẩy commit lên GitHub khi đã đăng nhập (xem lưu ý môi trường).
