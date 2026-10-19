@@ -17,6 +17,10 @@ internal static class ImageMetadata
         // writes leftover properties as text chunks, so clear them: Strip() already removed comments and dates, what is
         // left is decoder information (png:*, jpeg:*, icc:* descriptions).
         image.RemoveArtifact("png:exclude-chunk");
+        // The JPEG writer reads the source's chroma subsampling from this decoder attribute; without it, it picks 4:4:4
+        // at quality >= 90 (a 4:2:0 phone photo grows) and 4:2:0 below (a 4:4:4 source loses chroma detail).
+        if (image.GetAttribute("jpeg:sampling-factor") is { Length: > 0 } sampling)
+            image.Settings.SetDefine(MagickFormat.Jpeg, "sampling-factor", sampling);
         foreach (var name in image.AttributeNames.ToList())
             image.RemoveAttribute(name);
         if (colourProfile is not null)

@@ -107,7 +107,12 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
             return; // palette format; frames were coalesced and are optimised as a whole
 
         if (target == MagickFormat.Jpeg)
+        {
             ImageMetadata.FlattenOntoWhite(image);
+            // Light keeps the source's subsampling; the stronger levels trade colour resolution for size, as phones do.
+            if (level != CompressLevel.Light)
+                image.Settings.SetDefine(MagickFormat.Jpeg, "sampling-factor", "4:2:0");
+        }
 
         if (level == CompressLevel.Strong && Math.Max(image.Width, image.Height) > StrongMaxEdge)
             image.Resize(new MagickGeometry(StrongMaxEdge, StrongMaxEdge)); // keeps the aspect ratio, only shrinks here

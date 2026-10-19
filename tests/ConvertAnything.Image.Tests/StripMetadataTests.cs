@@ -110,6 +110,31 @@ public sealed class StripMetadataTests : IDisposable
         Assert.True(stripError < lightError, $"strip error {stripError:F5}, light error {lightError:F5}");
     }
 
+    // ImageMagick's JPEG writer picks 4:4:4 at quality >= 90 unless told otherwise, so a 4:2:0 phone photo grew by
+    // 8-16%, and a 4:4:4 source at q80 lost chroma detail.
+    [Theory]
+    [InlineData("4:4:4", 80u, "1x1")]
+    [InlineData("4:2:0", 95u, "2x2")]
+    public async Task A_jpg_keeps_its_chroma_subsampling(string sampling, uint quality, string expected)
+    {
+        var input = _dir.Combine("photo.jpg");
+        using (var image = new MagickImage(MagickColors.SteelBlue, 200, 150))
+        {
+            image.AddNoise(NoiseType.Gaussian, 0.3);
+            image.Quality = quality;
+            image.Settings.SetDefine(MagickFormat.Jpeg, "sampling-factor", sampling);
+            image.Write(input, MagickFormat.Jpeg);
+        }
+
+        using (var check = new MagickImage(input))
+            Assert.StartsWith(expected, check.GetAttribute("jpeg:sampling-factor"), StringComparison.Ordinal);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        using var result = new MagickImage(output);
+        Assert.StartsWith(expected, result.GetAttribute("jpeg:sampling-factor"), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_lossless_webp_stays_lossless()
     {
