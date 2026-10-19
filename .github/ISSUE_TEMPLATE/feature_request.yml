@@ -1,0 +1,15 @@
+name: Feature request
+description: Suggest something ConvertAnything should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you want to do with your files?
+      description: Describe the situation, for example "send 40 phone videos over Zalo".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How would you like it to work?
