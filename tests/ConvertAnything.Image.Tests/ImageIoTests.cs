@@ -63,14 +63,17 @@ public sealed class ImageIoTests : IDisposable
         }
 
         // Decoding cannot be cancelled and its speed varies (0.2 s on a desktop, over 3 s on a busy CI runner), so the
-        // bound scales with this machine's decode time. Uncancelled, the encodes take 10 to 100 times that.
+        // bound scales with this machine's decode time, but never below 5 s: on CI a cancelled strip-metadata still took
+        // 2.4 s while its measured decode was 0.36 s. Uncancelled, to-webp and compress-strong take 9 and 18 s on a
+        // desktop, so they are still caught; strip-metadata (2 s uncancelled) is too quick for the bound to matter, and
+        // only the exception and the missing partial file are checked for it.
         var decode = System.Diagnostics.Stopwatch.StartNew();
         using (new MagickImage(input))
         {
         }
 
         decode.Stop();
-        var bound = TimeSpan.FromSeconds(1) + 2 * decode.Elapsed;
+        var bound = TimeSpan.FromSeconds(Math.Max(5, 1 + 2 * decode.Elapsed.TotalSeconds));
 
         // Cancel once this machine has decoded the image, so the cancel lands in the encode the test is about.
         using var cancel = new CancellationTokenSource(decode.Elapsed + TimeSpan.FromMilliseconds(500));
