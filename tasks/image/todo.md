@@ -1,6 +1,6 @@
 # Todo: image
 
-Spec: [SPEC-image.md](../../SPEC-image.md) · Plan: [plan.md](plan.md)
+Spec: [docs/specs/image.md](../../docs/specs/image.md) · Plan: [plan.md](plan.md)
 
 Mỗi task xong khi đạt acceptance criteria **và** Definition of Done.
 

@@ -1,6 +1,6 @@
 # Spec: core
 
-Module `core` trong [CAPABILITY-MAP.md](CAPABILITY-MAP.md). Không phụ thuộc module nào. Module `image`, `media`, `pdf`, `installer` đều xây trên nó.
+Module `core` trong [docs/specs/capability-map.md](capability-map.md). Không phụ thuộc module nào. Module `image`, `media`, `pdf`, `installer` đều xây trên nó.
 
 ## Objective
 
@@ -32,7 +32,7 @@ Cho phép người dùng Windows chuột phải vào file, chọn một thao tá
 | Kiểu exe | `WinExe` | Explorer gọi exe không nháy cửa sổ console |
 | Test | xUnit | Chuẩn phổ biến của .NET |
 | Thông báo + tiến độ | WinForms (`NotifyIcon.ShowBalloonTip`, một `Form` nhỏ) | Có sẵn trong .NET; balloon hiện như toast trên Win10/11, không cần AUMID / MSIX. Chỉ nạp WinForms khi cần hiện UI |
-| Gom lô | Named pipe một instance (không mutex) | Có sẵn trong .NET; xem [ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md) |
+| Gom lô | Named pipe một instance (không mutex) | Có sẵn trong .NET; xem [ADR-0002](../adr/0002-batching-over-a-single-instance-pipe.md) |
 
 Không thêm package NuGet nào ngoài xUnit cho module này. `ConvertAnything.Core` không tham chiếu WinForms; UI nằm trong `ConvertAnything.Cli`.
 
@@ -73,7 +73,7 @@ src/
 tests/
   ConvertAnything.Core.Tests/  → Unit test + integration test (registry trong key test riêng)
 docs/                          → Tài liệu người dùng, ADR
-CAPABILITY-MAP.md
+docs/specs/capability-map.md
 SPEC-<module-id>.md
 tasks/                         → plan.md, todo.md
 ```
@@ -103,14 +103,14 @@ Explorer ──"ca.exe run image.to-png <file2>"──▶ B: pipe đã có → g
 A: hết hàng đợi + đang rảnh + 400 ms không có path mới → đóng pipe → 1 thông báo → thoát
 ```
 
-Tên pipe: `ConvertAnything-<SID>-<session>-<khóa>-<op-id>`. Khóa ngẫu nhiên riêng cho mỗi thao tác trong `%LOCALAPPDATA%\ConvertAnything\pipes`, thư mục chỉ user / SYSTEM / Administrators mở được, nhãn medium no-read-up; khóa đổi mỗi khi một lô đóng. Hai đầu kiểm tra tiến trình bên kia chạy cùng file exe, cùng session, integrity không thấp hơn. Lô sống tối thiểu 1,5 s; lô đầy (1000 file) trả `Full`: người gửi đổi khóa và tự làm chủ một lô mới, các tiến trình đến sau vào lô đó. Chi tiết, các bảo đảm và trade-off: [ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md).
+Tên pipe: `ConvertAnything-<SID>-<session>-<khóa>-<op-id>`. Khóa ngẫu nhiên riêng cho mỗi thao tác trong `%LOCALAPPDATA%\ConvertAnything\pipes`, thư mục chỉ user / SYSTEM / Administrators mở được, nhãn medium no-read-up; khóa đổi mỗi khi một lô đóng. Hai đầu kiểm tra tiến trình bên kia chạy cùng file exe, cùng session, integrity không thấp hơn. Lô sống tối thiểu 1,5 s; lô đầy (1000 file) trả `Full`: người gửi đổi khóa và tự làm chủ một lô mới, các tiến trình đến sau vào lô đó. Chi tiết, các bảo đảm và trade-off: [ADR-0002](../adr/0002-batching-over-a-single-instance-pipe.md).
 
-### Xử lý song song trong một lô (2026-10-19)
+### Xử lý song song trong một lô
 
 Đo trên máy 16 nhân, ảnh 12 MP: Magick.NET bản phát hành không có OpenMP (`ResourceLimits.Thread = 1`), phần ImageMagick của mỗi ảnh chỉ dùng một nhân (libheif tự giải mã các tile HEIC song song, ~2,8 nhân với ảnh iPhone thật); lô 10 ảnh HEIC→JPG chạy **lần lượt**. Vì vậy:
 
 - `Runner.RunAsync` nhận `maxParallel` (mặc định 1 = hành vi cũ). `IOperation.MaxParallel` mặc định 1: thao tác tự chọn chạy song song (ảnh, dev: 8); ffmpeg ở v0.2 vốn đã dùng mọi nhân nên giữ 1. `ca.exe` dùng `Clamp(min(MaxParallel, số nhân logic − 1), 1, 8)` và hạ ưu tiên tiến trình xuống BelowNormal khi chạy song song (để máy vẫn mượt; đo: thời gian lô không đổi trong nhiễu).
-- Giữ nguyên mọi bảo đảm: mỗi file một kết quả, trùng thì bỏ, 1 file lỗi không chặn file khác, log mỗi file. `Results` theo thứ tự **xong**, không theo thứ tự nhận. Cancel: không lấy file mới, các file đang chạy nhận token; mỗi file bị hủy giữa chừng tính là chưa xử lý (một file đã qua bước kiểm token cuối trước khi đổi tên vẫn có thể có output, như trước đây với một file, giờ tối đa 8). Runner luôn chờ các file đang chạy xong rồi mới báo kết quả, kể cả khi nguồn file lỗi.
+- Giữ nguyên mọi bảo đảm: mỗi file một kết quả, trùng thì bỏ, 1 file lỗi không chặn file khác, log mỗi file. `Results` theo thứ tự **xong**, không theo thứ tự nhận. Cancel: không lấy file mới, các file đang chạy nhận token; mỗi file bị hủy giữa chừng tính là chưa xử lý (một file đã qua bước kiểm token cuối trước khi đổi tên vẫn có thể có output; với file chạy song song, tối đa 8 file như vậy). Runner luôn chờ các file đang chạy xong rồi mới báo kết quả, kể cả khi nguồn file lỗi.
 - Chủ lô chỉ đóng pipe khi **không còn file nào đang chạy** (đếm số file đang chạy, không chỉ cờ "đang cầm một file"): đóng sớm lúc vẫn còn file đang chạy sẽ khiến file đến muộn mở lô thứ hai.
 - Hai file cùng muốn một tên output (`photo.png` và `photo.webp` → `photo.jpg`): `OutputPath` vốn đã an toàn khi ghi đồng thời (`File.Move` không ghi đè, trùng thì thử tên kế), nhưng ai được `photo.jpg` và ai được `photo (1).jpg` giờ tùy file nào xong trước.
 - Lô 1 file: không đổi. Thời gian một file không giảm (nằm trong bộ giải mã); tối thiểu 1,5 s của lô (ADR-0002) giữ nguyên.

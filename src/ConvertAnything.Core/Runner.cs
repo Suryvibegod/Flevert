@@ -35,7 +35,7 @@ public sealed class Runner(RunLog log)
 
     /// <param name="pending">How many received files are still queued; lets progress grow as late files join the batch.</param>
     /// <param name="maxParallel">How many files run at once. Image decoders use one core each, so a batch gains from
-    /// running several (SPEC-core, "Xử lý song song trong một lô"); results then come in the order files finish.</param>
+    /// running several (docs/specs/core.md, "Xử lý song song trong một lô"); results then come in the order files finish.</param>
     /// <param name="running">Told how many files are running: raised before the next file is requested, lowered after
     /// a result is recorded, so a batch leader never sees the batch idle while a file is still being converted. Required
     /// with a <see cref="BatchLeader"/> as the source and <paramref name="maxParallel"/> above 1 (pass

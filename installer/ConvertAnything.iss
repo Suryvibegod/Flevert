@@ -1,4 +1,4 @@
-﻿; Inno Setup 6 script for ConvertAnything. Build with scripts\build-installer.ps1; spec in SPEC-installer.md.
+﻿; Inno Setup 6 script for ConvertAnything. Build with scripts\build-installer.ps1; spec in docs/specs/installer.md.
 ; Per-user install without admin: the right-click menu lives in HKCU, so a machine-wide install would gain nothing.
 
 #if VER < EncodeVer(6, 7, 3)
@@ -273,7 +273,7 @@ end;
 // starts there, a DLL that another account placed beside it has already run. ca.exe runs from setup's own temporary
 // folder instead. The folder is created first, so the check sees the permissions it inherits. '' when it is safe.
 // Trusts the user's %TEMP% as Inno itself does for setup.tmp: on a machine where other accounts can change it, they
-// could swap the extracted files before they run (SPEC-installer.md).
+// could swap the extracted files before they run (../docs/specs/installer.md).
 function LocationProblem(const App: String): String;
 var
   Created, ProgramsCreated, Started: Boolean;

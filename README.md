@@ -120,7 +120,7 @@ ConvertAnything works entirely on your computer. It has no account, no telemetry
 | 0.2 | Video and audio: compress videos to a size that fits messaging apps, convert MP4/MOV/MKV/WEBM, extract MP3, convert audio |
 | 0.3 | PDF: to images, images to PDF, merge, split, compress |
 
-Details in [CAPABILITY-MAP.md](CAPABILITY-MAP.md). Ideas and bug reports are welcome in [issues](https://github.com/Suryvibegod/ConvertAnything/issues).
+Details in [docs/specs/capability-map.md](docs/specs/capability-map.md). Ideas and bug reports are welcome in [issues](https://github.com/Suryvibegod/ConvertAnything/issues).
 
 ## How it works
 
@@ -155,7 +155,7 @@ dotnet run --project tools/MenuProbe -- list "C:\path\file.txt"
 dotnet run --project tools/MenuProbe -- invoke "ConvertAnything/Dev/Copy" "C:\path\file.txt"
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how the project works. Specifications are `SPEC-<module>.md`, decisions are in [docs/adr](docs/adr), plans in [tasks/](tasks).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how the project works. Specifications are `docs/specs/<module>.md`, decisions are in [docs/adr](docs/adr), plans in [tasks/](tasks).
 
 ## License
 

@@ -1,6 +1,6 @@
 # Implementation Plan: installer (v0.1) + phát hành cộng đồng
 
-Spec: [SPEC-installer.md](../../SPEC-installer.md). Danh sách việc: [todo.md](todo.md).
+Spec: [docs/specs/installer.md](../../docs/specs/installer.md). Danh sách việc: [todo.md](todo.md).
 
 ## Overview
 
@@ -21,7 +21,7 @@ Spec: [SPEC-installer.md](../../SPEC-installer.md). Danh sách việc: [todo.md]
 - [ ] Task 3: Notices bên thứ ba, LICENSE trong bộ cài, icon app
 
 ### Checkpoint: Installer
-- [ ] Đủ 7 success criteria trong SPEC-installer, chạy thật trên máy này
+- [ ] Đủ 7 success criteria trong docs/specs/installer.md, chạy thật trên máy này
 - [ ] Review 3 góc (code, bảo mật, doubt) → sửa → không còn Critical/High/Required
 - [ ] ADR-0005, README (cài đặt, SmartScreen/Smart App Control), HANDOFF
 

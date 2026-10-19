@@ -6,7 +6,7 @@ Cập nhật: 2026-10-19 (cuối phiên trên máy thứ hai, chuyển sang máy
 
 Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, không ngoại lệ. Mỗi module, mỗi task:
 
-1. **Define:** spec (`SPEC-<module>.md`) đủ 6 mục, success criteria kiểm được; nếu thiếu thì `interview-me` / `idea-refine` trước.
+1. **Define:** spec (`docs/specs/<module>.md`) đủ 6 mục, success criteria kiểm được; nếu thiếu thì `interview-me` / `idea-refine` trước.
 2. **Plan:** `planning-and-task-breakdown` ra `tasks/<module>/plan.md` + `todo.md`; không ghi đè plan còn việc dở.
 3. **Build:** `incremental-implementation` + `test-driven-development`: viết test, **chạy thấy RED**, rồi mới code cho GREEN. Test pass ngay lần đầu là dấu hiệu xấu: kiểm lại bằng đối chứng âm. `source-driven-development`: kiểm API/giấy phép ở nguồn chính thức trước khi dùng.
 4. **Verify:** chạy thật (MenuProbe, tiến trình `ca.exe` thật, ảnh chụp chỉ cửa sổ của app), `debugging-and-error-recovery` khi lỗi: tái hiện → khoanh vùng → sửa → test chặn.
@@ -15,7 +15,7 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 
 ## Mục tiêu và cách làm việc (người dùng đã chốt)
 
-- Làm **đủ 5 module** theo [CAPABILITY-MAP.md](../CAPABILITY-MAP.md): core → image → installer (v0.1) → media (v0.2) → pdf (v0.3).
+- Làm **đủ 5 module** theo [docs/specs/capability-map.md](../docs/specs/capability-map.md): core → image → installer (v0.1) → media (v0.2) → pdf (v0.3).
 - Tuân thủ **quy trình agent-skills của Addy Osmani** (plugin `agent-skills@addy-agent-skills`): spec → plan/tasks → TDD (RED trước, rồi GREEN) → làm từng lát nhỏ → review 3 góc (code-reviewer, security-auditor, doubt-driven, mỗi reviewer bối cảnh trống, chỉ đọc) → sửa → review lại tới khi không còn Critical/High/Required → docs/ADR → ship.
 - **Không hỏi người dùng**, tự quyết và ghi lý do vào spec/ADR. Cross-model review (Gemini/Codex) bỏ qua, ghi rõ là bỏ qua.
 - Xong hết: repo **public**, release có installer, README có ảnh/GIF demo, topics GitHub, soạn sẵn bài giới thiệu để người dùng tự đăng (Reddit, Facebook nhóm dev VN, ...).
@@ -29,9 +29,9 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 | core | Xong. Review vòng 4–9 đã sửa hết (Phase 5–10 trong [todo.md](todo.md)). Còn mở: test gom lô qua junction hỏng hiếm khi chạy cả solution (đã cho in đủ chẩn đoán). |
 | image | **Xong** (Task 1–7): review 5 vòng, README + ADR-0004. 204 test pass. |
 | installer (v0.1) | **Code + review xong** (5 vòng, [installer/todo.md](installer/todo.md)): setup kiểm quyền thư mục bằng `ca check-location` chạy từ `{tmp}` **trước khi chép**. Test đầu-cuối 9 kịch bản. Còn: kiểm tay menu cổ điển (người dùng), rồi phát hành. Core 190 test + 1 skip, image 204. CI/release workflow đã ở `.github/workflows`. |
-| media, pdf | Chưa làm. Spec nháp: [SPEC-media.md](../SPEC-media.md), [SPEC-pdf.md](../SPEC-pdf.md). |
+| media, pdf | Chưa làm. Spec nháp: [docs/specs/media.md](../docs/specs/media.md), [docs/specs/pdf.md](../docs/specs/pdf.md). |
 
-Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói, 0004 Magick.NET, 0005 installer/ký mã). Spec installer: [SPEC-installer.md](../SPEC-installer.md).
+Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói, 0004 Magick.NET, 0005 installer/ký mã). Spec installer: [docs/specs/installer.md](../docs/specs/installer.md).
 
 Người dùng đã chốt (2026-10-19):
 - Mọi thứ **miễn phí** (Inno Setup; không mua chứng chỉ; ký mã sau qua SignPath Foundation, người dùng tự nộp đơn khi repo đã public).
@@ -47,7 +47,7 @@ Plugin cài giữa phiên chỉ được nạp sau khi khởi động lại Clau
 Lưu ý môi trường của máy cũ (có thể gặp lại):
 - Git global có rule hỏng `url.https://github.com.insteadof git@github.com:` (thiếu `/` cuối) làm cài plugin lỗi; script tự sửa.
 - Test chạy tiến trình `ca.exe` thật cần build cả solution trước (script đã làm).
-- Thư mục `%TEMP%` có thể có nhóm lạ (ví dụ `CodexSandboxUsers`) được quyền ghi; code đã tính tới, test tự dựng ACL.
+- Thư mục `%TEMP%` có thể có nhóm lạ (ví dụ nhóm của một công cụ sandbox) được quyền ghi; code đã tính tới, test tự dựng ACL.
 
 Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
 - SDK cài cho riêng user. Shell mở **trước** khi chạy setup không có `dotnet` trong PATH: trong PowerShell đặt `$env:Path = "$env:LOCALAPPDATA\Microsoft\dotnet;$env:Path"; $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"`. Bản Debug `ca.exe` (framework-dependent) chạy thiếu `DOTNET_ROOT` sẽ bật hộp thoại đòi tải .NET Desktop Runtime: không cần tải, chỉ là thiếu biến môi trường. Explorer chỉ thấy biến mới sau khi đăng xuất/đăng nhập.
@@ -87,5 +87,5 @@ Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
    5. Tag `v0.1.0`; workflow release tạo bản **nháp**. Tải file exe trong bản nháp, chạy `scripts/test-installer.ps1 -Setup <exe>` trên máy thật + cài tay một lần; so `runtimepack` trong `ca.deps.json` với bản vá .NET 10 mới nhất; quét VirusTotal. Đạt thì Publish.
    6. README: thêm ảnh/GIF demo (menu chuột phải, cửa sổ tiến trình); soạn bài giới thiệu cho người dùng tự đăng.
    7. Nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply).
-4. Media (v0.2), PDF (v0.3) theo [CAPABILITY-MAP.md](../CAPABILITY-MAP.md). v0.2: giữ setup 0.1.0 làm fixture để test nâng cấp thật. Trước v0.2 (SA Info vòng 3): bật `RestorePackagesWithLockFile` + `--locked-mode` trên CI/release và package source mapping về nuget.org.
+4. Media (v0.2), PDF (v0.3) theo [docs/specs/capability-map.md](../docs/specs/capability-map.md). v0.2: giữ setup 0.1.0 làm fixture để test nâng cấp thật. Trước v0.2 (SA Info vòng 3): bật `RestorePackagesWithLockFile` + `--locked-mode` trên CI/release và package source mapping về nuget.org.
 5. Khi bấm thử menu bằng bản build (không qua installer): `install-menu --allow-insecure-location` (thêm `--dev` nếu cần); nhớ `uninstall-menu`. `test-installer.ps1` từ chối chạy nếu còn menu/app data của bản dev.

@@ -1,6 +1,6 @@
 namespace ConvertAnything.Core.Tests;
 
-/// <summary>A batch runs several files at once (SPEC-core, "Xử lý song song trong một lô") with the same guarantees.</summary>
+/// <summary>A batch runs several files at once (docs/specs/core.md, "Xử lý song song trong một lô") with the same guarantees.</summary>
 public sealed class RunnerParallelTests : IDisposable
 {
     private readonly TempDir _dir = new();

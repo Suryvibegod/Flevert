@@ -14,7 +14,7 @@ Please attach a sample file only if it contains nothing private. Security proble
 
 ## Suggesting a feature
 
-Open an issue describing what you want to do with your files, not just the button you would add. The planned modules and what is out of scope are in [CAPABILITY-MAP.md](CAPABILITY-MAP.md).
+Open an issue describing what you want to do with your files, not just the button you would add. The planned modules and what is out of scope are in [docs/specs/capability-map.md](docs/specs/capability-map.md).
 
 ## Working on the code
 
@@ -29,7 +29,7 @@ powershell -File scripts/build-installer.ps1
 
 How the project works:
 
-- Each module has a specification (`SPEC-<module>.md`) and architecture decisions live in [docs/adr](docs/adr). Read the relevant ones before changing behaviour. Specs and plans are written in Vietnamese; code, UI, commits and the README in English.
+- Each module has a specification (`docs/specs/<module>.md`) and architecture decisions live in [docs/adr](docs/adr). Read the relevant ones before changing behaviour. Specs and plans are written in Vietnamese; code, UI, commits and the README in English.
 - Write the test first and watch it fail, then make it pass. Bugs get a test that reproduces them.
 - Keep pull requests small: one logical change, with a commit message that explains why.
 - Anything that touches files, paths, the registry or decoding untrusted input gets extra care; the specs list the inputs ConvertAnything refuses and why.

@@ -17,7 +17,7 @@ internal static class Program
         int.TryParse(Environment.GetEnvironmentVariable("CONVERTANYTHING_BATCH_IDLE_MS"), out var ms) ? Math.Clamp(ms, 100, 10_000) : 400);
     private static readonly TimeSpan LogRetention = TimeSpan.FromDays(7);
     // Up to what the operation allows, leaving one core for the machine and the progress window; beyond 8 the gain is
-    // small and memory grows. SPEC-core, "Xử lý song song trong một lô".
+    // small and memory grows. docs/specs/core.md, "Xử lý song song trong một lô".
     private static int MaxParallelFor(IOperation operation) =>
         Math.Clamp(Math.Min(operation.MaxParallel, Environment.ProcessorCount - 1), 1, 8);
 

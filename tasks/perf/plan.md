@@ -1,6 +1,6 @@
 # Plan: tăng tốc convert (xử lý song song trong một lô)
 
-Spec: [SPEC-core.md](../../SPEC-core.md#xử-lý-song-song-trong-một-lô-2026-10-19), [SPEC-image.md](../../SPEC-image.md#ngân-sách-bộ-nhớ-khi-chạy-song-song-2026-10-19). Quy trình: skill `performance-optimization` (đo → tìm nút thắt → sửa một thứ → đo lại, giữ hoặc hoàn tác → chặn hồi quy).
+Spec: [docs/specs/core.md](../../docs/specs/core.md#xử-lý-song-song-trong-một-lô), [docs/specs/image.md](../../docs/specs/image.md#ngân-sách-bộ-nhớ-khi-chạy-song-song). Quy trình: skill `performance-optimization` (đo → tìm nút thắt → sửa một thứ → đo lại, giữ hoặc hoàn tác → chặn hồi quy).
 
 ## Đo nền (2026-10-19, bản publish Release, máy 16 nhân, ảnh 12 MP, trung vị 5 lần)
 

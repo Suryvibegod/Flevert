@@ -1,6 +1,6 @@
 # Spec: image
 
-Module `image` trong [CAPABILITY-MAP.md](CAPABILITY-MAP.md). Phụ thuộc `core` (hợp đồng `IOperation`, `OutputPath`, `Runner`, menu).
+Module `image` trong [docs/specs/capability-map.md](capability-map.md). Phụ thuộc `core` (hợp đồng `IOperation`, `OutputPath`, `Runner`, menu).
 
 ## Objective
 
@@ -88,9 +88,9 @@ Quy tắc chung:
 
 Vượt giới hạn → file đó lỗi, ghi log, các file khác chạy tiếp.
 
-### Ngân sách bộ nhớ khi chạy song song (2026-10-19)
+### Ngân sách bộ nhớ khi chạy song song
 
-Giới hạn 2 GB của ImageMagick tính cho **cả tiến trình**. Khi chủ lô chạy nhiều file cùng lúc (SPEC-core, "Xử lý song song"), vài ảnh cực lớn cùng lúc sẽ tràn sang đĩa (chậm) hoặc vượt giới hạn đĩa 4 GB và lỗi, trong khi chạy lần lượt thì qua. Không được để song song làm hỏng file mà tuần tự làm được:
+Giới hạn 2 GB của ImageMagick tính cho **cả tiến trình**. Khi chủ lô chạy nhiều file cùng lúc (docs/specs/core.md, "Xử lý song song"), vài ảnh cực lớn cùng lúc sẽ tràn sang đĩa (chậm) hoặc vượt giới hạn đĩa 4 GB và lỗi, trong khi chạy lần lượt thì qua. Không được để song song làm hỏng file mà tuần tự làm được:
 
 - Mỗi thao tác ảnh lấy "suất" từ một ngân sách chung **trước khi giải mã**. Ngân sách = `min(ResourceLimits.Memory (2 GB), 1/4 bộ nhớ máy)`, dựng từ hằng số chứ không khởi tạo ImageMagick (một lỗi khởi tạo chỉ làm hỏng một file). Suất = max(byte pixel × 3, kích thước file × 2):
   - byte pixel: mỗi khung tính theo **canvas** (khung tối ưu của GIF/WebP động bị `Coalesce` bung ra cả canvas: GIF 200 khung 1×1 trên canvas 1000×1000 cần ~800 MB, ping từng khung chỉ thấy 2,4 KB) × max(4, số kênh ping báo + 1) byte (ping không báo alpha: TIFF CMYK + alpha ping ra 4 kênh, giải mã ra 5); × 3 = ảnh nguồn, bản đang xử lý, bộ đệm mã hóa.

@@ -1,6 +1,6 @@
 # Implementation Plan: image
 
-Spec: [SPEC-image.md](../../SPEC-image.md). Danh sách việc: [todo.md](todo.md).
+Spec: [docs/specs/image.md](../../docs/specs/image.md). Danh sách việc: [todo.md](todo.md).
 
 ## Overview
 
@@ -29,7 +29,7 @@ Thêm project `ConvertAnything.Image` (Magick.NET) với 14 thao tác: convert s
 - [x] Task 6: Remove metadata
 
 ### Checkpoint: Tính năng
-- [ ] Đủ 9 success criteria trong SPEC-image
+- [ ] Đủ 9 success criteria trong docs/specs/image.md
 
 ### Phase 3: Hoàn thiện
 - [x] Task 7: Review 3 góc (code, bảo mật, doubt), sửa, cập nhật README/ADR

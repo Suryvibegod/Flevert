@@ -1,6 +1,6 @@
 # Implementation Plan: core
 
-Spec: [SPEC-core.md](../SPEC-core.md). Danh sách việc: [todo.md](todo.md).
+Spec: [docs/specs/core.md](../docs/specs/core.md). Danh sách việc: [todo.md](todo.md).
 
 ## Overview
 

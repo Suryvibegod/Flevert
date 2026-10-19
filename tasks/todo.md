@@ -1,6 +1,6 @@
 # Todo: core
 
-Spec: [SPEC-core.md](../SPEC-core.md) · Plan: [plan.md](plan.md)
+Spec: [docs/specs/core.md](../docs/specs/core.md) · Plan: [plan.md](plan.md)
 
 Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done (test xanh, không hồi quy, đã chạy thật, tài liệu cập nhật).
 

@@ -3,7 +3,7 @@ using ImageMagick;
 namespace ConvertAnything.Image;
 
 /// <summary>
-/// Shares ImageMagick's one memory limit between files converted at the same time (SPEC-image, "Ngân sách bộ nhớ khi
+/// Shares ImageMagick's one memory limit between files converted at the same time (docs/specs/image.md, "Ngân sách bộ nhớ khi
 /// chạy song song"). Over the limit ImageMagick moves pixels to disk, and past its disk limit the file fails, so running
 /// files in parallel must never fail a file that one at a time would convert. Shares are granted in arrival order, so a
 /// large image waiting is never overtaken for ever by small ones; a share over half the budget runs alone.

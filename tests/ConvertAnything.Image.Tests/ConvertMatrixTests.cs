@@ -105,7 +105,7 @@ public sealed class ConvertMatrixTests : IDisposable
     }
 
     // Convert keeps metadata (Remove metadata is the operation for stripping it). TIFF is left out: ImageMagick's TIFF
-    // writer drops the EXIF block (checked by hand), a limitation recorded in SPEC-image.
+    // writer drops the EXIF block (checked by hand), a limitation recorded in docs/specs/image.md.
     [Theory]
     [InlineData("image.to-png")]
     [InlineData("image.to-webp")]

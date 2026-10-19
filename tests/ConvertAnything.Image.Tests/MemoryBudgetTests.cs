@@ -1,6 +1,6 @@
 namespace ConvertAnything.Image.Tests;
 
-/// <summary>SPEC-image, "Ngân sách bộ nhớ khi chạy song song": parallel files share ImageMagick's one memory limit.</summary>
+/// <summary>docs/specs/image.md, "Ngân sách bộ nhớ khi chạy song song": parallel files share ImageMagick's one memory limit.</summary>
 public sealed class MemoryBudgetTests
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);

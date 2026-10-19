@@ -1,6 +1,6 @@
 # Spec: pdf
 
-Module `pdf` trong [CAPABILITY-MAP.md](CAPABILITY-MAP.md). Phụ thuộc `core`, `image`. Bản nháp: chốt sau khi `media` xong.
+Module `pdf` trong [docs/specs/capability-map.md](capability-map.md). Phụ thuộc `core`, `image`. Bản nháp: chốt sau khi `media` xong.
 
 ## Objective
 
