@@ -34,14 +34,9 @@ Test: Core 204 (+1 skip), Image 221. Test đầu-cuối installer: `scripts/test
 
 ## Việc đang làm: phát hành v0.1.0
 
-`/ship` (2026-10-19): code-reviewer APPROVE, test-engineer GO có điều kiện, security-auditor **chặn**: GitHub vẫn phục vụ các commit trước khi viết lại lịch sử (có email cá nhân của người dùng). **Người dùng chọn xóa repo và tạo lại** (repo chưa có sao/fork, chưa phát hành). Thứ tự:
+Dự án đã đổi tên thành **Flevert** (người dùng chọn); tài khoản GitHub đổi tên Suryvibegod → **Suryvibegod** (cùng ID). `/ship` chặn vì GitHub còn phục vụ commit cũ có email cá nhân → repo cũ đã **xóa**, repo mới **`Suryvibegod/Flevert`** chỉ có `main` sạch, cấu hình và tính năng bảo mật đã cài lại; link commit cũ đều 404; lịch sử cũ trên máy đã dọn. Bảng reconcile và việc còn lại: [release/todo.md](release/todo.md).
 
-1. Sửa trên máy các mục `/ship` nêu (xong: Cancel không có phím tắt, tên file có `&`, README `gh auth login` + câu chữ Compress, release notes tự động từ CHANGELOG kèm `--source-digest`, Known issues (TIFF GHSA-g5j8-ff59-wp88), RELEASING theo immutable releases, `.gitignore` cho `.claude/settings.local.json`, mã commit cũ trong `tasks/` đổi sang mã mới).
-2. Xóa `Suryvibegod/Flevert`, tạo lại cùng tên, **chỉ** đẩy `main` (không `--all`, không đẩy `backup/pre-rewrite-main`).
-3. Cài lại: mô tả, homepage, 20 topics, Discussions, ruleset "Release tags" (`refs/tags/v*`, chỉ admin) và "Protect main" (cấm force-push/xóa), private vulnerability reporting, Dependabot alerts + security updates, secret scanning + push protection, immutable releases, bắt buộc pin action bằng SHA, fork PR cần duyệt.
-4. Kiểm `github.com/Suryvibegod/ConvertAnything/commit/6498e3f` (commit cũ có email; repo cũ, tên tài khoản cũ Suryvibegod) trả 404; xóa nhánh local `backup/pre-rewrite-main`.
-5. CI xanh 3 lần → tag `v0.1.0` → kiểm bản nháp theo RELEASING (hash, attestation, `test-installer.ps1`, runtime) → quét VirusTotal (người dùng đưa API key trong chat; **không ghi key vào file nào**; nhắc người dùng tạo key mới sau khi quét) → người dùng Publish.
-6. Điều kiện của test-engineer: người dùng kiểm tay một ảnh iPhone **dọc** thật có GPS (Convert → JPG đúng chiều; Remove metadata hết GPS). Sau phát hành: test tự động cho HEIC xoay và cho Remove metadata trên mọi định dạng ([perf/todo.md](perf/todo.md) không có; xem báo cáo test-engineer tóm trong lịch sử commit `docs: record the ship review`).
+Tiếp theo: CI xanh 3 lần trên repo mới → tag `v0.1.0` → kiểm bản nháp theo RELEASING → người dùng cài bản nháp, kiểm ảnh iPhone dọc có GPS, chụp lại menu (tên mới) cho README → quét VirusTotal (người dùng đưa API key trong chat; **không ghi key vào file nào**; nhắc tạo key mới sau khi quét) → người dùng Publish.
 
 Sau v0.1.0: nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview trên web, soạn bài giới thiệu (Reddit, nhóm dev VN). Rồi media (v0.2): giữ setup 0.1.0 làm fixture test nâng cấp; bật `RestorePackagesWithLockFile` + `--locked-mode`; ffmpeg đặt `MaxParallel = 1`.
 
