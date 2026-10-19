@@ -216,6 +216,32 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         Assert.Contains("other accounts can modify", stderr, StringComparison.Ordinal);
     }
 
+    [SkippableFact]
+    public async Task Check_location_accepts_a_folder_only_this_user_can_change()
+    {
+        // The control for the refusals: under the user's own profile, not %TEMP%, which some machines share with
+        // sandbox accounts.
+        var dir = Directory.CreateDirectory(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ca-test-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            Skip.IfNot(ConvertAnything.Core.Menu.InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir),
+                "Other accounts can change %LOCALAPPDATA% or a folder above it on this machine.");
+            var start = new ProcessStartInfo(CaExe) { UseShellExecute = false, RedirectStandardError = true };
+            start.ArgumentList.Add("check-location");
+            start.ArgumentList.Add(dir);
+            using var ca = Process.Start(start)!;
+            var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+            Assert.True(ca.ExitCode == ExitCodes.Ok, $"exit {ca.ExitCode}: {stderr}");
+        }
+        finally
+        {
+            Directory.Delete(dir);
+        }
+    }
+
     [Fact]
     public async Task Check_location_refuses_a_folder_that_does_not_exist()
     {

@@ -73,7 +73,7 @@ internal static class Program
                 {
                     if (!install.AllowInsecureLocation)
                     {
-                        Console.Error.WriteLine($"Refusing to register {exe}: other accounts can modify its folder, or it is reached through a link, so they could run code as you. Install with the ConvertAnything installer instead.");
+                        Console.Error.WriteLine($"Refusing to register {exe}: other accounts can modify its folder, or it is reached through a link, so they could run code as you (or its permissions could not be read, or it is not on a local NTFS drive). Install with the ConvertAnything installer instead.");
                         return RefusedLocation;
                     }
 
@@ -119,7 +119,7 @@ internal static class Program
 
                 if (InstallLocation.IsWritableOnlyByOwnerAndAdmins(check.Directory))
                     return Ok;
-                Console.Error.WriteLine($"Refusing to install into {check.Directory}: other accounts can modify it or a folder above it, or it is reached through a link, so they could run code as you.");
+                Console.Error.WriteLine($"Refusing to install into {check.Directory}: other accounts can modify it or a folder above it, or it is reached through a link, so they could run code as you (or its permissions could not be read, or it is not on a local NTFS drive).");
                 return RefusedLocation;
 
             case ListOpsCommand:

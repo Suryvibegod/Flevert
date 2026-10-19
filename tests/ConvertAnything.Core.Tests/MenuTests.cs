@@ -146,6 +146,50 @@ public sealed class MenuTests
         Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir.Path));
     }
 
+    // Setup checks the install folder while it is still empty. An entry that applies only to files created later
+    // (inherit-only) would give every copied ca.exe and DLL to other accounts, so it counts although it does not
+    // apply to the folder itself.
+    [Theory]
+    [InlineData(System.Security.AccessControl.InheritanceFlags.ObjectInherit)]
+    [InlineData(System.Security.AccessControl.InheritanceFlags.ContainerInherit)]
+    public void Install_location_that_would_hand_new_files_to_other_users_is_unsafe(System.Security.AccessControl.InheritanceFlags inheritance)
+    {
+        using var parent = new TempDir();
+        ProtectToOwnerAndAdmins(parent.Path);
+        var app = Directory.CreateDirectory(Path.Combine(parent.Path, "app")).FullName;
+        Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)), "control");
+
+        var acl = new DirectoryInfo(app).GetAccessControl();
+        acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+            new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null),
+            System.Security.AccessControl.FileSystemRights.Modify, inheritance,
+            System.Security.AccessControl.PropagationFlags.InheritOnly, System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(app).SetAccessControl(acl);
+
+        Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
+    }
+
+    [Fact]
+    public void Inherit_only_entries_on_a_parent_do_not_make_the_install_location_unsafe()
+    {
+        // C:\ grants Authenticated Users inherit-only Modify for new folders; the install folder's own ACL shows what
+        // actually reached it, so a parent's inherit-only entries are not held against it.
+        using var parent = new TempDir();
+        ProtectToOwnerAndAdmins(parent.Path);
+        var acl = new DirectoryInfo(parent.Path).GetAccessControl();
+        acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+            new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.AuthenticatedUserSid, null),
+            System.Security.AccessControl.FileSystemRights.Modify, System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+            System.Security.AccessControl.PropagationFlags.InheritOnly | System.Security.AccessControl.PropagationFlags.NoPropagateInherit,
+            System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(parent.Path).SetAccessControl(acl);
+        var app = Path.Combine(parent.Path, "app");
+        Directory.CreateDirectory(app);
+        ProtectToOwnerAndAdmins(app);
+
+        Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
+    }
+
     [Fact]
     public void Install_location_whose_parent_other_users_may_modify_is_unsafe()
     {

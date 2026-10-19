@@ -66,7 +66,7 @@ public static partial class InstallLocation
         var root = new DirectoryInfo(directory);
         if (!IsOnLocalFixedDriveAsWritten(root.FullName))
             return false;
-        if (IsLink(root) || !IsSafe(root.GetAccessControl(), WriteRights, trusted))
+        if (IsLink(root) || !IsSafe(root.GetAccessControl(), WriteRights, trusted, countInheritOnly: true))
             return false;
 
         foreach (var entry in root.EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
@@ -74,15 +74,17 @@ public static partial class InstallLocation
             if ((entry.Attributes & FileAttributes.ReparsePoint) != 0)
                 return false; // its ACL check would follow the link to a target whose parents are never checked
             FileSystemSecurity acl = entry is DirectoryInfo d ? d.GetAccessControl() : ((FileInfo)entry).GetAccessControl();
-            if (!IsSafe(acl, WriteRights, trusted))
+            if (!IsSafe(acl, WriteRights, trusted, countInheritOnly: true))
                 return false;
         }
 
+        // A parent's inherit-only entries are not held against it: what they passed down is in the ACLs checked above
+        // (C:\ itself grants Authenticated Users inherit-only Modify for new folders).
         for (var parent = root.Parent; parent is not null; parent = parent.Parent)
         {
             if (stopAt is not null && string.Equals(parent.FullName.TrimEnd('\\'), stopAt.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
                 break;
-            if (IsLink(parent) || !IsSafe(parent.GetAccessControl(), ParentRights, trusted))
+            if (IsLink(parent) || !IsSafe(parent.GetAccessControl(), ParentRights, trusted, countInheritOnly: false))
                 return false;
         }
 
@@ -137,7 +139,11 @@ public static partial class InstallLocation
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint GetFinalPathNameByHandleW(SafeFileHandle file, [Out] char[] path, uint length, uint flags);
 
-    private static bool IsSafe(FileSystemSecurity acl, FileSystemRights dangerous, HashSet<SecurityIdentifier> trusted)
+    /// <param name="countInheritOnly">
+    /// For the install folder and the folders in it: entries that apply only to files and folders created later count
+    /// too, because setup checks the folder before it copies anything into it.
+    /// </param>
+    private static bool IsSafe(FileSystemSecurity acl, FileSystemRights dangerous, HashSet<SecurityIdentifier> trusted, bool countInheritOnly)
     {
         // The owner can always rewrite the DACL.
         if (acl.GetOwner(typeof(SecurityIdentifier)) is SecurityIdentifier owner && !trusted.Contains(owner))
@@ -145,8 +151,10 @@ public static partial class InstallLocation
 
         foreach (FileSystemAccessRule rule in acl.GetAccessRules(includeExplicit: true, includeInherited: true, typeof(SecurityIdentifier)))
         {
-            if (rule.AccessControlType != AccessControlType.Allow || rule.PropagationFlags.HasFlag(PropagationFlags.InheritOnly))
-                continue; // inherit-only entries do not apply to this object; children are checked on their own
+            if (rule.AccessControlType != AccessControlType.Allow)
+                continue;
+            if (!countInheritOnly && rule.PropagationFlags.HasFlag(PropagationFlags.InheritOnly))
+                continue; // does not apply to this folder; what it passes down is checked where it lands
             if ((rule.FileSystemRights & dangerous) != 0 && !trusted.Contains((SecurityIdentifier)rule.IdentityReference))
                 return false;
         }
