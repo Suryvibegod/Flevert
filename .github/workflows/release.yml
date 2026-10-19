@@ -34,6 +34,8 @@ jobs:
         with:
           # The newest .NET 10 patch: a self-contained release ships its runtime.
           dotnet-version: 10.0.x
+      - name: Show the SDK and runtime that will ship
+        run: dotnet --info
       - name: Test
         run: dotnet test ConvertAnything.sln -c Release
       - name: No known-vulnerable packages

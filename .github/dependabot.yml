@@ -1,12 +1,17 @@
 version: 2
 updates:
   # Actions are pinned by commit; Dependabot proposes the new commit and release name together.
+  # A week's wait: a hijacked release is usually found and pulled before it would be proposed.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
   # Magick.NET bundles ImageMagick and its decoders, the main attack surface (ADR-0004).
   - package-ecosystem: nuget
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
