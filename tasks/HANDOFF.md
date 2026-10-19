@@ -19,7 +19,7 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 - **Không hỏi người dùng** những gì tự quyết được, ghi lý do vào spec/ADR; hỏi trước việc khó đảo ngược hoặc ra bên ngoài (xóa repo, publish, gửi file lên dịch vụ khác, dùng file cá nhân của người dùng).
 - Mọi thứ **miễn phí** (Inno Setup; không mua chứng chỉ; ký mã sau qua SignPath Foundation, người dùng tự nộp đơn).
 - Repo **public cho cộng đồng**, tên **Flevert**. Ngôn ngữ: UI/README/commit tiếng Anh; spec/plan nội bộ tiếng Việt.
-- Commit: `Suryvibegod` với email ẩn của GitHub (`79949229+<tên đăng nhập>@users.noreply.github.com`; script setup đặt khi `gh` đăng nhập đúng tài khoản ID 79949229, nay tên **Suryvibegod** (trước là Suryvibegod; commit cũ mang tên cũ vẫn gắn đúng tài khoản qua ID); **không bao giờ** dùng email cá nhân), kết thúc message bằng dòng `Co-Authored-By`.
+- Commit: tên **Suryvibegod** với email ẩn của GitHub `79949229+Suryvibegod@users.noreply.github.com` (script setup đặt khi `gh` đăng nhập đúng tài khoản ID 79949229; GitHub gắn email ẩn với tài khoản qua số ID); **không bao giờ** dùng email cá nhân; kết thúc message bằng dòng `Co-Authored-By`.
 
 ## Trạng thái
 
@@ -34,9 +34,9 @@ Test: Core 204 (+1 skip), Image 221. Test đầu-cuối installer: `scripts/test
 
 ## Việc đang làm: phát hành v0.1.0
 
-Dự án đã đổi tên thành **Flevert** (người dùng chọn); tài khoản GitHub đổi tên Suryvibegod → **Suryvibegod** (cùng ID). `/ship` chặn vì GitHub còn phục vụ commit cũ có email cá nhân → repo cũ đã **xóa**, repo mới **`Suryvibegod/Flevert`** chỉ có `main` sạch, cấu hình và tính năng bảo mật đã cài lại; link commit cũ đều 404; lịch sử cũ trên máy đã dọn. Bảng reconcile và việc còn lại: [release/todo.md](release/todo.md).
+Repo **`Suryvibegod/Flevert`** (tạo lại để GitHub không còn phục vụ commit cũ có email cá nhân). Trước khi public, người dùng yêu cầu: chuẩn prod, phát triển tiếp được, sạch; ba audit đã sửa xong phần trong repo. Bảng reconcile và việc còn lại: [release/todo.md](release/todo.md).
 
-Tiếp theo: CI xanh 3 lần trên repo mới → tag `v0.1.0` → kiểm bản nháp theo RELEASING → người dùng cài bản nháp, kiểm ảnh iPhone dọc có GPS, chụp lại menu (tên mới) cho README → quét VirusTotal (người dùng đưa API key trong chat; **không ghi key vào file nào**; nhắc tạo key mới sau khi quét) → người dùng Publish.
+Tiếp theo: CI xanh 3 lần trên repo mới → tag `v0.1.0` → kiểm bản nháp theo RELEASING → người dùng cài bản nháp, kiểm ảnh iPhone dọc có GPS, chụp lại menu (tên mới) cho README → quét VirusTotal (API key người dùng đưa trong chat, chỉ dùng trong lệnh, **không ghi vào file nào**) → người dùng Publish.
 
 Sau v0.1.0: nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview trên web, soạn bài giới thiệu (Reddit, nhóm dev VN). Rồi pdf (v0.2): hoàn thiện spec `docs/specs/pdf.md`, mở rộng `IOperation` cho batch operations (chọn nhiều ảnh bất kỳ sang 1 PDF, ghép PDF), tích hợp qpdf (Apache-2.0) và Docnet.Core/PDFiumCore. Sau đó mới tới media (v0.3).
 

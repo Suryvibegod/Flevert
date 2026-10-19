@@ -60,7 +60,7 @@ flevert.exe install-menu [--dev] [--allow-insecure-location]
 flevert.exe uninstall-menu               Gỡ mọi key đã ghi
 flevert.exe list-ops                     In danh sách thao tác và loại file áp dụng
 
-Biến môi trường: FLEVERT_HEADLESS=1 (chạy lô không UI), FLEVERT_LOG_DIR (đổi thư mục log), FLEVERT_BATCH_IDLE_MS (cửa sổ rảnh của lô, 100–10 000 ms; chỉ cho test tích hợp trên máy bận)
+Biến môi trường: FLEVERT_HEADLESS=1 (chạy lô không UI), FLEVERT_LOG_DIR (đổi thư mục log), FLEVERT_BATCH_IDLE_MS (cửa sổ rảnh của lô, 100–10 000 ms; chỉ cho test tích hợp trên máy bận), FLEVERT_SLOW_COPY_MS (thời gian của thao tác dev Slow copy, 0–60 000 ms, mặc định 1 000; chỉ cho test tích hợp)
 ```
 
 ## Project Structure
