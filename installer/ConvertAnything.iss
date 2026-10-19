@@ -57,6 +57,8 @@ UninstallDisplayIcon={app}\{#AppExe}
 AppMutex={#AppMutexName}
 CloseApplications=yes
 RestartApplications=no
+; PrepareToInstall unpacks a second copy of the app (about 140 MB) into {tmp}, usually on the same drive as {app}.
+ExtraDiskSpaceRequired=150000000
 ; Tells Explorer the menu changed, also when only the uninstall safety net below could clean up.
 ChangesAssociations=yes
 
@@ -91,7 +93,7 @@ const
   ClassicMenuMarker = 'ConvertAnything';
   // Inno writes it for AppId; PrepareToInstall uses it to recognise an earlier install. InstallerScriptTests checks it.
   UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{8B7A3F52-2C64-4F0B-9E3D-5A1C7E2B9D40}_is1';
-  // ca.exe's exit code for a folder other accounts can change (Program.RefusedLocation): setup again cannot fix it.
+  // ca.exe's exit code for a folder other accounts can change (ExitCodes.RefusedLocation): setup again cannot fix it.
   ExitRefusedLocation = 3;
   // Setup's exit code when it installed the files but could not set up the menu; Inno's own codes stop at 8.
   ExitMenuFailed = 10;
@@ -272,36 +274,49 @@ end;
 // The same check ca.exe install-menu makes, but before anything is copied or run from the install folder: once ca.exe
 // starts there, a DLL that another account placed beside it has already run. ca.exe runs from setup's own temporary
 // folder instead. The folder is created first, so the check sees the permissions it inherits. '' when it is safe.
+// Trusts the user's %TEMP% as Inno itself does for setup.tmp: on a machine where other accounts can change it, they
+// could swap the extracted files before they run (SPEC-installer.md).
 function LocationProblem(const App: String): String;
 var
-  Created, Started: Boolean;
+  Created, ProgramsCreated, Started: Boolean;
   Code: Integer;
-  Reason: String;
+  Reason, Checker: String;
 begin
   Result := '';
+  ProgramsCreated := not DirExists(ExtractFileDir(App));
   Created := not DirExists(App);
   if Created and not ForceDirectories(App) then
   begin
     Result := 'Setup could not create ' + App + '.';
     Exit;
   end;
+  Checker := AddBackslash(ExpandConstant('{tmp}')) + '{app}';
   try
     // {app} stays unexpanded: this extracts the files meant for {app} into a folder literally named {tmp}\{app}.
     ExtractTemporaryFiles('{app}\*');
   except
-    Log('Extracting ca.exe to check the install folder: ' + GetExceptionMessage);
+    Result := 'Setup could not unpack its files into ' + ExpandConstant('{tmp}') + ' to check the install folder: ' +
+      GetExceptionMessage + ' Make sure the drive has free space, then run setup again.';
   end;
-  if not RunCaIn(AddBackslash(ExpandConstant('{tmp}')) + '{app}', 'check-location "' + App + '"', Started, Code, Reason) then
+  if (Result = '') and not RunCaIn(Checker, 'check-location "' + App + '"', Started, Code, Reason) then
   begin
+    if Reason = '' then
+      Reason := 'Other accounts may be able to change ' + App + '.';
     if Started and (Code = ExitRefusedLocation) then
       Result := Reason + ' See {#AppUrl}#setup-refused-the-install-folder'
+    else if Started and (Code >= 1) and (Code <= 3) then
+      Result := Format('Setup could not check the install folder (code %d): %s', [Code, Reason])
     else
-      Result := Format('Setup could not check the install folder (code %d). Windows blocked ConvertAnything or it ' +
-        'stopped unexpectedly. See {#AppUrl}#smart-app-control', [Code]);
+      Result := Format('Setup could not check the install folder (code %d). Windows, or a security policy that ' +
+        'blocks programs in the temporary folder, stopped ConvertAnything from running. See {#AppUrl}#smart-app-control', [Code]);
   end;
-  // Leave nothing behind for a refused install; a folder that was there before is not ours to remove.
+  // Leave nothing behind for a refused install; folders that were there before are not ours to remove.
   if (Result <> '') and Created then
+  begin
     RemoveDir(App);
+    if ProgramsCreated then
+      RemoveDir(ExtractFileDir(App));
+  end;
 end;
 
 // Refused before anything is copied: files copied through a link land wherever it points, ca.exe would load a DLL

@@ -53,13 +53,25 @@ public sealed class InstallerScriptTests
     [Fact]
     public void Every_readme_link_in_the_script_names_a_readme_heading()
     {
-        var readme = File.ReadAllText(Path.Combine(RepositoryRoot(), "README.md"));
+        // Lines starting with # inside code blocks are comments, not headings.
+        var readme = Regex.Replace(File.ReadAllText(Path.Combine(RepositoryRoot(), "README.md")), @"(?ms)^```.*?^```", "");
         var anchors = Regex.Matches(readme, @"^#{1,6} (.+)$", RegexOptions.Multiline)
             .Select(m => Slug(m.Groups[1].Value.Trim())).ToHashSet(StringComparer.Ordinal);
         var links = Regex.Matches(Script, @"\{#AppUrl\}#([a-z0-9-]+)").Select(m => m.Groups[1].Value).Distinct().ToList();
 
         Assert.NotEmpty(links);
         Assert.All(links, link => Assert.Contains(link, anchors));
+    }
+
+    [Fact]
+    public void Link_check_walks_up_to_the_drive_root_itself()
+    {
+        // "C:" without a backslash is the current directory on drive C, so plain RemoveBackslash on "C:\" checked
+        // the wrong folder. Setup does not keep the caller's working directory, so no end-to-end test can show it.
+        var body = Regex.Match(Script, @"(?ms)^function LinkOnPath\(.*?^end;").Value;
+
+        Assert.Contains("RemoveBackslashUnlessRoot", body, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"\bRemoveBackslash\(", body);
     }
 
     // GitHub's heading anchors: lower case, spaces to hyphens, punctuation dropped.

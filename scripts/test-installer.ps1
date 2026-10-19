@@ -245,7 +245,8 @@ try {
     AssertClean
 
     Write-Host 'Scenario 9: setup started from a folder that is a junction still installs'
-    # The link check walks up to the drive root; checking "C:" instead of "C:\" reads the current directory on C:.
+    # A smoke test only: setup does not keep the caller's working directory, so this passes with or without the
+    # drive-root fix in LinkOnPath. InstallerScriptTests checks that fix in the script itself.
     $cwdTarget = Join-Path $work 'cwd-target'
     $cwdLink = Join-Path $work 'cwd-link'
     New-Item -ItemType Directory $cwdTarget | Out-Null
