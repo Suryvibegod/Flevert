@@ -21,8 +21,6 @@ Free, open source and fully offline: your files never leave your computer.
 - The result is saved next to the original, which is never modified or overwritten.
 
 <p align="center">
-<img src="assets/screenshots/menu.png" width="486" alt="Explorer's right-click menu on a picture, with Flevert open showing Convert, Compress and Remove metadata">
-<br><br>
 <img src="assets/screenshots/progress.png" width="420" alt="The Flevert progress window converting twelve photos to JPG: 8 of 12 done, with a Cancel button">
 </p>
 
