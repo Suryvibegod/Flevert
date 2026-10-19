@@ -25,29 +25,28 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 
 | Module | Trạng thái |
 |---|---|
-| core | Xong, review nhiều vòng ([todo.md](todo.md)). Chạy song song nhiều file trong một lô ([perf/todo.md](perf/todo.md)). |
+| core | Xong, review nhiều vòng ([todo.md](todo.md)). Chạy song song nhiều file trong một lô ([perf/todo.md](perf/todo.md)). Báo bản mới từ GitHub Releases ([update/todo.md](update/todo.md), ADR-0006). |
 | image | Xong ([image/todo.md](image/todo.md), ADR-0004). Ngân sách bộ nhớ chung khi chạy song song. |
-| installer (v0.1) | Xong, review 5 vòng ([installer/todo.md](installer/todo.md)); menu cổ điển kiểm tay đạt (ADR-0005). |
-| media, pdf | Chưa làm. Spec nháp: [docs/specs/media.md](../docs/specs/media.md), [docs/specs/pdf.md](../docs/specs/pdf.md). |
+| installer (v0.1) | Xong, review 5 vòng ([installer/todo.md](installer/todo.md)); menu cổ điển kiểm tay đạt (ADR-0005); trang "New versions" (`/UPDATECHECK`). |
+| pdf (v0.2) | Spec đã chốt: [docs/specs/pdf.md](../docs/specs/pdf.md). Chưa có plan/code. |
+| media (v0.3) | Spec đã chốt: [docs/specs/media.md](../docs/specs/media.md). Chưa có plan/code. |
 
-Test: Core 204 (+1 skip), Image 240. Test đầu-cuối installer: `scripts/test-installer.ps1` (9 kịch bản, chạy tay trên máy thật). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` (release notes lấy từ `CHANGELOG.md`).
+Test: Core 269 (+1 skip), Image 240. Test đầu-cuối installer: `scripts/test-installer.ps1` (9 kịch bản, chạy tay trên máy thật, `%LOCALAPPDATA%\Flevert` phải không tồn tại). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` + [docs/RELEASING.md](../docs/RELEASING.md).
 
-## Việc đang làm: phát hành v0.1.0
+## Việc đang làm: phát hành v0.1.0 (người dùng: "hôm nay chỉ cần release xong v0.1.0 và spec rõ v0.2, v0.3")
 
-Repo **`Suryvibegod/Flevert`** (tạo lại để GitHub không còn phục vụ commit cũ có email cá nhân). Trước khi public, người dùng yêu cầu: chuẩn prod, phát triển tiếp được, sạch; ba audit đã sửa xong phần trong repo. Bảng reconcile và việc còn lại: [release/todo.md](release/todo.md).
+Việc còn lại theo thứ tự: [release/todo.md](release/todo.md).
 
-Tiếp theo: CI xanh 3 lần trên repo mới → tag `v0.1.0` → kiểm bản nháp theo RELEASING → người dùng cài bản nháp, kiểm ảnh iPhone dọc có GPS, chụp lại menu (tên mới) cho README → quét VirusTotal (API key người dùng đưa trong chat, chỉ dùng trong lệnh, **không ghi vào file nào**) → người dùng Publish.
+1. Đổi tác giả mọi commit thành Suryvibegod (email ẩn), xóa và tạo lại `Suryvibegod/Flevert`, cài lại cấu hình (ruleset main cần PR + code owner, chủ repo bypass; tag `v*` chỉ admin; immutable releases; Dependabot, secret scanning, push protection; SHA pinning; fork PR cần duyệt), topics, mô tả.
+2. CI xanh 3 lần → tag `v0.1.0` → kiểm bản nháp theo RELEASING (hash, attestation, `test-installer.ps1 -Setup <file tải về>`, runtime).
+3. Quét VirusTotal (API key người dùng đưa trong chat, chỉ dùng trong lệnh, **không ghi vào file nào**; nhắc người dùng tạo key mới sau đó).
+4. Người dùng bấm Publish (việc ra bên ngoài, không đảo ngược: chỉ người dùng làm). Người dùng tự bật 2FA cho tài khoản GitHub (tên thật đã xóa khỏi hồ sơ qua API).
 
-Sau v0.1.0: nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview trên web, soạn bài giới thiệu (Reddit, nhóm dev VN). Rồi pdf (v0.2): hoàn thiện spec `docs/specs/pdf.md`, mở rộng `IOperation` cho batch operations (chọn nhiều ảnh bất kỳ sang 1 PDF, ghép PDF), tích hợp qpdf (Apache-2.0) và pdfium. Sau đó mới tới media (v0.3).
+## Sau v0.1.0
 
-Điều kiện v0.2 (từ review trước phát hành, phải nằm trong plan):
-- Script `scripts/fetch-deps.ps1` tải qpdf/pdfium bản cố định vào `deps/`, kiểm SHA256; CI và release dùng nó; không commit binary.
-- pdfium phải là bản mới (vd. `bblanchon/pdfium-binaries`, ghim hash), **không** dùng Docnet.Core/PDFiumCore vì kèm pdfium cũ 2021–2023 (PDF là input không tin cậy).
-- `build-installer.ps1` gom notice của deps (pdfium kèm FreeType, libjpeg-turbo, OpenJPEG, lcms2, zlib; qpdf và thư viện kèm) vào bộ cài.
-- `IOperation` nhiều input → một output (N→1) và một input → nhiều output, có tiến độ; giới hạn trang và kích thước (sau khi nhân DPI); pdfium không thread-safe: tuần tự hóa toàn tiến trình.
-- Mật khẩu cho qpdf không qua dòng lệnh (`--password-file` hoặc `@-` qua stdin).
-- Spec pdf.md cần sửa: PDFsharp 6.5+ là AGPL nhưng ≤6.2.4 là MIT; "CLI không GUI" mâu thuẫn hộp thoại mật khẩu; mục tiêu "dưới 200ms" chỉ cho khởi động; extract-images giữ JPEG gốc thay vì ép PNG; giới hạn trang **và** kích thước.
-- Giữ setup 0.1.0 làm fixture test nâng cấp; bật `RestorePackagesWithLockFile` + `--locked-mode`.
+- Nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview, viết bài giới thiệu.
+- v0.2 (pdf): theo quy trình, bắt đầu bằng `planning-and-task-breakdown` từ [docs/specs/pdf.md](../docs/specs/pdf.md) ra `tasks/pdf/plan.md` + `todo.md`; trả lời Open Questions của spec ở bước Plan; thay đổi core (N→1, 1→N, ExternalTool) làm trước, có ADR. Giữ file setup 0.1.0 (tải từ Releases theo hash) làm fixture test nâng cấp.
+- v0.3 (media): sau v0.2; quyết GPL hay LGPL ffmpeg (spec, Open Question 1) ở bước Plan.
 
 ## Dựng máy mới
 
