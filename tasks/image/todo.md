@@ -54,7 +54,7 @@ Mỗi task xong khi đạt acceptance criteria **và** Definition of Done.
 
 ## Task 7: Review và tài liệu
 - Acceptance:
-  - [ ] 3 reviewer bối cảnh trống; không còn Critical/High/Required
+  - [x] 3 reviewer bối cảnh trống; không còn Critical/High/Required (vòng 5)
   - [x] README liệt kê thao tác ảnh; ADR chọn Magick.NET (ADR-0004)
 - Scope: M
 
@@ -188,4 +188,16 @@ Doubt-driven vòng 3 (đến sau): 1 High, còn lại Medium/Low; không crash n
 | Biến môi trường LOCALAPPDATA/APPDATA khác known folder | Low | Chấp nhận (cần môi trường đã bị sửa) | — |
 | README fixtures hỏng mã "×", BOM | Nit | Hợp lệ | đã sửa |
 
-- [ ] Review vòng 5 module image (sau các bản sửa này)
+- [x] Review vòng 5 module image: **không Critical/High/Required** → đạt checkpoint Task 7
+
+### Review vòng 5 (2026-10-19): Medium đã sửa
+
+| Finding | Mức | Xử lý |
+|---|---|---|
+| Thumbnail nằm trước ảnh → Compress/Under N xử lý thumbnail; thumbnail xen giữa trang → mất trang 2 (hồi quy) | Medium | `ReadFirstPage`: đọc từng ảnh, bỏ thumbnail, gặp trang thật thứ hai thì lỗi |
+| Remove metadata giữ thumbnail (thành trang, lộ ảnh trước khi sửa, ép kiểu nén) | Medium | bỏ thumbnail trước khi chọn kiểu nén |
+| Giới hạn thô thấp 3 lần với Group 4 (TIFF 1,5 MB → 450 MB) | Medium | nhân hệ số phình theo kiểu nén (G4/fax ×3, LZW ×1,4) |
+| Giới hạn thô áp cả GIF/WebP động (chặn trước giới hạn 400 MP) | Medium | chỉ áp cho TIFF |
+| Test giới hạn chỉ kiểm ngưỡng | Low | thêm test `RawBytes` trên trang Group 4 thật |
+| Subfile type 3/4, palette tính 4 byte/pixel | Low | chấp nhận (ước lượng dư, an toàn) |
+| README fixtures, cảnh báo của script sinh | Nit | README sửa; cảnh báo là của Pillow, file đúng |

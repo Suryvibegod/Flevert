@@ -35,7 +35,8 @@ public static class ImageFile
     /// <param name="allFrames">False decodes only the first frame or page: a 1000-frame GIF converted to PNG need not
     /// decode the other 999.</param>
     /// <param name="maxFrames">Decode at most this many frames (to tell whether there is more than one).</param>
-    public static MagickImageCollection Read(string path, bool allFrames = true, uint? maxFrames = null)
+    /// <param name="frameIndex">Start at this frame (with <paramref name="maxFrames"/> = 1 to read exactly one).</param>
+    public static MagickImageCollection Read(string path, bool allFrames = true, uint? maxFrames = null, uint frameIndex = 0)
     {
         MagickSetup.EnsureInitialized();
         if (!Formats.TryGetValue(Path.GetExtension(path), out var format))
@@ -48,9 +49,9 @@ public static class ImageFile
         stream.Position = 0;
 
         var settings = new MagickReadSettings { Format = format };
-        if (!allFrames || maxFrames is not null)
+        if (!allFrames || maxFrames is not null || frameIndex > 0)
         {
-            settings.FrameIndex = 0;
+            settings.FrameIndex = frameIndex;
             settings.FrameCount = allFrames ? maxFrames : 1;
         }
 
@@ -58,6 +59,55 @@ public static class ImageFile
         settings.SetDefine(MagickFormat.Tiff, "ignore-layers", "true");
         return new MagickImageCollection(stream, settings);
     }
+
+    /// <summary>
+    /// The one real page of a TIFF, read an image at a time so that thumbnails stored before, between or after pages are
+    /// skipped and at most two pages are ever decoded. A second real page means the request (one output image) cannot
+    /// be fulfilled without dropping it, which fails.
+    /// </summary>
+    public static MagickImageCollection ReadFirstPage(string path)
+    {
+        MagickImageCollection? page = null;
+        for (uint index = 0; ; index++)
+        {
+            MagickImageCollection image;
+            try
+            {
+                image = Read(path, maxFrames: 1, frameIndex: index);
+            }
+            catch (MagickException) when (page is not null)
+            {
+                break; // past the last image
+            }
+
+            if (image.Count == 0)
+            {
+                image.Dispose();
+                break;
+            }
+
+            if (IsThumbnail(image[0]))
+            {
+                image.Dispose();
+                continue;
+            }
+
+            if (page is null)
+            {
+                page = image;
+                continue;
+            }
+
+            image.Dispose();
+            page.Dispose();
+            throw new InvalidOperationException("The TIFF has several pages and the result is a single image; use Remove metadata to keep every page.");
+        }
+
+        return page ?? throw new InvalidOperationException("The TIFF holds only thumbnails.");
+    }
+
+    /// <summary>A reduced-resolution thumbnail stored as an extra TIFF image (NewSubfileType = 1), not a page.</summary>
+    public static bool IsThumbnail(IMagickImage<byte> image) => image.GetAttribute("tiff:subfiletype") == "REDUCEDIMAGE";
 
     /// <summary>
     /// The format the file is decoded as: the allowed format its signature shows, or else the one its extension names.
@@ -233,24 +283,37 @@ public static class ImageFile
     /// may be encoded in memory. Compression proves nothing (a 2.2 MB crafted TIFF of Deflate pages produced 435 MB), but
     /// raw size scales with what a page really holds: 60 black-and-white A4 scans are 65 MB raw, 60 colour ones 1.5 GB.
     /// </summary>
-    internal static bool FitsInMemory(ulong rawBytes) => rawBytes <= MaxInMemoryBytes;
+    /// <remarks>
+    /// The guard is for TIFF pages; GIF and WebP animations have their own frames x canvas cap. Some codecs can grow past
+    /// the raw size: Group 4 or fax on a checkerboard about 3x (a 1.5 MB crafted TIFF of shared strips produced 450 MB),
+    /// LZW on noise about 1.4x.
+    /// </remarks>
+    internal static bool FitsInMemory(ulong rawBytes, MagickFormat format, CompressionMethod compression)
+    {
+        if (format != MagickFormat.Tiff)
+            return true;
+        var growth = compression switch
+        {
+            CompressionMethod.Group4 or CompressionMethod.Fax => 3.0, // Fax is Group 3
+            CompressionMethod.LZW => 1.4,
+            _ => 1.0,
+        };
+        return rawBytes * growth <= MaxInMemoryBytes;
+    }
+
+    /// <summary>Worst-case raw size of an image: width x height x channels x bits per channel.</summary>
+    internal static ulong RawBytes(IMagickImage<byte> image) => (ulong)image.Width * image.Height * image.ChannelCount * image.Depth / 8;
 
     private const ulong MaxInMemoryBytes = 1UL << 30;
 
-    /// <summary>
-    /// Pages of a TIFF, not counting reduced-resolution thumbnails stored as extra images (NewSubfileType = 1), which
-    /// scanners and cameras add.
-    /// </summary>
-    public static int PageCount(MagickImageCollection images) =>
-        images.Count(image => image.GetAttribute("tiff:subfiletype") != "REDUCEDIMAGE");
 
     /// <summary>Writes every frame (an animation or pages) to a new file through a stream.</summary>
     public static void Write(MagickImageCollection images, string path, MagickFormat format)
     {
         // The pages are encoded in memory below, outside ImageMagick's limits. Only one frame's settings decide the
         // compression of a collection write (Remove metadata chooses one that suits every page).
-        var raw = images.Aggregate(0UL, (sum, image) => sum + ((ulong)image.Width * image.Height * image.ChannelCount * image.Depth / 8));
-        if (!FitsInMemory(raw))
+        var raw = images.Aggregate(0UL, (sum, image) => sum + RawBytes(image));
+        if (!FitsInMemory(raw, format, images[0].Settings.Compression))
             throw new InvalidOperationException("The image has too many large pages or frames to process.");
 
         // Multi-page TIFF cannot be written to a .NET stream (libtiff fails linking directories); an in-memory blob works.

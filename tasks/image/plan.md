@@ -32,7 +32,7 @@ Thêm project `ConvertAnything.Image` (Magick.NET) với 14 thao tác: convert s
 - [ ] Đủ 9 success criteria trong SPEC-image
 
 ### Phase 3: Hoàn thiện
-- [ ] Task 7: Review 3 góc (code, bảo mật, doubt), sửa, cập nhật README/ADR
+- [x] Task 7: Review 3 góc (code, bảo mật, doubt), sửa, cập nhật README/ADR
 
 ## Risks and Mitigations
 

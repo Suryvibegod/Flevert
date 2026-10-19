@@ -175,8 +175,8 @@ public sealed class FramesTests : IDisposable
         var page = (Width: 2480UL, Height: 3508UL);
         var sixtyPages = Enumerable.Repeat(page.Width * page.Height * channels * depth / 8, 60).Aggregate(0UL, (a, b) => a + b);
 
-        Assert.Equal(fits, ImageFile.FitsInMemory(sixtyPages));
-        Assert.True(ImageFile.FitsInMemory(100_000_000), "small totals always fit");
+        Assert.Equal(fits, ImageFile.FitsInMemory(sixtyPages, MagickFormat.Tiff, CompressionMethod.Zip));
+        Assert.True(ImageFile.FitsInMemory(100_000_000, MagickFormat.Tiff, CompressionMethod.Zip), "small totals always fit");
     }
 
     [Fact]
@@ -194,19 +194,63 @@ public sealed class FramesTests : IDisposable
         Assert.True(red.R > 200 && red.G < 80 && red.B < 80, $"page 2 should still be red, was {red}");
     }
 
-    // A reduced-resolution thumbnail stored as a second image is not a second page.
+    // A reduced-resolution thumbnail stored as another image is not a page, wherever it sits: the result is the real
+    // image, never the thumbnail.
     [Theory]
-    [InlineData("image.compress-balanced")]
-    [InlineData("image.compress-under-1mb")]
-    public async Task A_tiff_with_a_thumbnail_is_not_treated_as_multi_page(string operationId)
+    [InlineData("image.compress-balanced", "with-thumbnail.tif")]
+    [InlineData("image.compress-under-1mb", "with-thumbnail.tif")]
+    [InlineData("image.compress-balanced", "thumbnail-first.tif")]
+    [InlineData("image.compress-under-1mb", "thumbnail-first.tif")]
+    public async Task A_tiff_with_a_thumbnail_is_processed_as_its_one_real_page(string operationId, string fixture)
     {
         var input = _dir.Combine("photo.tif");
-        File.Copy(Path.Combine(AppContext.BaseDirectory, "fixtures", "with-thumbnail.tif"), input);
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "fixtures", fixture), input);
 
         var output = await Op(operationId).RunAsync(input, CancellationToken.None);
 
         using var jpg = new MagickImage(output);
         Assert.Equal((300u, 200u), (jpg.Width, jpg.Height));
+    }
+
+    // page, thumbnail, page, thumbnail: reading only two images saw one page and silently dropped the second.
+    [Theory]
+    [InlineData("image.compress-balanced")]
+    [InlineData("image.compress-under-1mb")]
+    public async Task Pages_separated_by_thumbnails_are_still_several_pages(string operationId)
+    {
+        var input = _dir.Combine("scan.tif");
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "fixtures", "pages-with-thumbnails.tif"), input);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => Op(operationId).RunAsync(input, CancellationToken.None));
+
+        Assert.Contains("pages", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Removing_metadata_drops_tiff_thumbnails()
+    {
+        // A thumbnail can still show the image as it was before editing, and written back it became a visible page.
+        var input = _dir.Combine("photo.tif");
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "fixtures", "with-thumbnail.tif"), input);
+
+        var output = await Op("image.strip-metadata").RunAsync(input, CancellationToken.None);
+
+        using var result = new MagickImageCollection(output);
+        var page = Assert.Single(result);
+        Assert.Equal((300u, 200u), (page.Width, page.Height));
+    }
+
+    [Fact]
+    public void A_bilevel_page_counts_one_bit_per_pixel_and_group4_may_triple_it()
+    {
+        using var pages = new MagickImageCollection(Path.Combine(AppContext.BaseDirectory, "fixtures", "mixed-g4-colour.tif"));
+
+        Assert.Equal(200UL * 150 / 8, ImageFile.RawBytes(pages[0]));
+        // Group 4 can encode a checkerboard at about 3x its raw size; LZW on noise at about 1.4x.
+        Assert.False(ImageFile.FitsInMemory(400_000_000, MagickFormat.Tiff, CompressionMethod.Group4));
+        Assert.True(ImageFile.FitsInMemory(400_000_000, MagickFormat.Tiff, CompressionMethod.Zip));
+        // GIF and WebP animations have their own frames x canvas cap; this guard is for TIFF pages only.
+        Assert.True(ImageFile.FitsInMemory(1_500_000_000, MagickFormat.WebP, CompressionMethod.Undefined));
     }
 
     [Fact]

@@ -31,6 +31,15 @@ public sealed class ImageStripMetadata : IOperation
             // Animations and TIFF pages are all kept; formats with one image need only that one decoded.
             var keepsFrames = ImageFile.IsAnimationFormat(target) || target == MagickFormat.Tiff;
             using var images = ImageFile.Read(inputPath, allFrames: keepsFrames);
+            // TIFF thumbnails can still show the image as it was before editing; they are metadata, not pages.
+            foreach (var thumbnail in images.Where(ImageFile.IsThumbnail).ToList())
+            {
+                if (images.Count == 1)
+                    break;
+                images.Remove(thumbnail);
+                thumbnail.Dispose();
+            }
+
             ImageFile.StopOnCancel(images, token);
             // One compression is written for every page. Keep the source's when all pages share it; a scanner that mixes
             // Group 4 text pages with colour pages gets lossless Zip, or its colour pages would turn black and white.

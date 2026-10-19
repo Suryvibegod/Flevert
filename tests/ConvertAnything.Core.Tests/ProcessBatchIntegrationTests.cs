@@ -28,8 +28,9 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         var processes = files.Select(f => Ca("dev.copy", f)).ToList();
         await ExitAllOk(processes);
 
-        // Headless: the leader exits as soon as the batch is done instead of waiting for a notification.
-        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(4), $"took {timer.Elapsed}");
+        // Headless: the leader exits as soon as the batch is done instead of waiting for a notification (which would add
+        // at least the notification's lifetime). About 2 s alone; 4.1 s was seen while the image suite ran in parallel.
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(8), $"took {timer.Elapsed}");
         Assert.Equal(20, Directory.GetFiles(_dir.Path, "* (copy).txt").Length);
         Assert.Single(LoggedProcessIds());
     }

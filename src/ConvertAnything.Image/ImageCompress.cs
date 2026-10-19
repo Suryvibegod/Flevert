@@ -44,14 +44,11 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
         return Task.Run(async () =>
         {
             var source = ImageFile.RealFormat(inputPath);
-            // A TIFF is read up to its second page, only to tell whether it has more than one.
+            // The result is one JPG: for a TIFF, its one real page (thumbnails skipped); a second page fails, since
+            // Compress cannot fulfil the request without dropping it (a skip would claim there is nothing to gain).
             using var images = source == MagickFormat.Tiff
-                ? ImageFile.Read(inputPath, maxFrames: 2)
+                ? ImageFile.ReadFirstPage(inputPath)
                 : ImageFile.Read(inputPath, allFrames: ImageFile.IsAnimationFormat(source));
-            // The result is one JPG: Compress cannot fulfil the request without dropping pages, so it fails (a skip would
-            // claim there is nothing to gain).
-            if (source == MagickFormat.Tiff && ImageFile.PageCount(images) > 1)
-                throw new InvalidOperationException("The TIFF has several pages and Compress makes a single image; use Remove metadata to keep every page.");
             ImageFile.StopOnCancel(images, ct);
             var target = Target(source, animated: images.Count > 1);
             var desired = Path.Combine(

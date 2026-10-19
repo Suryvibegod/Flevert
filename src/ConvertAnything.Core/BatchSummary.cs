@@ -27,7 +27,7 @@ public sealed record BatchSummary(string Text, bool HasFailures, bool ShowsLog)
                 : new($"Nothing to do: {skipped} files skipped. Details: {logDirectory}", false, true);
         }
 
-        var text = $"Done: {FileCount(succeeded)}" + (skipped > 0 ? $", {skipped} skipped" : "");
+        var text = $"Done: {CountOfFiles(succeeded)}" + (skipped > 0 ? $", {skipped} skipped" : "");
         if (failed > 0)
             // The balloon may be gone before the user reads it, so name the place rather than relying on a click.
             return new($"{text}, {failed} failed. Details: {logDirectory}", true, true);
@@ -37,5 +37,5 @@ public sealed record BatchSummary(string Text, bool HasFailures, bool ShowsLog)
             : new(text, false, false);
     }
 
-    private static string FileCount(int n) => n == 1 ? "1 file" : $"{n} files";
+    private static string CountOfFiles(int n) => n == 1 ? "1 file" : $"{n} files";
 }
