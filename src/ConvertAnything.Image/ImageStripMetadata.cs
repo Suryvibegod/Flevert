@@ -28,7 +28,9 @@ public sealed class ImageStripMetadata : IOperation
         return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => Task.Run(() =>
         {
             var lossless = target == MagickFormat.WebP && ImageFile.IsLosslessWebP(inputPath);
-            using var images = ImageFile.Read(inputPath);
+            // Animations and TIFF pages are all kept; formats with one image need only that one decoded.
+            var keepsFrames = ImageFile.IsAnimationFormat(target) || target == MagickFormat.Tiff;
+            using var images = ImageFile.Read(inputPath, allFrames: keepsFrames);
             foreach (var frame in images)
             {
                 frame.AutoOrient();
@@ -42,7 +44,7 @@ public sealed class ImageStripMetadata : IOperation
                     frame.Quality = HighQuality;
             }
 
-            if (images.Count > 1 && (target is MagickFormat.Gif or MagickFormat.WebP))
+            if (images.Count > 1)
                 ImageFile.Write(images, temp, target);
             else
                 ImageFile.Write(images[0], temp, target);

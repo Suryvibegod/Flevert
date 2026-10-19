@@ -36,8 +36,9 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
         var sourceExtension = Path.GetExtension(inputPath);
         return Task.Run(async () =>
         {
-            using var images = ImageFile.Read(inputPath);
-            var target = Target(ImageFile.FormatOf(sourceExtension), animated: images.Count > 1);
+            var source = ImageFile.FormatOf(sourceExtension);
+            using var images = ImageFile.Read(inputPath, allFrames: ImageFile.IsAnimationFormat(source));
+            var target = Target(source, animated: images.Count > 1);
             // Keep the user's spelling (.jpeg, .JPG) when the format stays the same.
             var extension = target == ImageFile.FormatOf(sourceExtension) ? sourceExtension : ".jpg";
             var desired = Path.Combine(
@@ -45,9 +46,9 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
 
             return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) =>
             {
-                if (target is MagickFormat.Gif or MagickFormat.WebP && images.Count > 1)
+                if (ImageFile.IsAnimationFormat(target) && images.Count > 1)
                 {
-                    images.Coalesce();
+                    ImageFile.Coalesce(images);
                     foreach (var frame in images)
                         Prepare(frame, target);
                     if (target == MagickFormat.Gif)

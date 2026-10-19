@@ -35,7 +35,7 @@ public sealed class ImageCompressUnder(string id, long limitBytes, string label)
             Path.GetDirectoryName(inputPath)!, $"{Path.GetFileNameWithoutExtension(inputPath)} (under {label}).jpg");
         return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => Task.Run(() =>
         {
-            using var images = ImageFile.Read(inputPath);
+            using var images = ImageFile.Read(inputPath, allFrames: false); // the result is one JPG
             var original = images[0];
             original.AutoOrient();
             ImageMetadata.StripExceptColourProfile(original);

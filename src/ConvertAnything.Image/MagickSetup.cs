@@ -28,6 +28,9 @@ public static class MagickSetup
         </policymap>
         """;
 
+    /// <summary>Pixels per image (400 MP); also the cap on an animation's frames × canvas before it is expanded.</summary>
+    internal const ulong MaxArea = 400_000_000;
+
     private static readonly Lock Gate = new();
     private static bool _initialized;
 
@@ -75,7 +78,7 @@ public static class MagickSetup
 
             ResourceLimits.Width = 40_000;
             ResourceLimits.Height = 40_000;
-            ResourceLimits.Area = 400_000_000;
+            ResourceLimits.Area = MaxArea;
             ResourceLimits.Memory = 2UL * 1024 * 1024 * 1024;
             ResourceLimits.MaxMemoryRequest = 1UL * 1024 * 1024 * 1024;
             ResourceLimits.Disk = 4UL * 1024 * 1024 * 1024;
