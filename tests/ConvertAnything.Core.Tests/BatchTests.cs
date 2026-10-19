@@ -58,6 +58,40 @@ public sealed class BatchTests
     }
 
     [Fact]
+    public async Task A_parallel_consumer_keeps_the_batch_open_while_a_file_it_took_is_still_running()
+    {
+        // The parallel runner asks for the next file while the first one is still converting; the queue is then empty
+        // and nothing is "held", but the batch must stay open until the running file is done.
+        var op = UniqueOp();
+        await using var leader = (await Batch.LeadOrJoinAsync(op, [@"C:\first.txt"], Idle, CancellationToken.None))!;
+        var seen = new List<string>();
+        Task? converting = null;
+        var joined = false;
+
+        await foreach (var file in leader.ReadAllAsync(CancellationToken.None))
+        {
+            seen.Add(file);
+            if (file != @"C:\first.txt")
+                continue;
+
+            leader.ReportRunning(1);
+            converting = Task.Run(async () =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2.5));
+                var late = await Batch.LeadOrJoinAsync(op, [@"C:\late.txt"], Idle, CancellationToken.None);
+                joined = late is null;
+                if (late is not null)
+                    await late.DisposeAsync();
+                leader.ReportRunning(0);
+            });
+        }
+
+        await converting!;
+        Assert.True(joined, "the late file started a second batch");
+        Assert.Equal([@"C:\first.txt", @"C:\late.txt"], seen);
+    }
+
+    [Fact]
     public async Task Different_operations_never_share_a_batch()
     {
         var (opA, opB) = (UniqueOp(), UniqueOp());

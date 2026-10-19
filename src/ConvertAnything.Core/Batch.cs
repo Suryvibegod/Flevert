@@ -275,6 +275,7 @@ public sealed class BatchLeader : IAsyncDisposable
     private readonly Task _listener;
     private readonly Func<uint, bool> _isTrusted;
     private bool _busy;
+    private int _running;
     private int _disposed;
 
     private BatchLeader(
@@ -298,6 +299,12 @@ public sealed class BatchLeader : IAsyncDisposable
 
     /// <summary>Distinct files queued but not yet handed to the consumer.</summary>
     public int Pending => _queue.Reader.Count;
+
+    /// <summary>
+    /// How many files the consumer is still converting. A consumer that runs several files at once asks for the next one
+    /// while earlier ones run; the batch stays open until this is back to zero. Report it before asking for the next file.
+    /// </summary>
+    public void ReportRunning(int count) => Volatile.Write(ref _running, count);
 
     /// <param name="createServer">Creates a replacement pipe instance with the same name, after a client broke the current one.</param>
     internal static BatchLeader Start(
@@ -378,8 +385,9 @@ public sealed class BatchLeader : IAsyncDisposable
             return _seen.Count + files.Distinct(StringComparer.Ordinal).Count(f => !_seen.Contains(f)) <= Batch.MaxFilesPerBatch;
     }
 
-    // Read the queue before the flag: the consumer sets the flag before taking, so a held file is always visible in one of them.
-    private bool IsIdle => _queue.Reader.Count == 0 && !Volatile.Read(ref _busy);
+    // Read the queue before the flag: the consumer sets the flag before taking, so a held file is always visible in one of
+    // them. A parallel consumer reports a taken file as running before it asks for the next, so it stays visible after.
+    private bool IsIdle => _queue.Reader.Count == 0 && !Volatile.Read(ref _busy) && Volatile.Read(ref _running) == 0;
 
     private async Task ListenAsync(Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed)
     {
