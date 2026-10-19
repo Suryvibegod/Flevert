@@ -2,7 +2,13 @@
 .SYNOPSIS
 Publishes ca.exe self-contained (ADR-0003) and compiles the Inno Setup installer into artifacts\installer.
 Needs the .NET 10 SDK and Inno Setup 6 (free: winget install JRSoftware.InnoSetup --scope user).
+
+.PARAMETER Iscc
+The Inno Setup compiler to use. Defaults to ISCC on PATH, then the usual install folders. The release workflow passes
+the one it has just installed and checked.
 #>
+param([string]$Iscc)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -18,7 +24,11 @@ function Find-Tool([string]$Name, [string[]]$Candidates) {
 }
 
 $dotnet = Find-Tool 'dotnet' @("$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe", "$env:ProgramFiles\dotnet\dotnet.exe")
-$iscc = Find-Tool 'ISCC' @("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")
+if ($Iscc) {
+    if (-not (Test-Path $Iscc -PathType Leaf)) { throw "ISCC not found at $Iscc" }
+} else {
+    $Iscc = Find-Tool 'ISCC' @("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")
+}
 
 # A stale file in the publish folder would be packed into the installer.
 if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
@@ -48,7 +58,7 @@ foreach ($library in $deps.libraries.PSObject.Properties | Where-Object { $_.Val
 [IO.File]::WriteAllText((Join-Path $publish 'THIRD-PARTY-NOTICES.txt'), $notices.ToString(), [Text.UTF8Encoding]::new($false))
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $publish 'LICENSE.txt')
 
-& $iscc /Qp "/DSourceDir=$publish" (Join-Path $root 'installer\ConvertAnything.iss')
+& $Iscc /Qp "/DSourceDir=$publish" (Join-Path $root 'installer\ConvertAnything.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
 
 Get-ChildItem (Join-Path $root 'artifacts\installer') -Filter 'ConvertAnything-Setup-*.exe' |

@@ -1,7 +1,8 @@
 name: Release
 
-# Push a tag such as v0.1.0 (matching <Version> in Directory.Build.props). The installer is built and tested with
-# read-only rights, gets a build provenance attestation, and is attached to a draft release for a maintainer to publish.
+# Push a tag such as v0.1.0 (matching <Version> in Directory.Build.props) on a commit of main. The installer is built
+# and tested with read-only rights, a separate job attests its build provenance, and another attaches it to a draft
+# release for a maintainer to publish.
 on:
   push:
     tags: ['v*']
@@ -18,15 +19,21 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: read
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The whole history, so the tag can be checked against main.
+          fetch-depth: 0
+      - name: Check the tag is on main
+        shell: pwsh
+        run: |
+          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+          if ($LASTEXITCODE -ne 0) { throw "$env:TAG is not on main; releases are built only from reviewed commits." }
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          global-json-file: global.json
+          # The newest .NET 10 patch: a self-contained release ships its runtime.
+          dotnet-version: 10.0.x
       - name: Test
         run: dotnet test ConvertAnything.sln -c Release
       - name: No known-vulnerable packages
@@ -41,19 +48,20 @@ jobs:
           $setup = "$env:RUNNER_TEMP\innosetup-6.7.3.exe"
           Invoke-WebRequest https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe -OutFile $setup
           if ((Get-FileHash $setup -Algorithm SHA256).Hash -ne '9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732') { throw 'Inno Setup download does not match its published hash' }
-          Start-Process $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/CURRENTUSER' -Wait
+          $dir = "$env:RUNNER_TEMP\inno"
+          $p = Start-Process $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/CURRENTUSER', "/DIR=`"$dir`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Inno Setup install failed ($($p.ExitCode))" }
+          if (-not (Test-Path "$dir\ISCC.exe")) { throw "ISCC.exe not found in $dir" }
       - name: Build installer
         shell: pwsh
-        run: ./scripts/build-installer.ps1
+        # The compiler just installed, not whatever else the runner image has on PATH.
+        run: ./scripts/build-installer.ps1 -Iscc "$env:RUNNER_TEMP\inno\ISCC.exe"
       - name: Check the tag matches the version and write checksums
         shell: pwsh
         run: |
           $setup = Get-Item "artifacts/installer/ConvertAnything-Setup-$($env:TAG.TrimStart('v')).exe" -ErrorAction Stop
           (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant() + "  " + $setup.Name |
             Out-File artifacts/installer/SHA256SUMS.txt -Encoding ascii
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: artifacts/installer/ConvertAnything-Setup-*.exe
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installer
@@ -62,8 +70,26 @@ jobs:
             artifacts/installer/SHA256SUMS.txt
           if-no-files-found: error
 
-  release:
+  attest:
+    # Separate from the build, so the code that runs tests and third-party build steps never holds a token that can
+    # sign attestations.
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: installer
+          path: installer
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: installer/ConvertAnything-Setup-*.exe
+
+  release:
+    needs: attest
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
