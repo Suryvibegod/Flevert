@@ -6,18 +6,18 @@ Mỗi task xong khi đạt acceptance criteria **và** Definition of Done.
 
 ## Task 1: Project + Magick.NET + MagickSetup
 - Acceptance:
-  - [ ] `src/ConvertAnything.Image` tham chiếu Core + Magick.NET-Q8-x64 15.0.0; `tests/ConvertAnything.Image.Tests`
-  - [ ] Ảnh khai báo 100 000 × 100 000 px bị từ chối nhanh (< 2 s), không cấp phát lớn
-  - [ ] File `.jpg` có nội dung MVG/MSL/TEXT bị từ chối (không đọc file khác)
+  - [x] `src/ConvertAnything.Image` tham chiếu Core + Magick.NET-Q8-x64 15.0.0; `tests/ConvertAnything.Image.Tests`
+  - [x] Ảnh khai báo 100 000 × 100 000 px bị từ chối nhanh (< 2 s), không cấp phát lớn
+  - [x] File `.jpg` có nội dung MVG/MSL/TEXT bị từ chối (không đọc file khác)
 - Verify: `dotnet test --filter MagickSetup`
 - Files: `src/ConvertAnything.Image/*.csproj`, `MagickSetup.cs`, tests
 - Scope: M
 
 ## Task 2: Lát dọc JPG → PNG
 - Acceptance:
-  - [ ] `image.to-png` trên JPG có EXIF orientation 6 ra PNG đã xoay
-  - [ ] Catalog `ca.exe` có thao tác; menu `.jpg` hiện `Convert > PNG`, menu `.png` không có `Convert > PNG`
-  - [ ] Bấm thật qua MenuProbe ra PNG
+  - [x] `image.to-png` trên JPG có EXIF orientation 6 ra PNG đã xoay
+  - [x] Catalog `ca.exe` có thao tác; menu `.jpg` hiện `Convert > PNG`, menu `.png` không có `Convert > PNG`
+  - [x] Bấm thật qua MenuProbe ra PNG
 - Verify: `dotnet test`; MenuProbe
 - Files: `ImageOperation.cs`, `ImageOperations.cs`, `Program.cs`, tests
 - Scope: M

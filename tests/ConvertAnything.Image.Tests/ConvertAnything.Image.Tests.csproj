@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ConvertAnything.Image\ConvertAnything.Image.csproj" />
+    <!-- Build order only: CliIntegrationTests launches the real ca.exe. -->
+    <ProjectReference Include="..\..\src\ConvertAnything.Cli\ConvertAnything.Cli.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

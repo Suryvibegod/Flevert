@@ -1,6 +1,7 @@
 using ConvertAnything.Core;
 using ConvertAnything.Core.Menu;
 using ConvertAnything.Core.Operations;
+using ConvertAnything.Image;
 
 namespace ConvertAnything.Cli;
 
@@ -17,7 +18,7 @@ internal static class Program
     {
         var invocationDirectory = Environment.CurrentDirectory;
         SafeStartup.Apply();
-        var catalog = new OperationCatalog([new DevCopy(), new DevSlowCopy()]);
+        var catalog = new OperationCatalog([.. ImageOperations.All, new DevCopy(), new DevSlowCopy()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);

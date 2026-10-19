@@ -16,11 +16,11 @@ Thêm project `ConvertAnything.Image` (Magick.NET) với 14 thao tác: convert s
 ## Task List
 
 ### Phase 1: Foundation
-- [ ] Task 1: Project + Magick.NET + `MagickSetup` (giới hạn tài nguyên, chính sách coder)
-- [ ] Task 2: Lát dọc JPG → PNG (auto-orient, catalog, menu, MenuProbe)
+- [x] Task 1: Project + Magick.NET + `MagickSetup` (giới hạn tài nguyên, chính sách coder)
+- [x] Task 2: Lát dọc JPG → PNG (auto-orient, catalog, menu, MenuProbe)
 
 ### Checkpoint: Foundation
-- [ ] Bấm thật `Convert > PNG` trên JPG ra PNG đúng chiều
+- [x] Bấm thật `Convert > PNG` trên JPG ra PNG đúng chiều
 
 ### Phase 2: Tính năng
 - [ ] Task 3: Ma trận convert (7 đích; alpha → nền trắng; giữ animation; HEIC nguồn)
