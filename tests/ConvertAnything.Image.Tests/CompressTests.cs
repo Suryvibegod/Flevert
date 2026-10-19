@@ -58,23 +58,6 @@ public sealed class CompressTests : IDisposable
     }
 
     [Fact]
-    public async Task A_multi_page_tiff_is_skipped_rather_than_reduced_to_its_first_page()
-    {
-        var input = _dir.Combine("scan.tiff");
-        using (var pages = new MagickImageCollection())
-        {
-            pages.Add(new MagickImage(MagickColors.Red, 64, 64));
-            pages.Add(new MagickImage(MagickColors.Blue, 64, 64));
-            pages.Write(input, MagickFormat.Tiff);
-        }
-
-        var skipped = await Assert.ThrowsAsync<OperationSkippedException>(() => Op("balanced").RunAsync(input, CancellationToken.None));
-
-        Assert.Contains("2 pages", skipped.Message, StringComparison.Ordinal);
-        Assert.Equal(["scan.tiff"], _dir.FileNames());
-    }
-
-    [Fact]
     public async Task Balanced_writes_jpg_with_4_2_0_chroma_subsampling()
     {
         var input = Photo("hq.jpg", 800, 600, quality: 98);

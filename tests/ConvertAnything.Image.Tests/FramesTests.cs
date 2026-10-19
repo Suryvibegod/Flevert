@@ -163,6 +163,41 @@ public sealed class FramesTests : IDisposable
         Assert.Equal(0, result.Compare(new MagickImage(input), ErrorMetric.Absolute));
     }
 
+    // A 300 dpi A4 page is 8.7 MP: a 400 MP cap on all pages refused scans from about 47 pages, although G4 or LZW pages
+    // encode to a few MB. Pixels only bound memory when the output is uncompressed.
+    [Theory]
+    [InlineData(CompressionMethod.Group4, true)]
+    [InlineData(CompressionMethod.LZW, true)]
+    [InlineData(CompressionMethod.Zip, true)]
+    [InlineData(CompressionMethod.NoCompression, false)]
+    [InlineData(CompressionMethod.Undefined, false)]
+    public void Many_large_pages_are_refused_only_when_they_would_be_written_uncompressed(CompressionMethod compression, bool allowed)
+    {
+        const ulong sixtyA4Pages = 60UL * 2480 * 3508;
+
+        Assert.Equal(allowed, ImageFile.FitsInMemory(sixtyA4Pages, MagickFormat.Tiff, compression));
+        Assert.True(ImageFile.FitsInMemory(100_000_000, MagickFormat.Tiff, compression), "small totals always fit");
+    }
+
+    [Fact]
+    public async Task Compress_on_a_multi_page_tiff_fails_with_a_clear_reason_instead_of_dropping_pages()
+    {
+        // Compress makes one image: that cannot fulfil the request, so it is a failure, not "nothing to gain".
+        var input = _dir.Combine("scan.tiff");
+        using (var pages = new MagickImageCollection())
+        {
+            pages.Add(new MagickImage(MagickColors.Red, 64, 64));
+            pages.Add(new MagickImage(MagickColors.Blue, 64, 64));
+            pages.Add(new MagickImage(MagickColors.Green, 64, 64));
+            pages.Write(input, MagickFormat.Tiff);
+        }
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => Op("image.compress-balanced").RunAsync(input, CancellationToken.None));
+
+        Assert.Contains("pages", error.Message, StringComparison.Ordinal);
+        Assert.Equal(["scan.tiff"], _dir.FileNames());
+    }
+
     [Fact]
     public async Task Removing_metadata_keeps_every_page_of_a_tiff()
     {

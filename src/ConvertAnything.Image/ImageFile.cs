@@ -34,7 +34,8 @@ public static class ImageFile
     /// </summary>
     /// <param name="allFrames">False decodes only the first frame or page: a 1000-frame GIF converted to PNG need not
     /// decode the other 999.</param>
-    public static MagickImageCollection Read(string path, bool allFrames = true)
+    /// <param name="maxFrames">Decode at most this many frames (to tell whether there is more than one).</param>
+    public static MagickImageCollection Read(string path, bool allFrames = true, uint? maxFrames = null)
     {
         MagickSetup.EnsureInitialized();
         if (!Formats.TryGetValue(Path.GetExtension(path), out var format))
@@ -48,10 +49,10 @@ public static class ImageFile
         stream.Position = 0;
 
         var settings = new MagickReadSettings { Format = format };
-        if (!allFrames)
+        if (!allFrames || maxFrames is not null)
         {
             settings.FrameIndex = 0;
-            settings.FrameCount = 1;
+            settings.FrameCount = allFrames ? maxFrames : 1;
         }
 
         // Photoshop layers embedded in a TIFF are parsed by a separate, larger decoder; the composite image is enough.
@@ -212,14 +213,23 @@ public static class ImageFile
         stream.Write(bytes);
     }
 
+    /// <summary>
+    /// Whether frames totalling <paramref name="totalArea"/> pixels may be encoded in memory. Only uncompressed output
+    /// grows with the pixels (a few KB of crafted TIFF could otherwise produce gigabytes); compressed scans are small
+    /// however many pages they have (a 300 dpi A4 page is 8.7 MP, so a pixel cap alone refused 50-page scans).
+    /// </summary>
+    internal static bool FitsInMemory(ulong totalArea, MagickFormat format, CompressionMethod compression) =>
+        totalArea <= MagickSetup.MaxArea
+        || !(format == MagickFormat.Tiff && compression is CompressionMethod.NoCompression or CompressionMethod.Undefined);
+
     /// <summary>Writes every frame (an animation or pages) to a new file through a stream.</summary>
     public static void Write(MagickImageCollection images, string path, MagickFormat format)
     {
-        // The pages are encoded in memory below, outside ImageMagick's limits; each page is within the area limit, but
-        // many of them need not be.
+        // The pages are encoded in memory below, outside ImageMagick's limits. Only one frame's settings decide the
+        // compression of a collection write; the first page's is carried over (Remove metadata) or set (Convert).
         var area = images.Aggregate(0UL, (sum, image) => sum + ((ulong)image.Width * image.Height));
-        if (area > MagickSetup.MaxArea)
-            throw new InvalidOperationException("The image has too many large pages to process.");
+        if (!FitsInMemory(area, format, images[0].Settings.Compression))
+            throw new InvalidOperationException("The image has too many large pages or frames to write uncompressed.");
 
         // Multi-page TIFF cannot be written to a .NET stream (libtiff fails linking directories); an in-memory blob works.
         var bytes = images.ToByteArray(format);
