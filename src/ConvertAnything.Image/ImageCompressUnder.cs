@@ -35,7 +35,12 @@ public sealed class ImageCompressUnder(string id, long limitBytes, string label)
             Path.GetDirectoryName(inputPath)!, $"{Path.GetFileNameWithoutExtension(inputPath)} (under {label}).jpg");
         return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => ImageFile.RunAsync(() =>
         {
-            using var images = ImageFile.Read(inputPath, allFrames: false); // the result is one JPG
+            // The result is one JPG; a TIFF is read up to its second page only to tell whether pages would be lost.
+            using var images = ImageFile.RealFormat(inputPath) == MagickFormat.Tiff
+                ? ImageFile.Read(inputPath, maxFrames: 2)
+                : ImageFile.Read(inputPath, allFrames: false);
+            if (images.Count > 1)
+                throw new InvalidOperationException("The TIFF has several pages and this makes a single image; use Remove metadata to keep every page.");
             ImageFile.StopOnCancel(images, token);
             var original = images[0];
             ImageMetadata.AutoOrient(original);

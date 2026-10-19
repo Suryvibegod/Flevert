@@ -23,7 +23,8 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
         {
             // Only an animation stays one; the pages of a TIFF are not frames, and other targets hold one image. Read here,
             // off the caller's thread: a slow share or an offline cloud file must not freeze the progress window.
-            var keepsAnimation = ImageFile.IsAnimationFormat(format) && ImageFile.IsAnimationFormat(ImageFile.RealFormat(inputPath));
+            var source = ImageFile.RealFormat(inputPath);
+            var keepsAnimation = ImageFile.IsAnimationFormat(format) && ImageFile.IsAnimationFormat(source);
             using var images = ImageFile.Read(inputPath, allFrames: keepsAnimation);
             ImageFile.StopOnCancel(images, token);
             if (images.Count > 1)
@@ -31,18 +32,18 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
                 // Frames of an optimised GIF only hold what changed; expand them so each one stands on its own.
                 ImageFile.Coalesce(images, token);
                 foreach (var frame in images)
-                    Prepare(frame);
+                    Prepare(frame, source);
                 ImageFile.Write(images, temp, format);
                 return;
             }
 
             var image = images[0];
-            Prepare(image);
+            Prepare(image, source);
             ImageFile.Write(image, temp, format);
         }, token), ct);
     }
 
-    private void Prepare(IMagickImage<byte> image)
+    private void Prepare(IMagickImage<byte> image, MagickFormat source)
     {
         // Rotate the pixels so viewers that ignore EXIF orientation still show the image upright.
         ImageMetadata.AutoOrient(image);
@@ -52,6 +53,8 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
 
         if (quality is { } q)
             image.Quality = q;
+
+        ImageMetadata.PhotoSubsamplingForJpeg(image, source, format);
 
         // The TIFF writer defaults to no compression: an 8 KB PNG of 8000x8000 became an 8 MB TIFF (measured; far more
         // for photos).

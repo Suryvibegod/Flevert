@@ -127,6 +127,21 @@ public sealed class ConvertMatrixTests : IDisposable
         Assert.Equal("TestCam", result.GetExifProfile()?.GetValue(ExifTag.Make)?.Value);
     }
 
+    // At quality >= 90 ImageMagick writes 4:4:4 unless told; an iPhone photo turned into JPG grew to 144% that way.
+    [Theory]
+    [InlineData("image.to-jpg")]
+    [InlineData("image.strip-metadata")]
+    public async Task Heic_becomes_a_jpg_with_4_2_0_subsampling(string operationId)
+    {
+        var input = _dir.Combine("IMG_0002.HEIC");
+        File.Copy(Heic, input);
+
+        var output = await Op(operationId).RunAsync(input, CancellationToken.None);
+
+        using var jpg = new MagickImage(output);
+        Assert.StartsWith("2x2", jpg.GetAttribute("jpeg:sampling-factor"), StringComparison.Ordinal);
+    }
+
     private static IOperation Op(string id) => ImageOperations.All.Single(op => op.Id == id);
 
     private string Source(string extension)

@@ -46,12 +46,31 @@ public sealed class MagickSetupTests : IDisposable
     public void Only_heif_and_avif_brands_are_recognised_in_an_iso_media_file(string brand, MagickFormat expected)
     {
         var path = Path.Combine(_dir.Path, "clip.png");
+        WriteIsoMedia(path, brand);
+
+        Assert.Equal(expected, ImageFile.RealFormat(path));
+    }
+
+    // The "avif" brand is unambiguous; only generic brands (mif1) leave the choice to the extension.
+    [Theory]
+    [InlineData("photo.heic", "avif", MagickFormat.Avif)]
+    [InlineData("photo.avif", "heic", MagickFormat.Heic)]
+    [InlineData("photo.avif", "mif1", MagickFormat.Avif)]
+    [InlineData("photo.heic", "mif1", MagickFormat.Heic)]
+    public void A_specific_brand_wins_over_the_extension_within_the_heif_family(string name, string brand, MagickFormat expected)
+    {
+        var path = Path.Combine(_dir.Path, name);
+        WriteIsoMedia(path, brand);
+
+        Assert.Equal(expected, ImageFile.RealFormat(path));
+    }
+
+    private static void WriteIsoMedia(string path, string brand)
+    {
         var bytes = new byte[32];
         "\0\0\0\u0018ftyp"u8.CopyTo(bytes);
         System.Text.Encoding.ASCII.GetBytes(brand).CopyTo(bytes, 8);
         File.WriteAllBytes(path, bytes);
-
-        Assert.Equal(expected, ImageFile.RealFormat(path));
     }
 
     [Theory]

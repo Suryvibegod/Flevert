@@ -155,3 +155,17 @@ Code-reviewer và security-auditor: không Critical/High/Required; đều kết 
 | Test "không có file tạm khi đang mã hóa" dựa vào thời gian (CR-L6) | Low | Chấp nhận, có kiểm đối chứng "vẫn đang mã hóa" | — |
 | Ghi nhiều trang dùng cài đặt nén của trang đầu (CR-L7) | Low | Chấp nhận, đã ghi chú trong code | — |
 | Nits: comment MOV/.heic, brand mif2, thông báo "pages or frames" | Nit | Hợp lệ một phần | thông báo đã sửa |
+
+Doubt-driven vòng 3 (đến sau): 1 High, còn lại Medium/Low; không crash nào.
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| Remove metadata làm hỏng WebP động kiểu gif2webp (frame trộn alpha bị ghi không trộn → gần trong suốt) | High | Hợp lệ (Pillow xác nhận) | `98224dd`: mở rộng frame trước khi ghi; fixture tự sinh + test đọc cờ ANMF |
+| Under N âm thầm bỏ trang TIFF | Medium | Hợp lệ | báo lỗi như Compress |
+| Compress GIF động "already well compressed" là sai | Medium | Hợp lệ | báo lỗi kèm gợi ý Convert > WEBP |
+| AVIF đặt tên .heic bị coi là HEIC | Low | Hợp lệ | brand cụ thể thắng đuôi; chỉ brand chung (mif1) theo đuôi |
+| HEIC/AVIF → JPG ghi 4:4:4 (to 144%) | Low | Hợp lệ | 4:2:0 |
+| Ngưỡng 5% với PNG lossless | Low | Chấp nhận, ghi SPEC | — |
+| Hủy giữa AutoOrient ra ObjectDisposedException | Low | Hợp lệ | chuyển thành hủy |
+| SPEC lỗi thời (skip, TIFF) | Low | Hợp lệ | đã cập nhật |
+| WebP động trộn lossy/lossless thành một kiểu | Low | Chấp nhận (hiếm) | — |

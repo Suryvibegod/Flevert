@@ -88,7 +88,8 @@ public sealed class FramesTests : IDisposable
                 {
                     File.Delete(await Op(operationId).RunAsync(input, CancellationToken.None));
                 }
-                catch (ConvertAnything.Core.OperationSkippedException)
+                catch (Exception ex) when (ex is ConvertAnything.Core.OperationSkippedException
+                                           || ex.Message.Contains("animated GIF", StringComparison.Ordinal))
                 {
                     // Compress may find too little to gain on noise; what matters here is that the process survives.
                 }
@@ -196,6 +197,41 @@ public sealed class FramesTests : IDisposable
 
         Assert.Contains("pages", error.Message, StringComparison.Ordinal);
         Assert.Equal(["scan.tiff"], _dir.FileNames());
+    }
+
+    [Fact]
+    public async Task Compress_under_n_on_a_multi_page_tiff_fails_instead_of_dropping_pages()
+    {
+        var input = _dir.Combine("scan.tiff");
+        using (var pages = new MagickImageCollection())
+        {
+            pages.Add(new MagickImage(MagickColors.Red, 64, 64));
+            pages.Add(new MagickImage(MagickColors.Blue, 64, 64));
+            pages.Write(input, MagickFormat.Tiff);
+        }
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => Op("image.compress-under-1mb").RunAsync(input, CancellationToken.None));
+
+        Assert.Contains("pages", error.Message, StringComparison.Ordinal);
+    }
+
+    // GIF pixels are only re-optimised, never made lossier: when that saves too little, "already well compressed" would
+    // be false for a 10 MB GIF that is simply too large to send.
+    [Fact]
+    public async Task Compress_says_honestly_when_it_cannot_make_an_animated_gif_smaller()
+    {
+        var input = _dir.Combine("clip.gif");
+        using (var frames = new MagickImageCollection())
+        {
+            foreach (var color in new[] { MagickColors.Red, MagickColors.Green, MagickColors.Blue })
+                frames.Add(new MagickImage(color, 32, 32) { AnimationDelay = 10 });
+            frames.Optimize();
+            frames.Write(input, MagickFormat.Gif);
+        }
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => Op("image.compress-strong").RunAsync(input, CancellationToken.None));
+
+        Assert.Contains("Convert > WEBP", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

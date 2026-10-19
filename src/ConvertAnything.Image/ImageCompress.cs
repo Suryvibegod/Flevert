@@ -83,7 +83,13 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
                 // "compressed" copy would mislead, so refuse it and let the temporary file be deleted.
                 // Less than 5% saved is not worth a second, re-encoded copy (a q80 JPEG at Light saves a fraction of a percent).
                 if (new FileInfo(temp).Length > new FileInfo(inputPath).Length * MinSavedShare)
+                {
+                    // An animated GIF is only re-optimised, never made lossier, so "already well compressed" would be false
+                    // for a GIF that is simply too large to send. Say what would help.
+                    if (target == MagickFormat.Gif && images.Count > 1)
+                        throw new InvalidOperationException("Compress cannot make this animated GIF meaningfully smaller; use Convert > WEBP for a much smaller animation.");
                     throw new OperationSkippedException("The image is already well compressed: the result would be less than 5% smaller.");
+                }
             }, token), ct).ConfigureAwait(false);
         }, ct);
     }

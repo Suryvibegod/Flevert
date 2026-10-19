@@ -44,8 +44,7 @@ public static class ImageFile
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         // Downloads are often misnamed (a WebP or PNG saved as ".jpg"). Our own signature check may pick another decoder,
         // but only from the allow-list; ImageMagick itself is never asked to guess.
-        if (Signature(stream) is { } actual && Family(actual) != Family(format))
-            format = actual;
+        format = Choose(format, Signature(stream));
         stream.Position = 0;
 
         var settings = new MagickReadSettings { Format = format };
@@ -68,8 +67,21 @@ public static class ImageFile
     {
         var named = FormatOf(Path.GetExtension(path));
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        return Signature(stream) is { } actual && Family(actual) != Family(named) ? actual : named;
+        return Choose(named, Signature(stream));
     }
+
+    // The signature decides, except a generic HEIF brand (mif1), which cannot tell HEIC from AVIF: there the extension
+    // decides within that family.
+    private static MagickFormat Choose(MagickFormat named, MagickFormat? signature) => signature switch
+    {
+        null => named,
+        GenericHeif when named is MagickFormat.Heic or MagickFormat.Heif or MagickFormat.Avif => named,
+        GenericHeif => MagickFormat.Heic,
+        { } actual => actual,
+    };
+
+    // Stands for "HEIF container, generic brand" inside Signature/Choose; never handed to ImageMagick as such.
+    private const MagickFormat GenericHeif = MagickFormat.Heif;
 
     /// <summary>
     /// The extension for writing <paramref name="format"/>: the source's own spelling (.jpeg, .JPG) when it already
@@ -108,23 +120,20 @@ public static class ImageFile
             [(byte)'B', (byte)'M', ..] => MagickFormat.Bmp,
             [(byte)'I', (byte)'I', 42, 0, ..] or [(byte)'M', (byte)'M', 0, 42, ..] => MagickFormat.Tiff,
             [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', (byte)'a', (byte)'v', (byte)'i', (byte)'f' or (byte)'s'] => MagickFormat.Avif,
-            [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', ..] when HeifBrands.Contains(System.Text.Encoding.ASCII.GetString(h[8..12]))
+            [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', ..] when HeicBrands.Contains(System.Text.Encoding.ASCII.GetString(h[8..12]))
                 => MagickFormat.Heic,
+            [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', ..] when GenericHeifBrands.Contains(System.Text.Encoding.ASCII.GetString(h[8..12]))
+                => GenericHeif,
             _ => null, // includes other ISO media (MP4, MOV), which must not reach libheif
         };
     }
 
-    private static readonly HashSet<string> HeifBrands = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> HeicBrands = new(StringComparer.Ordinal)
     {
-        "heic", "heix", "heim", "heis", "hevc", "hevx", "hevm", "hevs", "mif1", "msf1",
+        "heic", "heix", "heim", "heis", "hevc", "hevx", "hevm", "hevs",
     };
 
-    // HEIC, HEIF and AVIF share a container: a generic brand (mif1) cannot tell them apart, so trust the extension there.
-    private static int Family(MagickFormat format) => format switch
-    {
-        MagickFormat.Heic or MagickFormat.Heif or MagickFormat.Avif => 1,
-        _ => (int)format,
-    };
+    private static readonly HashSet<string> GenericHeifBrands = new(StringComparer.Ordinal) { "mif1", "msf1", "mif2" };
 
     /// <summary>
     /// Makes <paramref name="images"/> stop as soon as <paramref name="ct"/> is cancelled: ImageMagick checks its progress
@@ -150,7 +159,8 @@ public static class ImageFile
         {
             work();
         }
-        catch (MagickException) when (ct.IsCancellationRequested)
+        // A cancelled step can also surface as ObjectDisposedException (seen when cancelling during AutoOrient).
+        catch (Exception ex) when (ex is MagickException or ObjectDisposedException && ct.IsCancellationRequested)
         {
             throw new OperationCanceledException(ct);
         }
