@@ -274,3 +274,49 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19. Cross-model bị bỏ qua 
 
 ## Checkpoint: Review fixes
 - [ ] Cả 3 reviewer chạy lại trên phần đã sửa, không còn Critical/High/Required
+
+# Phase 5: Review vòng 4 (xác minh các bản sửa vòng 3)
+
+Nguồn: 3 reviewer bối cảnh trống, chỉ đọc, 2026-10-19, trên diff `6498e3f..HEAD`. Không có Critical/High. Cross-model bỏ qua.
+Viết tắt: CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
+
+## Đối chiếu (reconcile)
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| Xoay khóa ném lỗi khác IO → `TryComplete` không chạy, chủ lô treo (CR1, DD-R1) | Required | Hợp lệ | F1 |
+| Junction trong đường dẫn cài đặt qua mặt kiểm tra ACL (SA1) | Required | Hợp lệ | F2 |
+| Log thử lại mọi `IOException` tới 2 s mỗi file (CR3, SA7, DD-M4) | Medium | Hợp lệ | F3 |
+| Trả `Full`/`Refused` rồi `Disconnect` ngay, client mất câu trả lời (DD-M1) | Medium | Hợp lệ | F4 |
+| `ReplaceAsync` thả tên pipe; tiến trình mới thành chủ lô thứ hai rồi bị xoay mất khóa (DD-M2, SA6) | Medium | Hợp lệ | F5 |
+| Kết nối lỗi/không tin cậy reset đồng hồ rảnh → giữ lô mở mãi; cửa sổ rảnh tụt còn 20 ms (SA2, DD-M3) | Medium | Hợp lệ | F6 |
+| `TrySecure` chỉ bắt IO → chủ lô chết sau khi đã ack (DD-M5) | Medium | Hợp lệ | F1 |
+| PipePeer so đường dẫn ảnh sau reparse với `ProcessPath` → qua junction/subst mọi peer bị từ chối (SA3) | Medium | Hợp lệ | F7 |
+| `GetFinalPathNameByHandle` dạng DOS lỗi với volume không có ký tự ổ (CR2) | Medium | Hợp lệ (chưa kiểm thật) | F8 |
+| Ký tự điều khiển BEL/BS trong `BatchTests.cs` (CR4, DD) | Medium (test) | Hợp lệ | F9 |
+| Kiểm đuôi trên đường dẫn yêu cầu, operation nhận đường dẫn thật (SA4) | Low | Hợp lệ | F8 |
+| Tên kết thúc bằng `.`/khoảng trắng bị chuẩn hóa thành file khác (SA5) | Low | Hợp lệ | F8 |
+| `\host\pipe\…` lọt allow-list, CreateFileW không có SQOS (CR10) | Low | Hợp lệ | F8 |
+| Giữ tiền tố `\?\UNC\` khi dài > 260 (CR nit, SA8, DD) | Low | Hợp lệ | F8 |
+| Poll 20 ms suốt lúc chuyển đổi dài (CR7, DD) | Low | Hợp lệ | F6 |
+| Gần hạn 10 s, timeout IO tụt còn 1 ms → trùng lặp (CR8, DD) | Low | Hợp lệ | F4 |
+| Thử lại khi xoay khóa không bắt `UnauthorizedAccessException` (CR6, DD) | Low | Hợp lệ | F1 |
+| `Full` làm bên gửi xoay khóa, ADR nói "tự xử lý" (CR5, DD) | Low | Hợp đồng sai → sửa ADR (giữ hành vi: lô >1000 file sang khóa mới, ít cửa sổ hơn) | F10 |
+| Từ chối file nhiều hard link chặn cả file hợp lệ (wallpaper, pnpm) (CR9) | Low | Trade-off chấp nhận, ghi SPEC/ADR | F10 |
+| README/SPEC còn lệnh `install-menu --dev` không có `--allow-insecure-location` (CR11) | Low | Hợp lệ | F10 |
+| Test không chứng minh fix: dangling link, `\./C:`, long path, xoay khóa có điều kiện (DD) | — | Hợp lệ một phần | F9 |
+| OneDrive placeholder, đổi tên thư mục cha khi đang pin (DD, SA) | — | Chưa kiểm | F9 (test thư mục cha); OneDrive: kiểm tay, ghi HANDOFF |
+| Nit: summary trùng ở SecureDirectory, lỗi cũ khi buffer FinalPath thiếu | Nit | Hợp lệ | F10 |
+
+## Việc
+- [ ] F1: Đóng lô luôn hoàn tất: `onClosed` bọc catch-all, `TryComplete` trong finally; `TryRotateSecret`/`TrySecure` bắt mọi lỗi; thử lại xoay khóa cả khi access denied
+- [ ] F2: `install-menu` từ chối khi thư mục cài hoặc thư mục cha là reparse point (trừ `--allow-insecure-location`)
+- [ ] F3: Log chỉ thử lại khi sharing/lock violation; sau một lần hết hạn thì không chờ nữa trong tiến trình
+- [ ] F4: Trả lời `Full`/`Refused` rồi chờ client đóng; chỉ cắt timeout cho Connect, IO giữ 2 s
+- [ ] F5: Không tạo lại được pipe (mất tên) → không xoay khóa; bắt `UnauthorizedAccessException`
+- [ ] F6: Đồng hồ rảnh chỉ reset sau tin nhắn tin cậy, tính từ lúc phục vụ xong; hết cửa sổ mà đang bận thì chờ cả cửa sổ
+- [ ] F7: PipePeer so ảnh của peer với ảnh của chính mình (QueryFullProcessImageName cả hai); test: 2 ca.exe chạy qua junction gom một lô
+- [ ] F8: Đầu vào: kiểm đuôi trên đường dẫn thật; từ chối tên kết thúc `.`/space; từ chối `\pipe\`, thêm SQOS; FinalPath dự phòng VOLUME_NAME_GUID; giữ `\?\UNC\` khi dài
+- [ ] F9: Test: sửa ký tự điều khiển; xoay khóa có điều kiện; thư mục cha không đổi tên được khi pin; kiểm lại test dangling link bằng đối chứng âm
+- [ ] F10: Tài liệu: ADR-0002 (`Full`, hard link), SPEC-core, README lệnh cài dev
+- [ ] Review vòng 5 trên phần sửa

@@ -14,10 +14,6 @@ public static partial class SecureDirectory
     private const uint LabelSecurityInformation = 0x10;
 
     /// <summary>
-    /// Read-up is allowed by default, so a sandboxed low-integrity process of the same user could otherwise read the batch
-    /// keys. Labelling the folder blocks that; it needs no extra privilege for a folder the user owns.
-    /// </summary>
-    /// <summary>
     /// Replaces inherited permissions with full control for this user, SYSTEM and Administrators only, so other accounts
     /// that can read the profile (for example sandbox groups some tools add) cannot read what is stored here.
     /// </summary>
@@ -40,7 +36,10 @@ public static partial class SecureDirectory
         new DirectoryInfo(directory).SetAccessControl(acl);
     }
 
-    /// <summary>Restricts and labels the folder, creating it if needed; failures are ignored (defence in depth).</summary>
+    /// <summary>
+    /// Restricts and labels the folder, creating it if needed. Never throws: it runs after a leader acknowledged other
+    /// processes' files, and it is defence in depth only.
+    /// </summary>
     public static void TrySecure(string directory)
     {
         try
@@ -49,10 +48,15 @@ public static partial class SecureDirectory
             RestrictToOwnerAndAdmins(directory);
             TryApplyNoReadUpLabel(directory);
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+#pragma warning disable CA1031 // SetAccessControl can also throw InvalidOperationException or NotSupportedException.
+        catch (Exception) { }
+#pragma warning restore CA1031
     }
 
+    /// <summary>
+    /// Read-up is allowed by default, so a sandboxed low-integrity process of the same user could otherwise read the batch
+    /// keys. Labelling the folder blocks that; it needs no extra privilege for a folder the user owns.
+    /// </summary>
     public static void TryApplyNoReadUpLabel(string directory)
     {
         try

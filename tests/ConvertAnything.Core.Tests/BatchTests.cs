@@ -159,7 +159,7 @@ public sealed class BatchTests
     public async Task Clients_that_connect_and_vanish_at_any_moment_do_not_wedge_the_leader()
     {
         var op = UniqueOp();
-        var leader = (await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None))!;
+        var leader = (await Batch.LeadOrJoinAsync(op, [@"C:\a.txt"], Idle, CancellationToken.None))!;
         var name = Batch.PipeName(op);
 
         // Some of these land before the listener has started waiting, some between connections.
@@ -171,10 +171,10 @@ public sealed class BatchTests
             catch (TimeoutException) { }
         })));
 
-        Assert.Null(await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None));
+        Assert.Null(await Batch.LeadOrJoinAsync(op, [@"C:\b.txt"], Idle, CancellationToken.None));
         var drained = DrainAsync(leader);
         Assert.Same(drained, await Task.WhenAny(drained, Task.Delay(TimeSpan.FromSeconds(10))));
-        Assert.Equal([@"C:.txt", @"C:.txt"], await drained);
+        Assert.Equal([@"C:\a.txt", @"C:\b.txt"], await drained);
         await leader.DisposeAsync();
     }
 
@@ -213,20 +213,20 @@ public sealed class BatchTests
     public async Task A_client_that_connects_and_stays_silent_does_not_block_others()
     {
         var op = UniqueOp();
-        await using var leader = (await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None))!;
+        await using var leader = (await Batch.LeadOrJoinAsync(op, [@"C:\a.txt"], Idle, CancellationToken.None))!;
         using var silent = new System.IO.Pipes.NamedPipeClientStream(".", Batch.PipeName(op),
             System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
         await silent.ConnectAsync(2000);
 
-        Assert.Null(await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None));
-        Assert.Equal([@"C:.txt", @"C:.txt"], await DrainAsync(leader));
+        Assert.Null(await Batch.LeadOrJoinAsync(op, [@"C:\b.txt"], Idle, CancellationToken.None));
+        Assert.Equal([@"C:\a.txt", @"C:\b.txt"], await DrainAsync(leader));
     }
 
     [Fact]
     public async Task A_leader_whose_consumer_stopped_no_longer_accepts_files()
     {
         var op = UniqueOp();
-        await using var leader = (await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None))!;
+        await using var leader = (await Batch.LeadOrJoinAsync(op, [@"C:\a.txt"], Idle, CancellationToken.None))!;
         using var cancel = new CancellationTokenSource();
         await foreach (var _ in leader.ReadAllAsync(cancel.Token))
             break; // the consumer stops early, as on Cancel
@@ -243,10 +243,35 @@ public sealed class BatchTests
     {
         var op = UniqueOp();
         var before = Batch.PipeName(op);
-        await using (var leader = await Batch.LeadOrJoinAsync(op, [@"C:.txt"], Idle, CancellationToken.None))
+        await using (var leader = await Batch.LeadOrJoinAsync(op, [@"C:\a.txt"], Idle, CancellationToken.None))
             await DrainAsync(leader!);
 
         Assert.NotEqual(before, Batch.PipeName(op));
+    }
+
+    [Fact]
+    public async Task A_batch_still_ends_when_closing_work_throws_an_unexpected_exception()
+    {
+        // Key rotation sets ACLs, which can throw InvalidOperationException or NotSupportedException, not only IO errors.
+        var name = $"ca-test-{Guid.NewGuid():N}";
+        var server = new System.IO.Pipes.NamedPipeServerStream(name, System.IO.Pipes.PipeDirection.InOut, 1,
+            System.IO.Pipes.PipeTransmissionMode.Byte, System.IO.Pipes.PipeOptions.Asynchronous);
+        var leader = BatchLeader.Start(server, [@"C:\a.txt"], Idle, onClosed: () => throw new InvalidOperationException("ACL"));
+
+        var drained = DrainAsync(leader);
+
+        Assert.Same(drained, await Task.WhenAny(drained, Task.Delay(TimeSpan.FromSeconds(10))));
+        Assert.Equal([@"C:\a.txt"], await drained);
+        await leader.DisposeAsync();
+    }
+
+    [Fact]
+    public void Securing_the_app_data_folder_never_throws()
+    {
+        // Runs after followers were acknowledged; a crash here would lose their files.
+        var ex = Record.Exception(() => SecureDirectory.TrySecure("bad\0name"));
+
+        Assert.Null(ex);
     }
 
     private static async Task<List<string>> DrainAsync(BatchLeader leader)

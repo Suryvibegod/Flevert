@@ -208,14 +208,16 @@ public static class Batch
                     WriteSecret(path, overwrite: true);
                     return;
                 }
-                catch (IOException) when (attempt < 10)
+                // Replacing a file another process has open can fail as a sharing violation or as access denied.
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < 10)
                 {
                     Thread.Sleep(5 * attempt); // a starting process may be reading the old key
                 }
             }
         }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+#pragma warning disable CA1031 // Best effort: a key that is not rotated only weakens defence in depth.
+        catch (Exception) { }
+#pragma warning restore CA1031
     }
 
     private static void WriteSecret(string path, bool overwrite)
@@ -430,8 +432,18 @@ public sealed class BatchLeader : IAsyncDisposable
         }
         finally
         {
-            // Rotate before the name is released, so nobody can claim the old name in between.
-            onClosed?.Invoke();
+            // Rotate before the name is released, so nobody can claim the old name in between. Whatever it throws, the
+            // queue must complete, or the consumer would wait for ever.
+            try
+            {
+                onClosed?.Invoke();
+            }
+#pragma warning disable CA1031 // Closing must always finish; rotation is best effort.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+            }
+
             _queue.Writer.TryComplete();
             await server.DisposeAsync().ConfigureAwait(false);
             if (connecting is not null)
