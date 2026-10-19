@@ -19,7 +19,7 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 - **Không hỏi người dùng** những gì tự quyết được, ghi lý do vào spec/ADR; hỏi trước việc khó đảo ngược hoặc ra bên ngoài (xóa repo, publish, gửi file lên dịch vụ khác, dùng file cá nhân của người dùng).
 - Mọi thứ **miễn phí** (Inno Setup; không mua chứng chỉ; ký mã sau qua SignPath Foundation, người dùng tự nộp đơn).
 - Repo **public cho cộng đồng**, tên **Flevert**. Ngôn ngữ: UI/README/commit tiếng Anh; spec/plan nội bộ tiếng Việt.
-- Commit: `Suryvibegod` với email ẩn của GitHub (`79949229+Suryvibegod@users.noreply.github.com`; script setup đặt khi `gh` đăng nhập Suryvibegod; **không bao giờ** dùng email cá nhân), kết thúc message bằng dòng `Co-Authored-By`.
+- Commit: `Suryvibegod` với email ẩn của GitHub (`79949229+<tên đăng nhập>@users.noreply.github.com`; script setup đặt khi `gh` đăng nhập đúng tài khoản ID 79949229, nay tên **Suryvibegod** (trước là Suryvibegod; commit cũ mang tên cũ vẫn gắn đúng tài khoản qua ID); **không bao giờ** dùng email cá nhân), kết thúc message bằng dòng `Co-Authored-By`.
 
 ## Trạng thái
 
@@ -39,7 +39,7 @@ Test: Core 204 (+1 skip), Image 221. Test đầu-cuối installer: `scripts/test
 1. Sửa trên máy các mục `/ship` nêu (xong: Cancel không có phím tắt, tên file có `&`, README `gh auth login` + câu chữ Compress, release notes tự động từ CHANGELOG kèm `--source-digest`, Known issues (TIFF GHSA-g5j8-ff59-wp88), RELEASING theo immutable releases, `.gitignore` cho `.claude/settings.local.json`, mã commit cũ trong `tasks/` đổi sang mã mới).
 2. Xóa `Suryvibegod/Flevert`, tạo lại cùng tên, **chỉ** đẩy `main` (không `--all`, không đẩy `backup/pre-rewrite-main`).
 3. Cài lại: mô tả, homepage, 20 topics, Discussions, ruleset "Release tags" (`refs/tags/v*`, chỉ admin) và "Protect main" (cấm force-push/xóa), private vulnerability reporting, Dependabot alerts + security updates, secret scanning + push protection, immutable releases, bắt buộc pin action bằng SHA, fork PR cần duyệt.
-4. Kiểm `github.com/Suryvibegod/ConvertAnything/commit/6498e3f` (commit cũ có email) trả 404; xóa nhánh local `backup/pre-rewrite-main`.
+4. Kiểm `github.com/Suryvibegod/ConvertAnything/commit/6498e3f` (commit cũ có email; repo cũ, tên tài khoản cũ Suryvibegod) trả 404; xóa nhánh local `backup/pre-rewrite-main`.
 5. CI xanh 3 lần → tag `v0.1.0` → kiểm bản nháp theo RELEASING (hash, attestation, `test-installer.ps1`, runtime) → quét VirusTotal (người dùng đưa API key trong chat; **không ghi key vào file nào**; nhắc người dùng tạo key mới sau khi quét) → người dùng Publish.
 6. Điều kiện của test-engineer: người dùng kiểm tay một ảnh iPhone **dọc** thật có GPS (Convert → JPG đúng chiều; Remove metadata hết GPS). Sau phát hành: test tự động cho HEIC xoay và cho Remove metadata trên mọi định dạng ([perf/todo.md](perf/todo.md) không có; xem báo cáo test-engineer tóm trong lịch sử commit `docs: record the ship review`).
 
