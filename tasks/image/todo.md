@@ -48,7 +48,7 @@ Mỗi task xong khi đạt acceptance criteria **và** Definition of Done.
 
 ## Task 6: Remove metadata
 - Acceptance:
-  - [ ] Output không còn EXIF/GPS/XMP/IPTC; còn ICC; xoay đúng
+  - [x] Output không còn EXIF/GPS/XMP/IPTC; còn ICC; xoay đúng
 - Verify: `dotnet test --filter Metadata`
 - Scope: S
 

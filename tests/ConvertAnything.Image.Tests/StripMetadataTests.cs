@@ -1,0 +1,101 @@
+using ConvertAnything.Core;
+using ImageMagick;
+
+namespace ConvertAnything.Image.Tests;
+
+public sealed class StripMetadataTests : IDisposable
+{
+    private static readonly string Heic = Path.Combine(AppContext.BaseDirectory, "fixtures", "gradient-320x240.heic");
+    private readonly TempDir _dir = new();
+
+    public void Dispose() => _dir.Dispose();
+
+    private static IOperation Op() => ImageOperations.All.Single(op => op.Id == "image.strip-metadata");
+
+    [Fact]
+    public void Remove_metadata_is_offered_for_every_readable_image()
+    {
+        Assert.Equal("Remove metadata", Op().MenuPath);
+        Assert.Equal(ImageFile.ReadableExtensions.Order(StringComparer.Ordinal), Op().Extensions.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task Location_camera_and_other_metadata_are_removed_but_colours_and_orientation_survive()
+    {
+        var input = _dir.Combine("IMG_2024.jpg");
+        using (var image = new MagickImage(MagickColors.Gray, 40, 20))
+        {
+            image.SetProfile(ColorProfiles.SRGB);
+            var exif = new ExifProfile();
+            exif.SetValue(ExifTag.Make, "TestCam");
+            exif.SetValue(ExifTag.GPSLatitudeRef, "N");
+            exif.SetValue(ExifTag.Orientation, (ushort)6); // ImageMagick only syncs Orientation into an existing tag
+            image.SetProfile(exif);
+            var iptc = new IptcProfile();
+            iptc.SetValue(IptcTag.Caption, "secret caption");
+            image.SetProfile(iptc);
+            image.SetProfile(new XmpProfile(System.Text.Encoding.UTF8.GetBytes(
+                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"/></x:xmpmeta>")));
+            image.Comment = "secret comment";
+            image.Orientation = Orientation.RightTop;
+            image.Write(input, MagickFormat.Jpeg);
+        }
+
+        using (var check = new MagickImage(input))
+        {
+            Assert.Equal((ushort)6, check.GetExifProfile()!.GetValue(ExifTag.Orientation)!.Value);
+            Assert.NotNull(check.GetIptcProfile());
+            Assert.NotNull(check.GetXmpProfile());
+        }
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.Equal("IMG_2024 (no metadata).jpg", Path.GetFileName(output));
+        using var result = new MagickImage(output);
+        Assert.Null(result.GetExifProfile());
+        Assert.Null(result.GetXmpProfile());
+        Assert.Null(result.GetIptcProfile());
+        Assert.Null(result.Comment);
+        Assert.NotNull(result.GetColorProfile());
+        Assert.Equal((20u, 40u), (result.Width, result.Height)); // rotated, since the orientation tag is gone
+    }
+
+    [Theory]
+    [InlineData("chart.png", "chart (no metadata).png")]
+    [InlineData("pic.webp", "pic (no metadata).webp")]
+    [InlineData("IMG_0001.HEIC", "IMG_0001 (no metadata).jpg")]
+    public async Task The_format_is_kept_except_for_heic_which_cannot_be_written(string name, string expected)
+    {
+        var input = _dir.Combine(name);
+        if (name.EndsWith(".HEIC", StringComparison.Ordinal))
+        {
+            File.Copy(Heic, input);
+        }
+        else
+        {
+            using var image = new MagickImage(MagickColors.Teal, 16, 16);
+            image.Write(input, ImageFile.FormatOf(Path.GetExtension(name)));
+        }
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.Equal(expected, Path.GetFileName(output));
+    }
+
+    [Fact]
+    public async Task An_animated_gif_keeps_its_frames()
+    {
+        var input = _dir.Combine("anim.gif");
+        using (var animation = new MagickImageCollection())
+        {
+            foreach (var color in new[] { MagickColors.Red, MagickColors.Green, MagickColors.Blue })
+                animation.Add(new MagickImage(color, 16, 16) { AnimationDelay = 10 });
+            animation.Write(input, MagickFormat.Gif);
+        }
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        using var result = new MagickImageCollection(output);
+        Assert.Equal(3, result.Count);
+    }
+}
