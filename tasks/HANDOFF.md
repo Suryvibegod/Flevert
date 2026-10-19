@@ -26,8 +26,8 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 
 | Module | Trạng thái |
 |---|---|
-| core | Xong. Review vòng 4 (2026-10-19): 2 Required + nhiều Medium, **đã sửa hết** (Phase 5 trong [todo.md](todo.md), commit `a835449`..`75fdc99`). **Review vòng 5 trên `9fd5cf4..HEAD` đang chạy / cần chạy lại nếu mất kết quả.** 117 test core pass, 1 skip (symlink cần admin). |
-| image | Task 1–2 xong: `image.to-png` (auto-orient, đọc theo đuôi file), đã gắn vào `ca.exe`, bấm thật qua MenuProbe ra PNG đúng chiều. 19 test pass. Tiếp theo: Task 3 (ma trận convert) trong [tasks/image/todo.md](image/todo.md). |
+| core | Xong. Review vòng 4 và 5 (2026-10-19) đã sửa hết (Phase 5–6 trong [todo.md](todo.md)). **Review vòng 6 trên `75fdc99..HEAD` đang chạy / cần chạy lại nếu mất kết quả.** 136 test core pass, 1 skip (symlink cần admin). Còn mở: test gom lô qua junction hỏng 1/6 lần chạy cả bộ (đang điều tra, test in log khi hỏng). |
+| image | Task 1–6 xong: convert 7 định dạng, nén 3 mức, nén dưới 500 KB / 1 MB / 5 MB, xóa metadata; gắn vào `ca.exe`, bấm thật qua MenuProbe (JPG → PNG, HEIC → JPG). 123 test pass. **Task 7 (review 3 góc + README/ADR) đang chạy review.** Giới hạn đã ghi trong SPEC-image: TIFF mất EXIF; ghi chú `not smaller` vào log hoãn. |
 | installer, media, pdf | Chưa làm. Spec nháp: [SPEC-media.md](../SPEC-media.md), [SPEC-pdf.md](../SPEC-pdf.md). |
 
 Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói). Kế hoạch core: [plan.md](plan.md), [todo.md](todo.md) (Phase 4–5 = sửa theo review).
@@ -45,14 +45,15 @@ Lưu ý môi trường của máy cũ (có thể gặp lại):
 
 Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
 - SDK cài cho riêng user. Shell mở **trước** khi chạy setup không có `dotnet` trong PATH: trong PowerShell đặt `$env:Path = "$env:LOCALAPPDATA\Microsoft\dotnet;$env:Path"; $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"`. Bản Debug `ca.exe` (framework-dependent) chạy thiếu `DOTNET_ROOT` sẽ bật hộp thoại đòi tải .NET Desktop Runtime: không cần tải, chỉ là thiếu biến môi trường. Explorer chỉ thấy biến mới sau khi đăng xuất/đăng nhập.
-- Application Control (Smart App Control) chặn `MenuProbe.exe` mới build. Chạy qua host đã ký: `dotnet tools/MenuProbe/bin/Debug/net10.0-windows/MenuProbe.dll list <file>`.
+- Smart App Control đang bật (enforce). Nó chặn theo **hash** từng file mới build, ngẫu nhiên: lúc chặn `MenuProbe.exe`, lúc chặn `ConvertAnything.Image.dll` ("An Application Control policy has blocked this file", test host thoát mã 255). Đổi nhẹ mã nguồn để ra hash mới thường qua được. MenuProbe chạy qua host đã ký: `dotnet tools/MenuProbe/bin/Debug/net10.0-windows/MenuProbe.dll list <file>`. **Hệ quả cho bản phát hành:** người dùng bật Smart App Control có thể bị chặn ca.exe/DLL chưa ký; module installer phải tính chuyện ký mã (code signing) hoặc ghi rõ trong README.
 - Máy này chưa đăng nhập GitHub (`git ls-remote` báo "Repository not found" vì repo private): commit đã có ở local, **chưa push**. Cần người dùng chạy `winget install --id GitHub.cli -e`, `gh auth login --web` (tài khoản Suryvibegod), `gh auth setup-git`, rồi `git push`.
 - Ghi file có dấu `\` qua heredoc/Python dễ bị biến `\a`, `\b` thành ký tự điều khiển (đã làm hỏng `BatchTests.cs` một lần). Sửa text có backslash bằng công cụ Edit.
 - Kiểm `dotnet format --verify-no-changes` thành **lệnh riêng**, đọc exit code rồi mới commit; đừng gộp chung một lệnh với `git commit`.
 
 ## Việc dở dang cụ thể (làm theo thứ tự)
 
-1. Review vòng 5 cho core: 3 reviewer bối cảnh trống, chỉ đọc, trên `git diff 9fd5cf4..HEAD -- src/ConvertAnything.Core src/ConvertAnything.Cli tests/ConvertAnything.Core.Tests`, kèm bảng đối chiếu Phase 5 trong [todo.md](todo.md). Sửa nếu còn Critical/High/Required, rồi đánh dấu checkpoint.
-2. Image Task 3: ma trận convert (7 đích, alpha → nền trắng, giữ animation GIF/WebP, HEIC nguồn) theo [tasks/image/todo.md](image/todo.md).
-3. Khi bấm thử menu trên máy thật: `install-menu --allow-insecure-location` (thêm `--dev` nếu cần thao tác dev) khi chạy từ thư mục build; nhớ `uninstall-menu` sau khi thử.
-4. Đẩy commit lên GitHub khi đã đăng nhập (xem lưu ý môi trường).
+1. Đối chiếu kết quả review vòng 6 của core (3 reviewer trên `git diff 75fdc99..HEAD -- src/ConvertAnything.Core src/ConvertAnything.Cli tests/ConvertAnything.Core.Tests`, bảng Phase 6 trong [todo.md](todo.md)); sửa nếu còn Critical/High/Required; tìm nguyên nhân test gom lô qua junction thỉnh thoảng hỏng.
+2. Image Task 7: đối chiếu 3 review module image (toàn bộ `src/ConvertAnything.Image`), sửa, rồi README liệt kê thao tác ảnh + ADR chọn Magick.NET.
+3. Module installer (v0.1): spec + plan theo quy trình; tính code signing vì Smart App Control.
+4. Khi bấm thử menu trên máy thật: `install-menu --allow-insecure-location` (thêm `--dev` nếu cần) khi chạy từ thư mục build; nhớ `uninstall-menu`.
+5. Đẩy commit lên GitHub khi đã đăng nhập (xem lưu ý môi trường).
