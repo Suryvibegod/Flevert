@@ -51,6 +51,15 @@ public sealed class CommandLineTests
     }
 
     [Fact]
+    public void Parses_check_location_with_one_folder()
+    {
+        Assert.Equal(new CheckLocationCommand(@"C:\Users\a\AppData\Local\Programs\ConvertAnything"),
+            CommandLine.Parse(["check-location", @"C:\Users\a\AppData\Local\Programs\ConvertAnything"]));
+        Assert.IsType<InvalidCommand>(CommandLine.Parse(["check-location"]));
+        Assert.IsType<InvalidCommand>(CommandLine.Parse(["check-location", "a", "b"]));
+    }
+
+    [Fact]
     public void Parses_uninstall_menu_and_list_ops()
     {
         Assert.IsType<UninstallMenuCommand>(CommandLine.Parse(["uninstall-menu"]));

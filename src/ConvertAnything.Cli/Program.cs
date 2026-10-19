@@ -7,20 +7,18 @@ namespace ConvertAnything.Cli;
 
 internal static class Program
 {
-    private const int Ok = 0;
-    private const int SomeFilesFailed = 1;
-    // Same value as SomeFilesFailed: setup reports 1-3 as ca.exe's own failures and shows its stderr.
-    private const int SetupCommandFailed = 1;
-    private const int BadUsage = 2;
-    // The installer tells this apart from other failures: running setup again cannot fix it.
-    private const int RefusedLocation = 3;
+    private const int Ok = ExitCodes.Ok;
+    private const int SomeFilesFailed = ExitCodes.Failed;
+    private const int SetupCommandFailed = ExitCodes.Failed;
+    private const int BadUsage = ExitCodes.BadUsage;
+    private const int RefusedLocation = ExitCodes.RefusedLocation;
     // CONVERTANYTHING_BATCH_IDLE_MS is for integration tests on a loaded machine, like CONVERTANYTHING_LOG_DIR.
     private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(
         int.TryParse(Environment.GetEnvironmentVariable("CONVERTANYTHING_BATCH_IDLE_MS"), out var ms) ? Math.Clamp(ms, 100, 10_000) : 400);
     private static readonly TimeSpan LogRetention = TimeSpan.FromDays(7);
 
-    // Never disposed: the handle must stay open until the process is gone, including while an unhandled exception is
-    // reported or a background thread outlives Main. Windows closes it on exit. See AppMutex.
+    // Never disposed: Inno's AppMutex expects it to exist until the process has fully terminated, which is after Main
+    // returns (a using declaration released it there). Windows closes it on exit. See AppMutex.
     private static Mutex? _running;
 
     [STAThread]
@@ -54,7 +52,7 @@ internal static class Program
         catch (Exception e) when (e is UnauthorizedAccessException or IOException or System.Security.SecurityException)
         {
             // The installer treats an unexpected exit code as "Windows blocked ca.exe"; say what actually failed.
-            Console.Error.WriteLine($"ca {args[0]} failed: {e.Message}");
+            Console.Error.WriteLine($"ca {args.FirstOrDefault()} failed: {e.Message}");
             return SetupCommandFailed;
         }
     }
@@ -104,6 +102,25 @@ internal static class Program
                     return Ok;
                 Console.Error.WriteLine("The classic-menu key already exists in another form; it was left unchanged, so the menu does not switch.");
                 return SetupCommandFailed;
+
+            case CheckLocationCommand check:
+                // Run by setup from its own temporary folder, before it copies anything into the install folder.
+                if (!Path.IsPathFullyQualified(check.Directory))
+                {
+                    Console.Error.WriteLine($"Give a full path: {check.Directory}");
+                    return BadUsage;
+                }
+
+                if (!Directory.Exists(check.Directory))
+                {
+                    Console.Error.WriteLine($"{check.Directory} does not exist.");
+                    return RefusedLocation;
+                }
+
+                if (InstallLocation.IsWritableOnlyByOwnerAndAdmins(check.Directory))
+                    return Ok;
+                Console.Error.WriteLine($"Refusing to install into {check.Directory}: other accounts can modify it or a folder above it, or it is reached through a link, so they could run code as you.");
+                return RefusedLocation;
 
             case ListOpsCommand:
                 foreach (var op in catalog.All)

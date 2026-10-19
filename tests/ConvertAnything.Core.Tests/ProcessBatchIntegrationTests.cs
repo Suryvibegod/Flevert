@@ -91,7 +91,10 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     {
         // Without it, uninstalling during a batch left ca.exe and its DLLs behind with no uninstaller to remove them.
         // Another suite may run ca.exe at the same time; only a mutex that appears with this job proves anything.
-        Skip.If(Mutex.TryOpenExisting(AppMutex.Name, out var before) && before is not null, "Another ca.exe is running.");
+        // Dispose what was opened: a handle kept by this process would keep the name alive and skip the next test too.
+        var othersRunning = Mutex.TryOpenExisting(AppMutex.Name, out var before);
+        before?.Dispose();
+        Skip.If(othersRunning, "Another ca.exe is running.");
         var job = Ca("dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
         try
         {
@@ -122,11 +125,13 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         Assert.True(File.Exists(_dir.Combine("1 (copy).txt")));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task A_menu_command_that_hits_a_registry_error_exits_1_with_the_reason_instead_of_crashing()
     {
         // Setup reads an unexpected exit code as "Windows blocked ca.exe", so an ordinary failure must not crash.
-        // Like any uninstall-menu, this also removes a ConvertAnything menu registered from a development build.
+        // It runs a real uninstall-menu, so it would silently remove the menu of an installed ConvertAnything (or a
+        // development build's); skip while one is registered.
+        Skip.If(MenuIsRegistered(), "A ConvertAnything menu is registered on this machine; uninstall-menu would remove it.");
         const string locked = @"Software\Classes\ConvertAnything.Menu.zz-locked-by-test";
         using var me = System.Security.Principal.WindowsIdentity.GetCurrent();
         var deny = new System.Security.AccessControl.RegistryAccessRule(me.User!, System.Security.AccessControl.RegistryRights.Delete,
@@ -175,7 +180,7 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
             var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
             await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
-            Assert.Equal(3, ca.ExitCode);
+            Assert.Equal(ExitCodes.RefusedLocation, ca.ExitCode);
             Assert.Contains("other accounts can modify its folder", stderr, StringComparison.Ordinal);
         }
         finally
@@ -187,6 +192,58 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
                 await uninstall.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
             }
         }
+    }
+
+    [Fact]
+    public async Task Check_location_refuses_a_folder_other_accounts_can_change_with_its_own_exit_code()
+    {
+        // Setup runs this from its private temporary folder before copying anything into the install folder.
+        using var dir = new TempDir();
+        var acl = new DirectoryInfo(dir.Path).GetAccessControl();
+        acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+            new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null),
+            System.Security.AccessControl.FileSystemRights.Modify, System.Security.AccessControl.AccessControlType.Allow));
+        new DirectoryInfo(dir.Path).SetAccessControl(acl);
+
+        var start = new ProcessStartInfo(CaExe) { UseShellExecute = false, RedirectStandardError = true };
+        start.ArgumentList.Add("check-location");
+        start.ArgumentList.Add(dir.Path);
+        using var ca = Process.Start(start)!;
+        var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(ExitCodes.RefusedLocation, ca.ExitCode);
+        Assert.Contains("other accounts can modify", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Check_location_refuses_a_folder_that_does_not_exist()
+    {
+        using var dir = new TempDir();
+
+        var start = new ProcessStartInfo(CaExe) { UseShellExecute = false, RedirectStandardError = true };
+        start.ArgumentList.Add("check-location");
+        start.ArgumentList.Add(Path.Combine(dir.Path, "missing"));
+        using var ca = Process.Start(start)!;
+        await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(ExitCodes.RefusedLocation, ca.ExitCode);
+    }
+
+    private static bool MenuIsRegistered()
+    {
+        using var classes = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Classes");
+        if (classes is null)
+            return false;
+        if (classes.GetSubKeyNames().Any(k => k.StartsWith("ConvertAnything", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        using var associations = classes.OpenSubKey("SystemFileAssociations");
+        return associations?.GetSubKeyNames().Any(ext =>
+        {
+            using var entry = associations.OpenSubKey($@"{ext}\shell\ConvertAnything");
+            return entry is not null;
+        }) ?? false;
     }
 
     private static async Task MakeJunction(string link, string target)

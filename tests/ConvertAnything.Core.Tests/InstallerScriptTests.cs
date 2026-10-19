@@ -44,6 +44,29 @@ public sealed class InstallerScriptTests
     }
 
     [Fact]
+    public void Exit_codes_setup_tells_apart_match_ca()
+    {
+        Assert.Contains($"ExitRefusedLocation = {ExitCodes.RefusedLocation};", Script, StringComparison.Ordinal);
+        Assert.Contains($"(Code >= {ExitCodes.Failed}) and (Code <= {ExitCodes.RefusedLocation})", Script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Every_readme_link_in_the_script_names_a_readme_heading()
+    {
+        var readme = File.ReadAllText(Path.Combine(RepositoryRoot(), "README.md"));
+        var anchors = Regex.Matches(readme, @"^#{1,6} (.+)$", RegexOptions.Multiline)
+            .Select(m => Slug(m.Groups[1].Value.Trim())).ToHashSet(StringComparer.Ordinal);
+        var links = Regex.Matches(Script, @"\{#AppUrl\}#([a-z0-9-]+)").Select(m => m.Groups[1].Value).Distinct().ToList();
+
+        Assert.NotEmpty(links);
+        Assert.All(links, link => Assert.Contains(link, anchors));
+    }
+
+    // GitHub's heading anchors: lower case, spaces to hyphens, punctuation dropped.
+    private static string Slug(string heading) =>
+        Regex.Replace(heading.ToLowerInvariant().Replace(' ', '-'), @"[^a-z0-9\-_]", "");
+
+    [Fact]
     public void Uninstall_removes_each_folder_ca_writes_under_local_app_data()
     {
         Assert.Equal(MenuInstaller.Title, AppData.FolderName);

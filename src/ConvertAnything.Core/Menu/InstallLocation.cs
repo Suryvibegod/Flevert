@@ -39,6 +39,20 @@ public static partial class InstallLocation
     /// <param name="stopAt">Tests only: stop the parent walk before this folder, so a test can build the whole chain.</param>
     internal static bool IsWritableOnlyByOwnerAndAdmins(string directory, string? stopAt)
     {
+        // A folder or file whose permissions cannot be read cannot be shown to be safe; refusing gives the installer
+        // the "folder refused" exit code instead of a generic failure.
+        try
+        {
+            return Check(directory, stopAt);
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException)
+        {
+            return false;
+        }
+    }
+
+    private static bool Check(string directory, string? stopAt)
+    {
         using var me = WindowsIdentity.GetCurrent();
         var trusted = new HashSet<SecurityIdentifier>
         {

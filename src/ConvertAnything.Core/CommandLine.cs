@@ -12,6 +12,9 @@ public sealed record ListOpsCommand : Command;
 
 public sealed record ClassicMenuCommand(bool On) : Command;
 
+/// <summary>Setup's check of the install folder before it copies anything there.</summary>
+public sealed record CheckLocationCommand(string Directory) : Command;
+
 public sealed record InvalidCommand(string Message) : Command;
 
 public static class CommandLine
@@ -23,6 +26,7 @@ public static class CommandLine
           ca uninstall-menu
           ca list-ops
           ca classic-menu on|off
+          ca check-location <folder>
         """;
 
     public static Command Parse(string[] args) => args switch
@@ -36,6 +40,7 @@ public static class CommandLine
         ["list-ops"] => new ListOpsCommand(),
         ["classic-menu", "on"] => new ClassicMenuCommand(On: true),
         ["classic-menu", "off"] => new ClassicMenuCommand(On: false),
+        ["check-location", var directory] => new CheckLocationCommand(directory),
         _ => new InvalidCommand(Usage),
     };
 }
