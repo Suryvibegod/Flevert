@@ -3,6 +3,9 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <!-- The one place the version is set; the installer reads it back from flevert.exe. -->
     <Version>0.1.0</Version>
+    <Authors>Flevert contributors</Authors>
+    <Company>Flevert contributors</Company>
+    <Copyright>Copyright (c) 2026 Flevert contributors</Copyright>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
