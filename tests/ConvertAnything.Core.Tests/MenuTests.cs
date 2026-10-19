@@ -166,6 +166,35 @@ public sealed class MenuTests
         Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(child, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
+    // The ACL check reads the link target; the link itself lives in its parent and inherits that folder's rights, so
+    // another account that can delete it can rebuild the path with a planted ca.exe.
+    [Theory]
+    [InlineData(@"link")]
+    [InlineData(@"link\app")]
+    public void Install_location_reached_through_a_junction_is_unsafe(string viaLink)
+    {
+        using var parent = new TempDir();
+        ProtectToOwnerAndAdmins(parent.Path);
+        var real = Directory.CreateDirectory(Path.Combine(parent.Path, "real", "app")).FullName;
+        var target = viaLink == "link" ? real : Path.GetDirectoryName(real)!;
+        Junction(Path.Combine(parent.Path, "link"), target);
+
+        var installed = Path.Combine(parent.Path, viaLink);
+        Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(real, stopAt: Path.GetDirectoryName(parent.Path)), "control: the target itself is safe");
+        Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(installed, stopAt: Path.GetDirectoryName(parent.Path)));
+    }
+
+    private static void Junction(string link, string target)
+    {
+        using var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+        })!;
+        mklink.WaitForExit();
+        Assert.Equal(0, mklink.ExitCode);
+    }
+
     private static System.Security.Principal.SecurityIdentifier[] OwnerAndAdmins()
     {
         using var me = System.Security.Principal.WindowsIdentity.GetCurrent();

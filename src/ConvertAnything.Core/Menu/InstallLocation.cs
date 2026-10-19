@@ -23,7 +23,7 @@ public static class InstallLocation
     /// <summary>
     /// The menu runs ca.exe as whoever clicks it. If another account could replace ca.exe or a DLL beside it, or swap the
     /// whole folder, that account could run code as this user. Checks owners and DACLs of the folder, everything in it,
-    /// and every parent folder.
+    /// and every parent folder, and refuses a folder reached through a junction or symbolic link.
     /// </summary>
     public static bool IsWritableOnlyByOwnerAndAdmins(string directory) => IsWritableOnlyByOwnerAndAdmins(directory, stopAt: null);
 
@@ -41,7 +41,7 @@ public static class InstallLocation
         };
 
         var root = new DirectoryInfo(directory);
-        if (!IsSafe(root.GetAccessControl(), WriteRights, trusted))
+        if (IsLink(root) || !IsSafe(root.GetAccessControl(), WriteRights, trusted))
             return false;
 
         foreach (var entry in root.EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
@@ -55,12 +55,16 @@ public static class InstallLocation
         {
             if (stopAt is not null && string.Equals(parent.FullName.TrimEnd('\\'), stopAt.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
                 break;
-            if (!IsSafe(parent.GetAccessControl(), ParentRights, trusted))
+            if (IsLink(parent) || !IsSafe(parent.GetAccessControl(), ParentRights, trusted))
                 return false;
         }
 
         return true;
     }
+
+    // GetAccessControl follows links, so it reports the target's ACL. The link itself is a separate entry in its parent
+    // that other accounts may be able to delete and recreate, and the registry would keep pointing through it.
+    private static bool IsLink(DirectoryInfo directory) => (directory.Attributes & FileAttributes.ReparsePoint) != 0;
 
     private static bool IsSafe(FileSystemSecurity acl, FileSystemRights dangerous, HashSet<SecurityIdentifier> trusted)
     {

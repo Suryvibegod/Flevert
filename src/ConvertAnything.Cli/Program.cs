@@ -45,11 +45,11 @@ internal static class Program
                 {
                     if (!install.AllowInsecureLocation)
                     {
-                        Console.Error.WriteLine($"Refusing to register {exe}: other accounts can modify its folder and could run code as you. Install with the ConvertAnything installer instead.");
+                        Console.Error.WriteLine($"Refusing to register {exe}: other accounts can modify its folder, or it is reached through a link, so they could run code as you. Install with the ConvertAnything installer instead.");
                         return BadUsage;
                     }
 
-                    Console.Error.WriteLine($"Warning: other accounts can modify {Path.GetDirectoryName(exe)}. Use --allow-insecure-location only on a machine you trust.");
+                    Console.Error.WriteLine($"Warning: other accounts can modify {Path.GetDirectoryName(exe)}, or it is reached through a link. Use --allow-insecure-location only on a machine you trust.");
                 }
 
                 var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));
