@@ -9,6 +9,11 @@ on:
 
 permissions: {}
 
+# One release run per tag at a time; a second push of the same tag waits instead of racing the first.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   # Passed through the environment, never pasted into scripts.
   TAG: ${{ github.ref_name }}
@@ -25,6 +30,12 @@ jobs:
           persist-credentials: false
           # The whole history, so the tag can be checked against main.
           fetch-depth: 0
+      - name: Check the tag names the version being built
+        shell: pwsh
+        run: |
+          if ($env:TAG -notmatch '^v(\d+\.\d+\.\d+)$') { throw "Tag $env:TAG is not vMAJOR.MINOR.PATCH; delete it and tag again." }
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if ($Matches[1] -ne $version) { throw "Tag $env:TAG does not match <Version>$version</Version> in Directory.Build.props; fix one of them and tag again." }
       - name: Check the tag is on main
         shell: pwsh
         run: |
@@ -65,7 +76,7 @@ jobs:
         shell: pwsh
         # The compiler just installed, not whatever else the runner image has on PATH.
         run: ./scripts/build-installer.ps1 -Iscc "$env:RUNNER_TEMP\inno\ISCC.exe"
-      - name: Check the tag matches the version and write checksums
+      - name: Write checksums
         shell: pwsh
         run: |
           $setup = Get-Item "artifacts/installer/Flevert-Setup-$($env:TAG.TrimStart('v')).exe" -ErrorAction Stop

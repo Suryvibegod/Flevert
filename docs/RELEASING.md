@@ -4,23 +4,30 @@ For maintainers. Releases are built only by [`.github/workflows/release.yml`](..
 
 ## Before tagging
 
-1. `<Version>` in `Directory.Build.props` is the new version, and `CHANGELOG.md` has its section.
+1. `<Version>` in `Directory.Build.props` is the new version (`MAJOR.MINOR.PATCH`, nothing after it). In `CHANGELOG.md`, the `[Unreleased]` section is renamed to `[X.Y.Z] - <date>`, a new empty `[Unreleased]` goes above it, and the links at the bottom are updated. The README's verify commands name a version as an example; change it if they should show the new one.
 2. CI is green on the commit three times in a row (re-run it from the Actions tab).
 3. The three reviews (code, security, doubt) of every change since the last release found nothing Critical, High or Required.
+4. From v0.1.1 on, upgrade over the previous release: install the previous published setup, convert a file, run the new setup over it (from the draft, below), and check the menu still works and uninstalling removes everything.
 
 ## Tag and check the draft
 
-1. `git tag -a vX.Y.Z -m "Flevert X.Y.Z"` and `git push origin vX.Y.Z`. Only repository administrators can create `v*` tags (ruleset "Release tags").
+1. `git tag -a vX.Y.Z -m "Flevert X.Y.Z"` and `git push origin vX.Y.Z`. Only repository administrators can create `v*` tags (ruleset "Release tags"). The workflow refuses a tag that is not `vMAJOR.MINOR.PATCH`, does not match `<Version>`, or is not on `main`.
 2. The workflow tests, builds the installer, attests it and attaches it with `SHA256SUMS.txt` to a **draft** release. The release notes are the version's CHANGELOG section plus how to check the download; the workflow fails if the CHANGELOG has no section for the version.
 3. Download the setup from the draft and check it as a user would:
    - `Get-FileHash` matches `SHA256SUMS.txt`.
    - The `gh attestation verify ...` command in the release notes passes. It pins the tag and the commit (`--source-digest`).
-   - `powershell -File scripts/test-installer.ps1 -Setup <setup>` passes on a machine without Flevert.
+   - `powershell -File scripts/test-installer.ps1 -Setup <setup>` passes on a machine without Flevert. Running the tests leaves `%LOCALAPPDATA%\Flevert` behind, and the script refuses to run while it exists: delete it first, and do not run the tests at the same time.
    - The runtime in the installed `flevert.deps.json` (`runtimepack.Microsoft.NETCore.App.Runtime.win-x64/...`) is the newest .NET 10 patch.
    - Microsoft Defender and VirusTotal report nothing. A detection by one or two engines with a generic name is usually a false positive of an unsigned Inno Setup installer: report it to the vendor, and do not publish until it is understood.
 4. Publish the draft.
 
-Until it is published, a draft may be thrown away and rebuilt: `gh release delete vX.Y.Z --cleanup-tag --yes`, then tag again. Delete the old run's artifacts too, so only one build of the version can pass the provenance check. Once published, the release is immutable (repository setting "Immutable releases"): its assets and tag cannot change, and the tag name can never be used again, even after the release is deleted.
+Until it is published, a draft may be thrown away and rebuilt: `gh release delete vX.Y.Z --cleanup-tag --yes`, then tag again. Delete the old run's artifacts too. The old build's attestation stays valid, but the verify command in the published notes pins the commit (`--source-digest`), so a file built from any other commit fails it; a rebuild from the same commit is the same reviewed source. Once published, the release is immutable (repository setting "Immutable releases"): its assets and tag cannot change, and the tag name can never be used again, even after the release is deleted.
+
+## If the release workflow fails
+
+- **Build or tests fail:** no draft exists. Fix the cause on `main` (through review, as any change), delete the tag (`git push --delete origin vX.Y.Z`; administrators bypass the tag ruleset) and tag the fixed commit. Never tag a commit that is not on `main`.
+- **A flaky test, or the attest or release job fails** (network, GitHub outage): re-run the failed jobs from the run's page. Nothing has been published, and the build is not repeated if only a later job failed.
+- **The draft exists but is wrong:** throw it away as above.
 
 ## If a published release is bad
 
@@ -32,3 +39,7 @@ Stop new downloads first, then fix forward. Users who already installed it keep 
 4. If the release published something it must not (a secret, a private file), delete the release, rotate the secret, ask GitHub Support to purge cached copies, and treat it as a security incident: downloads and attestations already made cannot be recalled.
 
 Setup installs over an earlier version, so a fixed version reaches users by running the new setup; there is no automatic update in v0.1.
+
+## Dependency updates
+
+Dependabot proposes updates to GitHub Actions and NuGet packages weekly, a week after their release ([`.github/dependabot.yml`](../.github/dependabot.yml)). Merge one only when CI passes and its release notes show nothing surprising; an Action update must keep the commit pin. A Magick.NET update that fixes a security problem in ImageMagick gets a patch release with a CHANGELOG entry naming the advisory. Close updates that are not needed rather than letting them pile up.
