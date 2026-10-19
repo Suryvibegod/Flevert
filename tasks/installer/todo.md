@@ -84,9 +84,34 @@ Ký hiệu: CR, SA, DD (F = finding của doubt-driven).
 
 Commit: `26ea77b` (check-location), `9d75744` (**chứa cả** bản sửa `.iss` + `test-installer.ps1` cho SA H-1 và F1, dù message chỉ nói `setup-dev.ps1`: commit riêng của chúng hỏng vì dấu `"` trong message qua PowerShell 5.1; đã push nên không viết lại lịch sử), `3faf0d1`, `ea145b9`. E2E 9 kịch bản xanh; test 182+204 xanh.
 
+## Review vòng 4 (trên `478f3cb..6d63d00`): reconcile
+
+Code-reviewer: APPROVE, chỉ Low/Nit. Security: không còn Critical/High/Required, H-1 vòng 3 đã đóng. Doubt-driven: 1 High + 1 Medium Required.
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| DD#1: `IsSafe` bỏ qua ACE inherit-only; ACE "chỉ cho file" (`OI\|IO`) trên `{app}` rỗng (hoặc kế thừa từ `Programs`) lọt kiểm tra, file chép vào sau đó cho người khác quyền ghi | High, Required | Hợp lệ | Với thư mục cài và mọi thứ bên trong, ACE inherit-only cũng tính; thư mục cha giữ như cũ (`C:\` có `Authenticated Users (OI)(CI)(IO)M`). Test lý thuyết `OI` và `CI` (đỏ → xanh, có đối chứng), test cha có ACE inherit-only vẫn an toàn |
+| DD#2, SA-L1, CR-L2: README `Remove-Item -Recurse` trên PS 5.1 đi theo junction | Medium, Required (DD) | Hợp lệ | `cmd /c rmdir /s /q`, không đi theo junction. Kiểm trong sandbox: junction bên trong và thư mục con là junction đều bị xóa mà đích còn nguyên |
+| SA-L2, CR-L1, DD#10: lệnh menu cổ điển báo lỗi đỏ khi không có khóa (trường hợp thường gặp) | Low | Hợp lệ, đã tái hiện | `Get-ItemProperty -Name ConvertAnything -ErrorAction SilentlyContinue`; kiểm: không có khóa thì im lặng |
+| SA-L3: README không cảnh báo khi bản nâng cấp bị từ chối | Low | Hợp lệ | README: đã cài trong thư mục bị từ chối thì gỡ tay, không dùng uninstaller, không chỉ sửa quyền |
+| DD#3: `%TEMP%` cho tài khoản khác ghi (máy dev này: `CodexSandboxUsers` Modify) → tráo DLL trong `{tmp}\{app}` | Medium | Trade-off | Giống mô hình mối đe dọa của chính Inno (`setup.tmp` cũng ở đó), cửa sổ dài hơn. Ghi rõ giả định trong spec, ADR-0005 và chú thích `.iss`. Khóa ACL của `{tmp}\{app}` bằng `icacls` cần SID người dùng và vẫn có race với thư mục cha ghi được, nên không làm |
+| DD#4, CR-L3, CR-L5, CR-N4: kiểm thư mục thất bại luôn đổ cho Smart App Control, mất lý do của `ca.exe`, lỗi giải nén bị nuốt | Medium/Low | Hợp lệ | Lỗi giải nén có thông báo riêng (dung lượng trống); mã 1–2 kèm lý do; mã khác nhắc cả chính sách bảo mật chặn chương trình trong thư mục tạm; lý do rỗng có câu dự phòng |
+| CR-L3, DD#8: thêm 137 MB trong `{tmp}` không được tính dung lượng | Low | Hợp lệ | `ExtraDiskSpaceRequired=150000000`. Thời gian: 9–10 s trên SSD; chưa đo HDD (ghi nhận) |
+| DD#5, CR-L7: kịch bản 9 không phải regression test cho F1 | Medium | Hợp lệ | `InstallerScriptTests.Link_check_walks_up_to_the_drive_root_itself` kiểm thân `LinkOnPath` (đối chứng âm: đổi lại `RemoveBackslash` thì đỏ); kịch bản 9 ghi là smoke test |
+| DD#6, CR-L8: không có đối chứng dương cho `check-location` | Low | Hợp lệ | Test thư mục dưới `%LOCALAPPDATA%` → mã 0 (skip nếu máy không an toàn). Nhánh "setup tự tạo rồi bị từ chối" và "không chạy được" chưa có e2e: cần nới quyền `Programs` thật; ghi nhận |
+| DD#7, SA I-1, CR-N3: `ForceDirectories` để lại `Programs` | Low | Hợp lệ | Xóa `Programs` nếu setup vừa tạo (chỉ khi rỗng) |
+| DD#9: ngưỡng 5 s phụ thuộc tốc độ máy | Low | Hợp lệ | Ngưỡng = 1 s + 2 × thời gian decode đo ngay trong test (máy này: ngưỡng 1.6 s, thực tế 0.02–0.12 s sau khi hủy) |
+| CR-L6: test anchor bắt cả comment `#` trong code block | Low | Hợp lệ | Bỏ code block trước khi lấy heading |
+| CR-L4: không có tiến trình/timeout khi giải nén và kiểm | Low | Trade-off | ~1–2 s trên máy này; giống `install-menu` vốn không có timeout. Ghi nhận |
+| CR-N1, DD#10: thông điệp từ chối không nói tới trường hợp không đọc được quyền / không phải NTFS cục bộ | Nit | Hợp lệ | Thêm vào cả `check-location` và `install-menu` |
+| CR-N2: chú thích trỏ `Program.RefusedLocation` | Nit | Hợp lệ | Trỏ `ExitCodes.RefusedLocation` |
+| SA I-3: Smart App Control giờ chặn cả bản cài (mã 7) thay vì cài thiếu menu (mã 10) | Info | Hợp lệ | Ghi trong spec, ADR-0005 |
+| CI: `Processes_started_through_a_junction…` quá thời gian, `Twenty_processes…` 22.9 s | (CI) | Không phải lỗi sản phẩm | Log cho thấy đúng một lô, đủ file, nhưng `dev.slow-copy` 1 s mất 15 s: hai assembly test chạy song song trên runner. CI/release chạy từng project ở bước riêng |
+
 ## Checkpoint
 - [x] Review vòng 1 → reconcile (bảng trên)
 - [x] Review vòng 2 → đã sửa
 - [x] Review vòng 3 → reconcile (bảng trên)
-- [ ] Review vòng 4 trên phần sửa vòng 3 → không còn Critical/High/Required
+- [x] Review vòng 4 → reconcile (bảng trên)
+- [ ] Review vòng 5 trên phần sửa vòng 4 → không còn Critical/High/Required
 - [ ] HANDOFF; commit + push
