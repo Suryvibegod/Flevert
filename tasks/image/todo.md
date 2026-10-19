@@ -127,13 +127,13 @@ CR = code-reviewer, SA = security-auditor, DD = doubt-driven. Không có Critica
 
 ### Việc vòng 2
 - [x] Sửa crash GC (`eb5bd6c`)
-- [ ] L1: Giữ `jpeg:sampling-factor` của nguồn khi Remove metadata
-- [ ] L2: Khởi tạo Magick với thư mục làm việc là thư mục cấu hình riêng; từ chối nếu có `policy.xml`/`delegates.xml` ở thư mục tìm kiếm của ImageMagick; probe kiểm đúng lỗi policy; sửa lời trong SPEC/ADR
-- [ ] L3: Giữ kiểu nén TIFF; chặn tổng diện tích khi ghi nhiều trang
-- [ ] L4: Nhận WebP động lossless (ANMF)
-- [ ] L5: Định dạng nguồn theo chữ ký thật cho mọi thao tác
-- [ ] L6: Mã hóa vào bộ nhớ rồi mới tạo file tạm
-- [ ] L7: Kết quả "skipped" (core) cho "không nhỏ hơn đáng kể" (< 5%)
-- [ ] L8: Compress TIFF nhiều trang → skipped có thông báo
-- [ ] L9: Chỉ nhận brand HEIF/AVIF; nits
+- [x] L1: Giữ `jpeg:sampling-factor` của nguồn khi Remove metadata
+- [x] L2: Khởi tạo Magick với thư mục làm việc là thư mục cấu hình riêng; từ chối nếu có `policy.xml`/`delegates.xml` ở thư mục tìm kiếm của ImageMagick; probe kiểm đúng lỗi policy; sửa lời trong SPEC/ADR
+- [x] L3: Giữ kiểu nén TIFF; chặn tổng diện tích khi ghi nhiều trang
+- [x] L4: Nhận WebP động lossless (ANMF)
+- [x] L5: Định dạng nguồn theo chữ ký thật cho mọi thao tác
+- [x] L6: Mã hóa vào bộ nhớ rồi mới tạo file tạm
+- [x] L7: Kết quả "skipped" (core) cho "không nhỏ hơn đáng kể" (< 5%)
+- [x] L8: Compress TIFF nhiều trang → skipped có thông báo
+- [x] L9: Chỉ nhận brand HEIF/AVIF; nits
 - [ ] Review vòng 3 module image

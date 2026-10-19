@@ -36,6 +36,24 @@ public sealed class MagickSetupTests : IDisposable
         Assert.ThrowsAny<MagickException>(() => ImageFile.Read(disguised));
     }
 
+    // Only HEIF and AVIF brands go to libheif; an MP4 or MOV renamed to ".png" is decoded as what its name says (and fails).
+    [Theory]
+    [InlineData("heic", MagickFormat.Heic)]
+    [InlineData("mif1", MagickFormat.Heic)]
+    [InlineData("avif", MagickFormat.Avif)]
+    [InlineData("isom", MagickFormat.Png)]
+    [InlineData("qt  ", MagickFormat.Png)]
+    public void Only_heif_and_avif_brands_are_recognised_in_an_iso_media_file(string brand, MagickFormat expected)
+    {
+        var path = Path.Combine(_dir.Path, "clip.png");
+        var bytes = new byte[32];
+        "\0\0\0\u0018ftyp"u8.CopyTo(bytes);
+        System.Text.Encoding.ASCII.GetBytes(brand).CopyTo(bytes, 8);
+        File.WriteAllBytes(path, bytes);
+
+        Assert.Equal(expected, ImageFile.RealFormat(path));
+    }
+
     [Theory]
     [InlineData("photo.jpg", MagickFormat.Png)]
     [InlineData("photo.png", MagickFormat.WebP)]

@@ -57,7 +57,11 @@ Quy tắc chung:
 - **CMYK** (ảnh từ in ấn): Convert, Compress, Under N chuyển sang sRGB qua profile CMYK của ảnh (hoặc profile in phổ biến nếu không có). Remove metadata giữ nguyên.
 - **Độ sâu màu:** dùng Magick.NET Q8, nên ảnh 16-bit/kênh (PNG, TIFF) ra 8-bit. **Trade-off chấp nhận:** Q8 nhẹ và nhanh hơn Q16; khác biệt 16 → 8 bit không thấy bằng mắt, nhưng "lossless" của PNG Light/Balanced chỉ đúng với ảnh 8-bit.
 - **ICC** được giữ nguyên từng byte; profile có thể chứa tag riêng của người tạo (hiếm). Ghi nhận, không xử lý.
-- **Hủy:** mọi thao tác dừng giữa chừng khi người dùng bấm Cancel (qua callback tiến độ của ImageMagick) và không để lại file tạm.
+- **Hủy:** mọi thao tác dừng giữa chừng khi người dùng bấm Cancel (qua callback tiến độ của ImageMagick, gắn lại sau Coalesce/Optimize). Mã hóa/giải mã AVIF và HEIC không báo tiến độ nên không ngắt được (giới hạn thư viện); vì ảnh được mã hóa vào bộ nhớ rồi mới tạo file, tiến trình thoát giữa chừng không để lại file tạm.
+- **Bộ nhớ:** kết quả được mã hóa trong RAM rồi mới ghi; ảnh nhiều trang cần khoảng 2 lần dung lượng output, tổng diện tích các trang bị chặn ở 400 MP. Ảnh 400 MP có thể dùng ~3 GB RAM đỉnh. Chấp nhận.
+- **PNG có ICC** ghi profile hai lần (chunk iCCP và một bản text "Raw profile type icc"): thêm vài KB, không lộ gì thêm. Chấp nhận.
+- **Compress HEIC** thật thường bị bỏ qua (JPG không nhỏ hơn HEIC đủ 5%); đó là kết quả "skipped", không phải lỗi.
+- **Remove metadata** với WebP/AVIF lossy có thể làm file to hơn (ghi lại ở quality 95 để không mất chất lượng). Chấp nhận.
 - **Policy:** ImageMagick còn nạp `policy.xml`/`delegates.xml` từ thư mục làm việc, `MAGICK_HOME`, `MAGICK_CONFIGURE_PATH`, `%LOCALAPPDATA%\ImageMagick`, thư mục cấu hình XDG/HOME, và áp dụng sau policy của ta (có thể đổi temp path, bật delegate). Vì vậy: nạp với thư mục làm việc là thư mục cấu hình riêng; có file cấu hình lạ ở các thư mục kia thì không xử lý ảnh nào; sau khi nạp còn đọc thử MVG/MSL/TEXT và phải bị chính luật coder từ chối.
 - **Trong suốt**: đích không có alpha (JPG, BMP) thì nền trắng.
 - **Compress**:

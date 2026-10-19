@@ -107,10 +107,16 @@ public static class ImageFile
             [(byte)'B', (byte)'M', ..] => MagickFormat.Bmp,
             [(byte)'I', (byte)'I', 42, 0, ..] or [(byte)'M', (byte)'M', 0, 42, ..] => MagickFormat.Tiff,
             [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', (byte)'a', (byte)'v', (byte)'i', (byte)'f' or (byte)'s'] => MagickFormat.Avif,
-            [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', ..] => MagickFormat.Heic, // heic, heix, mif1, ...
-            _ => null,
+            [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', ..] when HeifBrands.Contains(System.Text.Encoding.ASCII.GetString(h[8..12]))
+                => MagickFormat.Heic,
+            _ => null, // includes other ISO media (MP4, MOV), which must not reach libheif
         };
     }
+
+    private static readonly HashSet<string> HeifBrands = new(StringComparer.Ordinal)
+    {
+        "heic", "heix", "heim", "heis", "hevc", "hevx", "hevm", "hevs", "mif1", "msf1",
+    };
 
     // HEIC, HEIF and AVIF share a container: a generic brand (mif1) cannot tell them apart, so trust the extension there.
     private static int Family(MagickFormat format) => format switch
