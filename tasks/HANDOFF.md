@@ -1,6 +1,6 @@
 # Bàn giao: làm tiếp ConvertAnything trên máy khác
 
-Cập nhật: 2026-10-19. File này thay cho trí nhớ của phiên làm việc trước: mọi bối cảnh cần để làm tiếp nằm ở đây và trong các file được trỏ tới.
+Cập nhật: 2026-10-19 (cuối phiên trên máy thứ hai, chuyển sang máy nhà). File này thay cho trí nhớ của phiên làm việc trước: mọi bối cảnh cần để làm tiếp nằm ở đây và trong các file được trỏ tới.
 
 ## BẮT BUỘC: quy trình agent-skills của Addy Osmani
 
@@ -26,11 +26,17 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 
 | Module | Trạng thái |
 |---|---|
-| core | Xong. Review vòng 4–9 đã sửa hết (Phase 5–10 trong [todo.md](todo.md)); checkpoint đạt (vòng 9 không còn Critical/High/Required). 156 test pass, 1 skip. Còn mở: test gom lô qua junction hỏng hiếm khi chạy cả solution (đã cho in đủ chẩn đoán). |
-| image | **Xong** (Task 1–7): review 5 vòng, vòng 5 không còn Critical/High/Required; README + ADR-0004. 204 test pass. |
-| installer, media, pdf | Chưa làm. Spec nháp: [SPEC-media.md](../SPEC-media.md), [SPEC-pdf.md](../SPEC-pdf.md). |
+| core | Xong. Review vòng 4–9 đã sửa hết (Phase 5–10 trong [todo.md](todo.md)). Còn mở: test gom lô qua junction hỏng hiếm khi chạy cả solution (đã cho in đủ chẩn đoán). |
+| image | **Xong** (Task 1–7): review 5 vòng, README + ADR-0004. 204 test pass. |
+| installer (v0.1) | **Gần xong.** Code + test đầu-cuối 6 kịch bản xanh; review vòng 1 đã reconcile ([installer/todo.md](installer/todo.md)); review vòng 2 đã có kết quả, **mới sửa một phần** (xem "Việc dở dang"). ADR-0005, README mới, hồ sơ cộng đồng, CI/release workflow đã có. Core 176 test pass + 1 skip, image 204. |
+| media, pdf | Chưa làm. Spec nháp: [SPEC-media.md](../SPEC-media.md), [SPEC-pdf.md](../SPEC-pdf.md). |
 
-Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói). Kế hoạch core: [plan.md](plan.md), [todo.md](todo.md) (Phase 4–5 = sửa theo review).
+Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói, 0004 Magick.NET, 0005 installer/ký mã). Spec installer: [SPEC-installer.md](../SPEC-installer.md).
+
+Người dùng đã chốt (2026-10-19):
+- Mọi thứ **miễn phí** (Inno Setup; không mua chứng chỉ; ký mã sau qua SignPath Foundation, người dùng tự nộp đơn khi repo đã public).
+- Repo **public cho cộng đồng**: tự push và public **sau khi** đạt quy trình Addy; setup GitHub cho "popular" (mô tả, topics, Discussions, release có installer). Giữ tên **ConvertAnything** (tự mô tả, đã gắn vào menu/registry/installer; đổi tên tốn công mà không tăng khả năng được tìm thấy).
+- Lịch sử commit đã **viết lại sang email ẩn** của GitHub (người dùng chọn). Máy nào có bản clone cũ phải clone lại (hoặc `git fetch` rồi `git reset --hard origin/main`).
 
 ## Dựng máy mới
 
@@ -46,12 +52,32 @@ Lưu ý môi trường của máy cũ (có thể gặp lại):
 Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
 - SDK cài cho riêng user. Shell mở **trước** khi chạy setup không có `dotnet` trong PATH: trong PowerShell đặt `$env:Path = "$env:LOCALAPPDATA\Microsoft\dotnet;$env:Path"; $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"`. Bản Debug `ca.exe` (framework-dependent) chạy thiếu `DOTNET_ROOT` sẽ bật hộp thoại đòi tải .NET Desktop Runtime: không cần tải, chỉ là thiếu biến môi trường. Explorer chỉ thấy biến mới sau khi đăng xuất/đăng nhập.
 - Smart App Control đang bật (enforce). Nó chặn theo **hash** từng file mới build, ngẫu nhiên: lúc chặn `MenuProbe.exe`, lúc chặn `ConvertAnything.Image.dll` ("An Application Control policy has blocked this file", test host thoát mã 255). Đổi nhẹ mã nguồn để ra hash mới thường qua được. MenuProbe chạy qua host đã ký: `dotnet tools/MenuProbe/bin/Debug/net10.0-windows/MenuProbe.dll list <file>`. **Hệ quả cho bản phát hành:** người dùng bật Smart App Control có thể bị chặn ca.exe/DLL chưa ký; module installer phải tính chuyện ký mã (code signing) hoặc ghi rõ trong README.
-- GitHub CLI đã cài và đăng nhập tài khoản Suryvibegod trên máy này (2026-10-19); `gh auth setup-git` đã chạy, `git push` dùng được.
+- GitHub CLI đã cài và đăng nhập tài khoản Suryvibegod trên máy này (2026-10-19); `gh auth setup-git` đã chạy. Đẩy file trong `.github/workflows` cần token có quyền `workflow`: `gh auth refresh -h github.com -s workflow` (hoặc đăng nhập mới với `gh auth login --web -s workflow`).
+- Inno Setup 6.7.3 cài cho riêng user: `winget install JRSoftware.InnoSetup -e --version 6.7.3 --scope user`.
 - Ghi file có dấu `\` qua heredoc/Python dễ bị biến `\a`, `\b` thành ký tự điều khiển (đã làm hỏng `BatchTests.cs` một lần). Sửa text có backslash bằng công cụ Edit.
 - Kiểm `dotnet format --verify-no-changes` thành **lệnh riêng**, đọc exit code rồi mới commit; đừng gộp chung một lệnh với `git commit`.
 
 ## Việc dở dang cụ thể (làm theo thứ tự)
 
-1. Module installer (v0.1): spec + plan theo quy trình; quyết định code signing (Smart App Control chặn file chưa ký). Người dùng muốn public repo sớm: đề xuất public ở v0.1 (core + image + installer), **hỏi người dùng trước khi đổi repo sang public**.
-2. Media (v0.2), PDF (v0.3) theo [CAPABILITY-MAP.md](../CAPABILITY-MAP.md).
-3. Khi bấm thử menu trên máy thật: `install-menu --allow-insecure-location` (thêm `--dev` nếu cần) khi chạy từ thư mục build; nhớ `uninstall-menu`.
+1. **Sửa nốt review vòng 2 của installer.** Đã sửa: mutex là tùy chọn khi bị chiếm tên, lỗi registry trong lệnh menu thoát 1 kèm lý do, `classic-menu on` tự sửa khóa của mình, test mutex chờ, email. Còn lại, mỗi việc viết test trước:
+   - `.iss`: mã 3 (thư mục bị từ chối) có thông báo + mục README riêng (gồm trường hợp `%LOCALAPPDATA%` qua junction/ổ khác); câu dự phòng "Windows blocked ConvertAnything or it stopped unexpectedly"; chỉ hiện dòng stderr đầu trong hộp thoại, log phần còn lại; bỏ `(Code = ErrorPolicyBlocked)` thừa; `RunCa` bọc `try/except` (ngoại lệ không được bỏ qua `SweepRegistry`); không chạy `classic-menu on` khi `install-menu` đã lỗi, tách chữ trang cuối cho hai loại lỗi; `[Messages]` ghi đè `SetupAppRunningError`/`UninstallAppRunningError` ("A conversion is still running. Wait a few seconds..."); `PrepareToInstall` từ chối `{app}`/`{userpf}` là reparse point, và `{app}` có sẵn, **không rỗng**, mà không có mục gỡ `_is1` của app.
+   - `Program.cs`: giữ mutex tới khi tiến trình thoát (trường static, không `using`); hằng số thay cho `SomeFilesFailed` ở nhánh classic-menu.
+   - `InstallerScriptTests`: lấy tên thư mục `logs`/`pipes`/`magick` và `SystemFileAssociations` từ hằng số C# (thêm hằng số `internal`), bỏ assert hiển nhiên `Title + ".Menu"`.
+   - Test junction `install-menu`: `finally` chạy `uninstall-menu` nếu thoát 0; thêm test đơn vị junction cho `InstallLocation` nếu chưa có.
+   - `test-installer.ps1`: assert setup ≤ 60 MB; kịch bản 5 `ExitCode -eq 7` + log có "installs only into"; kịch bản 6 chỉ chấp nhận nhánh "từ chối" (cài im lặng thì Inno chọn Cancel); `finally` dừng `ca.exe` trong `{app}` trước khi gỡ, bọc `Remove-Item`; `MenuKeys` kiểm mọi khóa `ConvertAnything*`.
+   - Workflow: tách job `attest` riêng (job build chỉ `contents: read`); kiểm tag nằm trên `main` (`git merge-base --is-ancestor`, checkout `fetch-depth: 0`); gọi thẳng `ISCC.exe` vừa cài và kiểm mã thoát khi cài Inno (`build-installer.ps1` nhận tham số `-Iscc`); CI/release dùng `dotnet-version: 10.0.x` (bản vá mới nhất, tức runtime mới nhất trong bản self-contained), `global.json` hạ về `10.0.100` + `latestFeature`; thêm `.github/dependabot.yml` (github-actions, nuget).
+   - `setup-dev.ps1`: tải `dotnet-install.ps1` vào thư mục tạm ngẫu nhiên, đòi chữ ký Authenticode hợp lệ của Microsoft trước khi chạy; lời nhắc đăng nhập `gh` thêm `--scopes workflow`.
+   - README: hash chỉ chứng minh file không hỏng, provenance mới chứng minh build từ repo này (`gh attestation verify ... --signer-workflow Suryvibegod/ConvertAnything/.github/workflows/release.yml`); so sánh hash không phân biệt hoa thường; kiểm **trước** khi bấm Run anyway. Smart App Control: "is more likely to work once signed", bỏ câu "cannot be turned back on" tuyệt đối. Cách gỡ tay nếu uninstaller bị chặn. Nhắc thay tên user/tên file trong log trước khi đăng issue (cả CONTRIBUTING, mẫu bug).
+   - Spec/ADR-0005: AppMutex là **hỏi/hủy** chứ không "chờ" (cài im lặng thì hủy); `CloseApplications` chỉ còn tác dụng khi không có mutex. Ghi các trade-off: `.claude/settings.json` giữ lại (quy trình bắt buộc của maintainer, Claude Code hỏi tin cậy thư mục trước); test thời gian trên CI (nới nếu CI đỏ).
+   - Rồi chạy **review vòng 3** (3 reviewer bối cảnh trống, chỉ đọc) trên phần thay đổi, reconcile tới khi không còn Critical/High/Required; ghi bảng vào [installer/todo.md](installer/todo.md).
+2. **Kiểm tay menu cổ điển** (người dùng làm): cài setup trong `artifacts\installer`, tick "Use the classic (Windows 10 style) right-click menu for all apps", đăng xuất/đăng nhập, chuột phải ảnh: menu kiểu cũ phải có ConvertAnything ngay ngoài. Ghi kết quả + bản Windows vào ADR-0005. Không xác nhận được thì ẩn trang này ở v0.1.
+3. **Phát hành v0.1.0, đúng thứ tự** (attestation chỉ chạy khi repo public; mọi link trong README/setup trỏ vào release):
+   1. Push; CI xanh **3 lần liên tiếp** (Actions, Re-run). Nới test thời gian nếu chỉ đỏ trên CI.
+   2. Đổi repo sang public: `gh repo edit Suryvibegod/ConvertAnything --visibility public --accept-visibility-change-consequences`.
+   3. Bật private vulnerability reporting: `gh api -X PUT repos/Suryvibegod/ConvertAnything/private-vulnerability-reporting`; bấm thử link `/security/advisories/new`.
+   4. Mô tả repo (chỉ nói ảnh ở v0.1; video/PDF là "coming"), homepage = trang releases, topics (tối đa 20: windows, context-menu, image-converter, heic, heic-to-jpg, image-compression, webp, avif, exif, metadata-remover, file-converter, explorer, windows-11, dotnet, csharp, imagemagick, offline, privacy, inno-setup, open-source), bật Discussions; nhờ người dùng đặt ảnh social preview (chỉ làm được trên web).
+   5. Tag `v0.1.0`; workflow release tạo bản **nháp**. Tải file exe trong bản nháp, chạy `scripts/test-installer.ps1 -Setup <exe>` trên máy thật + cài tay một lần; so `runtimepack` trong `ca.deps.json` với bản vá .NET 10 mới nhất; quét VirusTotal. Đạt thì Publish.
+   6. README: thêm ảnh/GIF demo (menu chuột phải, cửa sổ tiến trình); soạn bài giới thiệu cho người dùng tự đăng.
+   7. Nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply).
+4. Media (v0.2), PDF (v0.3) theo [CAPABILITY-MAP.md](../CAPABILITY-MAP.md). v0.2: giữ setup 0.1.0 làm fixture để test nâng cấp thật.
+5. Khi bấm thử menu bằng bản build (không qua installer): `install-menu --allow-insecure-location` (thêm `--dev` nếu cần); nhớ `uninstall-menu`. `test-installer.ps1` từ chối chạy nếu còn menu/app data của bản dev.

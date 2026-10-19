@@ -44,12 +44,24 @@ if (-not ($sdks -match '^10\.')) {
 Step 'GitHub CLI'
 # The gh installer is per-machine and would block on a UAC prompt, so only advise here.
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-    Write-Warning 'GitHub CLI missing. Run:  winget install --id GitHub.cli -e   then  gh auth login --web  (account Suryvibegod).'
+    Write-Warning 'GitHub CLI missing. Run:  winget install --id GitHub.cli -e   then  gh auth login --web -s workflow  (account Suryvibegod).'
 } else {
     $auth = & gh auth status 2>&1 | Out-String
     if ($auth -notmatch 'Logged in') {
-        Write-Warning 'Not signed in to GitHub. Run:  gh auth login --web   (account Suryvibegod), then push works.'
+        Write-Warning 'Not signed in to GitHub. Run:  gh auth login --web -s workflow   (account Suryvibegod), then push works.'
+    } elseif ($auth -notmatch 'workflow') {
+        # Pushing changes under .github/workflows needs the workflow scope.
+        Write-Warning 'GitHub token lacks the workflow scope. Run:  gh auth refresh -h github.com -s workflow'
     }
+}
+
+Step 'Inno Setup 6.7.3 (builds the installer)'
+$iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" | Where-Object { Test-Path $_ }
+if (-not $iscc) {
+    # Per-user install: no UAC prompt.
+    winget install --id JRSoftware.InnoSetup -e --version 6.7.3 --scope user --silent --accept-package-agreements --accept-source-agreements
+} else {
+    $iscc
 }
 
 Step 'Commit identity (this repository only)'
