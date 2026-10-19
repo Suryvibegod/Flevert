@@ -10,13 +10,13 @@ public sealed class StripMetadataTests : IDisposable
 
     public void Dispose() => _dir.Dispose();
 
-    private static IOperation Op() => ImageOperations.All.Single(op => op.Id == "image.strip-metadata");
+    private static IOperation StripOp() => ImageOperations.All.Single(op => op.Id == "image.strip-metadata");
 
     [Fact]
     public void Remove_metadata_is_offered_for_every_readable_image()
     {
-        Assert.Equal("Remove metadata", Op().MenuPath);
-        Assert.Equal(ImageFile.ReadableExtensions.Order(StringComparer.Ordinal), Op().Extensions.Order(StringComparer.Ordinal));
+        Assert.Equal("Remove metadata", StripOp().MenuPath);
+        Assert.Equal(ImageFile.ReadableExtensions.Order(StringComparer.Ordinal), StripOp().Extensions.Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class StripMetadataTests : IDisposable
             Assert.NotNull(check.GetXmpProfile());
         }
 
-        var output = await Op().RunAsync(input, CancellationToken.None);
+        var output = await StripOp().RunAsync(input, CancellationToken.None);
 
         Assert.Equal("IMG_2024 (no metadata).jpg", Path.GetFileName(output));
         using var result = new MagickImage(output);
@@ -77,7 +77,7 @@ public sealed class StripMetadataTests : IDisposable
             image.Write(input, ImageFile.FormatOf(Path.GetExtension(name)));
         }
 
-        var output = await Op().RunAsync(input, CancellationToken.None);
+        var output = await StripOp().RunAsync(input, CancellationToken.None);
 
         Assert.Equal(expected, Path.GetFileName(output));
     }
@@ -99,7 +99,7 @@ public sealed class StripMetadataTests : IDisposable
             image.Write(input, format);
         }
 
-        var stripped = await Op().RunAsync(input, CancellationToken.None);
+        var stripped = await StripOp().RunAsync(input, CancellationToken.None);
         var light = await ImageOperations.All.Single(op => op.Id == "image.compress-light").RunAsync(input, CancellationToken.None);
 
         using var source = new MagickImage(input);
@@ -129,10 +129,33 @@ public sealed class StripMetadataTests : IDisposable
         using (var check = new MagickImage(input))
             Assert.StartsWith(expected, check.GetAttribute("jpeg:sampling-factor"), StringComparison.Ordinal);
 
-        var output = await Op().RunAsync(input, CancellationToken.None);
+        var output = await StripOp().RunAsync(input, CancellationToken.None);
 
         using var result = new MagickImage(output);
         Assert.StartsWith(expected, result.GetAttribute("jpeg:sampling-factor"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Subsampling_follows_a_quarter_turn_of_the_pixels()
+    {
+        // 4:2:2 halves the chroma horizontally; after the pixels turn 90 degrees, it must halve it vertically instead.
+        var input = _dir.Combine("portrait.jpg");
+        using (var image = new MagickImage(MagickColors.SteelBlue, 200, 150))
+        {
+            var exif = new ExifProfile();
+            exif.SetValue(ExifTag.Orientation, (ushort)6);
+            image.SetProfile(exif);
+            image.Orientation = Orientation.RightTop;
+            image.Quality = 92;
+            image.Settings.SetDefine(MagickFormat.Jpeg, "sampling-factor", "2x1");
+            image.Write(input, MagickFormat.Jpeg);
+        }
+
+        var output = await StripOp().RunAsync(input, CancellationToken.None);
+
+        using var result = new MagickImage(output);
+        Assert.Equal((150u, 200u), (result.Width, result.Height));
+        Assert.StartsWith("1x2", result.GetAttribute("jpeg:sampling-factor"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -146,7 +169,7 @@ public sealed class StripMetadataTests : IDisposable
             image.Write(input, MagickFormat.WebP);
         }
 
-        var output = await Op().RunAsync(input, CancellationToken.None);
+        var output = await StripOp().RunAsync(input, CancellationToken.None);
 
         using var before = new MagickImage(input);
         using var after = new MagickImage(output);
@@ -171,7 +194,7 @@ public sealed class StripMetadataTests : IDisposable
             frames.Write(input, MagickFormat.WebP);
         }
 
-        var output = await Op().RunAsync(input, CancellationToken.None);
+        var output = await StripOp().RunAsync(input, CancellationToken.None);
 
         using var before = new MagickImageCollection(input);
         using var after = new MagickImageCollection(output);
@@ -191,7 +214,7 @@ public sealed class StripMetadataTests : IDisposable
             animation.Write(input, MagickFormat.Gif);
         }
 
-        var output = await Op().RunAsync(input, CancellationToken.None);
+        var output = await StripOp().RunAsync(input, CancellationToken.None);
 
         using var result = new MagickImageCollection(output);
         Assert.Equal(3, result.Count);

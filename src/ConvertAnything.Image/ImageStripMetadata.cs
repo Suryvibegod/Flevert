@@ -16,7 +16,8 @@ public sealed class ImageStripMetadata : IOperation
 
     public IReadOnlyCollection<string> Extensions { get; } = [.. ImageFile.ReadableExtensions];
 
-    public Task<string> RunAsync(string inputPath, CancellationToken ct)
+    // The format is read off the caller's thread: a slow share or an offline cloud file must not freeze the progress window.
+    public Task<string> RunAsync(string inputPath, CancellationToken ct) => Task.Run(() =>
     {
         var source = ImageFile.RealFormat(inputPath);
         var target = source is MagickFormat.Heic or MagickFormat.Heif ? MagickFormat.Jpeg : source; // HEIC cannot be written
@@ -33,7 +34,7 @@ public sealed class ImageStripMetadata : IOperation
             ImageFile.StopOnCancel(images, token);
             foreach (var frame in images)
             {
-                frame.AutoOrient();
+                ImageMetadata.AutoOrient(frame);
                 ImageMetadata.StripExceptColourProfile(frame);
                 // The pixels are re-encoded; ImageMagick only estimates the source quality of a JPEG, so WebP, AVIF and a
                 // HEIC becoming JPG would otherwise fall back to its default (visibly worse than Compress > Light).
@@ -58,7 +59,7 @@ public sealed class ImageStripMetadata : IOperation
             else
                 ImageFile.Write(images[0], temp, target);
         }, token), ct);
-    }
+    }, ct);
 
     private const uint HighQuality = 95;
 }

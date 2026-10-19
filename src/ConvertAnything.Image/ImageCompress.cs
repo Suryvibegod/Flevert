@@ -97,7 +97,7 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
 
     private void Prepare(IMagickImage<byte> image, MagickFormat target)
     {
-        image.AutoOrient();
+        ImageMetadata.AutoOrient(image);
         ImageMetadata.StripExceptColourProfile(image);
         ImageMetadata.ToSrgb(image); // also drops the large CMYK profile from the output
 

@@ -19,10 +19,11 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
     public Task<string> RunAsync(string inputPath, CancellationToken ct)
     {
         var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + extension);
-        // Only an animation stays one; the pages of a TIFF are not frames, and other targets hold one image.
-        var keepsAnimation = ImageFile.IsAnimationFormat(format) && ImageFile.IsAnimationFormat(ImageFile.RealFormat(inputPath));
         return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => ImageFile.RunAsync(() =>
         {
+            // Only an animation stays one; the pages of a TIFF are not frames, and other targets hold one image. Read here,
+            // off the caller's thread: a slow share or an offline cloud file must not freeze the progress window.
+            var keepsAnimation = ImageFile.IsAnimationFormat(format) && ImageFile.IsAnimationFormat(ImageFile.RealFormat(inputPath));
             using var images = ImageFile.Read(inputPath, allFrames: keepsAnimation);
             ImageFile.StopOnCancel(images, token);
             if (images.Count > 1)
@@ -44,7 +45,7 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
     private void Prepare(IMagickImage<byte> image)
     {
         // Rotate the pixels so viewers that ignore EXIF orientation still show the image upright.
-        image.AutoOrient();
+        ImageMetadata.AutoOrient(image);
         ImageMetadata.ToSrgb(image);
         if (!HasAlpha)
             ImageMetadata.FlattenOntoWhite(image);

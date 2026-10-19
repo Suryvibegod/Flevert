@@ -38,7 +38,7 @@ public sealed class ImageCompressUnder(string id, long limitBytes, string label)
             using var images = ImageFile.Read(inputPath, allFrames: false); // the result is one JPG
             ImageFile.StopOnCancel(images, token);
             var original = images[0];
-            original.AutoOrient();
+            ImageMetadata.AutoOrient(original);
             ImageMetadata.StripExceptColourProfile(original);
             ToSrgbIfProfileTooLarge(original);
             ImageMetadata.FlattenOntoWhite(original);
