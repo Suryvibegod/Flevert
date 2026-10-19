@@ -136,4 +136,4 @@ Cả ba reviewer: không Critical/High/Required (code-reviewer APPROVE). CI xanh
 - [x] Review vòng 5 → không còn Critical/High/Required
 - [x] Soát phần sửa Low vòng 5 (một reviewer bối cảnh trống): 1 Required (CI đỏ ở test hủy Image) đã sửa và kiểm; còn lại Low/Nit đã sửa hoặc thu hẹp câu chữ
 - [x] HANDOFF; commit + push
-- [ ] CI xanh 3 lần liên tiếp (bước phát hành 3.1)
+- [x] CI xanh 3 lần liên tiếp (bước phát hành 3.1): run 39257865773, 39258408355 và lần chạy lại của nó (2026-10-19)
