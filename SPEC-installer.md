@@ -37,7 +37,9 @@ Ràng buộc của người dùng (2026-10-19): **mọi thứ miễn phí**: cô
 - `PrivilegesRequired=lowest`, không cho chuyển sang cài toàn máy: menu nằm ở HKCU của từng người, cài toàn máy không đem lại gì.
 - `ArchitecturesAllowed=x64compatible` (chạy cả Windows ARM64 qua giả lập), `MinVersion=10.0.17763`.
 - Sau khi chép file: chạy `ca.exe install-menu` (ẩn cửa sổ, đợi xong). Nếu mã thoát khác 0, báo lỗi rõ ràng; mã 4551 (`ERROR_SYSTEM_INTEGRITY_POLICY_VIOLATION`, Smart App Control chặn file) có thông báo riêng chỉ cách xử lý. File vẫn giữ, người dùng có thể gỡ bình thường.
-- Tác vụ tùy chọn `classicmenu` (mặc định không tick, chỉ hiện trên Windows 11 build ≥ 22000): chạy `ca.exe classic-menu on`. Trang cuối nhắc: có hiệu lực sau khi khởi động lại Explorer hoặc đăng xuất.
+- Trang "Right-click menu" (chỉ hiện trên Windows 11 build ≥ 22000) có một checkbox, mặc định không tick: tick thì chạy `ca.exe classic-menu on`, không tick thì `classic-menu off` (chỉ gỡ khóa do app tạo, nên bỏ tick khi cài đè sẽ hoàn tác). Lựa chọn được nhớ cho lần cài đè sau. Cài im lặng: `/CLASSICMENU=1|0`, không truyền thì giữ lựa chọn cũ. Trang cuối nhắc cách mở menu; với menu cổ điển: có hiệu lực sau khi khởi động lại Explorer hoặc đăng xuất.
+  - Không dùng `[Tasks]`: danh sách task (`TNewCheckListBox`) của Inno 6.7.3 vẽ checkbox bị cắt viền trái ở 200% DPI (người dùng phát hiện 2026-10-19); checkbox thường (`TNewCheckBox`) do Windows vẽ thì đúng.
+  - Không dùng `WizardStyle=modern windows11` (VCL style): Smart App Control chặn mọi bản setup build với style đó trên máy dev (2 lần liên tiếp), bỏ style thì chạy được.
 - Cài đè: `AppId` cố định, `CloseApplications=yes` (Restart Manager đóng `ca.exe` đang chạy). `install-menu` tự gỡ menu cũ trước khi ghi.
 - Kèm theo: `LICENSE.txt` của app, `THIRD-PARTY-NOTICES.txt` gom từ Notice.txt của Magick.NET và LICENSE/ThirdPartyNotices của .NET runtime (bắt buộc khi phân phối lại bản self-contained).
 - Phiên bản: lấy từ `<Version>` trong `Directory.Build.props`, installer đọc lại từ file version của `ca.exe` nên chỉ có một nơi khai báo.
@@ -89,7 +91,7 @@ Theo [SPEC-core.md](SPEC-core.md#code-style). Script Inno: hằng số ở `#def
 | Tầng | Kiểm cái gì |
 |---|---|
 | Unit (xUnit, `FakeRegistry`) | `ClassicMenu`: bật khi chưa có → có khóa + đánh dấu; bật khi đã có → không đổi gì; tắt chỉ xóa khi có đánh dấu; bật/tắt lặp lại không lỗi. `CommandLine` nhận `classic-menu on|off`, từ chối thứ khác |
-| Đầu-cuối (`test-installer.ps1`, máy thật) | Build installer → cài im lặng (`/VERYSILENT /SUPPRESSMSGBOXES /TASKS=classicmenu`) → có file, có mục gỡ trong HKCU Uninstall, có menu cho `.heic`/`.jpg`, có khóa menu cổ điển + đánh dấu → `ca.exe` đã cài chạy thật `image.to-jpg` trên fixture HEIC (chứng minh bản self-contained đủ native) → cài đè lần hai → gỡ im lặng → không còn thư mục app, `%LOCALAPPDATA%\ConvertAnything`, khóa menu, khóa menu cổ điển, mục gỡ. Kịch bản 2: cài, đổi tên `ca.exe`, gỡ → lưới an toàn Pascal vẫn dọn sạch registry. Kịch bản 3: khóa menu cổ điển có sẵn (không đánh dấu) → cài với `classicmenu` rồi gỡ → khóa vẫn còn |
+| Đầu-cuối (`test-installer.ps1`, máy thật) | Build installer → cài im lặng (`/VERYSILENT /SUPPRESSMSGBOXES /CLASSICMENU=1`) → có file, có mục gỡ trong HKCU Uninstall, có menu cho `.heic`/`.jpg`, có khóa menu cổ điển + đánh dấu → `ca.exe` đã cài chạy thật `image.to-jpg` trên fixture HEIC (chứng minh bản self-contained đủ native) → cài đè không tham số (giữ menu cổ điển) → cài đè `/CLASSICMENU=0` (gỡ khóa) → gỡ im lặng → không còn thư mục app, `%LOCALAPPDATA%\ConvertAnything`, khóa menu, khóa menu cổ điển, mục gỡ. Kịch bản 2: cài, đổi tên `ca.exe`, gỡ → lưới an toàn Pascal vẫn dọn sạch registry. Kịch bản 3: khóa menu cổ điển có sẵn (không đánh dấu) → cài với `/CLASSICMENU=1` rồi gỡ → khóa vẫn còn |
 
 Thứ tự TDD: viết `ClassicMenuTests` và `test-installer.ps1` trước, chạy thấy đỏ, rồi mới viết code và `.iss`.
 

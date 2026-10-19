@@ -1,4 +1,4 @@
-; Inno Setup 6 script for ConvertAnything. Build with scripts\build-installer.ps1; spec in SPEC-installer.md.
+﻿; Inno Setup 6 script for ConvertAnything. Build with scripts\build-installer.ps1; spec in SPEC-installer.md.
 ; Per-user install without admin: the right-click menu lives in HKCU, so a machine-wide install would gain nothing.
 
 #define AppName "ConvertAnything"
@@ -35,7 +35,9 @@ OutputBaseFilename={#AppName}-Setup-{#AppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
+; Not "modern windows11": Smart App Control blocked every setup built with that VCL style and none built without it.
 WizardStyle=modern
+SetupIconFile=..\assets\app.ico
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExe}
 ; Restart Manager closes a running ca.exe before files are replaced.
@@ -46,8 +48,8 @@ SetupLogging=yes
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
-[Tasks]
-Name: "classicmenu"; Description: "Use the classic right-click menu, so ConvertAnything appears without ""Show more options"" (affects all apps; undone on uninstall)"; Flags: unchecked; Check: IsWindows11
+; The classic-menu choice is a check box on a custom page, not a [Tasks] entry: Inno Setup 6.7 clips the check box of the
+; task list at high DPI (seen at 200%), while a plain check box is drawn by Windows. Silent installs pass /CLASSICMENU=1|0.
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -89,6 +91,53 @@ begin
   SuppressibleMsgBox(Text, mbError, MB_OK, IDOK);
 end;
 
+var
+  ClassicMenuCheck: TNewCheckBox; // nil before Windows 11, where the classic menu is the only one
+
+procedure InitializeWizard;
+var
+  Page: TWizardPage;
+  Explanation: TNewStaticText;
+  Choice: String;
+begin
+  if not IsWindows11 then
+    Exit;
+  Page := CreateCustomPage(wpWelcome, 'Right-click menu', 'Where should ConvertAnything appear?');
+
+  Explanation := TNewStaticText.Create(Page);
+  Explanation.Parent := Page.Surface;
+  Explanation.Width := Page.SurfaceWidth;
+  Explanation.WordWrap := True;
+  Explanation.Caption := 'Windows 11 puts ConvertAnything under "Show more options". The option below brings back ' +
+    'the classic right-click menu, as in Windows 10. It applies to all apps and is undone when you uninstall ConvertAnything.';
+
+  ClassicMenuCheck := TNewCheckBox.Create(Page);
+  ClassicMenuCheck.Parent := Page.Surface;
+  ClassicMenuCheck.Top := Explanation.Top + Explanation.Height + ScaleY(16);
+  ClassicMenuCheck.Width := Page.SurfaceWidth;
+  ClassicMenuCheck.Height := ScaleY(24);
+  ClassicMenuCheck.Caption := 'Show ConvertAnything directly in the right-click menu';
+
+  // /CLASSICMENU=1|0 for silent installs; otherwise keep the choice of the previous install.
+  Choice := ExpandConstant('{param:CLASSICMENU|}');
+  if Choice = '' then
+    Choice := GetPreviousData('ClassicMenu', '0');
+  ClassicMenuCheck.Checked := Choice = '1';
+end;
+
+function ClassicMenuChosen: Boolean;
+begin
+  Result := (ClassicMenuCheck <> nil) and ClassicMenuCheck.Checked;
+end;
+
+procedure RegisterPreviousData(PreviousDataKey: Integer);
+begin
+  if ClassicMenuChosen then
+    SetPreviousData(PreviousDataKey, 'ClassicMenu', '1')
+  else
+    SetPreviousData(PreviousDataKey, 'ClassicMenu', '0');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Code: Integer;
@@ -97,23 +146,32 @@ begin
     Exit;
   if not RunCa('install-menu', Code) then
     ReportFailure('adding the right-click menu', Code);
-  if WizardIsTaskSelected('classicmenu') and not RunCa('classic-menu on', Code) then
-    ReportFailure('switching to the classic menu', Code);
+  // Applied both ways, so unticking it on an upgrade undoes it; off only ever removes the key ca.exe created.
+  if ClassicMenuChosen then
+  begin
+    if not RunCa('classic-menu on', Code) then
+      ReportFailure('switching to the classic menu', Code);
+  end
+  else
+    RunCa('classic-menu off', Code);
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
+var
+  HowTo: String;
 begin
   if CurPageID <> wpFinished then
     Exit;
-  if WizardIsTaskSelected('classicmenu') then
-    WizardForm.FinishedLabel.Caption := WizardForm.FinishedLabel.Caption + #13#10#13#10 +
-      'Right-click a picture and choose ConvertAnything. The classic menu takes effect after you sign out and back in, or restart Windows Explorer.'
+  if ClassicMenuChosen then
+    HowTo := 'Right-click a picture and choose ConvertAnything. The classic menu takes effect after you sign out and back in, or restart Windows Explorer.'
   else if IsWindows11 then
-    WizardForm.FinishedLabel.Caption := WizardForm.FinishedLabel.Caption + #13#10#13#10 +
-      'Right-click a picture, choose "Show more options", then ConvertAnything.'
+    HowTo := 'Right-click a picture, choose "Show more options", then ConvertAnything.'
   else
-    WizardForm.FinishedLabel.Caption := WizardForm.FinishedLabel.Caption + #13#10#13#10 +
-      'Right-click a picture and choose ConvertAnything.';
+    HowTo := 'Right-click a picture and choose ConvertAnything.';
+  // The default text already ends with a line break.
+  WizardForm.FinishedLabel.Caption := WizardForm.FinishedLabel.Caption + #13#10 + HowTo;
+  // The label was sized for the default text; without this the added lines are cut off.
+  WizardForm.FinishedLabel.AdjustHeight;
 end;
 
 // Safety net for uninstall: removes what ca.exe uninstall-menu and classic-menu off would, in case ca.exe cannot run

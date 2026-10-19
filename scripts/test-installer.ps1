@@ -34,9 +34,10 @@ function MenuKeys {
     @(Get-ChildItem $classes -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'ConvertAnything.Menu*' })
 }
 
-function Install([string]$Tasks = '') {
+function Install([string]$ClassicMenu = '') {
     $log = Join-Path $work "install-$([guid]::NewGuid()).log"
-    $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$log`"", "/TASKS=`"$Tasks`"")
+    $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$log`"")
+    if ($ClassicMenu) { $arguments += "/CLASSICMENU=$ClassicMenu" }
     $timer = [Diagnostics.Stopwatch]::StartNew()
     $p = Start-Process $Setup -ArgumentList $arguments -Wait -PassThru
     Assert ($p.ExitCode -eq 0) "setup exits with 0 (got $($p.ExitCode); log $log)"
@@ -79,7 +80,7 @@ New-Item -ItemType Directory $work | Out-Null
 Write-Host "Testing $Setup"
 try {
     Write-Host 'Scenario 1: install, convert, install again, uninstall'
-    $elapsed = Install 'classicmenu'
+    $elapsed = Install '1'
     Assert ($elapsed.TotalSeconds -lt 30) 'installs in under 30 s'
     Assert (Test-Path "$app\ca.exe") 'ca.exe is installed'
     Assert (Test-Path "$app\LICENSE.txt") 'LICENSE.txt is installed'
@@ -99,15 +100,17 @@ try {
     Assert ($code -eq 0) "installed ca.exe converts HEIC to JPG (exit $code)"
     Assert (Test-Path "$work\photo.jpg") 'photo.jpg written'
 
-    Install 'classicmenu' | Out-Null
+    Install | Out-Null
     Assert (@(MenuKeys).Count -eq $menuCount) 'installing again leaves the same menu'
+    Assert (Test-Path $classicKey) 'installing again without /CLASSICMENU keeps the earlier choice'
+    Install '0' | Out-Null
+    Assert (-not (Test-Path $classicKey)) 'installing again with /CLASSICMENU=0 removes the classic menu key'
 
     Uninstall
     AssertClean
-    Assert (-not (Test-Path $classicKey)) 'classic menu key removed'
 
     Write-Host 'Scenario 2: the registry is cleaned even when ca.exe cannot run'
-    Install 'classicmenu' | Out-Null
+    Install '1' | Out-Null
     Remove-Item "$app\ca.exe"
     Uninstall
     AssertClean
@@ -116,7 +119,7 @@ try {
     Write-Host "Scenario 3: a classic menu key the user created survives"
     New-Item "$classicKey\InprocServer32" -Force | Out-Null
     Set-ItemProperty "$classicKey\InprocServer32" -Name '(default)' -Value ''
-    Install 'classicmenu' | Out-Null
+    Install '1' | Out-Null
     Assert ($null -eq (Get-ItemProperty $classicKey).PSObject.Properties['ConvertAnything']) 'user key left unmarked'
     Uninstall
     AssertClean
