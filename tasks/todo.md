@@ -339,8 +339,10 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `9fd5cf4..HEAD`. Kh�
 | Comment PipePeer nói 8.3 làm đổi đường dẫn kernel (DD5) | Nit | Hợp lệ | G4 |
 
 ## Việc
-- [ ] G1: Từ chối mọi đoạn đường dẫn kết thúc bằng `.` hoặc khoảng trắng (trừ `.`/`..`): trong Program trước `GetFullPath`, trong Runner, và trên đường dẫn thật sau khi pin
-- [ ] G2: Leader đọc (bỏ) yêu cầu của client không tin cậy rồi mới trả `Refused`; test qua seam tin cậy
-- [ ] G3: install-menu: thư mục phải ở ổ cố định cục bộ và đường dẫn thật (từ handle) trùng đường dẫn đưa vào; không reparse point bên trong thư mục
-- [ ] G4: Chặn tên server bắt đầu bằng `;`; sau khi pin yêu cầu `FILE_TYPE_DISK`; bỏ `FileInfo.Exists` trước pin; chặn `:` ngoài ký tự ổ; sửa comment PipePeer; ghi chú bit SQOS
-- [ ] G5: Tài liệu (ADR-0002 tách lô dưới tải, SPEC-core đầu vào) và review vòng 6
+- [x] G1: Từ chối mọi đoạn đường dẫn kết thúc bằng `.` hoặc khoảng trắng (trừ `.`/`..`): trong Program trước `GetFullPath`, trong Runner, và trên đường dẫn thật sau khi pin
+- [x] G2: Leader đọc (bỏ) yêu cầu của client không tin cậy rồi mới trả `Refused`; test qua seam tin cậy
+- [x] G3: install-menu: thư mục phải ở ổ cố định cục bộ và đường dẫn thật (từ handle) trùng đường dẫn đưa vào; không reparse point bên trong thư mục
+- [x] G4: Chặn tên server bắt đầu bằng `;`; sau khi pin yêu cầu `FILE_TYPE_DISK`; bỏ `FileInfo.Exists` trước pin; chặn `:` ngoài ký tự ổ; sửa comment PipePeer; ghi chú bit SQOS
+- [x] G5: Tài liệu (ADR-0002 tách lô dưới tải, SPEC-core đầu vào)
+- [ ] Review vòng 6 trên phần sửa (`75fdc99..HEAD`, core + cli)
+- [ ] Test `Processes_started_through_a_junction_still_form_one_batch` hỏng 1/6 lần chạy cả bộ (2 lô sau ~11 s); đã cho in log khi hỏng, cần tìm nguyên nhân

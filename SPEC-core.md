@@ -52,7 +52,9 @@ Lệnh của `ca.exe`:
 ca.exe run <op-id> <file>...        Chạy thao tác (Explorer gọi lệnh này)
 ca.exe install-menu [--dev] [--allow-insecure-location]
                                     Ghi menu chuột phải vào HKCU (--dev: thêm thao tác thử dev.copy;
-                                    --allow-insecure-location: cho phép thư mục người khác sửa được hoặc đi qua junction)
+                                    --allow-insecure-location: cho phép thư mục người khác sửa được, đi qua junction,
+                                    chứa link, nằm trên ổ subst/ổ mạng/UNC; mặc định thư mục cài phải ở ổ cố định
+                                    cục bộ và đường dẫn thật trùng đường dẫn đưa vào)
 ca.exe uninstall-menu               Gỡ mọi key đã ghi
 ca.exe list-ops                     In danh sách thao tác và loại file áp dụng
 
@@ -134,8 +136,9 @@ Menu, thông báo, log, README: tiếng Anh. Tài liệu nội bộ (spec, plan)
 
 Mỗi file được mở giữ (pin) không cho xóa/đổi tên trong lúc xử lý; thao tác nhận đường dẫn thật lấy từ handle. Bị từ chối, ghi lỗi vào log, các file khác chạy tiếp:
 
-- Đường dẫn thiết bị (`\\.\`, `\\?\GLOBALROOT`, `\??\` ...) và share `pipe` / `IPC$` (mở pipe như file cho phép server mạo danh người dùng).
-- Tên kết thúc bằng dấu chấm hoặc khoảng trắng: Win32 bỏ ký tự đó, nên sẽ đọc nhầm sang file khác.
+- Đường dẫn thiết bị (`\\.\`, `\\?\GLOBALROOT`, `\??\` ...), share `pipe` / `IPC$`, tên server bắt đầu bằng `;` (`\\;LanmanRedirector\…`). Sau khi pin còn kiểm handle là file trên đĩa (`FILE_TYPE_DISK`), nên không cách viết nào biến pipe/thiết bị thành đầu vào. Pin là lần mở duy nhất (không thăm dò `Exists` trước), có SQOS.
+- Bất kỳ tên file **hoặc thư mục** nào trong đường dẫn kết thúc bằng dấu chấm hoặc khoảng trắng (trừ `.`/`..`), kiểm cả trên đường dẫn thật sau khi pin: Win32 bỏ các ký tự đó, nên `sub.\x.txt` sẽ bị đọc thành `sub\x.txt`.
+- Alternate data stream (`a.txt:s.png`).
 - Symlink / junction (reparse point kiểu name surrogate). File OneDrive (placeholder) vẫn chạy.
 - File có hơn một hard link. **Trade-off chấp nhận:** chặn cả vài file hợp lệ (ảnh nền trong `C:\Windows\Web` liên kết sang WinSxS, kho pnpm, công cụ backup dùng hard link); đổi lại hard link không thể làm lộ bản sao của file người khác vào thư mục chung.
 - Đuôi file không thuộc thao tác, kiểm cả trên tên thật sau khi pin.

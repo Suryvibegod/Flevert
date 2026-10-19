@@ -62,5 +62,7 @@ Command-line context menu verbs (ADR-0001) make Explorer start one `ca.exe` per 
 - Files that arrive after the user presses Cancel are no longer acknowledged: the leader stops accepting as soon as its consumer stops.
 - Two selections of the same operation made while a batch is running merge into that batch.
 - **Accepted trade-off:** a new selection started in the instant between a batch closing and its key rotating can split into two batches.
+- **Accepted trade-off:** under heavy load a legitimate follower can split a batch: its exchange can outlast the leader's 2 s budget (so the idle timer is not restarted and an idle leader closes), or it can wait out its connect timeout behind a silent client. Its files then form a second batch; none are lost or processed twice.
+- An untrusted sender's request is read (and dropped) before it is refused: senders write before they read, and on the unbuffered pipe a reply written first would leave both sides waiting until the timeout.
 - **Accepted trade-off:** outputs take the ACL of the folder they are written to, not of the input file, so a file the user protected with its own explicit ACL produces a copy readable by whoever can read that folder.
 - **Accepted trade-off:** an operation that ignores cancellation is abandoned; if the process exits before it finishes, its hidden `.ca-*.partial` file can be left behind.
