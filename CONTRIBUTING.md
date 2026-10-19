@@ -8,7 +8,7 @@ Thanks for helping! Bug reports, ideas, translations of the docs and code are al
 
 - your Windows version and ConvertAnything version (Settings > Apps > Installed apps);
 - what you clicked and on which kind of file;
-- the log line from `%LOCALAPPDATA%\ConvertAnything\logs` if the notification mentioned one.
+- the log line from `%LOCALAPPDATA%\ConvertAnything\logs` if the notification mentioned one. Logs contain file names, folders and your Windows user name; replace anything private (for example with `<user>` or `photo.jpg`) before posting.
 
 Please attach a sample file only if it contains nothing private. Security problems go through [SECURITY.md](SECURITY.md), not public issues.
 

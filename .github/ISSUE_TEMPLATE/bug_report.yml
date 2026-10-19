@@ -37,5 +37,5 @@ body:
     id: log
     attributes:
       label: Log
-      description: The matching lines from %LOCALAPPDATA%\ConvertAnything\logs, if any. Remove anything private.
+      description: The matching lines from %LOCALAPPDATA%\ConvertAnything\logs, if any. They contain file names, folders and your Windows user name; replace anything private before posting.
       render: text

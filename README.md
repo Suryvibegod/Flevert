@@ -32,30 +32,59 @@ Windows 10 (1809 or later) and Windows 11, 64-bit. Nothing else to install.
 
 ### Windows protected your PC (SmartScreen)
 
-ConvertAnything is not code-signed yet, because a signing certificate costs money and this project is free (free signing for open-source projects has been requested). Until then Windows shows **Windows protected your PC** for a new download. Click **More info**, then **Run anyway**.
+ConvertAnything is not code-signed yet, because a signing certificate costs money and this project is free (free signing for open-source projects has been requested). Until then Windows shows **Windows protected your PC** for a new download, with **More info** and then **Run anyway**.
 
-Only do that for the file from this repository's [Releases page](https://github.com/Suryvibegod/ConvertAnything/releases). To check that your download is exactly the file GitHub built from this source code, open PowerShell in your Downloads folder and compare:
+**Before** you click **Run anyway**, make sure the file came from this repository's [Releases page](https://github.com/Suryvibegod/ConvertAnything/releases) and is intact:
 
-```
-Get-FileHash .\ConvertAnything-Setup-0.1.0.exe
-```
+1. Open PowerShell in your Downloads folder and run `Get-FileHash .\ConvertAnything-Setup-0.1.0.exe`. The hash must match the line in `SHA256SUMS.txt` on the release page (upper or lower case does not matter). This shows the download is complete and unchanged.
+2. To check that GitHub built it from this repository's source code, verify its build provenance with the [GitHub CLI](https://cli.github.com/):
 
-with `SHA256SUMS.txt` on the release page. With the [GitHub CLI](https://cli.github.com/) you can also verify the build provenance: `gh attestation verify ConvertAnything-Setup-0.1.0.exe --repo Suryvibegod/ConvertAnything`.
+   ```
+   gh attestation verify ConvertAnything-Setup-0.1.0.exe --repo Suryvibegod/ConvertAnything --signer-workflow Suryvibegod/ConvertAnything/.github/workflows/release.yml
+   ```
+
+A matching hash alone does not prove where the file came from: anyone who replaced the file could replace the hash beside it. The provenance check does.
 
 ### Smart App Control
 
-On Windows 11 with **Smart App Control** turned on, Windows may block the unsigned setup or parts of ConvertAnything, and there is no "Run anyway" button. **Please do not turn Smart App Control off for this**: it protects you from much more than this app, and once off it cannot always be turned back on without resetting Windows. ConvertAnything will work on these PCs once its releases are signed. Follow the [releases](https://github.com/Suryvibegod/ConvertAnything/releases) to hear when.
+On Windows 11 with **Smart App Control** turned on, Windows may block the unsigned setup or parts of ConvertAnything, and there is no "Run anyway" button. **Please do not turn Smart App Control off for this**: it protects you from much more than this app, and turning it back on may require resetting Windows. ConvertAnything is more likely to work on these PCs once its releases are signed. Follow the [releases](https://github.com/Suryvibegod/ConvertAnything/releases) to hear when.
 
 ### If the menu is missing
 
 - On Windows 11, look under **Show more options** (or press Shift+F10).
 - Explorer shows the entry for up to **100** selected files; select fewer.
-- If setup reported a problem with the right-click menu, run setup again. If it reports the same problem, [open an issue](https://github.com/Suryvibegod/ConvertAnything/issues/new/choose) with the message it showed. Setup refuses to register the menu when other Windows accounts could change the files it runs, because they could then run programs as you.
-- Logs of what ConvertAnything did are in `%LOCALAPPDATA%\ConvertAnything\logs` (kept for 7 days).
+- If setup reported a problem with the right-click menu, run setup again. If it reports the same problem, [open an issue](https://github.com/Suryvibegod/ConvertAnything/issues/new/choose) with the message it showed.
+- Logs of what ConvertAnything did are in `%LOCALAPPDATA%\ConvertAnything\logs` (kept for 7 days). They contain your file names and your Windows user name: replace anything private before you post them.
+
+### Setup refused the install folder
+
+ConvertAnything always installs into `%LOCALAPPDATA%\Programs\ConvertAnything` and adds the right-click menu only if no other Windows account can change that folder, any folder above it, or the files in it, and none of them is a junction or symbolic link to somewhere else. Otherwise another account could replace the program, and the next time you used the menu, their code would run as you. Running setup again does not change this.
+
+It usually happens when:
+
+- your `AppData` folder was moved to another drive (for example with a junction), or lives on a drive whose permissions let every user change files, as many second drives do;
+- someone changed the permissions of `%LOCALAPPDATA%\Programs` or of the folder itself;
+- `%LOCALAPPDATA%\Programs\ConvertAnything` already holds files from something else.
+
+Uninstall ConvertAnything, put the folder back where Windows keeps it with its default permissions (or remove the files that are not ConvertAnything's), and run setup again. If you are not sure what changed, [open an issue](https://github.com/Suryvibegod/ConvertAnything/issues/new/choose) with the message setup showed.
 
 ### Uninstall
 
 **Settings > Apps > Installed apps > ConvertAnything > Uninstall** removes the program, its right-click menu, its logs and settings, and the classic menu if setup turned it on. Your converted files stay where they are. If a conversion is still running, uninstall asks you to wait until it has finished.
+
+If Windows blocks the uninstaller (Smart App Control can), remove ConvertAnything by hand:
+
+1. Delete the menu: in PowerShell, run
+
+   ```
+   Get-ChildItem HKCU:\Software\Classes\SystemFileAssociations | ForEach-Object { Remove-Item "$($_.PSPath)\shell\ConvertAnything" -Recurse -ErrorAction SilentlyContinue }
+   Get-ChildItem HKCU:\Software\Classes | Where-Object PSChildName -like 'ConvertAnything.Menu*' | Remove-Item -Recurse
+   ```
+
+2. If you chose the classic menu during setup, also run `Remove-Item 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Recurse`, but only if you did not turn on the classic menu yourself before.
+3. Delete the folders `%LOCALAPPDATA%\Programs\ConvertAnything` and `%LOCALAPPDATA%\ConvertAnything`.
+4. Remove the entry from Installed apps: `Remove-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{8B7A3F52-2C64-4F0B-9E3D-5A1C7E2B9D40}_is1'`.
+5. Sign out and back in.
 
 ## What each command does
 
