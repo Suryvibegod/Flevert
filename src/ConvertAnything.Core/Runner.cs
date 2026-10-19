@@ -95,7 +95,8 @@ public sealed class Runner(RunLog log)
         }
         catch (OperationSkippedException ex)
         {
-            result = new FileResult(file, null, ex.Message, Skipped: true);
+            var reason = string.IsNullOrWhiteSpace(ex.Message) ? new OperationSkippedException().Message : ex.Message;
+            result = new FileResult(file, null, reason, Skipped: true);
         }
 #pragma warning disable CA1031 // One bad file must never stop the rest of the batch.
         catch (Exception ex)

@@ -11,9 +11,13 @@ public sealed record BatchSummary(string Text, bool HasFailures, bool ShowsLog)
         var succeeded = results.Count - failed - skipped;
 
         if (results.Count < total)
-            return new($"Cancelled after {results.Count} of {total} files.", failed > 0, false);
+        {
+            return failed > 0
+                ? new($"Cancelled after {results.Count} of {total} files, {failed} failed. Details: {logDirectory}", true, true)
+                : new($"Cancelled after {results.Count} of {total} files.", false, false);
+        }
 
-        if (skipped == results.Count)
+        if (results.Count > 0 && skipped == results.Count)
         {
             var reasons = results.Select(r => r.Error).Distinct(StringComparer.Ordinal).ToList();
             if (skipped == 1)

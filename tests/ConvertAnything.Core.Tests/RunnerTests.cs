@@ -364,12 +364,23 @@ public sealed class RunnerTests : IDisposable
         Assert.Equal("nothing to gain", line[6]); // the reason, not a stack trace
     }
 
-    private sealed class SkippingOp : IOperation
+    [Fact]
+    public async Task A_skip_without_a_reason_still_says_something()
+    {
+        var file = _dir.File("a.txt");
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new SkippingOp(" "), [file], progress: null, CancellationToken.None);
+
+        Assert.Equal("Nothing to gain.", Assert.Single(outcome.Results).Error);
+    }
+
+    private sealed class SkippingOp(string reason = "nothing to gain") : IOperation
     {
         public string Id => "test.skip";
         public string MenuPath => "Test/Skip";
         public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
-        public Task<string> RunAsync(string inputPath, CancellationToken ct) => throw new OperationSkippedException("nothing to gain");
+        public Task<string> RunAsync(string inputPath, CancellationToken ct) => throw new OperationSkippedException(reason);
     }
 
     [Fact]

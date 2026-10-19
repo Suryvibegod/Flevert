@@ -399,4 +399,13 @@ Nguồn: 1 reviewer bối cảnh trống, 3 góc, 2026-10-19, trên `37a6037..HE
 - [x] Hợp đồng bỏ qua: "đầu vào đã đáp ứng yêu cầu"; yêu cầu không làm được là lỗi; ném trực tiếp, trước khi ghi output (doc + SPEC-core)
 - [x] SPEC-core: trạng thái `skipped` trong log, cách thông báo, ý nghĩa mã thoát
 - [x] Chẩn đoán của test gom lô qua junction chạy được cả khi assert trước đó hỏng
-- [ ] TIFF nhiều trang trong Compress chuyển từ "skipped" sang lỗi (thuộc module image, làm cùng review vòng 3 image)
+- [x] TIFF nhiều trang trong Compress chuyển từ "skipped" sang lỗi (`8c04d07`)
+
+# Phase 10: Review vòng 9 (core)
+
+1 reviewer, 3 góc, trên `ef7ef4f..HEAD`. Không Critical/High/Required; "ship" sau khi sửa 2 Medium:
+
+- [x] Lô bị hủy có file lỗi mất đường dẫn log và bấm-mở-log (hồi quy do `ShowsLog`): nay `Cancelled after X of Y files, N failed. Details: …`
+- [x] SPEC-core: mã thoát chỉ do tiến trình chủ lô báo; tiến trình giao file thoát 0; file bị hủy ghi `failed`/`cancelled`; khi nào bấm mở log
+- [x] Low: lý do bỏ qua rỗng → "Nothing to gain."; lô rỗng không thành "0 files skipped"; chẩn đoán test junction bắt cả timeout
+- [x] Checkpoint core: không còn Critical/High/Required sau vòng 9

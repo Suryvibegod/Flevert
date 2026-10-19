@@ -153,13 +153,15 @@ Mỗi file được mở giữ (pin) không cho xóa/đổi tên trong lúc xử
 
 ### Log
 
-`%LOCALAPPDATA%\ConvertAnything\logs\ca-YYYYMMDD.log`, mỗi dòng: thời gian, pid, op-id, file, kết quả (`ok` / `skipped` / `failed`), thời gian xử lý, output hoặc lý do. Lỗi kèm stack; file bị bỏ qua chỉ ghi lý do. Giữ 7 ngày. Không ghi nội dung file.
+`%LOCALAPPDATA%\ConvertAnything\logs\ca-YYYYMMDD.log`, mỗi dòng: thời gian, pid, op-id, file, kết quả (`ok` / `skipped` / `failed`), thời gian xử lý, output hoặc lý do. Lỗi kèm stack; file bị bỏ qua chỉ ghi lý do; file bị ngắt khi Cancel ghi `failed` với lý do `cancelled`. Giữ 7 ngày. Không ghi nội dung file.
 
 ### Bỏ qua (skipped)
 
 Thao tác ném `OperationSkippedException` khi đầu vào đã đáp ứng yêu cầu, không có gì đáng ghi (ví dụ ảnh đã nén tốt); yêu cầu không làm được là lỗi, không phải bỏ qua. File bị bỏ qua không tính là lỗi. Thông báo: `Done: 2 files, 30 skipped`; cả lô bị bỏ qua: `Nothing to do: 3 files skipped (<lý do>)`, hoặc chỉ tới log nếu lý do khác nhau; một file: `Skipped: <lý do>`.
 
-Mã thoát của `ca.exe run` (dùng cho script, chế độ headless): 0 nếu mọi file đã xử lý và không file nào lỗi (file bị bỏ qua vẫn là 0, dù không có output); 1 nếu có file lỗi hoặc lô bị hủy; 2 nếu sai cú pháp/thao tác không tồn tại.
+Bấm vào thông báo mở log khi thông báo có chỉ tới log: có file lỗi (kể cả lô bị hủy giữa chừng), hoặc cả lô bị bỏ qua vì nhiều lý do khác nhau.
+
+Mã thoát của `ca.exe run` (dùng cho script, chế độ headless): chỉ **tiến trình chủ lô** báo kết quả lô: 0 nếu mọi file đã xử lý và không file nào lỗi (file bị bỏ qua vẫn là 0, dù không có output); 1 nếu có file lỗi hoặc lô bị hủy; 2 nếu sai cú pháp/thao tác không tồn tại. Tiến trình giao file cho một lô đang chạy thoát 0 ngay khi giao xong, bất kể kết quả các file đó; script cần kết quả từng file thì đọc log (hoặc chạy các lệnh cách nhau quá cửa sổ gom lô).
 
 ## Code Style
 

@@ -94,6 +94,16 @@ public sealed class BatchSummaryTests
     }
 
     [Fact]
+    public void A_cancelled_batch_with_failures_still_points_to_the_log()
+    {
+        var summary = BatchSummary.Describe([Ok("a"), Failed("b")], total: 5, LogDir);
+
+        Assert.Equal(@"Cancelled after 2 of 5 files, 1 failed. Details: D:\logs", summary.Text);
+        Assert.True(summary.HasFailures);
+        Assert.True(summary.ShowsLog);
+    }
+
+    [Fact]
     public void Cancelled_batch_reports_how_far_it_got()
     {
         var summary = BatchSummary.Describe([Ok("a"), Ok("b")], total: 5, LogDir);

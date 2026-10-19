@@ -78,9 +78,10 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
             Assert.Equal(3, Directory.GetFiles(_dir.Path, "* (copy).txt").Length);
             Assert.Single(LoggedProcessIds());
         }
-        catch (Xunit.Sdk.XunitException failure)
+        catch (Exception failure)
         {
-            throw new Xunit.Sdk.XunitException(failure.Message + "\n" + Diagnostics(leader, late));
+            // Also a TimeoutException from a hang; ExitAllOk has killed stragglers by then (exit -1).
+            throw new Xunit.Sdk.XunitException(failure.Message + "\n" + Diagnostics(leader, late), failure);
         }
     }
 
