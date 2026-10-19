@@ -35,7 +35,7 @@ How the project works:
 - Anything that touches files, paths, the registry or decoding untrusted input gets extra care; the specs list the inputs ConvertAnything refuses and why.
 - After trying the right-click menu from a development build, remove it with `ca.exe uninstall-menu`.
 
-`scripts/test-installer.ps1` installs the real installer on your machine and uninstalls it again; it refuses to run if ConvertAnything is already installed.
+`scripts/test-installer.ps1` installs the real installer on your machine and uninstalls it again; it refuses to run if ConvertAnything is already installed. How releases are made, checked and, if needed, withdrawn: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Code of conduct
 

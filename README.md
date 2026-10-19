@@ -120,7 +120,7 @@ ConvertAnything works entirely on your computer. It has no account, no telemetry
 | 0.2 | Video and audio: compress videos to a size that fits messaging apps, convert MP4/MOV/MKV/WEBM, extract MP3, convert audio |
 | 0.3 | PDF: to images, images to PDF, merge, split, compress |
 
-Details in [docs/specs/capability-map.md](docs/specs/capability-map.md). Ideas and bug reports are welcome in [issues](https://github.com/Suryvibegod/ConvertAnything/issues).
+What changed in each release: [CHANGELOG.md](CHANGELOG.md). Details of what is planned: [docs/specs/capability-map.md](docs/specs/capability-map.md). Ideas and bug reports are welcome in [issues](https://github.com/Suryvibegod/ConvertAnything/issues).
 
 ## How it works
 
