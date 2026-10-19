@@ -29,7 +29,8 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 # Redistributing the .NET runtime and Magick.NET (ImageMagick and the libraries it bundles) requires shipping their
 # notices. Every package and runtime pack in ca.deps.json is what the publish folder contains, so collect from each one
 # and fail rather than ship a package without its licence.
-$packages = ((& $dotnet nuget locals global-packages --list) -replace '^global-packages:\s*', '').Trim()
+# The command may print other lines first (the first-run banner on a fresh machine); take only the folder.
+$packages = (& $dotnet nuget locals global-packages --list | Select-String '^global-packages:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
 $deps = Get-Content (Join-Path $publish 'ca.deps.json') -Raw | ConvertFrom-Json
 $licenceNames = 'Notice.txt', 'Copyright.txt', 'LICENSE.TXT', 'LICENSE', 'THIRD-PARTY-NOTICES.TXT'
 $notices = [Text.StringBuilder]::new()
