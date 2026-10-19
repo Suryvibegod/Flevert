@@ -3,10 +3,12 @@ using ImageMagick;
 
 namespace ConvertAnything.Image;
 
-/// <summary>The image operations offered in the menu.</summary>
+/// <summary>The image operations offered in the menu, each waiting for its share of memory when files run in parallel.</summary>
 public static class ImageOperations
 {
-    public static IReadOnlyList<IOperation> All { get; } =
+    public static IReadOnlyList<IOperation> All { get; } = Unbudgeted().Select(op => (IOperation)new BudgetedOperation(op)).ToList();
+
+    private static IOperation[] Unbudgeted() =>
     [
         new ImageConvert(".jpg", MagickFormat.Jpeg, quality: 92),
         new ImageConvert(".png", MagickFormat.Png),

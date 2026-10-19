@@ -61,6 +61,26 @@ public static class ImageFile
     }
 
     /// <summary>
+    /// Pixels in every frame, from the headers only (ImageMagick's ping), opened and chosen the same safe way as
+    /// <see cref="Read"/>.
+    /// </summary>
+    public static ulong PixelCount(string path)
+    {
+        MagickSetup.EnsureInitialized();
+        var format = FormatOf(Path.GetExtension(path));
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        format = Choose(format, Signature(stream));
+        stream.Position = 0;
+
+        var settings = new MagickReadSettings { Format = format };
+        settings.SetDefine(MagickFormat.Tiff, "ignore-layers", "true");
+        ulong pixels = 0;
+        foreach (var frame in MagickImageInfo.ReadCollection(stream, settings))
+            pixels = checked(pixels + ((ulong)frame.Width * frame.Height));
+        return pixels;
+    }
+
+    /// <summary>
     /// The one real page of a TIFF, read an image at a time so that thumbnails stored before, between or after pages are
     /// skipped and at most two pages are ever decoded. A second real page means the request (one output image) cannot
     /// be fulfilled without dropping it, which fails.
