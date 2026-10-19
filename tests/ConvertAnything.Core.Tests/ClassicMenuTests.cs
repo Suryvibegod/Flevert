@@ -12,7 +12,7 @@ public sealed class ClassicMenuTests
     [Fact]
     public void On_creates_the_empty_server_key_and_marks_it_as_ours()
     {
-        new ClassicMenu(_registry).On();
+        Assert.True(new ClassicMenu(_registry).On());
 
         Assert.Equal("", _registry.GetValue(Server, ""));
         Assert.NotNull(_registry.GetValue(Clsid, ClassicMenu.Marker));
@@ -23,10 +23,26 @@ public sealed class ClassicMenuTests
     {
         _registry.SetValue(Server, "", "");
 
-        new ClassicMenu(_registry).On();
+        Assert.True(new ClassicMenu(_registry).On());
 
         Assert.Null(_registry.GetValue(Clsid, ClassicMenu.Marker));
         Assert.Equal("", _registry.GetValue(Server, ""));
+    }
+
+    [Theory]
+    [InlineData(null)] // InprocServer32 missing: only the CLSID key is there
+    [InlineData(@"C:\tools\shell.dll")]
+    public void On_reports_an_existing_key_that_does_not_switch_the_menu_and_leaves_it(string? server)
+    {
+        if (server is null)
+            _registry.SetValue(Clsid, "Note", "someone else's");
+        else
+            _registry.SetValue(Server, "", server);
+        var before = _registry.Snapshot();
+
+        Assert.False(new ClassicMenu(_registry).On());
+
+        Assert.Equal(before, _registry.Snapshot());
     }
 
     [Fact]

@@ -10,21 +10,32 @@ public sealed class ClassicMenu(IRegistry registry)
     /// <summary>Value set on the CLSID key when ConvertAnything created it.</summary>
     public const string Marker = "ConvertAnything";
 
+    /// <summary>Relative to HKCU\Software\Classes. The installer's uninstall safety net repeats it.</summary>
+    internal const string Key = $@"{ClsidRoot}\{Clsid}";
+
     private const string ClsidRoot = "CLSID";
     private const string Clsid = "{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}";
-    private const string Key = $@"{ClsidRoot}\{Clsid}";
+    private const string Server = $@"{Key}\InprocServer32";
 
-    public void On()
+    /// <summary>
+    /// Creates and marks the key unless it exists. False when it exists but would not switch the menu (no InprocServer32
+    /// or a non-empty default): someone else's key, left unchanged, so the caller can say the menu will not change.
+    /// </summary>
+    public bool On()
     {
-        if (Exists())
-            return; // the user's own setting (or ours from before); either way, nothing to add
-        registry.SetValue(Key, Marker, "1");
-        registry.SetValue($@"{Key}\InprocServer32", "", "");
+        if (!Exists())
+        {
+            registry.SetValue(Key, Marker, "1");
+            registry.SetValue(Server, "", "");
+            return true;
+        }
+
+        return registry.GetValue(Server, "") is "";
     }
 
     public void Off()
     {
-        if (Exists() && registry.GetValue(Key, Marker) is not null)
+        if (registry.GetValue(Key, Marker) is not null)
             registry.DeleteTree(Key);
     }
 

@@ -86,6 +86,51 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task A_running_ca_holds_the_app_mutex_the_installer_waits_for()
+    {
+        // Without it, uninstalling during a batch left ca.exe and its DLLs behind with no uninstaller to remove them.
+        var job = Ca("dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(0.8));
+            Assert.False(job.HasExited);
+            Assert.True(Mutex.TryOpenExisting(AppMutex.Name, out var mutex));
+            mutex.Dispose();
+        }
+        finally
+        {
+            await ExitAllOk([job]);
+        }
+    }
+
+    [Fact]
+    public async Task Install_menu_through_a_junction_is_refused_with_its_own_exit_code_and_reason()
+    {
+        using var links = new TempDir();
+        var link = Path.Combine(links.Path, "app");
+        await MakeJunction(link, Path.GetDirectoryName(CaExe)!);
+
+        var start = new ProcessStartInfo(Path.Combine(link, "ca.exe"), "install-menu") { UseShellExecute = false, RedirectStandardError = true };
+        using var ca = Process.Start(start)!;
+        var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(3, ca.ExitCode);
+        Assert.Contains("other accounts can modify its folder", stderr, StringComparison.Ordinal);
+    }
+
+    private static async Task MakeJunction(string link, string target)
+    {
+        using var mklink = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+        })!;
+        await mklink.WaitForExitAsync();
+        Assert.Equal(0, mklink.ExitCode);
+    }
+
     private string Diagnostics(params Process[] processes) =>
         string.Join(", ", processes.Select(p => $"pid {p.Id} " + (p.HasExited ? $"exit {p.ExitCode}" : "running"))) + "\n"
         + $"logs: {string.Join(", ", Directory.GetFiles(_logs.Path).Select(f => $"{Path.GetFileName(f)} ({new FileInfo(f).Length} B)"))}\n"

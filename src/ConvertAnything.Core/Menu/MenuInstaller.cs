@@ -8,8 +8,8 @@ namespace ConvertAnything.Core.Menu;
 /// </summary>
 public sealed partial class MenuInstaller(IRegistry registry, string exePath)
 {
-    private const string Title = "ConvertAnything";
-    private const string MenuKeyPrefix = "ConvertAnything.Menu";
+    internal const string Title = "ConvertAnything";
+    internal const string MenuKeyPrefix = Title + ".Menu";
     private const string Associations = "SystemFileAssociations";
 
     public void Install(IEnumerable<IOperation> operations)

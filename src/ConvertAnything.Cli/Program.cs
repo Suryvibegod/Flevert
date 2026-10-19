@@ -10,6 +10,8 @@ internal static class Program
     private const int Ok = 0;
     private const int SomeFilesFailed = 1;
     private const int BadUsage = 2;
+    // The installer tells this apart from other failures: running setup again cannot fix it.
+    private const int RefusedLocation = 3;
     // CONVERTANYTHING_BATCH_IDLE_MS is for integration tests on a loaded machine, like CONVERTANYTHING_LOG_DIR.
     private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(
         int.TryParse(Environment.GetEnvironmentVariable("CONVERTANYTHING_BATCH_IDLE_MS"), out var ms) ? Math.Clamp(ms, 100, 10_000) : 400);
@@ -19,6 +21,8 @@ internal static class Program
     private static int Main(string[] args)
     {
         var invocationDirectory = Environment.CurrentDirectory;
+        // Held until the process exits; see AppMutex.
+        using var running = new Mutex(initiallyOwned: false, AppMutex.Name);
         SafeStartup.Apply();
         var catalog = new OperationCatalog([.. ImageOperations.All, new DevCopy(), new DevSlowCopy()]);
         var log = new RunLog(RunLog.DefaultDirectory);
@@ -53,7 +57,7 @@ internal static class Program
                     if (!install.AllowInsecureLocation)
                     {
                         Console.Error.WriteLine($"Refusing to register {exe}: other accounts can modify its folder, or it is reached through a link, so they could run code as you. Install with the ConvertAnything installer instead.");
-                        return BadUsage;
+                        return RefusedLocation;
                     }
 
                     Console.Error.WriteLine($"Warning: other accounts can modify {Path.GetDirectoryName(exe)}, or it is reached through a link. Use --allow-insecure-location only on a machine you trust.");
@@ -71,11 +75,16 @@ internal static class Program
 
             case ClassicMenuCommand classic:
                 var classicMenu = new ClassicMenu(new WindowsRegistry());
-                if (classic.On)
-                    classicMenu.On();
-                else
+                if (!classic.On)
+                {
                     classicMenu.Off();
-                return Ok;
+                    return Ok;
+                }
+
+                if (classicMenu.On())
+                    return Ok;
+                Console.Error.WriteLine("The classic-menu key already exists in another form; it was left unchanged, so the menu does not switch.");
+                return SomeFilesFailed;
 
             case ListOpsCommand:
                 foreach (var op in catalog.All)
