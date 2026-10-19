@@ -49,6 +49,8 @@ A matching hash alone does not prove where the file came from: anyone who replac
 
 On Windows 11 with **Smart App Control** turned on, Windows may block the unsigned setup or parts of ConvertAnything, and there is no "Run anyway" button. **Please do not turn Smart App Control off for this**: it protects you from much more than this app, and turning it back on may require resetting Windows. ConvertAnything is more likely to work on these PCs once its releases are signed. Follow the [releases](https://github.com/Suryvibegod/ConvertAnything/releases) to hear when.
 
+On a work or school PC, a security policy (AppLocker, or security software) may stop programs from running in the temporary folder, where setup checks the install folder before copying anything. Setup then stops without installing; ask your IT department.
+
 ### If the menu is missing
 
 - On Windows 11, look under **Show more options** (or press Shift+F10).
@@ -77,7 +79,7 @@ If Windows blocks the uninstaller (Smart App Control can), remove ConvertAnythin
 
 ```
 # The right-click menu
-Get-ChildItem HKCU:\Software\Classes\SystemFileAssociations | ForEach-Object { Remove-Item -LiteralPath "$($_.PSPath)\shell\ConvertAnything" -Recurse -ErrorAction SilentlyContinue }
+Get-ChildItem HKCU:\Software\Classes\SystemFileAssociations -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath "$($_.PSPath)\shell\ConvertAnything" -Recurse -ErrorAction SilentlyContinue }
 Get-ChildItem HKCU:\Software\Classes | Where-Object PSChildName -like 'ConvertAnything.Menu*' | Remove-Item -Recurse
 # The classic menu, only if setup turned it on (it marks the key; a key you created yourself is left alone)
 $k = 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}'
@@ -85,9 +87,10 @@ if (Get-ItemProperty -LiteralPath $k -Name ConvertAnything -ErrorAction Silently
 # The entry in Installed apps
 Remove-Item -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{8B7A3F52-2C64-4F0B-9E3D-5A1C7E2B9D40}_is1' -ErrorAction SilentlyContinue
 # The program, its logs and settings (rmdir removes a junction itself, never what it points to)
-cmd /c 'rmdir /s /q "%LOCALAPPDATA%\Programs\ConvertAnything" 2>nul'
-cmd /c 'for %d in (logs pipes magick) do @rmdir /s /q "%LOCALAPPDATA%\ConvertAnything\%d" 2>nul'
-cmd /c 'rmdir "%LOCALAPPDATA%\ConvertAnything" 2>nul'
+cmd /d /c 'rmdir /s /q "%LOCALAPPDATA%\Programs\ConvertAnything" 2>nul'
+cmd /d /c 'for %d in (logs pipes magick) do @rmdir /s /q "%LOCALAPPDATA%\ConvertAnything\%d" 2>nul'
+cmd /d /c 'rmdir "%LOCALAPPDATA%\ConvertAnything" 2>nul'
+if (Test-Path -LiteralPath "$env:LOCALAPPDATA\Programs\ConvertAnything") { 'Not fully removed: wait for any conversion to finish, then run these lines again.' }
 ```
 
 Then sign out and back in.
