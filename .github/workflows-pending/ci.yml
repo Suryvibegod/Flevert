@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      # Actions are pinned by commit; the comment names the release.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - run: dotnet build ConvertAnything.sln -c Release
+      - run: dotnet format ConvertAnything.sln --verify-no-changes
+      - run: dotnet test ConvertAnything.sln -c Release --no-build
+      - name: No known-vulnerable packages
+        shell: pwsh
+        run: |
+          $report = dotnet list ConvertAnything.sln package --vulnerable --include-transitive
+          $report
+          if ($report -match 'has the following vulnerable packages') { exit 1 }
