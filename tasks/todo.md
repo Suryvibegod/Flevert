@@ -287,7 +287,7 @@ Viết tắt: CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
 | Xoay khóa ném lỗi khác IO → `TryComplete` không chạy, chủ lô treo (CR1, DD-R1) | Required | Hợp lệ | F1 |
 | Junction trong đường dẫn cài đặt qua mặt kiểm tra ACL (SA1) | Required | Hợp lệ | F2 |
 | Log thử lại mọi `IOException` tới 2 s mỗi file (CR3, SA7, DD-M4) | Medium | Hợp lệ | F3 |
-| Trả `Full`/`Refused` rồi `Disconnect` ngay, client mất câu trả lời (DD-M1) | Medium | Hợp lệ | F4 |
+| Trả `Full`/`Refused` rồi `Disconnect` ngay, client mất câu trả lời (DD-M1) | Medium | Nhiễu với code hiện tại: pipe không buffer, Write chỉ xong khi client đã đọc (thí nghiệm). Thêm test chặn nếu ai thêm buffer | F4 |
 | `ReplaceAsync` thả tên pipe; tiến trình mới thành chủ lô thứ hai rồi bị xoay mất khóa (DD-M2, SA6) | Medium | Hợp lệ | F5 |
 | Kết nối lỗi/không tin cậy reset đồng hồ rảnh → giữ lô mở mãi; cửa sổ rảnh tụt còn 20 ms (SA2, DD-M3) | Medium | Hợp lệ | F6 |
 | `TrySecure` chỉ bắt IO → chủ lô chết sau khi đã ack (DD-M5) | Medium | Hợp lệ | F1 |
@@ -309,14 +309,14 @@ Viết tắt: CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
 | Nit: summary trùng ở SecureDirectory, lỗi cũ khi buffer FinalPath thiếu | Nit | Hợp lệ | F10 |
 
 ## Việc
-- [ ] F1: Đóng lô luôn hoàn tất: `onClosed` bọc catch-all, `TryComplete` trong finally; `TryRotateSecret`/`TrySecure` bắt mọi lỗi; thử lại xoay khóa cả khi access denied
-- [ ] F2: `install-menu` từ chối khi thư mục cài hoặc thư mục cha là reparse point (trừ `--allow-insecure-location`)
-- [ ] F3: Log chỉ thử lại khi sharing/lock violation; sau một lần hết hạn thì không chờ nữa trong tiến trình
-- [ ] F4: Trả lời `Full`/`Refused` rồi chờ client đóng; chỉ cắt timeout cho Connect, IO giữ 2 s
-- [ ] F5: Không tạo lại được pipe (mất tên) → không xoay khóa; bắt `UnauthorizedAccessException`
-- [ ] F6: Đồng hồ rảnh chỉ reset sau tin nhắn tin cậy, tính từ lúc phục vụ xong; hết cửa sổ mà đang bận thì chờ cả cửa sổ
-- [ ] F7: PipePeer so ảnh của peer với ảnh của chính mình (QueryFullProcessImageName cả hai); test: 2 ca.exe chạy qua junction gom một lô
-- [ ] F8: Đầu vào: kiểm đuôi trên đường dẫn thật; từ chối tên kết thúc `.`/space; từ chối `\pipe\`, thêm SQOS; FinalPath dự phòng VOLUME_NAME_GUID; giữ `\?\UNC\` khi dài
-- [ ] F9: Test: sửa ký tự điều khiển; xoay khóa có điều kiện; thư mục cha không đổi tên được khi pin; kiểm lại test dangling link bằng đối chứng âm
-- [ ] F10: Tài liệu: ADR-0002 (`Full`, hard link), SPEC-core, README lệnh cài dev
+- [x] F1: Đóng lô luôn hoàn tất: `onClosed` bọc catch-all, `TryComplete` trong finally; `TryRotateSecret`/`TrySecure` bắt mọi lỗi; thử lại xoay khóa cả khi access denied
+- [x] F2: `install-menu` từ chối khi thư mục cài hoặc thư mục cha là reparse point (trừ `--allow-insecure-location`)
+- [x] F3: Log chỉ thử lại khi sharing/lock violation; sau một lần hết hạn thì không chờ nữa trong tiến trình
+- [x] F4: (DD-M1 là nhiễu, xem bảng; ghi rõ buffer 0 trong code + test chặn) chỉ cắt timeout cho Connect, IO giữ 2 s
+- [x] F5: Không tạo lại được pipe (mất tên) → không xoay khóa; bắt `UnauthorizedAccessException`
+- [x] F6: Đồng hồ rảnh chỉ reset sau tin nhắn tin cậy, tính từ lúc phục vụ xong; hết cửa sổ mà đang bận thì chờ cả cửa sổ
+- [x] F7: PipePeer so ảnh của peer với ảnh của chính mình (QueryFullProcessImageName cả hai); test: 2 ca.exe chạy qua junction gom một lô
+- [x] F8: Đầu vào: kiểm đuôi trên đường dẫn thật; từ chối tên kết thúc `.`/space; từ chối `\pipe\`, thêm SQOS; FinalPath dự phòng VOLUME_NAME_GUID; giữ `\\?\UNC\` khi dài
+- [x] F9: Test: sửa ký tự điều khiển; xoay khóa có điều kiện; thư mục cha không đổi tên được khi pin; kiểm lại test dangling link bằng đối chứng âm
+- [x] F10: Tài liệu: ADR-0002 (`Full`, hard link), SPEC-core, README lệnh cài dev
 - [ ] Review vòng 5 trên phần sửa
