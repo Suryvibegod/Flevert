@@ -371,3 +371,19 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `75fdc99..HEAD`. **K
 - [x] H4: Bỏ đồng hồ trong test untrusted; test subst skip khi `subst` lỗi; `CONVERTANYTHING_BATCH_IDLE_MS` cho test gom lô qua junction
 - [x] H5: install-menu yêu cầu volume có ACL
 - [ ] Review vòng 7 trên Phase 7 (bỏ ToLongPath, Shorten, ACL volume) cùng review vòng 2 module image
+
+# Phase 8: Review vòng 7 (core)
+
+Nguồn: 1 reviewer bối cảnh trống, 3 góc (code, bảo mật, doubt), 2026-10-19, trên `4c0646d..HEAD`.
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| H1 không có tác dụng: `Path.GetFullPath` của .NET tự mở rộng tên 8.3 (GetLongPathNameW) nên vẫn mở đường dẫn trước kiểm tra; reviewer không tái hiện được kết nối pipe | Required (tác động Low) | Hợp đồng sai: ghi nhận sai trong commit/todo/comment | P1: giữ hành vi (chấp nhận, tác động Low), sửa comment, todo, ADR |
+| Kiểm đuôi trước pin thấy đuôi 8.3 cắt cụt (.WEB, .JPE, .HEI) với đối số `\\?\` ngắn | Low | Hợp lệ (chỉ dòng lệnh) | P2 |
+| SPEC thiếu `CONVERTANYTHING_BATCH_IDLE_MS`; comment test "well past 400 ms" sai; todo H3 nói thứ tự kiểm khác code | Nit | Hợp lệ | P3 |
+| H5 không có test | Low | Chấp nhận: không có volume FAT; đối chứng đảo điều kiện đã chạy | — |
+
+## Việc
+- [ ] P1: Sửa ghi nhận H1 (comment Program, todo, ADR-0001)
+- [ ] P2: Bỏ kiểm đuôi trước pin khi tên có `~` (kiểm lại trên đường dẫn thật); test với đuôi 4 chữ
+- [ ] P3: SPEC biến môi trường; comment test; todo H3

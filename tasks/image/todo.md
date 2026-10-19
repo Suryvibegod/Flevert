@@ -101,3 +101,39 @@ CR = code-reviewer, SA = security-auditor, DD = doubt-driven. Không có Critica
 - [x] K11: Đọc theo magic bytes trong danh sách cho phép; (tùy) fixture HEIC xoay
 - [x] K12: Op-id cố định; SPEC: Q8, ICC, Under N với file nhỏ, TIFF nhiều trang
 - [ ] Review vòng 2 module image
+
+### Review vòng 2 (2026-10-19): đối chiếu
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| Callback tiến độ trỏ vào delegate đã bị GC sau Coalesce/Optimize, tiến trình chết (CR-C1, DD1) | Critical | Hợp lệ, do K7 gây ra | Đã sửa `eb5bd6c` |
+| Remove metadata đổi chroma subsampling JPEG (xóa thuộc tính `jpeg:sampling-factor`): ảnh điện thoại to thêm 8–16% (CR-R1, DD3) | Required | Hợp lệ, do K2 gây ra | L1 |
+| Policy lạ (thư mục làm việc, MAGICK_HOME, XDG/LOCALAPPDATA ImageMagick) vẫn qua kiểm tra 3 coder, đổi được temp path, delegate (SA-M1) | Medium | Hợp lệ; lời "fail closed" trong SPEC/ADR nói quá | L2 |
+| Remove metadata ghi TIFF không nén (2 KB → 2 MB; trang lớn → 750 MB) (SA-M2) | Medium | Hợp lệ | L3 |
+| WebP động lossless không được nhận ra (VP8L nằm trong ANMF) (CR-M1, DD4) | Medium | Hợp lệ | L4 |
+| File sai đuôi: đọc đúng nhưng định dạng output vẫn theo đuôi; làm phẳng nền theo đuôi (DD5, CR-L1) | Medium | Hợp lệ | L5 |
+| Hủy không kịp với AVIF (encode/decode không báo tiến độ); để lại `.partial` 0 byte (DD2) | Medium | Hợp lệ phần file tạm; AVIF/HEIC không ngắt được là giới hạn thư viện | L6 |
+| Từ chối "không nhỏ hơn" hiện thành "failed" kèm stack trace; ngưỡng 1 byte (DD6) | Medium | Hợp lệ | L7: kết quả "skipped" ở core + ngưỡng 5% |
+| Compress TIFF nhiều trang so JPEG trang 1 với cả TIFF, âm thầm bỏ trang (DD7) | Low/Medium | Hợp lệ | L8: bỏ qua có thông báo |
+| Mọi file `ftyp` (MP4, MOV) đều được đưa cho libheif (CR-L2) | Low | Hợp lệ | L9 |
+| ICC ghi hai lần trong PNG (iCCP + zTXt raw) (DD8, SA) | Low | Chấp nhận: không lộ thêm gì, vài KB | ghi SPEC |
+| Under N giữ độ phân giải, quality thấp (q43–51) (DD9) | Low | Chấp nhận: hợp đồng vẫn đúng | — |
+| Remove metadata làm WebP/AVIF lossy to hơn (q95) (DD10) | Low | Chấp nhận (đánh đổi để giữ chất lượng) | ghi SPEC |
+| Ghi nhiều frame giữ dữ liệu hai lần trong RAM; 400 MP đỉnh ~3 GB (CR-L3, SA) | Low | Chấp nhận, ghi SPEC | ghi SPEC |
+| HEIC thật nén Light thường bị từ chối (CR-L4) | Low | Chấp nhận (thành "skipped" sau L7), ghi SPEC | ghi SPEC |
+| CMYK dùng profile do file cung cấp → lcms (SA) | Low | Chấp nhận (lcms giới hạn cấp phát) | — |
+| Không có test âm cho VerifyPolicy (CR-L5) | Low | Hợp lệ | L2 (test quét thư mục cấu hình) |
+| Nits: doc "never sniffed", `Read` có thể đọc thiếu byte | Nit | Hợp lệ | L9 |
+
+### Việc vòng 2
+- [x] Sửa crash GC (`eb5bd6c`)
+- [ ] L1: Giữ `jpeg:sampling-factor` của nguồn khi Remove metadata
+- [ ] L2: Khởi tạo Magick với thư mục làm việc là thư mục cấu hình riêng; từ chối nếu có `policy.xml`/`delegates.xml` ở thư mục tìm kiếm của ImageMagick; probe kiểm đúng lỗi policy; sửa lời trong SPEC/ADR
+- [ ] L3: Giữ kiểu nén TIFF; chặn tổng diện tích khi ghi nhiều trang
+- [ ] L4: Nhận WebP động lossless (ANMF)
+- [ ] L5: Định dạng nguồn theo chữ ký thật cho mọi thao tác
+- [ ] L6: Mã hóa vào bộ nhớ rồi mới tạo file tạm
+- [ ] L7: Kết quả "skipped" (core) cho "không nhỏ hơn đáng kể" (< 5%)
+- [ ] L8: Compress TIFF nhiều trang → skipped có thông báo
+- [ ] L9: Chỉ nhận brand HEIF/AVIF; nits
+- [ ] Review vòng 3 module image
