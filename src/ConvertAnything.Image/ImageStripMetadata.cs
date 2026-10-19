@@ -32,6 +32,10 @@ public sealed class ImageStripMetadata : IOperation
             var keepsFrames = ImageFile.IsAnimationFormat(target) || target == MagickFormat.Tiff;
             using var images = ImageFile.Read(inputPath, allFrames: keepsFrames);
             ImageFile.StopOnCancel(images, token);
+            // gif2webp-style frames cover the canvas and are alpha-blended (transparent = keep the previous frame);
+            // ImageMagick writes WebP frames without blending, so expand them first or most of each frame turns clear.
+            if (target == MagickFormat.WebP && images.Count > 1)
+                ImageFile.Coalesce(images, token);
             foreach (var frame in images)
             {
                 ImageMetadata.AutoOrient(frame);

@@ -1,9 +1,10 @@
-# Test fixtures
+﻿# Test fixtures
 
 | File | Origin |
 |---|---|
-| `gradient-320x240.heic` | Generated for this project by `make_heic_fixture.py` (pillow-heif 1.8.1, libheif 1.23.6, x265). A synthetic 320×240 gradient with a white block at the top-left; no third-party image content. Released under the repository's MIT license. |
-| `wide-50000x1.png` | A solid grey 50000×1 PNG (356 bytes) written by Magick.NET without resource limits, to prove the width limit. MIT. |
+| `gradient-320x240.heic` | Generated for this project by `make_heic_fixture.py` (pillow-heif 1.8.1, libheif 1.23.6, x265). A synthetic 320Ã—240 gradient with a white block at the top-left; no third-party image content. Released under the repository's MIT license. |
+| `blended-240x180.webp` | Generated for this project by `make_blended_webp_fixture.py` (Pillow 12.3, libwebp): a 6-frame lossless animated WebP whose frames cover the canvas and are alpha-blended (transparent = keep the previous frame), as gif2webp makes them. Synthetic noise content. MIT. |
+| `wide-50000x1.png` | A solid grey 50000Ã—1 PNG (356 bytes) written by Magick.NET without resource limits, to prove the width limit. MIT. |
 
 Regenerate with:
 

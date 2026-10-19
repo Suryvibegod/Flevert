@@ -1,4 +1,4 @@
-using ConvertAnything.Core;
+﻿using ConvertAnything.Core;
 using ImageMagick;
 
 namespace ConvertAnything.Image.Tests;
@@ -201,6 +201,46 @@ public sealed class StripMetadataTests : IDisposable
         Assert.Equal(before.Count, after.Count);
         for (var i = 0; i < before.Count; i++)
             Assert.Equal(0, before[i].Compare(after[i], ErrorMetric.Absolute));
+    }
+
+    [Fact]
+    public async Task A_blended_animated_webp_keeps_every_frame_intact()
+    {
+        // gif2webp-style frames cover the canvas and are alpha-blended: transparent means "keep the previous frame".
+        // Written without expanding them first, most of each frame became transparent.
+        var input = _dir.Combine("sticker.webp");
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "fixtures", "blended-240x180.webp"), input);
+
+        var output = await StripOp().RunAsync(input, CancellationToken.None);
+
+        // ImageMagick ignores the blend flag when it reads, so comparing through it hides the damage (checked: a decoder
+        // that honours it, Pillow, showed frames 1-5 broken). What breaks viewers is a frame stored "do not blend" while
+        // it still carries the transparent "keep" pixels; the source animation is opaque.
+        var frames = AnimationFrames(await File.ReadAllBytesAsync(output));
+        Assert.Equal(6, frames.Count);
+        Assert.DoesNotContain(frames, f => !f.Blend && f.HasAlpha);
+    }
+
+    /// <summary>Per ANMF chunk: whether the frame is alpha-blended onto the previous one, and whether it carries alpha.</summary>
+    private static List<(bool Blend, bool HasAlpha)> AnimationFrames(byte[] webp)
+    {
+        var frames = new List<(bool, bool)>();
+        for (var pos = 12; pos + 8 <= webp.Length;)
+        {
+            var size = BitConverter.ToInt32(webp, pos + 4);
+            if (System.Text.Encoding.ASCII.GetString(webp, pos, 4) == "ANMF")
+            {
+                var body = pos + 8;
+                var blend = (webp[body + 15] & 2) == 0;
+                var sub = System.Text.Encoding.ASCII.GetString(webp, body + 16, 4);
+                var hasAlpha = sub == "ALPH" || (sub == "VP8L" && ((BitConverter.ToUInt32(webp, body + 25) >> 28) & 1) == 1);
+                frames.Add((blend, hasAlpha));
+            }
+
+            pos += 8 + size + (size & 1);
+        }
+
+        return frames;
     }
 
     [Fact]
