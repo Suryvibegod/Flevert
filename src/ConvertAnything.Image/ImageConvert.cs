@@ -28,7 +28,7 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
             if (images.Count > 1)
             {
                 // Frames of an optimised GIF only hold what changed; expand them so each one stands on its own.
-                ImageFile.Coalesce(images);
+                ImageFile.Coalesce(images, token);
                 foreach (var frame in images)
                     Prepare(frame);
                 ImageFile.Write(images, temp, format);

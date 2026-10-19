@@ -69,7 +69,7 @@ public sealed class ImageCompressUnder(string id, long limitBytes, string label)
             ct.ThrowIfCancellationRequested();
             // Always from the original: shrinking an already shrunk copy again would blur it a little more each round.
             using var work = original.Clone();
-            ImageFile.StopOnCancel([work], ct); // event handlers are not cloned
+            ImageFile.StopOnCancel([work], ct); // its own callback; the clone would otherwise call the original's
             if (scale < 1)
                 work.Resize(new Percentage(scale * 100));
 

@@ -47,6 +47,54 @@ public sealed class FramesTests : IDisposable
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(5), $"took {timer.Elapsed}");
     }
 
+    // Coalesce and Optimize create new frames that keep calling the progress handler of the frames they replaced; once
+    // the garbage collector frees those, the next callback kills the process. Tiny animations never reach a GC.
+    [Theory]
+    [InlineData("image.compress-balanced")]
+    [InlineData("image.to-webp")]
+    public async Task A_real_sized_animation_survives_garbage_collection_during_processing(string operationId)
+    {
+        var input = _dir.Combine("clip.gif");
+        using (var frames = new MagickImageCollection())
+        {
+            for (var i = 0; i < 30; i++)
+            {
+                var frame = new MagickImage(MagickColors.Gray, 400, 300) { AnimationDelay = 5 };
+                frame.AddNoise(NoiseType.Gaussian, 0.5);
+                frames.Add(frame);
+            }
+
+            // Metadata for Compress to remove, so its result is reliably smaller (random noise alone is not).
+            frames[0].Comment = new string('x', 50_000);
+            frames.Write(input, MagickFormat.Gif);
+        }
+
+        // A crash here kills the test host itself, which is how this test fails.
+        using var stop = new CancellationTokenSource();
+        var collector = Task.Run(async () =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                GC.Collect();
+                await Task.Delay(100);
+            }
+        });
+
+        try
+        {
+            for (var round = 0; round < 2; round++)
+            {
+                var output = await Op(operationId).RunAsync(input, CancellationToken.None);
+                File.Delete(output);
+            }
+        }
+        finally
+        {
+            await stop.CancelAsync();
+            await collector;
+        }
+    }
+
     [Fact]
     public async Task Removing_metadata_keeps_every_page_of_a_tiff()
     {

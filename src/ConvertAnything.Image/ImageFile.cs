@@ -90,6 +90,11 @@ public static class ImageFile
     /// callback while it processes and encodes. The runner abandons a cancelled operation and the process may exit soon
     /// after, so a long encode must not keep running (and leave its temporary file behind).
     /// </summary>
+    /// <remarks>
+    /// Must be called again after anything that replaces the frames (Coalesce, Optimize): ImageMagick copies the native
+    /// callback pointer into the new frames, and once the replaced .NET images are collected the next callback calls a
+    /// freed delegate, which terminates the process.
+    /// </remarks>
     public static void StopOnCancel(IEnumerable<IMagickImage<byte>> images, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -117,12 +122,13 @@ public static class ImageFile
     /// Coalescing expands every frame to the full canvas; 1000 frames of a 400 MP canvas would be written to the pixel
     /// cache on disk before any limit stops it. Refuse animations whose expanded size exceeds the per-image area limit.
     /// </summary>
-    public static void Coalesce(MagickImageCollection images)
+    public static void Coalesce(MagickImageCollection images, CancellationToken ct)
     {
         var canvas = images[0].Page is { Width: > 0, Height: > 0 } page ? (ulong)page.Width * page.Height : (ulong)images[0].Width * images[0].Height;
         if (canvas * (ulong)images.Count > MagickSetup.MaxArea)
             throw new InvalidOperationException("The animation is too large to process.");
         images.Coalesce();
+        StopOnCancel(images, ct); // the new frames still point at the replaced frames' callbacks; see StopOnCancel
     }
 
     /// <summary>Whether a WebP file stores its pixels losslessly (a VP8L chunk), which ImageMagick does not report.</summary>

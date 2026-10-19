@@ -56,11 +56,14 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
             {
                 if (ImageFile.IsAnimationFormat(target) && images.Count > 1)
                 {
-                    ImageFile.Coalesce(images);
+                    ImageFile.Coalesce(images, token);
                     foreach (var frame in images)
                         Prepare(frame, target);
                     if (target == MagickFormat.Gif)
+                    {
                         images.Optimize();
+                        ImageFile.StopOnCancel(images, token); // Optimize replaces the frames too
+                    }
                     ImageFile.Write(images, temp, target);
                 }
                 else
