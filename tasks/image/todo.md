@@ -88,16 +88,16 @@ CR = code-reviewer, SA = security-auditor, DD = doubt-driven. Không có Critica
 | Nits: ngoặc điều kiện, helper nền trắng lặp 3 lần, hình dạng ImageCompress | Nit | Hợp lệ | K9 |
 
 ### Việc
-- [ ] K1: Kiểm tra policy tự khóa (fail closed) sau Initialize; nhãn no-read-up; `tiff:ignore-layers`
-- [ ] K2: Giữ iCCP khi strip PNG; test ICC cho PNG
-- [ ] K3: Đọc/ghi qua FileStream, không đưa đường dẫn cho Magick; test thư mục `x %d`, `p%s q`
-- [ ] K4: Compress không nhỏ hơn → lỗi rõ ràng, không file
-- [ ] K5: Remove metadata giữ chất lượng (JPEG giữ quality ước lượng; WebP/AVIF quality cao)
-- [ ] K6: Under N: ước lượng tỉ lệ thu nhỏ, luôn thu từ ảnh gốc, chặn trên số pixel; test ảnh lớn trong thời gian giới hạn
-- [ ] K7: Nghe token giữa các bước và qua sự kiện Progress
-- [ ] K8: Test Balanced bằng ảnh kiểu chụp q90 4:2:0; 4:2:0 cho Balanced/Strong/Under N; thu hẹp tuyên bố trong SPEC
-- [ ] K9: CMYK → sRGB theo ICC; helper nền trắng dùng chung (cả Remove metadata HEIC)
-- [ ] K10: Chỉ đọc frame đầu khi đích một frame; chỉ giữ animation khi nguồn là GIF/WebP động; TIFF nhiều trang giữ đủ trang khi Remove metadata
-- [ ] K11: Đọc theo magic bytes trong danh sách cho phép; (tùy) fixture HEIC xoay
-- [ ] K12: Op-id cố định; SPEC: Q8, ICC, Under N với file nhỏ, TIFF nhiều trang
+- [x] K1: Kiểm tra policy tự khóa (fail closed) sau Initialize; nhãn no-read-up; `tiff:ignore-layers`
+- [x] K2: Giữ iCCP khi strip PNG; test ICC cho PNG
+- [x] K3: Đọc/ghi qua FileStream, không đưa đường dẫn cho Magick; test thư mục `x %d`, `p%s q`
+- [x] K4: Compress không nhỏ hơn → lỗi rõ ràng, không file
+- [x] K5: Remove metadata giữ chất lượng (JPEG giữ quality ước lượng; WebP/AVIF quality cao)
+- [x] K6: Under N: ước lượng tỉ lệ thu nhỏ, luôn thu từ ảnh gốc, chặn trên số pixel; test ảnh lớn trong thời gian giới hạn
+- [x] K7: Nghe token giữa các bước và qua sự kiện Progress
+- [x] K8: Test Balanced bằng ảnh kiểu chụp q90 4:2:0; 4:2:0 cho Balanced/Strong/Under N; thu hẹp tuyên bố trong SPEC
+- [x] K9: CMYK → sRGB theo ICC; helper nền trắng dùng chung (cả Remove metadata HEIC)
+- [x] K10: Chỉ đọc frame đầu khi đích một frame; chỉ giữ animation khi nguồn là GIF/WebP động; TIFF nhiều trang giữ đủ trang khi Remove metadata
+- [x] K11: Đọc theo magic bytes trong danh sách cho phép; (tùy) fixture HEIC xoay
+- [x] K12: Op-id cố định; SPEC: Q8, ICC, Under N với file nhỏ, TIFF nhiều trang
 - [ ] Review vòng 2 module image

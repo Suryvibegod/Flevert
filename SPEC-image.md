@@ -52,7 +52,13 @@ Quy tắc chung:
 
 - **Xoay theo EXIF** (auto-orient) trước khi ghi, để ảnh không bị nằm ngang sau khi mất EXIF.
 - **Nguồn không ghi lại được** (HEIC/HEIF): Compress và Remove metadata ghi ra JPG.
-- **Ảnh động** (GIF/WebP nhiều frame): giữ animation khi đích là GIF hoặc WebP; đích khác lấy frame đầu.
+- **Ảnh động** (GIF/WebP nhiều frame): giữ animation khi đích là GIF hoặc WebP; đích khác lấy frame đầu. **TIFF nhiều trang** không phải animation: Convert/Compress lấy trang đầu, Remove metadata giữ đủ trang. Chỉ giải mã frame đầu khi kết quả là một ảnh; animation có frame × canvas vượt 400 MP bị từ chối trước khi mở rộng.
+- **File sai đuôi** (WebP/PNG lưu thành `.jpg`): module tự đọc chữ ký đầu file và chọn bộ giải mã tương ứng, chỉ trong danh sách cho phép; ImageMagick không bao giờ tự đoán. Nội dung không khớp chữ ký nào (script) được giải mã theo đuôi và lỗi.
+- **CMYK** (ảnh từ in ấn): Convert, Compress, Under N chuyển sang sRGB qua profile CMYK của ảnh (hoặc profile in phổ biến nếu không có). Remove metadata giữ nguyên.
+- **Độ sâu màu:** dùng Magick.NET Q8, nên ảnh 16-bit/kênh (PNG, TIFF) ra 8-bit. **Trade-off chấp nhận:** Q8 nhẹ và nhanh hơn Q16; khác biệt 16 → 8 bit không thấy bằng mắt, nhưng "lossless" của PNG Light/Balanced chỉ đúng với ảnh 8-bit.
+- **ICC** được giữ nguyên từng byte; profile có thể chứa tag riêng của người tạo (hiếm). Ghi nhận, không xử lý.
+- **Hủy:** mọi thao tác dừng giữa chừng khi người dùng bấm Cancel (qua callback tiến độ của ImageMagick) và không để lại file tạm.
+- **Policy:** sau khi nạp, module tự đọc thử MVG/MSL/TEXT và phải bị policy từ chối; nếu không (ví dụ có `policy.xml` lạ ở thư mục làm việc) thì không xử lý ảnh nào.
 - **Trong suốt**: đích không có alpha (JPG, BMP) thì nền trắng.
 - **Compress**:
   - JPG/WebP/AVIF: Light = quality 85, Balanced = 75, Strong = 60 + thu cạnh dài về tối đa 2560 px.
@@ -61,7 +67,8 @@ Quy tắc chung:
   - Xóa metadata trừ profile màu ICC.
   - Nếu file nén **không nhỏ hơn** file gốc (JPG đã nén sẵn ở quality ~70, PNG đã tối ưu, GIF động không có metadata) thì **báo lỗi, không ghi file**: một bản "compressed" to hơn sẽ đánh lừa người dùng. (Thay quy tắc cũ "vẫn ghi + log not smaller", theo review module.)
 - **Under N**: luôn ra JPG. Tìm nhị phân quality 40–92; nếu quality 40 vẫn quá lớn thì thu kích thước 15% mỗi bước rồi tìm lại. Kết quả phải < N (1 MB = 1 000 000 byte cho dễ hiểu với người dùng).
-- **Remove metadata**: xóa EXIF, GPS, XMP, IPTC, comment; giữ ICC; giữ định dạng (trừ HEIC → JPG).
+- **Remove metadata**: xóa EXIF, GPS, XMP, IPTC, comment, text chunk PNG; giữ ICC (cả với PNG); giữ định dạng (trừ HEIC → JPG). Điểm ảnh được ghi lại: JPEG giữ quality ước lượng của nguồn, WebP/AVIF ghi ở quality 95, WebP lossless giữ lossless.
+- **Under N** với ảnh đã nhỏ hơn N: vẫn ghi lại JPG ở quality tốt nhất vừa N, nên có thể to hơn file gốc nhưng luôn < N (hợp đồng là "dưới N"). Ảnh rất lớn được thu ngay từ đầu về khoảng N × 20 pixel; mỗi vòng thu nhỏ tính từ ảnh gốc theo kích thước đo được ở quality 40; profile lớn hơn 1/10 N (profile in CMYK) được chuyển sang sRGB và bỏ.
 - **Convert** giữ metadata (trừ khi định dạng đích không chứa được). Giới hạn đã biết: bộ ghi TIFF của ImageMagick bỏ khối EXIF, nên `Convert > TIFF` mất EXIF (không ảnh hưởng ảnh; chấp nhận, vì vá phải tự chép từng thẻ EXIF sang thẻ TIFF).
 
 ## Giới hạn tài nguyên (bảo mật)

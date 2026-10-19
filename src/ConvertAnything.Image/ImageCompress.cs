@@ -18,7 +18,13 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
 {
     private const uint StrongMaxEdge = 2560;
 
-    public string Id => $"image.compress-{level.ToString().ToLowerInvariant()}";
+    // Spelled out: ids are stored in the registry and must never change if the enum or its names do.
+    public string Id => level switch
+    {
+        CompressLevel.Light => "image.compress-light",
+        CompressLevel.Balanced => "image.compress-balanced",
+        _ => "image.compress-strong",
+    };
 
     public string MenuPath => "Compress/" + level;
 

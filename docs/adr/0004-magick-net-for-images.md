@@ -20,7 +20,9 @@ ImageMagick reads many formats, including scripts and formats that reach other f
 
 - A `policy.xml` written on every start that denies all coders, delegates and filters, then allows only the formats this module reads or writes; `@*` and `fd:*` paths are denied. The folder holding it (and ImageMagick's temp files) is restricted to the user, SYSTEM and Administrators, so another account cannot relax the policy.
 - Resource limits: 40 000 px per side, 400 MP per image, 2 GB memory, 4 GB disk, 1000 frames, 120 s.
-- The decoder is chosen from the file extension, never sniffed from the content, so a `.jpg` that holds a script is an error.
+- ImageMagick never guesses a format. The module picks the decoder from the file's signature when it matches an allowed format (misnamed downloads are common), otherwise from the extension, so a `.jpg` that holds a script is an error.
+- After loading, the module proves MVG, MSL and TEXT are refused, and fails closed otherwise: ImageMagick also reads a `policy.xml` from the working directory, after ours.
+- ImageMagick never sees a path: files are read and written through streams the module opens, because it reads `%d`, `[0]` and similar in names as patterns.
 
 ## Alternatives Considered
 
