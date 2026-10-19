@@ -44,6 +44,32 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task Processes_started_through_a_junction_still_form_one_batch()
+    {
+        // Peers are matched by executable path; the kernel reports the resolved path, the process its launch path.
+        using var links = new TempDir();
+        var link = Path.Combine(links.Path, "app");
+        using (var mklink = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{Path.GetDirectoryName(CaExe)}\"")
+               {
+                   UseShellExecute = false,
+                   RedirectStandardOutput = true,
+               })!)
+        {
+            await mklink.WaitForExitAsync();
+            Assert.Equal(0, mklink.ExitCode);
+        }
+
+        var viaLink = Path.Combine(link, "ca.exe");
+        var leader = CaVia(viaLink, "dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
+        await Task.Delay(TimeSpan.FromSeconds(1.2));
+        var late = CaVia(viaLink, "dev.slow-copy", _dir.File("3.txt"));
+        await ExitAllOk([leader, late]);
+
+        Assert.Equal(3, Directory.GetFiles(_dir.Path, "* (copy).txt").Length);
+        Assert.Single(LoggedProcessIds());
+    }
+
+    [Fact]
     public async Task Relative_paths_resolve_against_the_directory_ca_was_started_in()
     {
         _dir.File("relative.txt");
@@ -53,9 +79,11 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         Assert.True(File.Exists(_dir.Combine("relative (copy).txt")));
     }
 
-    private Process Ca(string operation, params string[] files)
+    private Process Ca(string operation, params string[] files) => CaVia(CaExe, operation, files);
+
+    private Process CaVia(string exe, string operation, params string[] files)
     {
-        var start = new ProcessStartInfo(CaExe) { UseShellExecute = false, WorkingDirectory = _dir.Path };
+        var start = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = _dir.Path };
         start.ArgumentList.Add("run");
         start.ArgumentList.Add(operation);
         foreach (var f in files)

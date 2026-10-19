@@ -33,7 +33,10 @@ internal static partial class PipePeer
             return false;
         try
         {
-            return string.Equals(ImagePath(process), Environment.ProcessPath, StringComparison.OrdinalIgnoreCase)
+            // Both sides read the same way: the kernel reports the resolved path, which differs from the launch path
+            // (Environment.ProcessPath) when ca.exe is started through a junction, a subst drive or an 8.3 name.
+            return ImagePath(process) is { } theirImage
+                && string.Equals(theirImage, OwnImagePath.Value, StringComparison.OrdinalIgnoreCase)
                 && ProcessIdToSessionId(processId, out var theirs) && ProcessIdToSessionId((uint)Environment.ProcessId, out var ours)
                 && theirs == ours
                 && IntegrityLevel(process) is { } theirLevel && IntegrityLevel(GetCurrentProcess()) is { } ourLevel
@@ -44,6 +47,8 @@ internal static partial class PipePeer
             CloseHandle(process);
         }
     }
+
+    private static readonly Lazy<string?> OwnImagePath = new(() => ImagePath(GetCurrentProcess()));
 
     private static string? ImagePath(nint process)
     {
