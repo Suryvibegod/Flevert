@@ -96,7 +96,7 @@ Code-reviewer: APPROVE, chỉ Low/Nit. Security: không còn Critical/High/Requi
 | SA-L3: README không cảnh báo khi bản nâng cấp bị từ chối | Low | Hợp lệ | README: đã cài trong thư mục bị từ chối thì gỡ tay, không dùng uninstaller, không chỉ sửa quyền |
 | DD#3: `%TEMP%` cho tài khoản khác ghi (máy dev này: `CodexSandboxUsers` Modify) → tráo DLL trong `{tmp}\{app}` | Medium | Trade-off | Giống mô hình mối đe dọa của chính Inno (`setup.tmp` cũng ở đó), cửa sổ dài hơn. Ghi rõ giả định trong spec, ADR-0005 và chú thích `.iss`. Khóa ACL của `{tmp}\{app}` bằng `icacls` cần SID người dùng và vẫn có race với thư mục cha ghi được, nên không làm |
 | DD#4, CR-L3, CR-L5, CR-N4: kiểm thư mục thất bại luôn đổ cho Smart App Control, mất lý do của `ca.exe`, lỗi giải nén bị nuốt | Medium/Low | Hợp lệ | Lỗi giải nén có thông báo riêng (dung lượng trống); mã 1–2 kèm lý do; mã khác nhắc cả chính sách bảo mật chặn chương trình trong thư mục tạm; lý do rỗng có câu dự phòng |
-| CR-L3, DD#8: thêm 137 MB trong `{tmp}` không được tính dung lượng | Low | Hợp lệ | `ExtraDiskSpaceRequired=150000000`. Thời gian: 9–10 s trên SSD; chưa đo HDD (ghi nhận) |
+| CR-L3, DD#8: thêm 137 MB trong `{tmp}` không được tính dung lượng | Low | Hợp lệ | Lúc đầu thêm `ExtraDiskSpaceRequired`; vòng 5 bỏ (xem dưới). Thời gian: 9–10 s trên SSD; chưa đo HDD (ghi nhận) |
 | DD#5, CR-L7: kịch bản 9 không phải regression test cho F1 | Medium | Hợp lệ | `InstallerScriptTests.Link_check_walks_up_to_the_drive_root_itself` kiểm thân `LinkOnPath` (đối chứng âm: đổi lại `RemoveBackslash` thì đỏ); kịch bản 9 ghi là smoke test |
 | DD#6, CR-L8: không có đối chứng dương cho `check-location` | Low | Hợp lệ | Test thư mục dưới `%LOCALAPPDATA%` → mã 0 (skip nếu máy không an toàn). Nhánh "setup tự tạo rồi bị từ chối" và "không chạy được" chưa có e2e: cần nới quyền `Programs` thật; ghi nhận |
 | DD#7, SA I-1, CR-N3: `ForceDirectories` để lại `Programs` | Low | Hợp lệ | Xóa `Programs` nếu setup vừa tạo (chỉ khi rỗng) |
@@ -108,10 +108,31 @@ Code-reviewer: APPROVE, chỉ Low/Nit. Security: không còn Critical/High/Requi
 | SA I-3: Smart App Control giờ chặn cả bản cài (mã 7) thay vì cài thiếu menu (mã 10) | Info | Hợp lệ | Ghi trong spec, ADR-0005 |
 | CI: `Processes_started_through_a_junction…` quá thời gian, `Twenty_processes…` 22.9 s | (CI) | Không phải lỗi sản phẩm | Log cho thấy đúng một lô, đủ file, nhưng `dev.slow-copy` 1 s mất 15 s: hai assembly test chạy song song trên runner. CI/release chạy từng project ở bước riêng |
 
+## Review vòng 5 (trên `6d63d00..c9207f1`): **không còn Critical/High/Required**
+
+Cả ba reviewer: không Critical/High/Required (code-reviewer APPROVE). CI xanh 2 lần liên tiếp trên `main`. Các Low rẻ đã sửa; phần sửa này được một reviewer bối cảnh trống soát lại (dưới).
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| CR-L1, DD-L1: `ExtraDiskSpaceRequired` chỉ đổi con số hiển thị, làm Installed apps báo ~290 MB | Low | Hợp lệ | Bỏ; ổ đầy đã có thông báo lỗi giải nén riêng |
+| DD-L5, CR nit: lời lỗi giải nén đổ hết cho dung lượng; lý do dự phòng sai nhánh; `<= 3` thừa | Nit | Hợp lệ | Nhắc cả phần mềm bảo mật; dự phòng riêng cho mã 3 và mã 1–2; `<= 2` |
+| DD-L3: thông báo nhắc chính sách chặn chương trình nhưng mục README không nói | Low | Hợp lệ | Thêm đoạn về AppLocker/phần mềm bảo mật ở mục Smart App Control |
+| DD-L4, CR-L6, SA Info: lệnh gỡ tay im lặng khi gỡ dở; lỗi đỏ khi không có khóa `SystemFileAssociations`; AutoRun của cmd | Low/Info | Hợp lệ | Dòng cuối báo "Not fully removed…"; `-ErrorAction SilentlyContinue`; `cmd /d /c`. Kiểm sandbox với file bị khóa: báo, chạy lại thì sạch |
+| DD-L6, CR-L5: bước test thứ hai bị bỏ khi bước đầu đỏ; danh sách project cứng | Low | Hợp lệ | `if: ${{ !cancelled() }}`; chú thích nhắc thêm project mới vào cả hai workflow |
+| DD-L2: hủy ở 800 ms cố định rơi vào lúc decode trên CI | Low | Hợp lệ | Hủy ở thời gian decode đo được + 0.5 s |
+| CR-L4: ngưỡng chặt hơn 5 s cũ | Low | Trade-off | Giữ ngưỡng tương đối (yêu cầu của DD vòng 4); hủy giờ rơi sau decode nên ít dao động |
+| CR-L2: test dương skip dựa trên chính hàm đang kiểm | Low | Hợp lệ | Trên CI (`GITHUB_ACTIONS`) không bao giờ skip |
+| CR-L3, SA Info: chưa test CREATOR OWNER/GROUP inherit-only, ACE `OI` (không IO) từ cha | Low/Info | Hợp lệ | Thêm test: CREATOR OWNER an toàn, CREATOR GROUP không; cha có `Users:Write (OI)` → không an toàn |
+| SA-L1: ACE kế thừa của cha chưa lan xuống `{app}` (đặt bằng API không lan truyền) | Low | Trade-off | Cần quyền WRITE_DAC trên thư mục cha (chính người dùng/admin); ghi nhận |
+| SA-L2: lệnh gỡ tay đi theo link phía trên hoặc bị tráo giữa chừng | Low | Trade-off | Chỉ xảy ra khi tài khoản khác đã ghi được thư mục, tức đã chạy được code qua menu; Inno `[UninstallDelete]` cũng xóa theo đường dẫn |
+| DD-L6: `dotnet test ConvertAnything.sln` cục bộ vẫn chạy song song | Low | Trade-off | Máy dev đủ mạnh (xanh); CI đã tách |
+| Nit: câu trùng trong spec; chú thích `C:\` | Nit | Hợp lệ | Sửa spec |
+
 ## Checkpoint
 - [x] Review vòng 1 → reconcile (bảng trên)
 - [x] Review vòng 2 → đã sửa
 - [x] Review vòng 3 → reconcile (bảng trên)
 - [x] Review vòng 4 → reconcile (bảng trên)
-- [ ] Review vòng 5 trên phần sửa vòng 4 → không còn Critical/High/Required
+- [x] Review vòng 5 → không còn Critical/High/Required
+- [ ] Soát phần sửa Low vòng 5 (một reviewer bối cảnh trống)
 - [ ] HANDOFF; commit + push
