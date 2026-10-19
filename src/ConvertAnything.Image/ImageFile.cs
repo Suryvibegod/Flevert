@@ -194,11 +194,16 @@ public static class ImageFile
         return false;
     }
 
-    /// <summary>Writes one image to a new file through a stream, for the same reason as <see cref="Read"/>.</summary>
+    /// <summary>
+    /// Encodes one image in memory, then writes it to a new file, for the same reason as <see cref="Read"/>. Encoding
+    /// first means no file exists while an uninterruptible encode (AVIF reports no progress) runs, so a process that exits
+    /// meanwhile leaves nothing behind.
+    /// </summary>
     public static void Write(IMagickImage<byte> image, string path, MagickFormat format)
     {
+        var bytes = image.ToByteArray(format);
         using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-        image.Write(stream, format);
+        stream.Write(bytes);
     }
 
     /// <summary>Writes every frame (an animation or pages) to a new file through a stream.</summary>

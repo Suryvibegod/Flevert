@@ -68,6 +68,28 @@ public sealed class ImageIoTests : IDisposable
         Assert.Equal(["big.png"], _dir.FileNames());
     }
 
+    // AVIF encoding reports no progress, so Cancel cannot stop it; if ca.exe exits meanwhile, a temporary file opened
+    // before encoding would stay behind. Nothing is created until there is something to write.
+    [Fact]
+    public async Task No_temporary_file_exists_while_an_image_is_still_being_encoded()
+    {
+        var input = _dir.Combine("big.png");
+        using (var image = new MagickImage(MagickColors.Gray, 6000, 4000))
+        {
+            image.AddNoise(NoiseType.Gaussian, 0.4);
+            image.Write(input, MagickFormat.Png);
+        }
+
+        var work = Op("image.to-avif").RunAsync(input, CancellationToken.None);
+        await Task.Delay(TimeSpan.FromSeconds(1.5)); // decoding takes about half of that; then the long encode starts
+        var duringEncode = Directory.GetFiles(_dir.Path, ".ca-*");
+        var stillEncoding = !work.IsCompleted;
+        await work;
+
+        Assert.True(stillEncoding, "control: the encode should still be running after 1.5 s");
+        Assert.Empty(duringEncode);
+    }
+
     // A CMYK JPG (from print workflows) carries a CMYK profile; converting it to RGB without that profile shifts colours
     // by tens of levels.
     [Theory]
