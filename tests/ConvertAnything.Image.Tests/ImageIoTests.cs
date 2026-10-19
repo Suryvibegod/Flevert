@@ -62,6 +62,16 @@ public sealed class ImageIoTests : IDisposable
             image.Write(input, MagickFormat.Png);
         }
 
+        // Decoding cannot be cancelled and its speed varies (0.2 s on a desktop, over 3 s on a busy CI runner), so the
+        // bound scales with this machine's decode time. Uncancelled, the encodes take 10 to 100 times that.
+        var decode = System.Diagnostics.Stopwatch.StartNew();
+        using (new MagickImage(input))
+        {
+        }
+
+        decode.Stop();
+        var bound = TimeSpan.FromSeconds(1) + 2 * decode.Elapsed;
+
         using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(800));
         var timer = System.Diagnostics.Stopwatch.StartNew();
         var cancelledAt = TimeSpan.Zero;
@@ -69,11 +79,10 @@ public sealed class ImageIoTests : IDisposable
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Op(operationId).RunAsync(input, cancel.Token));
 
-        // Measured from the cancel, not the start: decoding cannot be cancelled and took up to 3.5 s on a CI runner.
-        // Uncancelled, to-webp takes about 9 s and compress-strong about 18 s on a desktop, so 5 s still catches an
-        // encode that only checks the token at the end; one that never checks it would not throw at all.
+        // An encode that never checks the token would not throw at all; one that checks it only at the end takes
+        // the whole encode after the cancel.
         var afterCancel = timer.Elapsed - cancelledAt;
-        Assert.True(afterCancel < TimeSpan.FromSeconds(5), $"stopped {afterCancel} after the cancel");
+        Assert.True(afterCancel < bound, $"stopped {afterCancel} after the cancel (bound {bound}, decode {decode.Elapsed})");
         Assert.Equal(["big.png"], _dir.FileNames());
     }
 
