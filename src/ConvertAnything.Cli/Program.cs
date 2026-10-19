@@ -22,7 +22,7 @@ internal static class Program
     {
         var invocationDirectory = Environment.CurrentDirectory;
         // Held until the process exits; see AppMutex.
-        using var running = new Mutex(initiallyOwned: false, AppMutex.Name);
+        using var running = AppMutex.TryHold();
         SafeStartup.Apply();
         var catalog = new OperationCatalog([.. ImageOperations.All, new DevCopy(), new DevSlowCopy()]);
         var log = new RunLog(RunLog.DefaultDirectory);
@@ -30,20 +30,34 @@ internal static class Program
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);
 
         var command = CommandLine.Parse(args);
-        if (command is not RunCommand)
-            ParentConsole.Attach();
+        if (command is RunCommand run)
+        {
+            // SafeStartup moved the current directory, so resolve relative paths against where ca was started.
+            // GetFullPath drops trailing dots and spaces from names, which would name another file; keep such paths
+            // unchanged for the runner to refuse.
+            return RunBatch(run with
+            {
+                Files = [.. run.Files.Select(f => InputPath.HasNameEndingInDotOrSpace(f) ? f : Path.GetFullPath(f, invocationDirectory))],
+            }, catalog, log);
+        }
 
+        ParentConsole.Attach();
+        try
+        {
+            return RunSetupCommand(command, catalog);
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException or System.Security.SecurityException)
+        {
+            // The installer treats an unexpected exit code as "Windows blocked ca.exe"; say what actually failed.
+            Console.Error.WriteLine($"ca {args[0]} failed: {e.Message}");
+            return SomeFilesFailed;
+        }
+    }
+
+    private static int RunSetupCommand(Command command, OperationCatalog catalog)
+    {
         switch (command)
         {
-            case RunCommand run:
-                // SafeStartup moved the current directory, so resolve relative paths against where ca was started.
-                // GetFullPath drops trailing dots and spaces from names, which would name another file; keep such paths
-                // unchanged for the runner to refuse.
-                return RunBatch(run with
-                {
-                    Files = [.. run.Files.Select(f => InputPath.HasNameEndingInDotOrSpace(f) ? f : Path.GetFullPath(f, invocationDirectory))],
-                }, catalog, log);
-
             case InstallMenuCommand install:
                 var exe = Environment.ProcessPath!;
                 if (Path.GetFileName(exe).Equals("dotnet.exe", StringComparison.OrdinalIgnoreCase))

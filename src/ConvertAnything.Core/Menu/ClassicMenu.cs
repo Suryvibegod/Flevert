@@ -30,6 +30,13 @@ public sealed class ClassicMenu(IRegistry registry)
             return true;
         }
 
+        if (registry.GetValue(Key, Marker) is not null)
+        {
+            // Ours, possibly left half-written by an earlier run.
+            registry.SetValue(Server, "", "");
+            return true;
+        }
+
         return registry.GetValue(Server, "") is "";
     }
 

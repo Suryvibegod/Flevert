@@ -46,6 +46,17 @@ public sealed class ClassicMenuTests
     }
 
     [Fact]
+    public void On_repairs_its_own_key_left_without_the_server_key()
+    {
+        // An earlier On that stopped between its two writes.
+        _registry.SetValue(Clsid, ClassicMenu.Marker, "1");
+
+        Assert.True(new ClassicMenu(_registry).On());
+
+        Assert.Equal("", _registry.GetValue(Server, ""));
+    }
+
+    [Fact]
     public void Off_removes_the_key_it_created()
     {
         var menu = new ClassicMenu(_registry);

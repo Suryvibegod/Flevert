@@ -86,21 +86,78 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task A_running_ca_holds_the_app_mutex_the_installer_waits_for()
     {
         // Without it, uninstalling during a batch left ca.exe and its DLLs behind with no uninstaller to remove them.
+        // Another suite may run ca.exe at the same time; only a mutex that appears with this job proves anything.
+        Skip.If(Mutex.TryOpenExisting(AppMutex.Name, out var before) && before is not null, "Another ca.exe is running.");
         var job = Ca("dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(0.8));
+            // The first run of a fresh build can be slow to start (Smart App Control checks new binaries).
+            Mutex? mutex = null;
+            for (var waited = 0; waited < 50 && !job.HasExited && !Mutex.TryOpenExisting(AppMutex.Name, out mutex); waited++)
+                await Task.Delay(100);
             Assert.False(job.HasExited);
-            Assert.True(Mutex.TryOpenExisting(AppMutex.Name, out var mutex));
+            Assert.NotNull(mutex);
             mutex.Dispose();
         }
         finally
         {
             await ExitAllOk([job]);
+        }
+    }
+
+    [SkippableFact]
+    public async Task A_mutex_someone_else_holds_with_no_access_for_us_does_not_stop_ca()
+    {
+        // Another process in the session (elevated, or another account via runas) can create the name first; the mutex
+        // is advisory, so ca.exe must still work rather than crash on every click.
+        using var squatter = System.Threading.MutexAcl.Create(false, AppMutex.Name, out var created, new System.Security.AccessControl.MutexSecurity());
+        Skip.IfNot(created, "A ca.exe is running; the name is already taken.");
+
+        await ExitAllOk([Ca("dev.copy", _dir.File("1.txt"))]);
+
+        Assert.True(File.Exists(_dir.Combine("1 (copy).txt")));
+    }
+
+    [Fact]
+    public async Task A_menu_command_that_hits_a_registry_error_exits_1_with_the_reason_instead_of_crashing()
+    {
+        // Setup reads an unexpected exit code as "Windows blocked ca.exe", so an ordinary failure must not crash.
+        // Like any uninstall-menu, this also removes a ConvertAnything menu registered from a development build.
+        const string locked = @"Software\Classes\ConvertAnything.Menu.zz-locked-by-test";
+        using var me = System.Security.Principal.WindowsIdentity.GetCurrent();
+        var deny = new System.Security.AccessControl.RegistryAccessRule(me.User!, System.Security.AccessControl.RegistryRights.Delete,
+            System.Security.AccessControl.AccessControlType.Deny);
+        using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(locked))
+        {
+            var acl = key.GetAccessControl();
+            acl.AddAccessRule(deny);
+            key.SetAccessControl(acl);
+        }
+
+        try
+        {
+            var start = new ProcessStartInfo(CaExe, "uninstall-menu") { UseShellExecute = false, RedirectStandardError = true };
+            using var ca = Process.Start(start)!;
+            var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+            Assert.Equal(1, ca.ExitCode);
+            Assert.Contains("uninstall-menu", stderr, StringComparison.Ordinal);
+        }
+        finally
+        {
+            using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(locked, writable: true))
+            {
+                var acl = key!.GetAccessControl();
+                acl.RemoveAccessRule(deny);
+                key.SetAccessControl(acl);
+            }
+
+            Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(locked, throwOnMissingSubKey: false);
         }
     }
 
