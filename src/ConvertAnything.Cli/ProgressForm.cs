@@ -5,8 +5,9 @@ namespace ConvertAnything.Cli;
 internal sealed class ProgressForm : Form
 {
     private readonly Label _status = new() { AutoSize = false, Dock = DockStyle.Top, Height = 40, AutoEllipsis = true };
-    private readonly ProgressBar _bar = new() { Dock = DockStyle.Top, Height = 18 };
-    private readonly Button _cancel = new() { Text = "Cancel", Anchor = AnchorStyles.Right | AnchorStyles.Bottom, AutoSize = true };
+    // Named for screen readers, which otherwise announce only "progress bar"; Alt+C and Esc both cancel.
+    private readonly ProgressBar _bar = new() { Dock = DockStyle.Top, Height = 18, AccessibleName = "Conversion progress" };
+    private readonly Button _cancel = new() { Text = "&Cancel", Anchor = AnchorStyles.Right | AnchorStyles.Bottom, AutoSize = true };
 
     public ProgressForm(string title, int total, CancellationTokenSource cancellation)
     {
@@ -29,7 +30,14 @@ internal sealed class ProgressForm : Form
             cancellation.Cancel();
         };
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true };
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            AccessibleRole = AccessibleRole.Grouping,
+            AccessibleName = "Actions",
+        };
         buttons.Controls.Add(_cancel);
         Controls.Add(buttons);
         Controls.Add(_bar);
