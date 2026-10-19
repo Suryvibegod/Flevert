@@ -344,5 +344,30 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `9fd5cf4..HEAD`. Kh�
 - [x] G3: install-menu: thư mục phải ở ổ cố định cục bộ và đường dẫn thật (từ handle) trùng đường dẫn đưa vào; không reparse point bên trong thư mục
 - [x] G4: Chặn tên server bắt đầu bằng `;`; sau khi pin yêu cầu `FILE_TYPE_DISK`; bỏ `FileInfo.Exists` trước pin; chặn `:` ngoài ký tự ổ; sửa comment PipePeer; ghi chú bit SQOS
 - [x] G5: Tài liệu (ADR-0002 tách lô dưới tải, SPEC-core đầu vào)
-- [ ] Review vòng 6 trên phần sửa (`75fdc99..HEAD`, core + cli)
-- [ ] Test `Processes_started_through_a_junction_still_form_one_batch` hỏng 1/6 lần chạy cả bộ (2 lô sau ~11 s); đã cho in log khi hỏng, cần tìm nguyên nhân
+- [x] Review vòng 6 trên phần sửa (`75fdc99..HEAD`, core + cli): không còn Critical/High/Required (Phase 7)
+- [x] Test gom lô qua junction hỏng 1/6: DD vòng 6 xác định là CPU bị chiếm khi chạy cả bộ, follower lỡ cửa sổ 400 ms (trade-off đã ghi ở ADR-0002); sửa ở test (Phase 7)
+
+# Phase 7: Review vòng 6 (core)
+
+Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `75fdc99..HEAD`. **Không có Critical/High/Required**; mọi claim vòng 5 đứng vững (test hỏng khi gỡ fix). Còn Low/Nit:
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| `ToLongPath` (GetLongPathNameW) mở đường dẫn có `~` trước mọi kiểm tra, không SQOS; qua junction tới không gian pipe thì kết nối được pipe (SA1, CR3, DD) | Low | Hợp lệ | H1: bỏ khỏi Program; tên output đã lấy từ đường dẫn thật sau pin |
+| `FinalPath` bỏ `\\?\` khi < 260 ký tự: tên thiết bị (`NUL.jpg`) trên Windows 10 (CR2, SA4) | Low | Hợp lệ | H2: chỉ bỏ khi `GetFullPath` không đổi đường dẫn |
+| Kiểm `FILE_TYPE_DISK` chưa có test (CR1) | Low | Hợp lệ | H3 |
+| Hai helper bỏ tiền tố khác nhau; hằng thông báo nằm ở Runner (CR4, CR8) | Nit | Hợp lệ | H3 |
+| Đường dẫn tương đối có thư mục `x.` nhận thông báo "absolute" (CR5) | Nit | Hợp lệ | H3 |
+| Test untrusted dùng đồng hồ < 1 s dễ hỏng khi máy bận; test subst hỏng thay vì skip khi ổ bị phiên khác chiếm (CR7, CR9) | Nit | Hợp lệ | H4 |
+| Test gom lô qua junction hỏng 1/6 dưới tải (DD) | Low | Hợp lệ (ở test) | H4: cửa sổ rảnh rộng hơn cho test tích hợp qua biến môi trường |
+| Ổ cứng gắn ngoài / VHD báo là Fixed (SA2) | Low | Trade-off chấp nhận: installer cài vào Program Files/LocalAppData; ghi SPEC | ghi chú |
+| Volume FAT/exFAT không có ACL (SA3) | Low | Hợp lệ | H5: yêu cầu FILE_PERSISTENT_ACLS |
+| Thông báo lỗi với thư mục mang đuôi ảnh đổi thành "Access is denied." (CR6) | Nit | Chấp nhận | — |
+
+## Việc
+- [ ] H1: Bỏ `ToLongPath` trong Program; test: đường dẫn ngắn 8.3 qua runner và qua ca.exe vẫn ra tên dài
+- [ ] H2: `FinalPath` giữ `\\?\` khi bỏ nó làm đổi đường dẫn
+- [ ] H3: Test FILE_TYPE_DISK; một helper bỏ tiền tố; hằng thông báo ở InputPath; kiểm dot/stream trước kiểm absolute
+- [ ] H4: Bỏ đồng hồ trong test untrusted; test subst skip khi `subst` lỗi; `CONVERTANYTHING_BATCH_IDLE_MS` cho test gom lô qua junction
+- [ ] H5: install-menu yêu cầu volume có ACL
+- [ ] Review vòng 7 (nếu sửa nhiều) hoặc đóng checkpoint
