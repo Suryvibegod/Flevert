@@ -170,11 +170,23 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
 
         var start = new ProcessStartInfo(Path.Combine(link, "ca.exe"), "install-menu") { UseShellExecute = false, RedirectStandardError = true };
         using var ca = Process.Start(start)!;
-        var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
-        await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        try
+        {
+            var stderr = await ca.StandardError.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
-        Assert.Equal(3, ca.ExitCode);
-        Assert.Contains("other accounts can modify its folder", stderr, StringComparison.Ordinal);
+            Assert.Equal(3, ca.ExitCode);
+            Assert.Contains("other accounts can modify its folder", stderr, StringComparison.Ordinal);
+        }
+        finally
+        {
+            // A regression would leave a real menu pointing into a temp folder that is about to be deleted.
+            if (ca.HasExited && ca.ExitCode == 0)
+            {
+                using var uninstall = Process.Start(new ProcessStartInfo(CaExe, "uninstall-menu") { UseShellExecute = false })!;
+                await uninstall.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+            }
+        }
     }
 
     private static async Task MakeJunction(string link, string target)

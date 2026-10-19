@@ -9,6 +9,8 @@ internal static class Program
 {
     private const int Ok = 0;
     private const int SomeFilesFailed = 1;
+    // Same value as SomeFilesFailed: setup reports 1-3 as ca.exe's own failures and shows its stderr.
+    private const int SetupCommandFailed = 1;
     private const int BadUsage = 2;
     // The installer tells this apart from other failures: running setup again cannot fix it.
     private const int RefusedLocation = 3;
@@ -17,12 +19,15 @@ internal static class Program
         int.TryParse(Environment.GetEnvironmentVariable("CONVERTANYTHING_BATCH_IDLE_MS"), out var ms) ? Math.Clamp(ms, 100, 10_000) : 400);
     private static readonly TimeSpan LogRetention = TimeSpan.FromDays(7);
 
+    // Never disposed: the handle must stay open until the process is gone, including while an unhandled exception is
+    // reported or a background thread outlives Main. Windows closes it on exit. See AppMutex.
+    private static Mutex? _running;
+
     [STAThread]
     private static int Main(string[] args)
     {
         var invocationDirectory = Environment.CurrentDirectory;
-        // Held until the process exits; see AppMutex.
-        using var running = AppMutex.TryHold();
+        _running = AppMutex.TryHold();
         SafeStartup.Apply();
         var catalog = new OperationCatalog([.. ImageOperations.All, new DevCopy(), new DevSlowCopy()]);
         var log = new RunLog(RunLog.DefaultDirectory);
@@ -50,7 +55,7 @@ internal static class Program
         {
             // The installer treats an unexpected exit code as "Windows blocked ca.exe"; say what actually failed.
             Console.Error.WriteLine($"ca {args[0]} failed: {e.Message}");
-            return SomeFilesFailed;
+            return SetupCommandFailed;
         }
     }
 
@@ -98,7 +103,7 @@ internal static class Program
                 if (classicMenu.On())
                     return Ok;
                 Console.Error.WriteLine("The classic-menu key already exists in another form; it was left unchanged, so the menu does not switch.");
-                return SomeFilesFailed;
+                return SetupCommandFailed;
 
             case ListOpsCommand:
                 foreach (var op in catalog.All)
@@ -135,8 +140,7 @@ internal static class Program
         try
         {
             // Logs hold every path processed; keep the whole app-data folder private to this user, like the batch keys.
-            SecureDirectory.TrySecure(Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ConvertAnything"));
+            SecureDirectory.TrySecure(AppData.Root);
             log.Prune(LogRetention, DateOnly.FromDateTime(DateTime.Now));
             if (Environment.GetEnvironmentVariable("CONVERTANYTHING_HEADLESS") == "1")
                 return RunHeadless(operation, leader, log);
