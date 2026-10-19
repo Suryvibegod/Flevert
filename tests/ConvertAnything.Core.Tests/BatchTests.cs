@@ -145,6 +145,29 @@ public sealed class BatchTests
     }
 
     [Fact]
+    public async Task An_untrusted_sender_gets_its_refusal_promptly()
+    {
+        // The sender writes its paths before reading; on the unbuffered pipe a leader that writes "Refused" without
+        // reading first leaves both sides waiting for each other until the 2 s timeout, and the sender never sees it.
+        var name = $"ca-test-{Guid.NewGuid():N}";
+        System.IO.Pipes.NamedPipeServerStream Create() => Batch.CreateServer(name);
+        await using var leader = BatchLeader.Start(Create, Create(), [@"C:\a.txt"], Idle, onClosed: () => { }, isTrusted: _ => false);
+
+        using var client = new System.IO.Pipes.NamedPipeClientStream(".", name,
+            System.IO.Pipes.PipeDirection.InOut, System.IO.Pipes.PipeOptions.Asynchronous);
+        await client.ConnectAsync(5000);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(1.5));
+        await Batch.WritePathsAsync(client, [@"C:\x.txt"], deadline.Token);
+        var reply = new byte[1];
+        var read = await client.ReadAsync(reply, deadline.Token);
+
+        Assert.Equal(1, read);
+        Assert.Equal(Batch.Refused, reply[0]);
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(1), $"took {timer.Elapsed}");
+    }
+
+    [Fact]
     public void An_empty_or_corrupt_pipe_secret_is_regenerated()
     {
         using var dir = new TempDir();

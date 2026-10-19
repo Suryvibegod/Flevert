@@ -274,13 +274,15 @@ public sealed class BatchLeader : IAsyncDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly Stopwatch _age = Stopwatch.StartNew();
     private readonly Task _listener;
+    private readonly Func<uint, bool> _isTrusted;
     private bool _busy;
     private int _disposed;
 
     private BatchLeader(
         Func<NamedPipeServerStream>? createServer, NamedPipeServerStream? server, IReadOnlyList<string> files, TimeSpan idle,
-        Action? onClosed)
+        Action? onClosed, Func<uint, bool>? isTrusted = null)
     {
+        _isTrusted = isTrusted ?? PipePeer.IsTrusted;
         foreach (var file in files)
             TryEnqueue(file);
 
@@ -305,6 +307,12 @@ public sealed class BatchLeader : IAsyncDisposable
 
     internal static BatchLeader Start(NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle, Action onClosed) =>
         new(() => throw new IOException("No replacement pipe available."), server, files, idle, onClosed);
+
+    /// <param name="isTrusted">Tests only: replaces the peer check, so a test can play an untrusted client.</param>
+    internal static BatchLeader Start(
+        Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle,
+        Action onClosed, Func<uint, bool> isTrusted) =>
+        new(createServer, server, files, idle, onClosed, isTrusted);
 
     internal static BatchLeader Alone(IReadOnlyList<string> files) => new(null, null, files, TimeSpan.Zero, null);
 
@@ -492,8 +500,11 @@ public sealed class BatchLeader : IAsyncDisposable
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(Batch.IoTimeout);
 
-        if (!PipePeer.IsTrusted(PipePeer.ClientProcessId(server)))
+        if (!_isTrusted(PipePeer.ClientProcessId(server)))
         {
+            // Read (and drop) the request first: senders write before they read, and on this unbuffered pipe a reply
+            // written now would wait for a reader that is itself waiting for its own write to be read.
+            _ = await Batch.ReadPathsAsync(server, timeout.Token).ConfigureAwait(false);
             await server.WriteAsync(new[] { Batch.Refused }, timeout.Token).ConfigureAwait(false);
             return false;
         }
