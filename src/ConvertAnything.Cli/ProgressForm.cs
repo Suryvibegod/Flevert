@@ -53,11 +53,14 @@ internal sealed class ProgressForm : Form
         base.OnFormClosing(e);
     }
 
+    private string? _lastStarted;
+
     public void Report(BatchProgress progress)
     {
         _bar.Maximum = Math.Max(progress.Total, 1); // grows when late files join the batch
         _bar.Value = Math.Min(progress.Completed, _bar.Maximum);
-        if (progress.Current is { } file && _cancel.Enabled)
-            _status.Text = $"{progress.Completed + 1} of {progress.Total}: {Path.GetFileName(file)}";
+        if (_cancel.Enabled)
+            _status.Text = BatchProgressText.Describe(progress, _lastStarted);
+        _lastStarted = progress.Current ?? _lastStarted;
     }
 }
