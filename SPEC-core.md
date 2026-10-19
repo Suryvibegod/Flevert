@@ -54,7 +54,9 @@ ca.exe install-menu [--dev] [--allow-insecure-location]
                                     Ghi menu chuột phải vào HKCU (--dev: thêm thao tác thử dev.copy;
                                     --allow-insecure-location: cho phép thư mục người khác sửa được, đi qua junction,
                                     chứa link, nằm trên ổ subst/ổ mạng/UNC; mặc định thư mục cài phải ở ổ cố định
-                                    cục bộ và đường dẫn thật trùng đường dẫn đưa vào)
+                                    cục bộ có ACL (NTFS, không FAT/exFAT) và đường dẫn thật trùng đường dẫn đưa vào.
+                                    Trade-off chấp nhận: ổ cứng gắn ngoài và VHD cũng báo là ổ cố định; installer
+                                    cài vào Program Files/LocalAppData nên không gặp)
 ca.exe uninstall-menu               Gỡ mọi key đã ghi
 ca.exe list-ops                     In danh sách thao tác và loại file áp dụng
 

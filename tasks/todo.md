@@ -365,9 +365,9 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `75fdc99..HEAD`. **K
 | Thông báo lỗi với thư mục mang đuôi ảnh đổi thành "Access is denied." (CR6) | Nit | Chấp nhận | — |
 
 ## Việc
-- [ ] H1: Bỏ `ToLongPath` trong Program; test: đường dẫn ngắn 8.3 qua runner và qua ca.exe vẫn ra tên dài
-- [ ] H2: `FinalPath` giữ `\\?\` khi bỏ nó làm đổi đường dẫn
-- [ ] H3: Test FILE_TYPE_DISK; một helper bỏ tiền tố; hằng thông báo ở InputPath; kiểm dot/stream trước kiểm absolute
-- [ ] H4: Bỏ đồng hồ trong test untrusted; test subst skip khi `subst` lỗi; `CONVERTANYTHING_BATCH_IDLE_MS` cho test gom lô qua junction
-- [ ] H5: install-menu yêu cầu volume có ACL
-- [ ] Review vòng 7 (nếu sửa nhiều) hoặc đóng checkpoint
+- [x] H1: Bỏ `ToLongPath` trong Program; test: đường dẫn ngắn 8.3 qua runner và qua ca.exe vẫn ra tên dài
+- [x] H2: `FinalPath` giữ `\\?\` khi bỏ nó làm đổi đường dẫn
+- [x] H3: Test FILE_TYPE_DISK; một helper bỏ tiền tố; hằng thông báo ở InputPath; kiểm dot/stream trước kiểm absolute
+- [x] H4: Bỏ đồng hồ trong test untrusted; test subst skip khi `subst` lỗi; `CONVERTANYTHING_BATCH_IDLE_MS` cho test gom lô qua junction
+- [x] H5: install-menu yêu cầu volume có ACL
+- [ ] Review vòng 7 trên Phase 7 (bỏ ToLongPath, Shorten, ACL volume) cùng review vòng 2 module image

@@ -12,6 +12,7 @@ public static partial class InstallLocation
     private const uint OpenExisting = 3;
     private const uint FileFlagBackupSemantics = 0x02000000;
     private const uint DriveFixed = 3;
+    private const uint FilePersistentAcls = 0x8;
 
     private const FileSystemRights GenericAll = (FileSystemRights)0x10000000;
     private const FileSystemRights GenericWrite = (FileSystemRights)0x40000000;
@@ -93,6 +94,10 @@ public static partial class InstallLocation
         using var handle = CreateFileW(@"\\?\" + fullPath, FileReadAttributes, FileShareAll, 0, OpenExisting, FileFlagBackupSemantics, 0);
         if (handle.IsInvalid)
             return false;
+
+        // FAT and exFAT keep no ACLs: anyone can replace files there, whatever .NET reports for the folder.
+        if (!GetVolumeInformationByHandleW(handle, 0, 0, 0, 0, out var volumeFlags, 0, 0) || (volumeFlags & FilePersistentAcls) == 0)
+            return false;
         var buffer = new char[short.MaxValue];
         var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, 0);
         if (length == 0 || length >= buffer.Length)
@@ -104,6 +109,12 @@ public static partial class InstallLocation
 
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint GetDriveTypeW(string root);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetVolumeInformationByHandleW(
+        SafeFileHandle file, nint volumeName, uint volumeNameSize, nint serialNumber, nint maxComponentLength,
+        out uint fileSystemFlags, nint fileSystemName, uint fileSystemNameSize);
 
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial SafeFileHandle CreateFileW(
