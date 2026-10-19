@@ -67,6 +67,31 @@ public sealed class MagickSetupTests : IDisposable
         Assert.ThrowsAny<MagickException>(() => new MagickImage($"{coder}:{script}"));
     }
 
+    // ImageMagick also reads policy.xml and delegates.xml from MAGICK_HOME, %LOCALAPPDATA%\ImageMagick, the XDG and HOME
+    // config folders; a planted one can redirect temporary files or enable delegates without touching the three probes.
+    [Theory]
+    [InlineData("policy.xml")]
+    [InlineData("delegates.xml")]
+    public void Configuration_planted_in_an_imagemagick_search_folder_is_found(string name)
+    {
+        var planted = Path.Combine(_dir.Path, "ImageMagick");
+        Directory.CreateDirectory(planted);
+        var file = Path.Combine(planted, name);
+        File.WriteAllText(file, "<policymap />");
+
+        Assert.Equal(file, MagickSetup.ForeignConfiguration([_dir.Combine("empty"), planted]));
+        Assert.Null(MagickSetup.ForeignConfiguration([_dir.Combine("empty")]));
+    }
+
+    [Fact]
+    public void The_folders_searched_for_foreign_configuration_include_the_user_ones()
+    {
+        var folders = MagickSetup.ConfigurationSearchFolders();
+
+        Assert.Contains(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ImageMagick"), folders);
+        Assert.Contains(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "ImageMagick"), folders);
+    }
+
     [Fact]
     public void The_loaded_policy_is_verified_to_refuse_script_coders()
     {

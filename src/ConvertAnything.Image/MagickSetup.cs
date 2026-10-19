@@ -72,28 +72,86 @@ public static class MagickSetup
             // Also the pixel-cache folder for decoded images; ca.exe labels the whole app-data folder, other hosts may not.
             SecureDirectory.TryApplyNoReadUpLabel(ConfigurationDirectory);
 
+            // ImageMagick also loads configuration from other folders and applies it after ours. A planted policy.xml can
+            // redirect temporary files (decoded pixels) or enable delegates while the coder probes below still pass, so
+            // refuse to start if any exists. The working directory is one of those folders (Explorer starts verbs in the
+            // clicked file's folder, e.g. Downloads): load with ours as the working directory instead.
+            if (ForeignConfiguration(ConfigurationSearchFolders()) is { } foreign)
+                throw new InvalidOperationException($"Found ImageMagick configuration at {foreign}; refusing to process images with it.");
+
             WriteConfiguration(ConfigurationDirectory);
-            MagickNET.Initialize(ConfigurationDirectory);
-            MagickNET.SetTempDirectory(ConfigurationDirectory);
+            var workingDirectory = Environment.CurrentDirectory;
+            Environment.CurrentDirectory = ConfigurationDirectory;
+            try
+            {
+                MagickNET.Initialize(ConfigurationDirectory);
+                MagickNET.SetTempDirectory(ConfigurationDirectory);
 
-            ResourceLimits.Width = 40_000;
-            ResourceLimits.Height = 40_000;
-            ResourceLimits.Area = MaxArea;
-            ResourceLimits.Memory = 2UL * 1024 * 1024 * 1024;
-            ResourceLimits.MaxMemoryRequest = 1UL * 1024 * 1024 * 1024;
-            ResourceLimits.Disk = 4UL * 1024 * 1024 * 1024;
-            ResourceLimits.ListLength = 1_000;
-            ResourceLimits.Time = 120;
+                ResourceLimits.Width = 40_000;
+                ResourceLimits.Height = 40_000;
+                ResourceLimits.Area = MaxArea;
+                ResourceLimits.Memory = 2UL * 1024 * 1024 * 1024;
+                ResourceLimits.MaxMemoryRequest = 1UL * 1024 * 1024 * 1024;
+                ResourceLimits.Disk = 4UL * 1024 * 1024 * 1024;
+                ResourceLimits.ListLength = 1_000;
+                ResourceLimits.Time = 120;
 
-            VerifyPolicy();
+                VerifyPolicy();
+            }
+            finally
+            {
+                Environment.CurrentDirectory = workingDirectory;
+            }
+
             _initialized = true;
         }
     }
 
+    /// <summary>Where ImageMagick looks for configuration besides the folder given to it and the program folder.</summary>
+    internal static IReadOnlyList<string> ConfigurationSearchFolders()
+    {
+        var folders = new List<string>
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ImageMagick"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "ImageMagick"),
+        };
+        foreach (var variable in new[] { "MAGICK_HOME", "MAGICK_CONFIGURE_PATH" })
+        {
+            if (Environment.GetEnvironmentVariable(variable) is { Length: > 0 } value)
+                folders.AddRange(value.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries));
+        }
+
+        foreach (var variable in new[] { "XDG_CONFIG_HOME", "HOME" })
+        {
+            if (Environment.GetEnvironmentVariable(variable) is { Length: > 0 } value)
+                folders.Add(variable == "HOME" ? Path.Combine(value, ".config", "ImageMagick") : Path.Combine(value, "ImageMagick"));
+        }
+
+        return folders;
+    }
+
+    /// <returns>The first policy.xml or delegates.xml found in <paramref name="folders"/>, or <c>null</c>.</returns>
+    internal static string? ForeignConfiguration(IEnumerable<string> folders)
+    {
+        foreach (var folder in folders)
+        {
+            // Magick.NET points MAGICK_CONFIGURE_PATH at our folder, and child processes inherit it.
+            if (string.Equals(Path.GetFullPath(folder).TrimEnd('\\'), ConfigurationDirectory.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                continue;
+            foreach (var name in new[] { "policy.xml", "delegates.xml" })
+            {
+                var path = Path.Combine(folder, name);
+                if (File.Exists(path))
+                    return path;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
-    /// Proves the script coders are refused. ImageMagick also loads a <c>policy.xml</c> from the working directory and
-    /// applies it after ours, so a permissive file planted there (for example in Downloads, where Explorer starts verbs)
-    /// would re-enable them. ca.exe moves its working directory first; this check makes the module fail closed anyway.
+    /// Proves the script coders are refused by the coder policy itself (a refusal for another reason, such as a path rule,
+    /// does not count). Together with the refusal of foreign configuration, this makes the module fail closed.
     /// </summary>
     internal static void VerifyPolicy()
     {
@@ -104,9 +162,9 @@ public static class MagickSetup
                 using var image = new MagickImage();
                 image.Read("viewbox 0 0 1 1\n"u8.ToArray(), new MagickReadSettings { Format = format, Width = 1, Height = 1 });
             }
-            catch (MagickPolicyErrorException)
+            catch (MagickPolicyErrorException ex) when (ex.Message.Contains(format.ToString(), StringComparison.OrdinalIgnoreCase))
             {
-                continue; // refused, as it must be
+                continue; // refused by the coder rule, as it must be
             }
 #pragma warning disable CA1031 // Any other outcome means the coder ran; never continue with that policy.
             catch (Exception ex)

@@ -58,7 +58,7 @@ Quy tắc chung:
 - **Độ sâu màu:** dùng Magick.NET Q8, nên ảnh 16-bit/kênh (PNG, TIFF) ra 8-bit. **Trade-off chấp nhận:** Q8 nhẹ và nhanh hơn Q16; khác biệt 16 → 8 bit không thấy bằng mắt, nhưng "lossless" của PNG Light/Balanced chỉ đúng với ảnh 8-bit.
 - **ICC** được giữ nguyên từng byte; profile có thể chứa tag riêng của người tạo (hiếm). Ghi nhận, không xử lý.
 - **Hủy:** mọi thao tác dừng giữa chừng khi người dùng bấm Cancel (qua callback tiến độ của ImageMagick) và không để lại file tạm.
-- **Policy:** sau khi nạp, module tự đọc thử MVG/MSL/TEXT và phải bị policy từ chối; nếu không (ví dụ có `policy.xml` lạ ở thư mục làm việc) thì không xử lý ảnh nào.
+- **Policy:** ImageMagick còn nạp `policy.xml`/`delegates.xml` từ thư mục làm việc, `MAGICK_HOME`, `MAGICK_CONFIGURE_PATH`, `%LOCALAPPDATA%\ImageMagick`, thư mục cấu hình XDG/HOME, và áp dụng sau policy của ta (có thể đổi temp path, bật delegate). Vì vậy: nạp với thư mục làm việc là thư mục cấu hình riêng; có file cấu hình lạ ở các thư mục kia thì không xử lý ảnh nào; sau khi nạp còn đọc thử MVG/MSL/TEXT và phải bị chính luật coder từ chối.
 - **Trong suốt**: đích không có alpha (JPG, BMP) thì nền trắng.
 - **Compress**:
   - JPG/WebP/AVIF: Light = quality 85, Balanced = 75, Strong = 60 + thu cạnh dài về tối đa 2560 px.
