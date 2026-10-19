@@ -26,11 +26,11 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 
 | Module | Trạng thái |
 |---|---|
-| core | Xong + đã sửa theo 3 vòng review. **Vòng 4 (xác minh các bản sửa vòng 3) chưa có kết quả, cần chạy lại** (xem dưới). 100 test pass, 1 skip (symlink cần quyền admin). |
-| image | Task 1 xong (MagickSetup: policy allow-list, giới hạn tài nguyên, đọc theo đuôi file). Hai project image đã có trong solution. Tiếp theo: Task 2 trong [tasks/image/todo.md](image/todo.md). |
+| core | Xong. Review vòng 4 (2026-10-19): 2 Required + nhiều Medium, **đã sửa hết** (Phase 5 trong [todo.md](todo.md), commit `a835449`..`75fdc99`). **Review vòng 5 trên `9fd5cf4..HEAD` đang chạy / cần chạy lại nếu mất kết quả.** 117 test core pass, 1 skip (symlink cần admin). |
+| image | Task 1–2 xong: `image.to-png` (auto-orient, đọc theo đuôi file), đã gắn vào `ca.exe`, bấm thật qua MenuProbe ra PNG đúng chiều. 19 test pass. Tiếp theo: Task 3 (ma trận convert) trong [tasks/image/todo.md](image/todo.md). |
 | installer, media, pdf | Chưa làm. Spec nháp: [SPEC-media.md](../SPEC-media.md), [SPEC-pdf.md](../SPEC-pdf.md). |
 
-Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói). Kế hoạch core: [plan.md](plan.md), [todo.md](todo.md) (Phase 4 = sửa theo review).
+Quyết định quan trọng: [docs/adr/](../docs/adr) (0001 registry, 0002 gom lô, 0003 đóng gói). Kế hoạch core: [plan.md](plan.md), [todo.md](todo.md) (Phase 4–5 = sửa theo review).
 
 ## Dựng máy mới
 
@@ -43,8 +43,16 @@ Lưu ý môi trường của máy cũ (có thể gặp lại):
 - Test chạy tiến trình `ca.exe` thật cần build cả solution trước (script đã làm).
 - Thư mục `%TEMP%` có thể có nhóm lạ (ví dụ `CodexSandboxUsers`) được quyền ghi; code đã tính tới, test tự dựng ACL.
 
+Lưu ý môi trường máy thứ hai (Windows 11 Home, 2026-10-19):
+- SDK cài cho riêng user. Shell mở **trước** khi chạy setup không có `dotnet` trong PATH: trong PowerShell đặt `$env:Path = "$env:LOCALAPPDATA\Microsoft\dotnet;$env:Path"; $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"`. Bản Debug `ca.exe` (framework-dependent) chạy thiếu `DOTNET_ROOT` sẽ bật hộp thoại đòi tải .NET Desktop Runtime: không cần tải, chỉ là thiếu biến môi trường. Explorer chỉ thấy biến mới sau khi đăng xuất/đăng nhập.
+- Application Control (Smart App Control) chặn `MenuProbe.exe` mới build. Chạy qua host đã ký: `dotnet tools/MenuProbe/bin/Debug/net10.0-windows/MenuProbe.dll list <file>`.
+- Máy này chưa đăng nhập GitHub (`git ls-remote` báo "Repository not found" vì repo private): commit đã có ở local, **chưa push**. Cần người dùng chạy `winget install --id GitHub.cli -e`, `gh auth login --web` (tài khoản Suryvibegod), `gh auth setup-git`, rồi `git push`.
+- Ghi file có dấu `\` qua heredoc/Python dễ bị biến `\a`, `\b` thành ký tự điều khiển (đã làm hỏng `BatchTests.cs` một lần). Sửa text có backslash bằng công cụ Edit.
+- Kiểm `dotnet format --verify-no-changes` thành **lệnh riêng**, đọc exit code rồi mới commit; đừng gộp chung một lệnh với `git commit`.
+
 ## Việc dở dang cụ thể (làm theo thứ tự)
 
-1. Chạy lại review xác minh vòng 4 cho core: reviewer bối cảnh trống, chỉ đọc, trên diff `6498e3f..HEAD` của `src/ConvertAnything.Core`, `src/ConvertAnything.Cli`, `tests/ConvertAnything.Core.Tests`; sửa nếu còn Critical/High/Required (agent đang chạy khi tắt máy, kết quả mất).
-2. Image Task 2: lát dọc JPG → PNG (auto-orient, đăng ký op vào catalog trong `src/ConvertAnything.Cli/Program.cs`, `ProjectReference` từ Cli tới Image, menu, kiểm thật bằng `tools/MenuProbe`).
-3. Khi bấm thử menu trên máy thật: `install-menu --dev --allow-insecure-location` nếu chạy từ thư mục build; nhớ `uninstall-menu` sau khi thử.
+1. Review vòng 5 cho core: 3 reviewer bối cảnh trống, chỉ đọc, trên `git diff 9fd5cf4..HEAD -- src/ConvertAnything.Core src/ConvertAnything.Cli tests/ConvertAnything.Core.Tests`, kèm bảng đối chiếu Phase 5 trong [todo.md](todo.md). Sửa nếu còn Critical/High/Required, rồi đánh dấu checkpoint.
+2. Image Task 3: ma trận convert (7 đích, alpha → nền trắng, giữ animation GIF/WebP, HEIC nguồn) theo [tasks/image/todo.md](image/todo.md).
+3. Khi bấm thử menu trên máy thật: `install-menu --allow-insecure-location` (thêm `--dev` nếu cần thao tác dev) khi chạy từ thư mục build; nhớ `uninstall-menu` sau khi thử.
+4. Đẩy commit lên GitHub khi đã đăng nhập (xem lưu ý môi trường).
