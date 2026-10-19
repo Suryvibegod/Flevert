@@ -64,10 +64,16 @@ public sealed class ImageIoTests : IDisposable
 
         using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(800));
         var timer = System.Diagnostics.Stopwatch.StartNew();
+        var cancelledAt = TimeSpan.Zero;
+        using var _ = cancel.Token.Register(() => cancelledAt = timer.Elapsed);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Op(operationId).RunAsync(input, cancel.Token));
 
-        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(3), $"took {timer.Elapsed}");
+        // Measured from the cancel, not the start: decoding cannot be cancelled and took up to 3.5 s on a CI runner.
+        // Uncancelled, to-webp takes about 9 s and compress-strong about 18 s on a desktop, so 5 s still catches an
+        // encode that only checks the token at the end; one that never checks it would not throw at all.
+        var afterCancel = timer.Elapsed - cancelledAt;
+        Assert.True(afterCancel < TimeSpan.FromSeconds(5), $"stopped {afterCancel} after the cancel");
         Assert.Equal(["big.png"], _dir.FileNames());
     }
 
