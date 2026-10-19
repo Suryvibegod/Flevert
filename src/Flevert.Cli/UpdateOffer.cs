@@ -31,10 +31,10 @@ internal static partial class UpdateOffer
 
     private static UpdateChecker CreateChecker()
     {
-        // FLEVERT_UPDATE_URL points at a fake GitHub for tests; only a loopback address is accepted, and it may not
-        // redirect anywhere else.
+        // FLEVERT_UPDATE_URL points at a fake GitHub for tests; only a loopback address is accepted, reached directly
+        // (no proxy) and without redirects.
         var test = UpdateChecker.TryTestEndpoint(Environment.GetEnvironmentVariable("FLEVERT_UPDATE_URL"), out var endpoint);
-        var handler = new SocketsHttpHandler { UseCookies = false, AllowAutoRedirect = !test };
+        var handler = new SocketsHttpHandler { UseCookies = false, AllowAutoRedirect = !test, UseProxy = !test };
         return new UpdateChecker(handler, new UpdateStateStore(UpdateStateStore.DefaultPath), TimeProvider.System,
             ReleaseVersion.Current, test ? endpoint! : UpdateChecker.LatestReleaseApi);
     }

@@ -51,7 +51,10 @@ public sealed class UpdateChecker(
     public static void SetEnabled(UpdateStateStore store, bool enabled)
     {
         var state = store.Load();
-        store.Save((ReferenceEquals(state, UpdateState.Unreadable) ? UpdateState.Default : state) with { Enabled = enabled });
+        // Setup chose its default from this file; if it could not read it either, "on" might undo the user's "off".
+        if (ReferenceEquals(state, UpdateState.Unreadable))
+            throw new IOException("The update-check setting cannot be read right now; it was left unchanged.");
+        store.Save(state with { Enabled = enabled });
     }
 
     /// <summary>

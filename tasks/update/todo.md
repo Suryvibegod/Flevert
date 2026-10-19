@@ -47,3 +47,16 @@ Plan: [plan.md](plan.md). Spec: core.md "Báo bản mới". ADR-0006.
 | Hai leader cùng kiểm cùng lúc | security I2, code | Info | Chấp nhận (hiếm, chỉ là hỏi hai lần) |
 | Trang setup trên Windows 10 chưa xem | code | Suggestion | Chưa có máy Windows 10; logic trang dùng chung, test-installer chạy đường im lặng |
 | Người không convert gì thì không được hỏi | doubt | Suggestion (sản phẩm) | Theo spec: chỉ kiểm sau khi dùng, không có tiến trình nền |
+
+## Review lại (commit f1c5160)
+
+Không còn Critical/High/Required trong code. Hai cổng quy trình: CI chạy test tích hợp có UI lần đầu khi push (CI 3 lần trước khi tag); `test-installer.ps1` với kịch bản mới đã chạy sau khi sửa: **PASS** (2026-10-20: tắt bằng lệnh rồi cài đè vẫn tắt; `/UPDATECHECK=yes` không đổi gì), chạy lại trên bản nháp theo RELEASING.
+
+| Góp ý | Xử lý |
+|---|---|
+| S1: kết quả kiểm có thể mất vì race giữa task xong và continuation | Cờ `_checkAnswered` do continuation đặt thay cho `IsCompleted` |
+| S2: setup không đọc được file rồi `update-check on` bật lại "off" | `SetEnabled` từ chối (IOException) khi file không đọc được; test đỏ trước |
+| S3: test tích hợp không giết tiến trình con khi hết giờ | Giết trong finally |
+| S4: thư mục/quyền tại đường dẫn trạng thái = tắt, chưa có test | Thêm test; spec ghi rõ |
+| S5: endpoint test đi qua proxy hệ thống | `UseProxy = !test` |
+| Nit: file sửa tay có dấu cách/BOM; rename chưa flush; icon khay còn tới 10 s | Chấp nhận (chỉ Flevert ghi file; không ảnh hưởng an toàn) |

@@ -95,6 +95,28 @@ public sealed class UpdateStateStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_folder_where_the_file_should_be_is_unreadable_not_the_defaults()
+    {
+        var path = _dir.Combine("state.json");
+        Directory.CreateDirectory(path);
+
+        Assert.Same(UpdateState.Unreadable, new UpdateStateStore(path).Load());
+    }
+
+    [Fact]
+    public void Setting_on_or_off_refuses_a_state_file_it_cannot_read()
+    {
+        // Setup reads the file before choosing; if it could not, writing "on" over it could undo the user's "off".
+        var path = _dir.File("state.json", "{\"enabled\":false}");
+        var store = new UpdateStateStore(path);
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.ThrowsAny<IOException>(() => UpdateChecker.SetEnabled(store, true));
+
+        Assert.False(store.Load().Enabled);
+    }
+
+    [Fact]
     public void Turned_off_is_saved_in_the_exact_form_setup_looks_for()
     {
         // installer/Flevert.iss reads state.json itself to keep the user's choice on an upgrade (InstallerScriptTests).

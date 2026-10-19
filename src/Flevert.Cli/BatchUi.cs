@@ -20,6 +20,7 @@ internal sealed class BatchUi : ApplicationContext
     private NotifyIcon? _tray;
     private bool _askingAboutUpdate;
     private bool _exitWhenChecked;
+    private bool _checkAnswered; // set by the continuation itself: the task completes a moment before it runs
 
     private BatchUi(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running,
         Task<UpdateFound?> update)
@@ -125,7 +126,7 @@ internal sealed class BatchUi : ApplicationContext
     {
         if (_askingAboutUpdate)
             return;
-        if (!_update.IsCompleted && !evenIfChecking)
+        if (!_checkAnswered && !evenIfChecking)
         {
             _exitWhenChecked = true;
             return;
@@ -136,6 +137,7 @@ internal sealed class BatchUi : ApplicationContext
 
     private void AskAboutUpdate(Task<UpdateFound?> check)
     {
+        _checkAnswered = true;
         if (!check.IsCompletedSuccessfully || check.Result is not { } found)
         {
             _ = check.Exception; // observed: a failed check only means nothing to offer

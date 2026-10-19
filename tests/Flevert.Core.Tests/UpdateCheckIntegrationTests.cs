@@ -46,10 +46,19 @@ public sealed class UpdateCheckIntegrationTests : IDisposable
         var file = _dir.File("ảnh.txt");
 
         using var flevert = Start(file, $"http://127.0.0.1:{port}/latest");
-        var exited = flevert.WaitForExitAsync();
+        string asked;
+        try
+        {
+            asked = await request.WaitAsync(TimeSpan.FromSeconds(30));
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        }
+        finally
+        {
+            // A flevert.exe left behind would write its state after Dispose has put the developer's back.
+            if (!flevert.HasExited)
+                flevert.Kill(entireProcessTree: true);
+        }
 
-        var asked = await request.WaitAsync(TimeSpan.FromSeconds(30));
-        await exited.WaitAsync(TimeSpan.FromSeconds(30));
         Assert.StartsWith("GET /latest ", asked, StringComparison.Ordinal);
         Assert.Contains($"User-Agent: Flevert/{ReleaseVersion.Current}", asked, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Cookie:", asked, StringComparison.OrdinalIgnoreCase);
