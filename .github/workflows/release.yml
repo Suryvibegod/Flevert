@@ -42,6 +42,7 @@ jobs:
       - name: Test core
         run: dotnet test tests/ConvertAnything.Core.Tests -c Release --no-build
       - name: Test images
+        if: ${{ !cancelled() }}
         run: dotnet test tests/ConvertAnything.Image.Tests -c Release --no-build
       - name: No known-vulnerable packages
         shell: pwsh

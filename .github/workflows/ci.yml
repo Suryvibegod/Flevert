@@ -24,9 +24,11 @@ jobs:
       - run: dotnet build ConvertAnything.sln -c Release
       - run: dotnet format ConvertAnything.sln --verify-no-changes
       # One project at a time: run together, the image encodes starved the process-batching tests on the runner (a 1 s
-      # copy took 15 s). Separate steps, so a failure in the first is never hidden by the second.
+      # copy took 15 s). Separate steps, and the second runs even if the first fails, so neither hides the other.
+      # A new test project must be added here and in release.yml.
       - run: dotnet test tests/ConvertAnything.Core.Tests -c Release --no-build
-      - run: dotnet test tests/ConvertAnything.Image.Tests -c Release --no-build
+      - if: ${{ !cancelled() }}
+        run: dotnet test tests/ConvertAnything.Image.Tests -c Release --no-build
       - name: No known-vulnerable packages
         shell: pwsh
         run: |
