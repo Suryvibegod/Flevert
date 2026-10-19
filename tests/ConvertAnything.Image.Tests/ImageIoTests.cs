@@ -109,6 +109,60 @@ public sealed class ImageIoTests : IDisposable
     private static int Distance(IMagickColor<byte> a, IMagickColor<byte> b) =>
         Math.Max(Math.Abs(a.R - b.R), Math.Max(Math.Abs(a.G - b.G), Math.Abs(a.B - b.B)));
 
+    // A misnamed file is decoded as what it is; the output must follow that too, not the name.
+    [Fact]
+    public async Task Removing_metadata_from_a_png_named_jpg_writes_a_png_and_keeps_transparency()
+    {
+        var input = _dir.Combine("logo.jpg");
+        using (var image = new MagickImage(MagickColors.Transparent, 20, 20))
+        {
+            image.Draw(new ImageMagick.Drawing.Drawables().FillColor(MagickColors.Red).Rectangle(10, 0, 19, 19));
+            image.Write(input, MagickFormat.Png);
+        }
+
+        var output = await Op("image.strip-metadata").RunAsync(input, CancellationToken.None);
+
+        Assert.Equal("logo (no metadata).png", Path.GetFileName(output));
+        using var result = new MagickImage(output);
+        Assert.Equal(MagickFormat.Png, result.Format);
+        Assert.True(result.HasAlpha);
+    }
+
+    [Fact]
+    public async Task Compressing_a_jpg_named_png_compresses_it_as_a_jpg()
+    {
+        var input = _dir.Combine("photo.png");
+        using (var image = new MagickImage(MagickColors.SteelBlue, 800, 600))
+        {
+            image.AddNoise(NoiseType.Gaussian, 0.4);
+            image.Quality = 97;
+            image.Write(input, MagickFormat.Jpeg);
+        }
+
+        var output = await Op("image.compress-balanced").RunAsync(input, CancellationToken.None);
+
+        Assert.Equal("photo (compressed).jpg", Path.GetFileName(output));
+        using var result = new MagickImage(output);
+        Assert.Equal(MagickFormat.Jpeg, result.Format);
+    }
+
+    [Fact]
+    public async Task An_animated_gif_named_jpg_stays_animated_when_converted_to_gif()
+    {
+        var input = _dir.Combine("reaction.jpg");
+        using (var frames = new MagickImageCollection())
+        {
+            foreach (var color in new[] { MagickColors.Red, MagickColors.Green, MagickColors.Blue })
+                frames.Add(new MagickImage(color, 16, 16) { AnimationDelay = 10 });
+            frames.Write(input, MagickFormat.Gif);
+        }
+
+        var output = await Op("image.to-gif").RunAsync(input, CancellationToken.None);
+
+        using var result = new MagickImageCollection(output);
+        Assert.Equal(3, result.Count);
+    }
+
     // Strip() also drops the PNG colour chunks; a Display P3 screenshot would then shift colour.
     [Theory]
     [InlineData("image.strip-metadata")]

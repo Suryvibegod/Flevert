@@ -20,7 +20,7 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
     {
         var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + extension);
         // Only an animation stays one; the pages of a TIFF are not frames, and other targets hold one image.
-        var keepsAnimation = ImageFile.IsAnimationFormat(format) && ImageFile.IsAnimationFormat(ImageFile.FormatOf(Path.GetExtension(inputPath)));
+        var keepsAnimation = ImageFile.IsAnimationFormat(format) && ImageFile.IsAnimationFormat(ImageFile.RealFormat(inputPath));
         return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => ImageFile.RunAsync(() =>
         {
             using var images = ImageFile.Read(inputPath, allFrames: keepsAnimation);

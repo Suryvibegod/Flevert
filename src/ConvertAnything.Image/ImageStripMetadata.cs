@@ -18,12 +18,11 @@ public sealed class ImageStripMetadata : IOperation
 
     public Task<string> RunAsync(string inputPath, CancellationToken ct)
     {
-        var sourceExtension = Path.GetExtension(inputPath);
-        var source = ImageFile.FormatOf(sourceExtension);
-        var target = source is MagickFormat.Heic or MagickFormat.Heif ? MagickFormat.Jpeg : source;
-        var extension = target == source ? sourceExtension : ".jpg";
+        var source = ImageFile.RealFormat(inputPath);
+        var target = source is MagickFormat.Heic or MagickFormat.Heif ? MagickFormat.Jpeg : source; // HEIC cannot be written
         var desired = Path.Combine(
-            Path.GetDirectoryName(inputPath)!, $"{Path.GetFileNameWithoutExtension(inputPath)} (no metadata){extension}");
+            Path.GetDirectoryName(inputPath)!,
+            $"{Path.GetFileNameWithoutExtension(inputPath)} (no metadata){ImageFile.ExtensionFor(target, inputPath)}");
 
         return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => ImageFile.RunAsync(() =>
         {
@@ -36,14 +35,13 @@ public sealed class ImageStripMetadata : IOperation
             {
                 frame.AutoOrient();
                 ImageMetadata.StripExceptColourProfile(frame);
-                // The pixels are re-encoded; for WebP and AVIF ImageMagick has no estimate of the source quality and would
-                // fall back to its default (visibly worse than Compress > Light), so use a high one. JPEG keeps its own
-                // estimate of the source quality.
+                // The pixels are re-encoded; ImageMagick only estimates the source quality of a JPEG, so WebP, AVIF and a
+                // HEIC becoming JPG would otherwise fall back to its default (visibly worse than Compress > Light).
                 if (lossless)
                     frame.Settings.SetDefine(MagickFormat.WebP, "lossless", "true");
-                else if (target is MagickFormat.WebP or MagickFormat.Avif)
+                else if (target is MagickFormat.WebP or MagickFormat.Avif || (target == MagickFormat.Jpeg && source != MagickFormat.Jpeg))
                     frame.Quality = HighQuality;
-                if (target != source)
+                if (target == MagickFormat.Jpeg)
                     ImageMetadata.FlattenOntoWhite(frame); // HEIC/HEIF with transparency becoming JPG
                 // The TIFF writer ignores the compression the file was read with and writes uncompressed: 2 KB became 2 MB.
                 if (target == MagickFormat.Tiff)

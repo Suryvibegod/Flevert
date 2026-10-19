@@ -59,6 +59,39 @@ public static class ImageFile
         return new MagickImageCollection(stream, settings);
     }
 
+    /// <summary>
+    /// The format the file is decoded as: the allowed format its signature shows, or else the one its extension names.
+    /// Operations choose their output from this, so a PNG saved as ".jpg" stays a PNG (with its transparency).
+    /// </summary>
+    public static MagickFormat RealFormat(string path)
+    {
+        var named = FormatOf(Path.GetExtension(path));
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        return Signature(stream) is { } actual && Family(actual) != Family(named) ? actual : named;
+    }
+
+    /// <summary>
+    /// The extension for writing <paramref name="format"/>: the source's own spelling (.jpeg, .JPG) when it already
+    /// names that format, otherwise the usual one.
+    /// </summary>
+    public static string ExtensionFor(MagickFormat format, string sourcePath)
+    {
+        var sourceExtension = Path.GetExtension(sourcePath);
+        if (Formats.TryGetValue(sourceExtension, out var named) && named == format)
+            return sourceExtension;
+        return format switch
+        {
+            MagickFormat.Jpeg => ".jpg",
+            MagickFormat.Png => ".png",
+            MagickFormat.WebP => ".webp",
+            MagickFormat.Avif => ".avif",
+            MagickFormat.Gif => ".gif",
+            MagickFormat.Bmp => ".bmp",
+            MagickFormat.Tiff => ".tiff",
+            _ => throw new NotSupportedException($"No output extension for {format}."),
+        };
+    }
+
     /// <summary>The allowed format whose signature starts the file, or <c>null</c> if none matches.</summary>
     private static MagickFormat? Signature(Stream stream)
     {

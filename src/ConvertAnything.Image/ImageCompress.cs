@@ -39,18 +39,16 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
 
     public Task<string> RunAsync(string inputPath, CancellationToken ct)
     {
-        var sourceExtension = Path.GetExtension(inputPath);
         // The image is read before the output is named: whether a GIF stays a GIF depends on it being animated.
         return Task.Run(async () =>
         {
-            var source = ImageFile.FormatOf(sourceExtension);
+            var source = ImageFile.RealFormat(inputPath);
             using var images = ImageFile.Read(inputPath, allFrames: ImageFile.IsAnimationFormat(source));
             ImageFile.StopOnCancel(images, ct);
             var target = Target(source, animated: images.Count > 1);
-            // Keep the user's spelling (.jpeg, .JPG) when the format stays the same.
-            var extension = target == ImageFile.FormatOf(sourceExtension) ? sourceExtension : ".jpg";
             var desired = Path.Combine(
-                Path.GetDirectoryName(inputPath)!, $"{Path.GetFileNameWithoutExtension(inputPath)} (compressed){extension}");
+                Path.GetDirectoryName(inputPath)!,
+                $"{Path.GetFileNameWithoutExtension(inputPath)} (compressed){ImageFile.ExtensionFor(target, inputPath)}");
 
             return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => ImageFile.RunAsync(() =>
             {
