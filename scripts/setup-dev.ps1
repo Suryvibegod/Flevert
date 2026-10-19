@@ -15,6 +15,14 @@ Set-Location $repo
 
 function Step($text) { Write-Host "`n== $text" -ForegroundColor Cyan }
 
+# Windows PowerShell 5.1 turns a native command's redirected stderr into a terminating error under
+# ErrorActionPreference=Stop. gh writes to stderr when signed out or offline, which must not stop the build and tests.
+function Invoke-Tolerant([scriptblock]$Command) {
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $Command } catch { $null } finally { $ErrorActionPreference = $saved }
+}
+
 Step '.NET 10 SDK'
 # A per-user install needs no UAC prompt, so the script can run unattended.
 $userDotnet = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet'
@@ -59,10 +67,10 @@ Step 'GitHub CLI'
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Write-Warning 'GitHub CLI missing. Run:  winget install --id GitHub.cli -e   then  gh auth login --web --scopes workflow  (account Suryvibegod).'
 } else {
-    $auth = & gh auth status 2>&1 | Out-String
+    $auth = Invoke-Tolerant { & gh auth status 2>&1 | Out-String }
     if ($auth -notmatch 'Logged in') {
         Write-Warning 'Not signed in to GitHub. Run:  gh auth login --web --scopes workflow   (account Suryvibegod), then push works.'
-    } elseif ($auth -notmatch 'workflow') {
+    } elseif ($auth -match 'Token scopes' -and $auth -notmatch 'workflow') {
         # Pushing changes under .github/workflows needs the workflow scope.
         Write-Warning 'GitHub token lacks the workflow scope. Run:  gh auth refresh -h github.com -s workflow'
     }
@@ -73,6 +81,8 @@ $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(
 if (-not $iscc) {
     # Per-user install: no UAC prompt.
     winget install --id JRSoftware.InnoSetup -e --version 6.7.3 --scope user --silent --accept-package-agreements --accept-source-agreements
+    # Only the installer needs it; build and tests go on without it.
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Installing Inno Setup failed ($LASTEXITCODE); scripts\build-installer.ps1 will not work until it is installed." }
 } else {
     $iscc
 }
@@ -80,7 +90,7 @@ if (-not $iscc) {
 Step 'Commit identity (this repository only)'
 # Only on the maintainer's machines: contributors keep their own identity. The GitHub no-reply address keeps personal
 # email out of the public history.
-$login = if (Get-Command gh -ErrorAction SilentlyContinue) { gh api user --jq .login 2>$null } else { $null }
+$login = if (Get-Command gh -ErrorAction SilentlyContinue) { Invoke-Tolerant { gh api user --jq .login 2>$null } } else { $null }
 if ($login -eq 'Suryvibegod') {
     git config user.name 'Suryvibegod'
     git config user.email '79949229+Suryvibegod@users.noreply.github.com'

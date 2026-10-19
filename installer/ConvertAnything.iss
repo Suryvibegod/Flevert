@@ -51,7 +51,7 @@ WizardStyle=modern
 SetupIconFile=..\assets\app.ico
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExe}
-; While ca.exe runs, Setup and Uninstall ask to wait (OK) or give up (Cancel); silent runs give up. A per-user
+; While ca.exe runs, Setup and Uninstall ask to wait (OK) or give up (Cancel); with /SUPPRESSMSGBOXES they give up. A per-user
 ; uninstaller cannot remove files in use, and they would stay behind with no uninstaller left. Restart Manager only
 ; matters for a ca.exe that could not open the mutex.
 AppMutex={#AppMutexName}
@@ -64,9 +64,9 @@ ChangesAssociations=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
-; Shown for AppMutex. The default asks to close ca.exe, which has no window to close; a conversion ends by itself.
-SetupAppRunningError=A ConvertAnything conversion is still running.%n%nWait a few seconds until it has finished, then click OK to continue, or Cancel to exit.
-UninstallAppRunningError=A ConvertAnything conversion is still running.%n%nWait a few seconds until it has finished, then click OK to continue, or Cancel to exit.
+; Shown for AppMutex. The default asks to close the program; a conversion ends by itself, or from its progress window.
+SetupAppRunningError=A ConvertAnything conversion is still running.%n%nWait until it has finished (or click Cancel in its progress window), then click OK to continue, or Cancel to exit.
+UninstallAppRunningError=A ConvertAnything conversion is still running.%n%nWait until it has finished (or click Cancel in its progress window), then click OK to continue, or Cancel to exit.
 
 ; The classic-menu choice is a check box on a custom page, not a [Tasks] entry: Inno Setup 6.7 clips the check box of the
 ; task list at high DPI (seen at 200%), while a plain check box is drawn by Windows. Silent installs pass /CLASSICMENU=1|0.
@@ -113,9 +113,9 @@ begin
   Result := GetWindowsVersion >= $0A0055F0;
 end;
 
-// Runs ca.exe and waits. False when it could not start or exited with an error. Reason is the first line ca.exe wrote
-// to stderr, for a message box; the log gets every line.
-function RunCa(const Params: String; var Started: Boolean; var Code: Integer; var Reason: String): Boolean;
+// Runs ca.exe from Folder and waits. False when it could not start or exited with an error. Reason is the first line
+// ca.exe wrote to stderr, for a message box; the log gets every line.
+function RunCaIn(const Folder, Params: String; var Started: Boolean; var Code: Integer; var Reason: String): Boolean;
 var
   Output: TExecOutput;
   I: Integer;
@@ -126,7 +126,7 @@ begin
   Reason := '';
   // An exception must not end the uninstall step before SweepRegistry, or skip reporting a failed install.
   try
-    Started := ExecAndCaptureOutput(ExpandConstant('{app}\{#AppExe}'), Params, '', SW_HIDE, ewWaitUntilTerminated, Code, Output);
+    Started := ExecAndCaptureOutput(AddBackslash(Folder) + '{#AppExe}', Params, '', SW_HIDE, ewWaitUntilTerminated, Code, Output);
     if Started then
       for I := 0 to GetArrayLength(Output.StdErr) - 1 do
       begin
@@ -141,6 +141,11 @@ begin
   end;
   Log(Format('ca.exe %s: started=%d code=%d', [Params, Ord(Started), Code]));
   Result := Started and (Code = 0);
+end;
+
+function RunCa(const Params: String; var Started: Boolean; var Code: Integer; var Reason: String): Boolean;
+begin
+  Result := RunCaIn(ExpandConstant('{app}'), Params, Started, Code, Reason);
 end;
 
 procedure ReportFailure(const What: String; Started: Boolean; Code: Integer; const Reason: String);
@@ -228,17 +233,18 @@ var
   Parent: String;
 begin
   Result := '';
-  Dir := RemoveBackslash(Dir);
+  // UnlessRoot: "C:" without the backslash names the current directory on drive C, not its root.
+  Dir := RemoveBackslashUnlessRoot(Dir);
   while Result = '' do
   begin
     if IsLink(Dir) then
       Result := Dir
     else
     begin
-      Parent := ExtractFileDir(Dir);
+      Parent := RemoveBackslashUnlessRoot(ExtractFileDir(Dir));
       if (Parent = '') or (CompareText(Parent, Dir) = 0) then
         Break;
-      Dir := RemoveBackslash(Parent);
+      Dir := Parent;
     end;
   end;
 end;
@@ -263,8 +269,43 @@ begin
   end;
 end;
 
-// Refused before anything is copied: files copied through a link land wherever it points, and ca.exe would load a
-// DLL that someone placed in the folder beforehand. ca.exe install-menu repeats the link and permission checks later.
+// The same check ca.exe install-menu makes, but before anything is copied or run from the install folder: once ca.exe
+// starts there, a DLL that another account placed beside it has already run. ca.exe runs from setup's own temporary
+// folder instead. The folder is created first, so the check sees the permissions it inherits. '' when it is safe.
+function LocationProblem(const App: String): String;
+var
+  Created, Started: Boolean;
+  Code: Integer;
+  Reason: String;
+begin
+  Result := '';
+  Created := not DirExists(App);
+  if Created and not ForceDirectories(App) then
+  begin
+    Result := 'Setup could not create ' + App + '.';
+    Exit;
+  end;
+  try
+    // {app} stays unexpanded: this extracts the files meant for {app} into a folder literally named {tmp}\{app}.
+    ExtractTemporaryFiles('{app}\*');
+  except
+    Log('Extracting ca.exe to check the install folder: ' + GetExceptionMessage);
+  end;
+  if not RunCaIn(AddBackslash(ExpandConstant('{tmp}')) + '{app}', 'check-location "' + App + '"', Started, Code, Reason) then
+  begin
+    if Started and (Code = ExitRefusedLocation) then
+      Result := Reason + ' See {#AppUrl}#setup-refused-the-install-folder'
+    else
+      Result := Format('Setup could not check the install folder (code %d). Windows blocked ConvertAnything or it ' +
+        'stopped unexpectedly. See {#AppUrl}#smart-app-control', [Code]);
+  end;
+  // Leave nothing behind for a refused install; a folder that was there before is not ours to remove.
+  if (Result <> '') and Created then
+    RemoveDir(App);
+end;
+
+// Refused before anything is copied: files copied through a link land wherever it points, ca.exe would load a DLL
+// that someone placed in the folder beforehand, and other accounts could replace files in a folder they can change.
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   App, Link: String;
@@ -282,7 +323,10 @@ begin
     Result := 'ConvertAnything cannot be installed: ' + Link + ' is a link to another folder (a junction or symbolic ' +
       'link), so its files could end up where other accounts can change them. See {#AppUrl}#setup-refused-the-install-folder'
   else if DirExists(App) and HoldsAnything(App) and not RegKeyExists(HKCU, UninstallKey) then
-    Result := App + ' already holds files that ConvertAnything did not install. Move or delete them, then run setup again.';
+    Result := App + ' already holds files, perhaps left by an earlier ConvertAnything install that did not finish. ' +
+      'Delete the folder, then run setup again.'
+  else
+    Result := LocationProblem(App);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

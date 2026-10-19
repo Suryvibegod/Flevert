@@ -3,7 +3,8 @@
 End-to-end test of the installer on this machine: installs silently without admin, checks files, menu and a real
 conversion, installs over itself, uninstalls and checks that nothing ConvertAnything wrote is left. Further scenarios
 cover the uninstall safety net, a classic-menu key the user created, a refused install folder, /DIR, uninstalling
-while ca.exe runs, an install folder that is a junction, and one that already holds someone else's files.
+while ca.exe runs, an install folder that is a junction, one that already holds someone else's files, and setup
+started from a junction.
 
 Uses the real per-user install location and HKCU, so it refuses to run when anything of ConvertAnything is present.
 
@@ -24,7 +25,6 @@ $classes = 'HKCU:\Software\Classes'
 $associations = "$classes\SystemFileAssociations"
 $classicKey = "$classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"
 $heic = Join-Path $root 'tests\ConvertAnything.Image.Tests\fixtures\gradient-320x240.heic'
-$exitMenuFailed = 10
 
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw "FAIL: $Message" }
@@ -54,11 +54,11 @@ function SetupRefused($Run, [string]$Reason) {
     Assert ((Get-Content $Run.Log -Raw).Contains($Reason)) "setup logs why: '$Reason'"
 }
 
-function Setup([string[]]$Arguments) {
+function Setup([string[]]$Arguments, [string]$WorkingDirectory = $work) {
     $log = Join-Path $work "setup-$([guid]::NewGuid()).log"
     $all = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$log`"") + $Arguments
     $timer = [Diagnostics.Stopwatch]::StartNew()
-    $p = Start-Process $Setup -ArgumentList $all -Wait -PassThru
+    $p = Start-Process $Setup -ArgumentList $all -WorkingDirectory $WorkingDirectory -Wait -PassThru
     return [pscustomobject]@{ ExitCode = $p.ExitCode; Log = $log; Seconds = $timer.Elapsed.TotalSeconds }
 }
 
@@ -178,19 +178,19 @@ try {
     Remove-Item $classicKey -Recurse -Force
     $userClassicKey = $false
 
-    Write-Host 'Scenario 4: an install folder other accounts can change is refused, and setup says so'
+    Write-Host 'Scenario 4: an install folder other accounts can change is refused before anything is copied or run'
     New-Item -ItemType Directory $app | Out-Null
     $acl = Get-Acl $app
     $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new('BUILTIN\Users', 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
     Set-Acl $app $acl
     $run = Setup @('/CLASSICMENU=1')
-    Assert ($run.ExitCode -eq $exitMenuFailed) "setup exits with $exitMenuFailed when the menu is refused (got $($run.ExitCode))"
-    $log = Get-Content $run.Log -Raw
-    Assert ($log.Contains('other accounts can modify its folder')) "ca.exe's reason reaches setup"
-    Assert ($log.Contains('#setup-refused-the-install-folder')) 'the message points to the README section for a refused folder'
+    SetupRefused $run 'other accounts can modify it'
+    Assert ((Get-Content $run.Log -Raw).Contains('#setup-refused-the-install-folder')) 'the message points to the README section for a refused folder'
+    Assert (@(Get-ChildItem $app -Force).Count -eq 0) 'nothing copied into the folder'
+    Assert (-not (Test-Path $arpKey)) 'nothing listed in Installed apps'
     Assert (@(MenuKeys).Count -eq 0) 'no menu registered'
-    Assert (-not (Test-Path $classicKey)) 'no classic menu switched on for a menu that is not there'
-    Uninstall
+    Assert (-not (Test-Path $classicKey)) 'no classic menu switched on'
+    Remove-Item $app -Recurse -Force
     AssertClean
 
     Write-Host 'Scenario 5: /DIR cannot move the install elsewhere'
@@ -203,11 +203,19 @@ try {
     Write-Host 'Scenario 6: uninstalling while ca.exe runs is cancelled, never left half done'
     Install '0' | Out-Null
     $menuCount = @(MenuKeys).Count
-    $inputs = 1..6 | ForEach-Object { $f = "$work\slow$_.txt"; Set-Content $f 'x'; "`"$f`"" }
+    # About 20 s of work (one second per file): long enough for a slow first start and the uninstaller's hand-over.
+    $inputs = 1..20 | ForEach-Object { $f = "$work\slow$_.txt"; Set-Content $f 'x'; "`"$f`"" }
     $job = RunCaHeadless (@('run', 'dev.slow-copy') + $inputs) -NoWait
-    Start-Sleep -Seconds 1
-    Assert (-not $job.HasExited) 'ca.exe is running'
+    # The uninstaller only sees ca.exe once it holds the mutex; a fresh binary can take a while to start.
+    $mutex = $null
+    $deadline = (Get-Date).AddSeconds(15)
+    while (-not $job.HasExited -and -not [Threading.Mutex]::TryOpenExisting('ConvertAnything.App', [ref]$mutex) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 100
+    }
+    Assert ($null -ne $mutex) 'ca.exe is running and holds its mutex'
+    $mutex.Dispose()
     Uninstall
+    Assert (-not $job.HasExited) 'ca.exe was still running when the uninstaller finished, so the test is meaningful'
     # A silent uninstall answers the "still running" question with Cancel, so everything must still be there.
     Assert (Test-Path $arpKey) 'still listed in Installed apps'
     Assert (Test-Path "$app\ca.exe") 'ca.exe still installed'
@@ -234,6 +242,18 @@ try {
     Assert (-not (Test-Path "$app\ca.exe")) 'nothing installed beside them'
     Assert ((Get-Content "$app\planted.dll") -eq 'not ours') 'their files are left alone'
     Remove-Item $app -Recurse -Force
+    AssertClean
+
+    Write-Host 'Scenario 9: setup started from a folder that is a junction still installs'
+    # The link check walks up to the drive root; checking "C:" instead of "C:\" reads the current directory on C:.
+    $cwdTarget = Join-Path $work 'cwd-target'
+    $cwdLink = Join-Path $work 'cwd-link'
+    New-Item -ItemType Directory $cwdTarget | Out-Null
+    New-Item -ItemType Junction -Path $cwdLink -Target $cwdTarget | Out-Null
+    $run = Setup @('/CLASSICMENU=0') -WorkingDirectory $cwdLink
+    Assert ($run.ExitCode -eq 0) "setup exits with 0 (got $($run.ExitCode); log $($run.Log))"
+    Uninstall
+    (Get-Item $cwdLink).Delete()
     AssertClean
 
     Write-Host 'PASS'
