@@ -25,25 +25,50 @@ public sealed record BatchOutcome(IReadOnlyList<FileResult> Results, int Total)
 public sealed class Runner(RunLog log)
 {
     public Task<BatchOutcome> RunAsync(
-        IOperation operation, IReadOnlyList<string> files, IProgress<BatchProgress>? progress, CancellationToken ct)
+        IOperation operation, IReadOnlyList<string> files, IProgress<BatchProgress>? progress, CancellationToken ct, int maxParallel = 1)
     {
         var taken = 0;
         var source = files.Select(file => { taken++; return file; }).ToAsyncEnumerable();
-        return RunAsync(operation, source, () => files.Count - taken, progress, ct);
+        return RunAsync(operation, source, () => files.Count - taken, progress, ct, maxParallel);
     }
 
     /// <param name="pending">How many received files are still queued; lets progress grow as late files join the batch.</param>
+    /// <param name="maxParallel">How many files run at once. Image decoders use one core each, so a batch gains from
+    /// running several (SPEC-core, "Xử lý song song trong một lô"); results then come in the order files finish.</param>
+    /// <param name="running">Told how many files are running: raised before the next file is requested, lowered after
+    /// a result is recorded, so a batch leader never sees the batch idle while a file is still being converted.</param>
     public async Task<BatchOutcome> RunAsync(
         IOperation operation,
         IAsyncEnumerable<string> files,
         Func<int> pending,
         IProgress<BatchProgress>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        int maxParallel = 1,
+        Action<int>? running = null)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxParallel, 1);
         var results = new List<FileResult>();
         // Exact comparison: case-sensitive folders can hold a.txt and A.txt as different files.
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var interrupted = 0;
+        var runningCount = 0;
+        var inFlight = new List<Task>();
+
+        // Results, counts and progress change together under one lock, so every report is consistent and counts only
+        // ever move in order. The callbacks only record or post the numbers.
+        async Task RunAndRecordAsync(string file)
+        {
+            var result = await RunOneAsync(operation, file, ct).ConfigureAwait(false);
+            lock (results)
+            {
+                if (result is null)
+                    interrupted++;
+                else
+                    results.Add(result);
+                running?.Invoke(--runningCount);
+                progress?.Report(new BatchProgress(results.Count, results.Count + runningCount + pending(), null));
+            }
+        }
 
         try
         {
@@ -52,16 +77,15 @@ public sealed class Runner(RunLog log)
                 if (!seen.Add(file))
                     continue;
 
-                progress?.Report(new BatchProgress(results.Count, results.Count + 1 + pending(), file));
-                var result = await RunOneAsync(operation, file, ct).ConfigureAwait(false);
-                if (result is null)
+                lock (results)
                 {
-                    interrupted = 1;
-                    break;
+                    running?.Invoke(++runningCount);
+                    progress?.Report(new BatchProgress(results.Count, results.Count + runningCount + pending(), file));
                 }
 
-                results.Add(result);
-                progress?.Report(new BatchProgress(results.Count, results.Count + pending(), null));
+                inFlight.Add(RunAndRecordAsync(file));
+                if (inFlight.Count >= maxParallel)
+                    inFlight.Remove(await Task.WhenAny(inFlight).ConfigureAwait(false));
                 if (ct.IsCancellationRequested)
                     break;
             }
@@ -70,6 +94,8 @@ public sealed class Runner(RunLog log)
         {
         }
 
+        // Files already started finish (or stop at the cancel) before the outcome is known.
+        await Task.WhenAll(inFlight).ConfigureAwait(false);
         return new BatchOutcome(results, results.Count + interrupted + pending());
     }
 
