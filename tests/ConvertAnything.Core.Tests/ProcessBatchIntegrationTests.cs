@@ -70,6 +70,18 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_name_ending_in_a_dot_is_not_resolved_to_the_file_without_it()
+    {
+        // A decoy "budget.txt." beside a protected budget.txt must not make ca convert budget.txt.
+        _dir.File("budget.txt");
+
+        using var ca = Ca("dev.copy", _dir.Combine("budget.txt."));
+        await ca.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.False(File.Exists(_dir.Combine("budget (copy).txt")));
+    }
+
+    [Fact]
     public async Task Relative_paths_resolve_against_the_directory_ca_was_started_in()
     {
         _dir.File("relative.txt");

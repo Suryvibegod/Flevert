@@ -172,6 +172,53 @@ public sealed class RunnerTests : IDisposable
         Assert.Contains("absolute", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
     }
 
+    // Opening a pipe as a file connects to its server, which may then impersonate the user.
+    [Theory]
+    [InlineData(@"\\localhost\pipe\x.txt")]
+    [InlineData(@"\\?\UNC\localhost\PIPE\x.txt")]
+    [InlineData("//localhost/pipe/x.txt")]
+    public async Task Runner_rejects_named_pipe_paths(string path)
+    {
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [path], progress: null, CancellationToken.None);
+
+        Assert.Contains("absolute", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
+    }
+
+    // Win32 strips a trailing dot or space, so "a.txt." names another file than the one the user clicked.
+    [Theory]
+    [InlineData("a.txt.")]
+    [InlineData("a.txt ")]
+    public async Task Runner_rejects_names_ending_in_a_dot_or_space(string name)
+    {
+        _dir.File("a.txt");
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [_dir.Path + Path.DirectorySeparatorChar + name], progress: null, CancellationToken.None);
+
+        Assert.Contains("dot or space", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
+        Assert.False(File.Exists(_dir.Combine("a (copy).txt")));
+    }
+
+    [SkippableFact]
+    public async Task Runner_checks_the_file_type_of_the_real_name_not_of_a_short_name()
+    {
+        var file = _dir.File("abcdefghij.txtx");
+        var buffer = new char[1024];
+        var length = GetShortPathNameW(file, buffer, (uint)buffer.Length);
+        var shortPath = new string(buffer, 0, (int)length);
+        Skip.If(length == 0 || shortPath == file, "this volume does not create 8.3 names");
+        Assert.EndsWith(".TXT", shortPath, StringComparison.Ordinal);
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new DevCopy(), [shortPath], progress: null, CancellationToken.None);
+
+        Assert.Contains("not supported", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetShortPathNameW(string longPath, [System.Runtime.InteropServices.Out] char[] shortPath, uint length);
+
     [Fact]
     public async Task Cancel_returns_promptly_even_if_the_operation_ignores_the_token()
     {

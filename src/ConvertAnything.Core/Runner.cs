@@ -74,7 +74,7 @@ public sealed class Runner(RunLog log)
         try
         {
             var realPath = file;
-            var reason = Reject(operation, file) ?? Pin(file, out pin, out realPath);
+            var reason = Reject(operation, file) ?? Pin(file, out pin, out realPath) ?? Unsupported(operation, realPath);
             // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned.
             result = reason is not null
                 ? new FileResult(file, null, reason)
@@ -105,16 +105,30 @@ public sealed class Runner(RunLog log)
         // Paths also arrive over the batch pipe; accept only plain absolute file paths, not device namespaces.
         if (!IsPlainFilePath(file))
             return "Only absolute file paths are accepted.";
+        // Win32 drops a trailing dot or space, so such a name would be read as a different file than the one selected.
+        if (file.EndsWith('.') || file.EndsWith(' '))
+            return "Names ending in a dot or space are not supported.";
 
         var info = new FileInfo(file);
         if (!info.Exists)
             return "Input file not found.";
-        if (!operation.Extensions.Contains(info.Extension, StringComparer.OrdinalIgnoreCase))
-            return $"File type {info.Extension} is not supported by {operation.Id}.";
-        return null;
+        return Unsupported(operation, file);
     }
 
-    /// <summary>Allow-list, either slash: <c>C:\…</c>, <c>\\server\share\…</c>, <c>\\?\C:\…</c> or <c>\\?\UNC\…</c>.</summary>
+    // Checked again on the real path after pinning: a short 8.3 name that could not be expanded ends in a truncated
+    // extension (X~1.TXT for x.txtq).
+    private static string? Unsupported(IOperation operation, string path)
+    {
+        var extension = Path.GetExtension(path);
+        return operation.Extensions.Contains(extension, StringComparer.OrdinalIgnoreCase)
+            ? null
+            : $"File type {extension} is not supported by {operation.Id}.";
+    }
+
+    /// <summary>
+    /// Allow-list, either slash: <c>C:\…</c>, <c>\\server\share\…</c>, <c>\\?\C:\…</c> or <c>\\?\UNC\…</c>. The share may not
+    /// be <c>pipe</c> or <c>IPC$</c>: opening a named pipe as a file lets its server impersonate the user.
+    /// </summary>
     private static bool IsPlainFilePath(string file)
     {
         if (!Path.IsPathFullyQualified(file))
@@ -122,12 +136,21 @@ public sealed class Runner(RunLog log)
 
         var p = file.Replace('/', '\\');
         if (p.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
-            return true;
+            return IsFileShare(p[@"\\?\UNC\".Length..]);
         if (p.StartsWith(@"\\?\", StringComparison.Ordinal))
             return p.Length > 6 && char.IsAsciiLetter(p[4]) && p[5] == ':' && p[6] == '\\';
         if (p.StartsWith(@"\\", StringComparison.Ordinal))
-            return p.Length > 2 && p[2] is not ('.' or '?');
+            return p.Length > 2 && p[2] is not ('.' or '?') && IsFileShare(p[2..]);
         return p.Length > 2 && char.IsAsciiLetter(p[0]) && p[1] == ':' && p[2] == '\\';
+    }
+
+    /// <param name="serverAndShare"><c>server\share\…</c></param>
+    private static bool IsFileShare(string serverAndShare)
+    {
+        var parts = serverAndShare.Split('\\');
+        return parts.Length > 2 && parts[1] is { Length: > 0 } share
+            && !share.Equals("pipe", StringComparison.OrdinalIgnoreCase)
+            && !share.Equals("IPC$", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? Pin(string file, out SafeFileHandle? pin, out string realPath)

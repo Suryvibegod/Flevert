@@ -31,7 +31,11 @@ internal static class Program
         {
             case RunCommand run:
                 // SafeStartup moved the current directory, so resolve relative paths against where ca was started.
-                return RunBatch(run with { Files = [.. run.Files.Select(f => Path.GetFullPath(f, invocationDirectory))] }, catalog, log);
+                // GetFullPath drops a trailing dot or space, which would name another file; keep those for the runner to refuse.
+                return RunBatch(run with
+                {
+                    Files = [.. run.Files.Select(f => f.EndsWith('.') || f.EndsWith(' ') ? f : Path.GetFullPath(f, invocationDirectory))],
+                }, catalog, log);
 
             case InstallMenuCommand install:
                 var exe = Environment.ProcessPath!;

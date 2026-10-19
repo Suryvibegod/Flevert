@@ -15,6 +15,10 @@ internal static partial class InputPin
     private const uint FileShareRead = 0x00000001;
     private const uint OpenExisting = 3;
     private const uint FileFlagOpenReparsePoint = 0x00200000;
+    // If a path still reaches a named pipe, its server may only identify the user, never impersonate them.
+    private const uint SecuritySqosPresent = 0x00100000;
+    private const uint SecurityIdentification = 0x00010000;
+    private const uint VolumeNameGuid = 0x1;
     private const int FileAttributeTagInfoClass = 9;
     private const uint FileAttributeReparsePoint = 0x400;
     private const uint NameSurrogateBit = 0x20000000; // symlinks, mount points and other name-redirecting reparse tags
@@ -24,7 +28,8 @@ internal static partial class InputPin
     public static SafeFileHandle? TryPin(string path, out string? reason, out string realPath)
     {
         realPath = path;
-        var handle = CreateFileW(ToExtendedPath(path), GenericRead, FileShareRead, 0, OpenExisting, FileFlagOpenReparsePoint, 0);
+        var handle = CreateFileW(ToExtendedPath(path), GenericRead, FileShareRead, 0, OpenExisting,
+            FileFlagOpenReparsePoint | SecuritySqosPresent | SecurityIdentification, 0);
         if (handle.IsInvalid)
             return Fail(handle, new Win32Exception(Marshal.GetLastPInvokeError()).Message, out reason);
 
@@ -67,16 +72,25 @@ internal static partial class InputPin
 
     private static string? FinalPath(SafeFileHandle handle)
     {
-        var buffer = new char[short.MaxValue];
-        var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, 0);
-        if (length == 0 || length >= buffer.Length)
+        // The drive-letter form fails for a volume mounted only into a folder; its \\?\Volume{guid}\ form still opens.
+        var final = FinalPath(handle, flags: 0) ?? FinalPath(handle, VolumeNameGuid);
+        if (final is null)
             return null;
 
-        var final = new string(buffer, 0, (int)length);
+        // Keep the extended form only where it is needed, so ordinary paths look ordinary in names and logs. Tools
+        // launched later with this path (ffmpeg, qpdf) do not add the prefix themselves.
         if (final.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase))
-            return @"\\" + final[8..];
-        // Keep the extended form only where it is needed, so ordinary paths look ordinary in names and logs.
-        return final.StartsWith(@"\\?\", StringComparison.Ordinal) && final.Length - 4 < MaxPath ? final[4..] : final;
+            return final.Length - 6 < MaxPath ? @"\\" + final[8..] : final;
+        if (final.StartsWith(@"\\?\", StringComparison.Ordinal) && final.Length > 6 && final[5] == ':')
+            return final.Length - 4 < MaxPath ? final[4..] : final;
+        return final;
+    }
+
+    private static string? FinalPath(SafeFileHandle handle, uint flags)
+    {
+        var buffer = new char[short.MaxValue];
+        var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, flags);
+        return length == 0 || length >= buffer.Length ? null : new string(buffer, 0, (int)length);
     }
 
     [StructLayout(LayoutKind.Sequential)]
