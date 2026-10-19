@@ -128,6 +128,42 @@ public sealed class FramesTests : IDisposable
     }
 
     [Fact]
+    public async Task Removing_metadata_keeps_the_quality_of_a_jpeg_compressed_tiff()
+    {
+        // The TIFF reader reports quality 0, so carrying the JPEG compression over re-encoded at libtiff's default (~75).
+        var input = _dir.Combine("scan.tiff");
+        using (var image = new MagickImage(MagickColors.SteelBlue, 600, 400))
+        {
+            image.AddNoise(NoiseType.Gaussian, 0.3);
+            image.Settings.Compression = CompressionMethod.JPEG;
+            image.Quality = 95;
+            image.Write(input, MagickFormat.Tiff);
+        }
+
+        var output = await Op("image.strip-metadata").RunAsync(input, CancellationToken.None);
+
+        using var before = new MagickImage(input);
+        using var after = new MagickImage(output);
+        var error = before.Compare(after, ErrorMetric.RootMeanSquared);
+        Assert.True(error < 0.005, $"RMS error {error:F4}");
+    }
+
+    [Fact]
+    public async Task Converting_to_tiff_compresses_losslessly()
+    {
+        // An 8 KB PNG of 8000x8000 became an 8 MB TIFF: the TIFF writer defaults to no compression.
+        var input = _dir.Combine("flat.png");
+        using (var image = new MagickImage(MagickColors.White, 3000, 3000))
+            image.Write(input, MagickFormat.Png);
+
+        var output = await Op("image.to-tiff").RunAsync(input, CancellationToken.None);
+
+        Assert.True(new FileInfo(output).Length < 500_000, $"{new FileInfo(output).Length} bytes");
+        using var result = new MagickImage(output);
+        Assert.Equal(0, result.Compare(new MagickImage(input), ErrorMetric.Absolute));
+    }
+
+    [Fact]
     public async Task Removing_metadata_keeps_every_page_of_a_tiff()
     {
         var output = await Op("image.strip-metadata").RunAsync(ThreePageTiff(), CancellationToken.None);
