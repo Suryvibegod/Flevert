@@ -4,7 +4,7 @@ Spec: [docs/specs/image.md](../../docs/specs/image.md). Danh sách việc: [todo
 
 ## Overview
 
-Thêm project `ConvertAnything.Image` (Magick.NET) với 14 thao tác: convert sang 7 định dạng, nén 3 mức, nén dưới 500 KB / 1 MB / 5 MB, xóa metadata. Cắm vào catalog của `ca.exe`; menu chỉ hiện thao tác hợp với đuôi file.
+Thêm project `Flevert.Image` (Magick.NET) với 14 thao tác: convert sang 7 định dạng, nén 3 mức, nén dưới 500 KB / 1 MB / 5 MB, xóa metadata. Cắm vào catalog của `flevert.exe`; menu chỉ hiện thao tác hợp với đuôi file.
 
 ## Architecture Decisions
 

@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Claude Code: per-user settings and approved commands, which can hold secrets typed into a command
+.claude/settings.local.json

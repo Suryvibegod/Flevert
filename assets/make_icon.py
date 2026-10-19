@@ -1,4 +1,4 @@
-"""Draws the ConvertAnything icon (two arrows chasing each other on a rounded tile) and writes app.ico and a PNG preview.
+"""Draws the Flevert icon (two arrows chasing each other on a rounded tile) and writes app.ico and a PNG preview.
 
 Usage: python assets/make_icon.py   (needs Pillow). Drawn at 1024 px and downscaled per size, so it stays reproducible
 and owned by the repository.

@@ -4,7 +4,7 @@ Module `image` trong [docs/specs/capability-map.md](capability-map.md). Phụ th
 
 ## Objective
 
-Người dùng chuột phải vào ảnh → `ConvertAnything` → chọn thao tác → có file ảnh mới cạnh file gốc. Nhu cầu chính:
+Người dùng chuột phải vào ảnh → `Flevert` → chọn thao tác → có file ảnh mới cạnh file gốc. Nhu cầu chính:
 
 - Ảnh HEIC từ iPhone không mở được trên Windows / không gửi được → đổi sang JPG.
 - Ảnh quá nặng để gửi Zalo / email → nén, hoặc nén xuống dưới một dung lượng cụ thể.
@@ -23,7 +23,7 @@ Người dùng chuột phải vào ảnh → `ConvertAnything` → chọn thao t
 | Thành phần | Lựa chọn | Lý do |
 |---|---|---|
 | Thư viện ảnh | **Magick.NET-Q8-x64 15.0.0** (Apache-2.0; ImageMagick 7.1.2) | Đã kiểm chứng thực nghiệm: đọc HEIC/HEIF, đọc+ghi AVIF, WebP, JPEG, PNG, GIF, BMP, TIFF. Một package, có sẵn native cho win-x64 |
-| Project | `src/ConvertAnything.Image` tham chiếu `ConvertAnything.Core` | Giữ Core không phụ thuộc thư viện ảnh |
+| Project | `src/Flevert.Image` tham chiếu `Flevert.Core` | Giữ Core không phụ thuộc thư viện ảnh |
 
 Đã cân nhắc NetVips (libvips, LGPL-3.0): nhanh và ít RAM hơn, nhưng bản native Windows không kèm decoder HEIC (HEVC). Magick.NET thắng vì HEIC là nhu cầu số 1.
 
@@ -65,7 +65,7 @@ Quy tắc chung:
 - **PNG có ICC** ghi profile hai lần (chunk iCCP và một bản text "Raw profile type icc"): thêm vài KB, không lộ gì thêm. Chấp nhận.
 - **Compress HEIC** thật thường bị bỏ qua (JPG không nhỏ hơn HEIC đủ 5%); đó là kết quả "skipped", không phải lỗi.
 - **Remove metadata** với WebP/AVIF lossy có thể làm file to hơn (ghi lại ở quality 95 để không mất chất lượng). Chấp nhận.
-- **Policy:** ImageMagick còn nạp `policy.xml`/`delegates.xml` từ thư mục làm việc, `MAGICK_HOME`, `MAGICK_CONFIGURE_PATH`, `%LOCALAPPDATA%\ImageMagick`, thư mục cấu hình XDG/HOME, và áp dụng sau policy của ta (có thể đổi temp path, bật delegate). Vì vậy: có bất kỳ file cấu hình ImageMagick nào (policy, delegates, colors, type, …) trong các thư mục người dùng kia (`%LOCALAPPDATA%`, `%APPDATA%`, `%USERPROFILE%`, XDG/HOME, `MAGICK_HOME`, `MAGICK_CONFIGURE_PATH`) thì không xử lý ảnh nào; lúc khởi tạo, thư mục làm việc là thư mục cấu hình riêng; sau khi nạp còn đọc thử MVG/MSL/TEXT và phải bị chính luật coder từ chối. Giới hạn: file cấu hình ImageMagick nạp **sau** khởi tạo (colors, thresholds, type) vẫn tìm ở thư mục làm việc hiện tại; ca.exe luôn chạy với thư mục làm việc là thư mục cài (SafeStartup) nên không bị ảnh hưởng, host khác phải tự làm vậy.
+- **Policy:** ImageMagick còn nạp `policy.xml`/`delegates.xml` từ thư mục làm việc, `MAGICK_HOME`, `MAGICK_CONFIGURE_PATH`, `%LOCALAPPDATA%\ImageMagick`, thư mục cấu hình XDG/HOME, và áp dụng sau policy của ta (có thể đổi temp path, bật delegate). Vì vậy: có bất kỳ file cấu hình ImageMagick nào (policy, delegates, colors, type, …) trong các thư mục người dùng kia (`%LOCALAPPDATA%`, `%APPDATA%`, `%USERPROFILE%`, XDG/HOME, `MAGICK_HOME`, `MAGICK_CONFIGURE_PATH`) thì không xử lý ảnh nào; lúc khởi tạo, thư mục làm việc là thư mục cấu hình riêng; sau khi nạp còn đọc thử MVG/MSL/TEXT và phải bị chính luật coder từ chối. Giới hạn: file cấu hình ImageMagick nạp **sau** khởi tạo (colors, thresholds, type) vẫn tìm ở thư mục làm việc hiện tại; flevert.exe luôn chạy với thư mục làm việc là thư mục cài (SafeStartup) nên không bị ảnh hưởng, host khác phải tự làm vậy.
 - **Trong suốt**: đích không có alpha (JPG, BMP) thì nền trắng.
 - **Compress**:
   - JPG/WebP/AVIF: Light = quality 85, Balanced = 75, Strong = 60 + thu cạnh dài về tối đa 2560 px.
@@ -108,18 +108,18 @@ Giới hạn 2 GB của ImageMagick tính cho **cả tiến trình**. Khi chủ 
 
 ## Commands
 
-Như `core`. Thêm: test fixture HEIC nhỏ trong `tests/ConvertAnything.Image.Tests/fixtures/` (lấy từ nguồn có giấy phép cho phép phân phối, ghi rõ nguồn trong `fixtures/README.md`).
+Như `core`. Thêm: test fixture HEIC nhỏ trong `tests/Flevert.Image.Tests/fixtures/` (lấy từ nguồn có giấy phép cho phép phân phối, ghi rõ nguồn trong `fixtures/README.md`).
 
 ## Project Structure
 
 ```
-src/ConvertAnything.Image/
+src/Flevert.Image/
   ImageOperations.cs     → danh sách IOperation của module
   ImageConvert.cs        → Convert/*
   ImageCompress.cs       → Compress/* (mức + dưới N)
   ImageStripMetadata.cs  → Remove metadata
   MagickSetup.cs         → ResourceLimits + coder policy, gọi một lần
-tests/ConvertAnything.Image.Tests/
+tests/Flevert.Image.Tests/
 ```
 
 ## Testing Strategy

@@ -38,17 +38,17 @@ jobs:
         run: dotnet --info
       - name: Build
         id: build
-        run: dotnet build ConvertAnything.sln -c Release
+        run: dotnet build Flevert.sln -c Release
       # One project at a time, as in ci.yml: together they starve the process-batching tests.
       - name: Test core
-        run: dotnet test tests/ConvertAnything.Core.Tests -c Release --no-build
+        run: dotnet test tests/Flevert.Core.Tests -c Release --no-build
       - name: Test images
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: dotnet test tests/ConvertAnything.Image.Tests -c Release --no-build
+        run: dotnet test tests/Flevert.Image.Tests -c Release --no-build
       - name: No known-vulnerable packages
         shell: pwsh
         run: |
-          $report = dotnet list ConvertAnything.sln package --vulnerable --include-transitive
+          $report = dotnet list Flevert.sln package --vulnerable --include-transitive
           $report
           if ($report -match 'has the following vulnerable packages') { exit 1 }
       - name: Install Inno Setup 6.7.3 (official release, hash checked)
@@ -68,14 +68,14 @@ jobs:
       - name: Check the tag matches the version and write checksums
         shell: pwsh
         run: |
-          $setup = Get-Item "artifacts/installer/ConvertAnything-Setup-$($env:TAG.TrimStart('v')).exe" -ErrorAction Stop
+          $setup = Get-Item "artifacts/installer/Flevert-Setup-$($env:TAG.TrimStart('v')).exe" -ErrorAction Stop
           (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant() + "  " + $setup.Name |
             Out-File artifacts/installer/SHA256SUMS.txt -Encoding ascii
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installer
           path: |
-            artifacts/installer/ConvertAnything-Setup-*.exe
+            artifacts/installer/Flevert-Setup-*.exe
             artifacts/installer/SHA256SUMS.txt
           if-no-files-found: error
 
@@ -95,7 +95,7 @@ jobs:
           path: installer
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: installer/ConvertAnything-Setup-*.exe
+          subject-path: installer/Flevert-Setup-*.exe
 
   release:
     needs: attest
@@ -104,12 +104,36 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: CHANGELOG.md
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: installer
           path: installer
+      - name: Write the release notes
+        # This version's CHANGELOG section, then how to check the download before "Run anyway" (unsigned build).
+        run: |
+          version="${TAG#v}"
+          awk -v v="$version" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "CHANGELOG.md has no section for $version"; exit 1; fi
+          cat >> notes.md <<EOF
+
+          ## Check your download
+
+          This build is not code-signed yet, so Windows shows **Windows protected your PC**. Before you click **More info > Run anyway**:
+
+          1. In PowerShell: \`Get-FileHash .\\Flevert-Setup-$version.exe\` must match \`SHA256SUMS.txt\` below.
+          2. With the [GitHub CLI](https://cli.github.com/) (after \`gh auth login\`), check that this repository's release workflow built it from commit \`$GITHUB_SHA\`:
+
+             \`\`\`
+             gh attestation verify Flevert-Setup-$version.exe --repo $GITHUB_REPOSITORY --signer-workflow $GITHUB_REPOSITORY/.github/workflows/release.yml --source-ref refs/tags/$TAG --source-digest $GITHUB_SHA --deny-self-hosted-runners
+             \`\`\`
+          EOF
+          cat notes.md
       - name: Draft the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$TAG" installer/* --draft --generate-notes --title "ConvertAnything $TAG"
+        run: gh release create "$TAG" installer/* --draft --notes-file notes.md --title "Flevert $TAG"

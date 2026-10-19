@@ -23,7 +23,7 @@ Script đo: `scripts/measure-convert.ps1` (thêm ở Task 4).
 1. **Runner song song** (Core). `maxParallel`; test trước: N file chậm xong trong ~1/N thời gian; trùng vẫn bỏ; lỗi một file không chặn; Cancel không lấy file mới và đếm file bị hủy; `maxParallel = 1` giữ nguyên mọi test cũ. Nghiệm thu: `RunnerTests` mới đỏ → xanh, test cũ xanh.
 2. **Chủ lô biết số file đang chạy** (Core, `BatchLeader`). Test trước: lô không đóng khi vẫn còn file đang chạy dù hàng đợi rỗng quá cửa sổ idle. Nghiệm thu: test đỏ với `_busy` cũ, xanh sau.
 3. **Ngân sách bộ nhớ** (Image). `MemoryBudget` (FIFO, có trọng số, hủy được) + bọc mọi thao tác ảnh; ping kích thước. Test trước: cấp FIFO, ảnh quá lớn chạy một mình, hủy khi chờ không giữ suất, tổng suất không vượt ngân sách.
-4. **Nối vào `ca.exe` + đo lại.** `Program` truyền `maxParallel`; `scripts/measure-convert.ps1`. Nghiệm thu: lô 10 HEIC nhanh hơn rõ rệt so với nền (vượt dao động); lô 1 file không chậm hơn; test tích hợp tiến trình thật xanh.
+4. **Nối vào `flevert.exe` + đo lại.** `Program` truyền `maxParallel`; `scripts/measure-convert.ps1`. Nghiệm thu: lô 10 HEIC nhanh hơn rõ rệt so với nền (vượt dao động); lô 1 file không chậm hơn; test tích hợp tiến trình thật xanh.
 5. **Review** 3 góc → reconcile → docs (ADR-0002, README nếu cần) → build lại bản nháp v0.1.0.
 
 Mỗi task một commit; số đo trước/sau ghi trong message và bảng ở `todo.md`.

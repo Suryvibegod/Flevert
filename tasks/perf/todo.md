@@ -5,7 +5,7 @@ Plan: [plan.md](plan.md).
 - [x] Task 1: Runner song song (`880ceca`; đối chứng: ép tuần tự thì 4/6 test đỏ)
 - [x] Task 2: chủ lô đếm file đang chạy (`321291b`; test đỏ với `IsIdle` cũ)
 - [x] Task 3: ngân sách bộ nhớ ảnh (`ff2d400`; đối chứng FIFO và cấp sau khi hủy đều đỏ)
-- [x] Task 4: nối vào ca.exe, đo lại (test tích hợp tiến trình thật đỏ → xanh; số đo dưới)
+- [x] Task 4: nối vào flevert.exe, đo lại (test tích hợp tiến trình thật đỏ → xanh; số đo dưới)
 - [x] Task 5: review 3 góc (vòng 1, bảng dưới), docs, soát phần sửa (vòng 2: không còn Critical/High/Required; Medium/Low đã sửa, bảng dưới)
 - [ ] Build lại bản nháp v0.1.0 (HANDOFF mục 3.5)
 
@@ -19,7 +19,7 @@ Plan: [plan.md](plan.md).
 | L2: test ưu tiên lấy mẫu một lần sau 1 s | Low | Thăm dò 50 ms tới 2,5 s |
 | L3: test đến muộn biên hẹp | Low | `dev.slow-copy` 6 s |
 | L5: ≥ 1000 khung/trang → chạy một mình | Low | Ghi spec "Đã biết" |
-| Nit: tóm tắt lớp `MemoryBudget`; AVIF không đọc cả file khi ping; lỗi kép trong `finally`; chưa test thao tác `MaxParallel = 1` qua ca.exe | Nit | Sửa tóm tắt; còn lại ghi nhận (test sẽ có khi v0.2 thêm ffmpeg) |
+| Nit: tóm tắt lớp `MemoryBudget`; AVIF không đọc cả file khi ping; lỗi kép trong `finally`; chưa test thao tác `MaxParallel = 1` qua flevert.exe | Nit | Sửa tóm tắt; còn lại ghi nhận (test sẽ có khi v0.2 thêm ffmpeg) |
 
 ## Review vòng 1 (code-reviewer, security-auditor, doubt-driven): reconcile
 
@@ -32,7 +32,7 @@ Plan: [plan.md](plan.md).
 | DD M4: ngân sách cố định 2 GB, không theo RAM máy | Medium | Hợp lệ | `min(2 GB, 1/4 bộ nhớ máy)` |
 | DD M3: một mức song song chung sẽ áp cả cho ffmpeg (v0.2) | Medium, Required trước v0.2 | Hợp lệ | `IOperation.MaxParallel` mặc định 1; ảnh và dev chọn 8; test |
 | DD M2: không hạ ưu tiên, máy có thể giật | Medium | Hợp lệ | BelowNormal khi chạy song song; test tiến trình thật (đỏ khi gỡ); đo: thời gian lô không đổi trong nhiễu |
-| CR M4: không test nào bắt được việc `ca.exe` thôi gọi `ReportRunning` | Medium | Hợp lệ | Test tiến trình: file chạy 4 s, cửa sổ idle 200 ms, tiến trình đến muộn ở 2,2 s phải vào cùng lô (đỏ khi gỡ lời gọi). `CONVERTANYTHING_SLOW_COPY_MS` cho `dev.slow-copy` |
+| CR M4: không test nào bắt được việc `flevert.exe` thôi gọi `ReportRunning` | Medium | Hợp lệ | Test tiến trình: file chạy 4 s, cửa sổ idle 200 ms, tiến trình đến muộn ở 2,2 s phải vào cùng lô (đỏ khi gỡ lời gọi). `FLEVERT_SLOW_COPY_MS` cho `dev.slow-copy` |
 | DD M1: ảnh đo tổng hợp không đại diện (HEIC một tile giải mã 1,6 s; ảnh iPhone thật ~0,2 s nhờ libheif đa luồng) | Medium | Hợp lệ | Ghi số của reviewer với ảnh thật (16 ảnh: 8,7 s → 2,1 s, ×4,1); sửa câu chữ spec. Không dùng ảnh cá nhân của người dùng để đo khi chưa hỏi |
 | CR L1, DD L1: lỗi của một tác vụ bị nuốt; nguồn lỗi thì thoát khi file còn đang ghi | Low | Hợp lệ | `await done`; `WhenAll` trong `finally` |
 | CR L2: file bị hủy vẫn có thể ra output | Low | Hợp lệ (đã có từ trước) | Ghi trong spec và chú thích `BatchOutcome` |

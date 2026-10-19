@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Publishes ca.exe self-contained (ADR-0003) and compiles the Inno Setup installer into artifacts\installer.
+Publishes flevert.exe self-contained (ADR-0003) and compiles the Inno Setup installer into artifacts\installer.
 Needs the .NET 10 SDK and Inno Setup 6 (free: winget install JRSoftware.InnoSetup --scope user).
 
 .PARAMETER Iscc
@@ -32,19 +32,19 @@ if ($Iscc) {
 
 # A stale file in the publish folder would be packed into the installer.
 if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
-& $dotnet publish (Join-Path $root 'src\ConvertAnything.Cli') -c Release -r win-x64 --self-contained `
+& $dotnet publish (Join-Path $root 'src\Flevert.Cli') -c Release -r win-x64 --self-contained `
     -p:PublishReadyToRun=true -o $publish
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 
 # Redistributing the .NET runtime and Magick.NET (ImageMagick and the libraries it bundles) requires shipping their
-# notices. Every package and runtime pack in ca.deps.json is what the publish folder contains, so collect from each one
+# notices. Every package and runtime pack in flevert.deps.json is what the publish folder contains, so collect from each one
 # and fail rather than ship a package without its licence.
 # The command may print other lines first (the first-run banner on a fresh machine); take only the folder.
 $packages = (& $dotnet nuget locals global-packages --list | Select-String '^global-packages:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
-$deps = Get-Content (Join-Path $publish 'ca.deps.json') -Raw | ConvertFrom-Json
+$deps = Get-Content (Join-Path $publish 'flevert.deps.json') -Raw | ConvertFrom-Json
 $licenceNames = 'Notice.txt', 'Copyright.txt', 'LICENSE.TXT', 'LICENSE', 'THIRD-PARTY-NOTICES.TXT'
 $notices = [Text.StringBuilder]::new()
-[void]$notices.AppendLine('ConvertAnything includes the following third-party software.')
+[void]$notices.AppendLine('Flevert includes the following third-party software.')
 foreach ($library in $deps.libraries.PSObject.Properties | Where-Object { $_.Value.type -ne 'project' }) {
     $id, $version = $library.Name -replace '^runtimepack\.', '' -split '/'
     $folder = Join-Path $packages "$($id.ToLowerInvariant())\$version"
@@ -58,9 +58,9 @@ foreach ($library in $deps.libraries.PSObject.Properties | Where-Object { $_.Val
 [IO.File]::WriteAllText((Join-Path $publish 'THIRD-PARTY-NOTICES.txt'), $notices.ToString(), [Text.UTF8Encoding]::new($false))
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $publish 'LICENSE.txt')
 
-& $Iscc /Qp "/DSourceDir=$publish" (Join-Path $root 'installer\ConvertAnything.iss')
+& $Iscc /Qp "/DSourceDir=$publish" (Join-Path $root 'installer\Flevert.iss')
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
 
-Get-ChildItem (Join-Path $root 'artifacts\installer') -Filter 'ConvertAnything-Setup-*.exe' |
+Get-ChildItem (Join-Path $root 'artifacts\installer') -Filter 'Flevert-Setup-*.exe' |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1 |
     ForEach-Object { Write-Host ("{0} ({1:N1} MB)" -f $_.FullName, ($_.Length / 1MB)) }

@@ -36,5 +36,5 @@ Module `pdf` trong [docs/specs/capability-map.md](capability-map.md). Phụ thu�
 
 ## Bảo mật
 
-- pdfium chạy trong tiến trình `ca.exe`: giới hạn số trang render (1000), kích thước trang render tối đa 10 000 px mỗi cạnh.
+- pdfium chạy trong tiến trình `flevert.exe`: giới hạn số trang render (1000), kích thước trang render tối đa 10 000 px mỗi cạnh.
 - qpdf: đường dẫn tuyệt đối, `ArgumentList`, timeout.

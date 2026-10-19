@@ -4,7 +4,7 @@ Module `media` trong [docs/specs/capability-map.md](capability-map.md). Phụ th
 
 ## Objective
 
-Chuột phải video / audio → `ConvertAnything` → đổi định dạng, nén cho vừa giới hạn gửi file, tách nhạc.
+Chuột phải video / audio → `Flevert` → đổi định dạng, nén cho vừa giới hạn gửi file, tách nhạc.
 
 - Video quay điện thoại quá nặng để gửi Messenger / Gmail (25 MB), Discord (10 MB) → `Compress > Under 25 MB`.
 - MOV từ iPhone không chạy trên máy cũ → `Convert > MP4`.
@@ -37,7 +37,7 @@ Nguồn video: `.mp4 .mov .mkv .webm .avi .wmv .m4v`. Nguồn audio: `.mp3 .wav 
 
 ## Bảo mật (theo security audit của core)
 
-- Gọi `ffmpeg.exe` bằng **đường dẫn tuyệt đối** cạnh `ca.exe`; `ArgumentList`, không ghép chuỗi.
+- Gọi `ffmpeg.exe` bằng **đường dẫn tuyệt đối** cạnh `flevert.exe`; `ArgumentList`, không ghép chuỗi.
 - Input truyền dạng `file:<đường dẫn>` và `-protocol_whitelist file` → file "video" thực chất là playlist HLS / concat không thể kéo URL hay đọc file khác.
 - Output chỉ ghi vào file `.partial` do `OutputPath` cấp; luôn `-n` (không ghi đè).
 - `-nostdin -hide_banner`; timeout cứng theo thời lượng × 4 + 60 s; Cancel kill cả cây tiến trình.

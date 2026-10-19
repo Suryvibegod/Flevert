@@ -1,18 +1,18 @@
 <#
 .SYNOPSIS
-  Times ca.exe end to end (headless) on 12 MP photos, single files and a batch of ten, as Explorer starts it: one process
-  per file. Per scenario: median of -Runs of the wall time, and of the per-file time ca.exe logs (the operation itself).
+  Times flevert.exe end to end (headless) on 12 MP photos, single files and a batch of ten, as Explorer starts it: one process
+  per file. Per scenario: median of -Runs of the wall time, and of the per-file time flevert.exe logs (the operation itself).
   Wall minus operation = start-up, batching window and exit. Baseline and results: tasks/perf/todo.md.
 .PARAMETER Src
   A folder with photo.heic, photo.jpg and photo.png. scripts/make_bench_photos.py makes synthetic ones (needs Python with
   Pillow, pillow-heif and NumPy); real phone photos work as well.
 .EXAMPLE
-  powershell -File scripts/measure-convert.ps1 -Src C:\bench -Exe artifacts\publish\ca.exe
+  powershell -File scripts/measure-convert.ps1 -Src C:\bench -Exe artifacts\publish\flevert.exe
 #>
 param([string]$Exe, [Parameter(Mandatory)][string]$Src, [int]$Runs = 5, [string]$Out)
 $ErrorActionPreference = 'Stop'
 # Windows PowerShell 5.1 has no $PSScriptRoot in parameter defaults.
-if (-not $Exe) { $Exe = Join-Path $PSScriptRoot '..\artifacts\publish\ca.exe' }
+if (-not $Exe) { $Exe = Join-Path $PSScriptRoot '..\artifacts\publish\flevert.exe' }
 $Exe = (Resolve-Path $Exe).Path
 
 $scenarios = @(
@@ -39,8 +39,8 @@ $rows = foreach ($sc in $scenarios) {
             $psi = New-Object Diagnostics.ProcessStartInfo $Exe
             $psi.Arguments = "run $($sc.Op) `"$f`""
             $psi.UseShellExecute = $false
-            $psi.EnvironmentVariables['CONVERTANYTHING_LOG_DIR'] = "$work\logs"
-            $psi.EnvironmentVariables['CONVERTANYTHING_HEADLESS'] = '1'
+            $psi.EnvironmentVariables['FLEVERT_LOG_DIR'] = "$work\logs"
+            $psi.EnvironmentVariables['FLEVERT_HEADLESS'] = '1'
             [Diagnostics.Process]::Start($psi)
         }
         $procs | ForEach-Object { $_.WaitForExit() }

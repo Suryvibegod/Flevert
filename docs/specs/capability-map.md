@@ -1,10 +1,10 @@
-# Capability Map: ConvertAnything
+# Capability Map: Flevert
 
 Tool Windows miễn phí: chuột phải vào file ảnh / video-audio / PDF để convert, nén, xử lý ngay tại chỗ. Chạy offline 100%, file kết quả nằm cạnh file gốc.
 
 | Module id | Trách nhiệm | Phụ thuộc |
 |-----------|-------------|-----------|
-| core | `ca.exe <thao-tác> <files...>`; ghi/gỡ menu chuột phải (registry, lọc theo loại file); gom nhiều file chọn cùng lúc thành 1 lô; đặt tên output không đè (`x (1).jpg`); thông báo khi xong/lỗi; log lỗi | — |
+| core | `flevert.exe <thao-tác> <files...>`; ghi/gỡ menu chuột phải (registry, lọc theo loại file); gom nhiều file chọn cùng lúc thành 1 lô; đặt tên output không đè (`x (1).jpg`); thông báo khi xong/lỗi; log lỗi | — |
 | image | Convert JPG/PNG/WEBP/HEIC/AVIF/GIF/BMP/TIFF qua lại; nén 3 mức hoặc theo dung lượng mục tiêu; xóa metadata (EXIF, GPS) | core |
 | installer | Bộ cài 1 click, không cần admin; tùy chọn bật menu chuột phải kiểu cũ (cho mọi app, theo từng tài khoản); gỡ sạch registry; kèm sẵn ffmpeg/pdfium khi có module cần | core |
 | media | Nén video theo mức hoặc dung lượng mục tiêu (preset "vừa gửi Zalo/Messenger"); convert MP4/MOV/MKV/WEBM/AVI/WMV; tách MP3 từ video; convert audio MP3/WAV/M4A/FLAC/OGG/Opus | core |
@@ -18,7 +18,7 @@ core → image → installer   ⇒ v0.1 (chỉ có ảnh)
      → pdf                 ⇒ v0.3
 ```
 
-Module id chốt một lần, không đổi. Mỗi module có spec riêng: `SPEC-<module-id>.md`.
+Module id chốt một lần, không đổi. Mỗi module có spec riêng: `docs/specs/<module-id>.md`.
 
 ## Ngoài phạm vi
 

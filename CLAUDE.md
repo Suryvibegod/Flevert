@@ -1,4 +1,4 @@
-# ConvertAnything: instructions for Claude
+# Flevert: instructions for Claude
 
 Windows right-click converter for images, video/audio and PDF (C#/.NET 10). Read [tasks/HANDOFF.md](tasks/HANDOFF.md) at the start of every session: it holds the goal, the current state, the decisions and the next task.
 
@@ -20,17 +20,17 @@ Per module and per task: spec → plan/tasks → test first (see it fail, then p
 
 - UI, README, commit messages: English. Specs and plans: Vietnamese.
 - One logical change per commit; the message explains why. Commit identity is set by the setup script.
-- Check `dotnet format ConvertAnything.sln --verify-no-changes` by its exit code before committing (never through a pipe that hides it).
+- Check `dotnet format Flevert.sln --verify-no-changes` by its exit code before committing (never through a pipe that hides it).
 - Never commit binaries (ffmpeg, qpdf, pdfium); they are fetched by scripts into `deps/`.
-- After trying the context menu on a real machine, run `ca.exe uninstall-menu`.
+- After trying the context menu on a real machine, run `flevert.exe uninstall-menu`.
 
 ## Commands
 
 ```
-dotnet build ConvertAnything.sln
-dotnet test ConvertAnything.sln
-dotnet format ConvertAnything.sln --verify-no-changes
-dotnet publish src/ConvertAnything.Cli -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish
+dotnet build Flevert.sln
+dotnet test Flevert.sln
+dotnet format Flevert.sln --verify-no-changes
+dotnet publish src/Flevert.Cli -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish
 powershell -File scripts/measure-startup.ps1
 dotnet run --project tools/MenuProbe -- list "C:\path\file.txt"
 ```

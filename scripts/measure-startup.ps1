@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  Measures what every extra selected file costs: a ca.exe follower starting, handing its path to a running leader and exiting.
+  Measures what every extra selected file costs: a flevert.exe follower starting, handing its path to a running leader and exiting.
 .DESCRIPTION
   Starts a headless leader running dev.slow-copy (one second per file), then times -Runs follower processes that join it.
   Files and logs live in a temporary folder that is removed afterwards; the real log is not touched.
   Prints the median, minimum and maximum follower start-to-exit time in milliseconds.
 #>
 param(
-    [string]$Exe = (Join-Path $PSScriptRoot '..\artifacts\publish\ca.exe'),
+    [string]$Exe = (Join-Path $PSScriptRoot '..\artifacts\publish\flevert.exe'),
     [int]$Runs = 10
 )
 
@@ -20,8 +20,8 @@ function Start-Ca([string]$file) {
     $start = New-Object Diagnostics.ProcessStartInfo $Exe
     $start.Arguments = "run dev.slow-copy `"$file`""
     $start.UseShellExecute = $false
-    $start.EnvironmentVariables['CONVERTANYTHING_LOG_DIR'] = Join-Path $work 'logs'
-    $start.EnvironmentVariables['CONVERTANYTHING_HEADLESS'] = '1'
+    $start.EnvironmentVariables['FLEVERT_LOG_DIR'] = Join-Path $work 'logs'
+    $start.EnvironmentVariables['FLEVERT_HEADLESS'] = '1'
     [Diagnostics.Process]::Start($start)
 }
 

@@ -1,14 +1,14 @@
-# Contributing to ConvertAnything
+# Contributing to Flevert
 
 Thanks for helping! Bug reports, ideas, translations of the docs and code are all welcome.
 
 ## Reporting a bug
 
-[Open an issue](https://github.com/Suryvibegod/ConvertAnything/issues/new/choose) with:
+[Open an issue](https://github.com/Suryvibegod/Flevert/issues/new/choose) with:
 
-- your Windows version and ConvertAnything version (Settings > Apps > Installed apps);
+- your Windows version and Flevert version (Settings > Apps > Installed apps);
 - what you clicked and on which kind of file;
-- the log line from `%LOCALAPPDATA%\ConvertAnything\logs` if the notification mentioned one. Logs contain file names, folders and your Windows user name; replace anything private (for example with `<user>` or `photo.jpg`) before posting.
+- the log line from `%LOCALAPPDATA%\Flevert\logs` if the notification mentioned one. Logs contain file names, folders and your Windows user name; replace anything private (for example with `<user>` or `photo.jpg`) before posting.
 
 Please attach a sample file only if it contains nothing private. Security problems go through [SECURITY.md](SECURITY.md), not public issues.
 
@@ -21,9 +21,9 @@ Open an issue describing what you want to do with your files, not just the butto
 You need Windows 10 or 11 and the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). For the installer, also [Inno Setup 6](https://jrsoftware.org/isinfo.php) (free; `winget install JRSoftware.InnoSetup --scope user`).
 
 ```
-dotnet build ConvertAnything.sln
-dotnet test ConvertAnything.sln
-dotnet format ConvertAnything.sln --verify-no-changes
+dotnet build Flevert.sln
+dotnet test Flevert.sln
+dotnet format Flevert.sln --verify-no-changes
 powershell -File scripts/build-installer.ps1
 ```
 
@@ -32,10 +32,10 @@ How the project works:
 - Each module has a specification (`docs/specs/<module>.md`) and architecture decisions live in [docs/adr](docs/adr). Read the relevant ones before changing behaviour. Specs and plans are written in Vietnamese; code, UI, commits and the README in English.
 - Write the test first and watch it fail, then make it pass. Bugs get a test that reproduces them.
 - Keep pull requests small: one logical change, with a commit message that explains why.
-- Anything that touches files, paths, the registry or decoding untrusted input gets extra care; the specs list the inputs ConvertAnything refuses and why.
-- After trying the right-click menu from a development build, remove it with `ca.exe uninstall-menu`.
+- Anything that touches files, paths, the registry or decoding untrusted input gets extra care; the specs list the inputs Flevert refuses and why.
+- After trying the right-click menu from a development build, remove it with `flevert.exe uninstall-menu`.
 
-`scripts/test-installer.ps1` installs the real installer on your machine and uninstalls it again; it refuses to run if ConvertAnything is already installed. How releases are made, checked and, if needed, withdrawn: [docs/RELEASING.md](docs/RELEASING.md).
+`scripts/test-installer.ps1` installs the real installer on your machine and uninstalls it again; it refuses to run if Flevert is already installed. How releases are made, checked and, if needed, withdrawn: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Code of conduct
 

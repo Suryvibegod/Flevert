@@ -10,7 +10,7 @@ Accepted
 
 ## Context
 
-ConvertAnything adds a cascading `ConvertAnything >` entry to the Explorer right-click menu, showing only the operations that apply to the clicked file type. Requirements:
+Flevert adds a cascading `Flevert >` entry to the Explorer right-click menu, showing only the operations that apply to the clicked file type. Requirements:
 
 - Installable per user, without administrator rights.
 - Nested submenus (e.g. `Convert > PNG`).
@@ -22,12 +22,12 @@ ConvertAnything adds a cascading `ConvertAnything >` entry to the Explorer right
 
 Write static verbs under `HKCU\Software\Classes`:
 
-- `SystemFileAssociations\<.ext>\shell\ConvertAnything` with `MUIVerb`, `Icon` and `ExtendedSubCommandsKey=ConvertAnything.Menu<.ext>`.
-- Each menu level lives at `ConvertAnything.Menu<.ext>[\<submenu>]\shell\NNN`, where `NNN` is a three-digit index that preserves declared order (Explorer sorts verbs by key name).
+- `SystemFileAssociations\<.ext>\shell\Flevert` with `MUIVerb`, `Icon` and `ExtendedSubCommandsKey=Flevert.Menu<.ext>`.
+- Each menu level lives at `Flevert.Menu<.ext>[\<submenu>]\shell\NNN`, where `NNN` is a three-digit index that preserves declared order (Explorer sorts verbs by key name).
 - Leaf verbs run `"<exe>" run <op-id> "%1"`.
 - Every verb sets `MultiSelectModel=Player`.
 
-Uninstall deletes every `shell\ConvertAnything` key under `SystemFileAssociations` and every top-level key starting with `ConvertAnything.Menu`, then prunes parents left empty (never `SystemFileAssociations` itself).
+Uninstall deletes every `shell\Flevert` key under `SystemFileAssociations` and every top-level key starting with `Flevert.Menu`, then prunes parents left empty (never `SystemFileAssociations` itself).
 
 ## Alternatives Considered
 
@@ -46,7 +46,7 @@ Uninstall deletes every `shell\ConvertAnything` key under `SystemFileAssociation
 ## Consequences
 
 - No admin rights; install and uninstall are plain registry writes.
-- Verified with `tools/MenuProbe` against the real Explorer menu: the cascade appears, `Dev > Copy` runs `ca.exe`, the entry is shown for 100 selected files and hidden for 101. This matches Microsoft's documented limits for command-line verbs (Document: 15 items, Player: 100 items).
+- Verified with `tools/MenuProbe` against the real Explorer menu: the cascade appears, `Dev > Copy` runs `flevert.exe`, the entry is shown for 100 selected files and hidden for 101. This matches Microsoft's documented limits for command-line verbs (Document: 15 items, Player: 100 items).
 - Explorer starts one process per selected file, so batching has to happen in our process (see ADR-0002).
 - For paths longer than MAX_PATH Explorer passes 8.3 short names in `%1`. `Path.GetFullPath` expands them (through `GetLongPathNameW`, which touches the path before the runner's checks; accepted, since no route to a pipe was found), and outputs are named from the pinned file's real path, so a name that stays short (a `\\?\` argument) still works; its file type is judged after pinning.
 

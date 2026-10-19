@@ -12,17 +12,17 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 **Acceptance criteria:**
 - [ ] `dotnet build` và `dotnet test` chạy được (1 test mẫu xanh)
-- [ ] `ca.exe` build ra là `WinExe` (chạy không mở console)
-- [ ] Repo `ConvertAnything` private trên GitHub có commit đầu tiên
+- [ ] `flevert.exe` build ra là `WinExe` (chạy không mở console)
+- [ ] Repo `Flevert` private trên GitHub có commit đầu tiên
 
 **Verification:**
-- [ ] `dotnet build ConvertAnything.sln -c Debug` không warning
-- [ ] `dotnet test ConvertAnything.sln` xanh
-- [ ] `gh repo view ConvertAnything --json visibility` trả `PRIVATE`
+- [ ] `dotnet build Flevert.sln -c Debug` không warning
+- [ ] `dotnet test Flevert.sln` xanh
+- [ ] `gh repo view Flevert --json visibility` trả `PRIVATE`
 
 **Dependencies:** None
 
-**Files likely touched:** `ConvertAnything.sln`, `Directory.Build.props`, `src/ConvertAnything.Core/*.csproj`, `src/ConvertAnything.Cli/*.csproj`, `tests/ConvertAnything.Core.Tests/*.csproj`, `LICENSE`, `.gitignore`, `README.md`
+**Files likely touched:** `Flevert.sln`, `Directory.Build.props`, `src/Flevert.Core/*.csproj`, `src/Flevert.Cli/*.csproj`, `tests/Flevert.Core.Tests/*.csproj`, `LICENSE`, `.gitignore`, `README.md`
 
 **Estimated scope:** M
 
@@ -42,18 +42,18 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 **Dependencies:** Task 1
 
-**Files likely touched:** `src/ConvertAnything.Core/OutputPath.cs`, `tests/ConvertAnything.Core.Tests/OutputPathTests.cs`
+**Files likely touched:** `src/Flevert.Core/OutputPath.cs`, `tests/Flevert.Core.Tests/OutputPathTests.cs`
 
 **Estimated scope:** S
 
 ---
 
-## Task 3: Lát dọc đầu tiên `ca.exe run dev.copy <file>` ✅
+## Task 3: Lát dọc đầu tiên `flevert.exe run dev.copy <file>` ✅
 
-**Description:** Hợp đồng `IOperation`, danh mục thao tác, thao tác `dev.copy` (copy file thành `tên (copy).ext`), parse lệnh `run`, ghi log dòng có cấu trúc vào `%LOCALAPPDATA%\ConvertAnything\logs`. Một file mỗi lần, chưa gom lô.
+**Description:** Hợp đồng `IOperation`, danh mục thao tác, thao tác `dev.copy` (copy file thành `tên (copy).ext`), parse lệnh `run`, ghi log dòng có cấu trúc vào `%LOCALAPPDATA%\Flevert\logs`. Một file mỗi lần, chưa gom lô.
 
 **Acceptance criteria:**
-- [ ] `ca.exe run dev.copy <file>` tạo `<tên> (copy).<ext>` cạnh file gốc; file gốc không đổi (hash giống)
+- [ ] `flevert.exe run dev.copy <file>` tạo `<tên> (copy).<ext>` cạnh file gốc; file gốc không đổi (hash giống)
 - [ ] Mỗi lần chạy ghi 1 dòng log: thời gian, op-id, file, kết quả, ms
 - [ ] op-id không tồn tại hoặc file không tồn tại → exit code khác 0, log ghi lý do
 
@@ -63,7 +63,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 **Dependencies:** Task 2
 
-**Files likely touched:** `src/ConvertAnything.Core/IOperation.cs`, `src/ConvertAnything.Core/OperationCatalog.cs`, `src/ConvertAnything.Core/Log.cs`, `src/ConvertAnything.Cli/Program.cs`, `tests/ConvertAnything.Core.Tests/RunCommandTests.cs`
+**Files likely touched:** `src/Flevert.Core/IOperation.cs`, `src/Flevert.Core/OperationCatalog.cs`, `src/Flevert.Core/Log.cs`, `src/Flevert.Cli/Program.cs`, `tests/Flevert.Core.Tests/RunCommandTests.cs`
 
 **Estimated scope:** M
 
@@ -71,27 +71,27 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ## Checkpoint: Foundation
 - [ ] `dotnet test` xanh, `dotnet format --verify-no-changes` sạch
-- [ ] Chạy tay `ca.exe run dev.copy` với đường dẫn tiếng Việt ra đúng file và log
+- [ ] Chạy tay `flevert.exe run dev.copy` với đường dẫn tiếng Việt ra đúng file và log
 - [ ] Mày xem lại trước khi qua Phase 2
 
 ---
 
 ## Task 4: Menu chuột phải trong registry ✅
 
-**Description:** Dựng mô hình menu từ danh mục thao tác (`MenuPath` "Dev/Copy" → menu lồng). `install-menu [--dev]` ghi vào HKCU theo cấu trúc `ExtendedSubCommandsKey` trong spec, mọi verb có `MultiSelectModel=Player`. `uninstall-menu` xóa mọi key tên bắt đầu `ConvertAnything`. Ghi registry qua interface `IRegistry`.
+**Description:** Dựng mô hình menu từ danh mục thao tác (`MenuPath` "Dev/Copy" → menu lồng). `install-menu [--dev]` ghi vào HKCU theo cấu trúc `ExtendedSubCommandsKey` trong spec, mọi verb có `MultiSelectModel=Player`. `uninstall-menu` xóa mọi key tên bắt đầu `Flevert`. Ghi registry qua interface `IRegistry`.
 
 **Acceptance criteria:**
-- [ ] Sau `install-menu --dev`, chuột phải `.txt` (menu cũ) thấy `ConvertAnything > Dev > Copy`; bấm vào ra file copy, không nháy console
+- [ ] Sau `install-menu --dev`, chuột phải `.txt` (menu cũ) thấy `Flevert > Dev > Copy`; bấm vào ra file copy, không nháy console
 - [ ] Chạy `install-menu` 2 lần không tạo key trùng; `uninstall-menu` xong không còn key nào
 - [ ] Chọn 100 file menu vẫn hiện
 
 **Verification:**
-- [ ] Unit test mô hình menu (bản `IRegistry` giả) và integration test ghi/gỡ thật trong `HKCU\Software\Classes\ConvertAnything.Test`
+- [ ] Unit test mô hình menu (bản `IRegistry` giả) và integration test ghi/gỡ thật trong `HKCU\Software\Classes\Flevert.Test`
 - [ ] Bấm thật trong Explorer
 
 **Dependencies:** Task 3
 
-**Files likely touched:** `src/ConvertAnything.Core/Menu/MenuModel.cs`, `src/ConvertAnything.Core/Menu/MenuInstaller.cs`, `src/ConvertAnything.Cli/WindowsRegistry.cs`, `src/ConvertAnything.Cli/Program.cs`, `tests/ConvertAnything.Core.Tests/MenuTests.cs`
+**Files likely touched:** `src/Flevert.Core/Menu/MenuModel.cs`, `src/Flevert.Core/Menu/MenuInstaller.cs`, `src/Flevert.Cli/WindowsRegistry.cs`, `src/Flevert.Cli/Program.cs`, `tests/Flevert.Core.Tests/MenuTests.cs`
 
 **Estimated scope:** M
 
@@ -99,10 +99,10 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 ## Task 5: Gom lô ✅
 
-**Description:** `run` đầu tiên giữ named mutex `ConvertAnything.<op-id>.<session>` và mở named pipe; các tiến trình sau gửi đường dẫn qua pipe rồi thoát. Chủ lô chờ đến khi 400 ms không có đường dẫn mới, xử lý tuần tự, lỗi từng file ghi log và đi tiếp. Cửa sổ chờ dùng `TimeProvider`.
+**Description:** `run` đầu tiên giữ named mutex `Flevert.<op-id>.<session>` và mở named pipe; các tiến trình sau gửi đường dẫn qua pipe rồi thoát. Chủ lô chờ đến khi 400 ms không có đường dẫn mới, xử lý tuần tự, lỗi từng file ghi log và đi tiếp. Cửa sổ chờ dùng `TimeProvider`.
 
 **Acceptance criteria:**
-- [ ] 50 tiến trình `ca.exe run dev.copy` bắn song song → đúng 1 tiến trình xử lý, đủ 50 file output
+- [ ] 50 tiến trình `flevert.exe run dev.copy` bắn song song → đúng 1 tiến trình xử lý, đủ 50 file output
 - [ ] 1 file lỗi (bị khóa) không chặn các file còn lại
 - [ ] Hai op-id khác nhau chạy cùng lúc không lẫn lô
 
@@ -112,7 +112,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 **Dependencies:** Task 4
 
-**Files likely touched:** `src/ConvertAnything.Core/Batching/BatchCoordinator.cs`, `src/ConvertAnything.Core/Batching/BatchWindow.cs`, `src/ConvertAnything.Cli/Program.cs`, `tests/ConvertAnything.Core.Tests/BatchTests.cs`
+**Files likely touched:** `src/Flevert.Core/Batching/BatchCoordinator.cs`, `src/Flevert.Core/Batching/BatchWindow.cs`, `src/Flevert.Cli/Program.cs`, `tests/Flevert.Core.Tests/BatchTests.cs`
 
 **Estimated scope:** M
 
@@ -134,7 +134,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 **Dependencies:** Task 5
 
-**Files likely touched:** `src/ConvertAnything.Core/BatchSummary.cs`, `src/ConvertAnything.Cli/BatchUi.cs`, `src/ConvertAnything.Cli/Program.cs`, `tests/ConvertAnything.Core.Tests/BatchSummaryTests.cs`
+**Files likely touched:** `src/Flevert.Core/BatchSummary.cs`, `src/Flevert.Cli/BatchUi.cs`, `src/Flevert.Cli/Program.cs`, `tests/Flevert.Core.Tests/BatchSummaryTests.cs`
 
 **Estimated scope:** M
 
@@ -160,7 +160,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 **Dependencies:** Task 6
 
-**Files likely touched:** `src/ConvertAnything.Cli/app.manifest`, `src/ConvertAnything.Cli/ConvertAnything.Cli.csproj`, `tests/ConvertAnything.Core.Tests/LongPathTests.cs`
+**Files likely touched:** `src/Flevert.Cli/app.manifest`, `src/Flevert.Cli/Flevert.Cli.csproj`, `tests/Flevert.Core.Tests/LongPathTests.cs`
 
 **Estimated scope:** S
 
@@ -171,7 +171,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 **Description:** Đo khởi động lạnh bản publish self-contained ReadyToRun. Xóa log cũ hơn 7 ngày khi khởi động.
 
 **Acceptance criteria:**
-- [ ] Khởi động lạnh `ca.exe run` < 300 ms (trung vị 10 lần `Measure-Command`)
+- [ ] Khởi động lạnh `flevert.exe run` < 300 ms (trung vị 10 lần `Measure-Command`)
 - [ ] Log cũ hơn 7 ngày bị xóa
 
 **Verification:**
@@ -180,7 +180,7 @@ Mỗi task chỉ xong khi đạt acceptance criteria **và** Definition of Done 
 
 **Dependencies:** Task 7
 
-**Files likely touched:** `src/ConvertAnything.Cli/ConvertAnything.Cli.csproj`, `src/ConvertAnything.Core/Log.cs`, `scripts/measure-startup.ps1`, `tests/ConvertAnything.Core.Tests/LogRetentionTests.cs`
+**Files likely touched:** `src/Flevert.Cli/Flevert.Cli.csproj`, `src/Flevert.Core/Log.cs`, `scripts/measure-startup.ps1`, `tests/Flevert.Core.Tests/LogRetentionTests.cs`
 
 **Estimated scope:** S
 
@@ -219,7 +219,7 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19. Cross-model bị bỏ qua 
 
 ## R1: Log không bao giờ làm hỏng lô
 - [x] `RunLog.Write` / `Prune` nuốt mọi exception (kể cả `UnauthorizedAccessException`)
-- [x] Ghi log giữa nhiều tiến trình qua named mutex `Local\ConvertAnything.Log` (append không nguyên tử)
+- [x] Ghi log giữa nhiều tiến trình qua named mutex `Local\Flevert.Log` (append không nguyên tử)
 - [x] Mọi trường log qua `OneLine` (CR/LF/TAB không giả được dòng log)
 - [x] `BatchUi`: work lỗi vẫn gọi `Finish`, tiến trình luôn thoát; exception chưa bắt ghi log rồi thoát
 - Nguồn: C1, doubt#1, L3, O1
@@ -230,9 +230,9 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19. Cross-model bị bỏ qua 
 - [x] Thứ tự: đọc → ack → flush → `WaitForPipeDrain` → mới thêm vào hàng đợi
 - [x] Gói tin UTF-16 thô (giữ được surrogate lẻ); bỏ đường dẫn rỗng; tối đa 1000 file/lô
 - [x] Khử trùng bằng so sánh `Ordinal`
-- [x] Tên pipe gồm SID + bí mật ngẫu nhiên lưu trong `%LOCALAPPDATA%\ConvertAnything\pipe.key`; hai đầu kiểm tra tiến trình bên kia chạy cùng file exe
+- [x] Tên pipe gồm SID + bí mật ngẫu nhiên lưu trong `%LOCALAPPDATA%\Flevert\pipe.key`; hai đầu kiểm tra tiến trình bên kia chạy cùng file exe
 - [x] `UnauthorizedAccessException` → xử lý một mình ngay, không thử lại 40 s
-- [x] Test: tiến trình `ca.exe` thật (20 cái), file đến trễ trong lúc xử lý vẫn vào lô; khôi phục `SetMinThreads`
+- [x] Test: tiến trình `flevert.exe` thật (20 cái), file đến trễ trong lúc xử lý vẫn vào lô; khôi phục `SetMinThreads`
 - Nguồn: doubt#2–8, M1, L1, R2, R3, R4
 
 ## R3: OutputPath an toàn hơn
@@ -263,7 +263,7 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19. Cross-model bị bỏ qua 
 - Nguồn: R5, O5, nit
 
 ## R8: Đo khởi động đúng đường đi
-- [x] Biến môi trường `CONVERTANYTHING_LOG_DIR` đổi thư mục log (cho test và script đo)
+- [x] Biến môi trường `FLEVERT_LOG_DIR` đổi thư mục log (cho test và script đo)
 - [x] `measure-startup.ps1` đo tiến trình phụ gửi vào chủ lô đang chạy, log vào thư mục tạm
 - Nguồn: R6
 
@@ -277,7 +277,7 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19. Cross-model bị bỏ qua 
 
 # Phase 5: Review vòng 4 (xác minh các bản sửa vòng 3)
 
-Nguồn: 3 reviewer bối cảnh trống, chỉ đọc, 2026-10-19, trên diff `6498e3f..HEAD`. Không có Critical/High. Cross-model bỏ qua.
+Nguồn: 3 reviewer bối cảnh trống, chỉ đọc, 2026-10-19, trên diff `221392d..HEAD`. Không có Critical/High. Cross-model bỏ qua.
 Viết tắt: CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
 
 ## Đối chiếu (reconcile)
@@ -315,7 +315,7 @@ Viết tắt: CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
 - [x] F4: (DD-M1 là nhiễu, xem bảng; ghi rõ buffer 0 trong code + test chặn) chỉ cắt timeout cho Connect, IO giữ 2 s
 - [x] F5: Không tạo lại được pipe (mất tên) → không xoay khóa; bắt `UnauthorizedAccessException`
 - [x] F6: Đồng hồ rảnh chỉ reset sau tin nhắn tin cậy, tính từ lúc phục vụ xong; hết cửa sổ mà đang bận thì chờ cả cửa sổ
-- [x] F7: PipePeer so ảnh của peer với ảnh của chính mình (QueryFullProcessImageName cả hai); test: 2 ca.exe chạy qua junction gom một lô
+- [x] F7: PipePeer so ảnh của peer với ảnh của chính mình (QueryFullProcessImageName cả hai); test: 2 flevert.exe chạy qua junction gom một lô
 - [x] F8: Đầu vào: kiểm đuôi trên đường dẫn thật; từ chối tên kết thúc `.`/space; từ chối `\pipe\`, thêm SQOS; FinalPath dự phòng VOLUME_NAME_GUID; giữ `\\?\UNC\` khi dài
 - [x] F9: Test: sửa ký tự điều khiển; xoay khóa có điều kiện; thư mục cha không đổi tên được khi pin; kiểm lại test dangling link bằng đối chứng âm
 - [x] F10: Tài liệu: ADR-0002 (`Full`, hard link), SPEC-core, README lệnh cài dev
@@ -323,11 +323,11 @@ Viết tắt: CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
 
 # Phase 6: Review vòng 5
 
-Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `9fd5cf4..HEAD`. Không có Critical/High. CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
+Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `7cac441..HEAD`. Không có Critical/High. CR = code-reviewer, SA = security-auditor, DD = doubt-driven.
 
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|
-| Thư mục (không chỉ tên file) kết thúc bằng `.` làm đọc/ghi nhầm thư mục khác: qua `GetFullPath` trong Program, và qua `FinalPath` bỏ `\\?\` sau khi pin (CR-R1, DD1 tái hiện bằng ca.exe thật, SA3) | Required | Hợp lệ | G1 |
+| Thư mục (không chỉ tên file) kết thúc bằng `.` làm đọc/ghi nhầm thư mục khác: qua `GetFullPath` trong Program, và qua `FinalPath` bỏ `\\?\` sau khi pin (CR-R1, DD1 tái hiện bằng flevert.exe thật, SA3) | Required | Hợp lệ | G1 |
 | Leader ghi `Refused` trước khi đọc yêu cầu; pipe không buffer nên hai bên chờ nhau tới timeout 2 s, follower không bao giờ nhận `Refused` (CR-M1) | Medium | Hợp lệ (bằng chứng mới, khác DD-M1 vòng 4) | G2 |
 | Kiểm tra nơi cài tin vào chuỗi đường dẫn: ổ `subst`, ổ mạng, UNC qua mặt (SA1) | Medium | Hợp lệ | G3 |
 | `\\;LanmanRedirector\host\pipe\…` qua mặt chặn pipe/IPC$; `FileInfo.Exists` trước khi pin đã kết nối tới pipe (SA2, DD2) | Low/Medium | Hợp lệ (SQOS và không ghi gì nên không mạo danh được) | G4 |
@@ -344,12 +344,12 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `9fd5cf4..HEAD`. Kh�
 - [x] G3: install-menu: thư mục phải ở ổ cố định cục bộ và đường dẫn thật (từ handle) trùng đường dẫn đưa vào; không reparse point bên trong thư mục
 - [x] G4: Chặn tên server bắt đầu bằng `;`; sau khi pin yêu cầu `FILE_TYPE_DISK`; bỏ `FileInfo.Exists` trước pin; chặn `:` ngoài ký tự ổ; sửa comment PipePeer; ghi chú bit SQOS
 - [x] G5: Tài liệu (ADR-0002 tách lô dưới tải, SPEC-core đầu vào)
-- [x] Review vòng 6 trên phần sửa (`75fdc99..HEAD`, core + cli): không còn Critical/High/Required (Phase 7)
+- [x] Review vòng 6 trên phần sửa (`47fa6ff..HEAD`, core + cli): không còn Critical/High/Required (Phase 7)
 - [x] Test gom lô qua junction hỏng 1/6: DD vòng 6 xác định là CPU bị chiếm khi chạy cả bộ, follower lỡ cửa sổ 400 ms (trade-off đã ghi ở ADR-0002); sửa ở test (Phase 7)
 
 # Phase 7: Review vòng 6 (core)
 
-Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `75fdc99..HEAD`. **Không có Critical/High/Required**; mọi claim vòng 5 đứng vững (test hỏng khi gỡ fix). Còn Low/Nit:
+Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `47fa6ff..HEAD`. **Không có Critical/High/Required**; mọi claim vòng 5 đứng vững (test hỏng khi gỡ fix). Còn Low/Nit:
 
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|
@@ -368,19 +368,19 @@ Nguồn: 3 reviewer bối cảnh trống, 2026-10-19, trên `75fdc99..HEAD`. **K
 - [x] H1: Bỏ `ToLongPath` trong Program (vòng 7: vô tác dụng vì `Path.GetFullPath` vẫn mở rộng 8.3; xem Phase 8 P1)
 - [x] H2: `FinalPath` giữ `\\?\` khi bỏ nó làm đổi đường dẫn
 - [x] H3: Test FILE_TYPE_DISK; một helper bỏ tiền tố; hằng thông báo ở InputPath; đường dẫn tương đối có tên kết thúc bằng dấu chấm nhận thông báo dấu chấm (kiểm stream vẫn sau kiểm absolute)
-- [x] H4: Bỏ đồng hồ trong test untrusted; test subst skip khi `subst` lỗi; `CONVERTANYTHING_BATCH_IDLE_MS` cho test gom lô qua junction
+- [x] H4: Bỏ đồng hồ trong test untrusted; test subst skip khi `subst` lỗi; `FLEVERT_BATCH_IDLE_MS` cho test gom lô qua junction
 - [x] H5: install-menu yêu cầu volume có ACL
 - [ ] Review vòng 7 trên Phase 7 (bỏ ToLongPath, Shorten, ACL volume) cùng review vòng 2 module image
 
 # Phase 8: Review vòng 7 (core)
 
-Nguồn: 1 reviewer bối cảnh trống, 3 góc (code, bảo mật, doubt), 2026-10-19, trên `4c0646d..HEAD`.
+Nguồn: 1 reviewer bối cảnh trống, 3 góc (code, bảo mật, doubt), 2026-10-19, trên `921abd7..HEAD`.
 
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|
 | H1 không có tác dụng: `Path.GetFullPath` của .NET tự mở rộng tên 8.3 (GetLongPathNameW) nên vẫn mở đường dẫn trước kiểm tra; reviewer không tái hiện được kết nối pipe | Required (tác động Low) | Hợp đồng sai: ghi nhận sai trong commit/todo/comment | P1: giữ hành vi (chấp nhận, tác động Low), sửa comment, todo, ADR |
 | Kiểm đuôi trước pin thấy đuôi 8.3 cắt cụt (.WEB, .JPE, .HEI) với đối số `\\?\` ngắn | Low | Hợp lệ (chỉ dòng lệnh) | P2 |
-| SPEC thiếu `CONVERTANYTHING_BATCH_IDLE_MS`; comment test "well past 400 ms" sai; todo H3 nói thứ tự kiểm khác code | Nit | Hợp lệ | P3 |
+| SPEC thiếu `FLEVERT_BATCH_IDLE_MS`; comment test "well past 400 ms" sai; todo H3 nói thứ tự kiểm khác code | Nit | Hợp lệ | P3 |
 | H5 không có test | Low | Chấp nhận: không có volume FAT; đối chứng đảo điều kiện đã chạy | — |
 
 ## Việc
@@ -391,7 +391,7 @@ Nguồn: 1 reviewer bối cảnh trống, 3 góc (code, bảo mật, doubt), 202
 
 # Phase 9: Review vòng 8 (core)
 
-Nguồn: 1 reviewer bối cảnh trống, 3 góc, 2026-10-19, trên `37a6037..HEAD`. Không có Critical/High/Required; kết luận "ship". Medium/Low đã xử lý:
+Nguồn: 1 reviewer bối cảnh trống, 3 góc, 2026-10-19, trên `6964408..HEAD`. Không có Critical/High/Required; kết luận "ship". Medium/Low đã xử lý:
 
 - [x] Quy tắc "không lỗi" (mã thoát) chuyển vào `BatchOutcome.NoFailures`, có test; CLI dùng chung
 - [x] Cả lô bị bỏ qua: nói lý do chung, hoặc chỉ tới log (và bấm thông báo mở log) khi lý do khác nhau
@@ -399,11 +399,11 @@ Nguồn: 1 reviewer bối cảnh trống, 3 góc, 2026-10-19, trên `37a6037..HE
 - [x] Hợp đồng bỏ qua: "đầu vào đã đáp ứng yêu cầu"; yêu cầu không làm được là lỗi; ném trực tiếp, trước khi ghi output (doc + SPEC-core)
 - [x] SPEC-core: trạng thái `skipped` trong log, cách thông báo, ý nghĩa mã thoát
 - [x] Chẩn đoán của test gom lô qua junction chạy được cả khi assert trước đó hỏng
-- [x] TIFF nhiều trang trong Compress chuyển từ "skipped" sang lỗi (`8c04d07`)
+- [x] TIFF nhiều trang trong Compress chuyển từ "skipped" sang lỗi (`2904b6d`)
 
 # Phase 10: Review vòng 9 (core)
 
-1 reviewer, 3 góc, trên `ef7ef4f..HEAD`. Không Critical/High/Required; "ship" sau khi sửa 2 Medium:
+1 reviewer, 3 góc, trên `3838a98..HEAD`. Không Critical/High/Required; "ship" sau khi sửa 2 Medium:
 
 - [x] Lô bị hủy có file lỗi mất đường dẫn log và bấm-mở-log (hồi quy do `ShowsLog`): nay `Cancelled after X of Y files, N failed. Details: …`
 - [x] SPEC-core: mã thoát chỉ do tiến trình chủ lô báo; tiến trình giao file thoát 0; file bị hủy ghi `failed`/`cancelled`; khi nào bấm mở log

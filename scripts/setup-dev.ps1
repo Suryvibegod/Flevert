@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Prepares a Windows machine to work on ConvertAnything and checks that the repository builds and its tests pass.
+  Prepares a Windows machine to work on Flevert and checks that the repository builds and its tests pass.
 .DESCRIPTION
   Safe to run repeatedly; each step is skipped when already done.
   1. Installs the .NET 10 SDK per user (no admin rights needed) if missing; warns if the GitHub CLI is missing or signed out.
@@ -124,8 +124,8 @@ if (Get-Command claude -ErrorAction SilentlyContinue) {
 
 Step 'Build and test'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-& dotnet build ConvertAnything.sln -c Debug
+& dotnet build Flevert.sln -c Debug
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
-& dotnet test ConvertAnything.sln --no-build
+& dotnet test Flevert.sln --no-build
 if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
 Write-Host "`nReady." -ForegroundColor Green

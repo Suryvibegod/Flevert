@@ -8,7 +8,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: ConvertAnything version
+      label: Flevert version
       description: Settings > Apps > Installed apps
       placeholder: 0.1.0
     validations:
@@ -37,5 +37,5 @@ body:
     id: log
     attributes:
       label: Log
-      description: The matching lines from %LOCALAPPDATA%\ConvertAnything\logs, if any. They contain file names, folders and your Windows user name; replace anything private before posting.
+      description: The matching lines from %LOCALAPPDATA%\Flevert\logs, if any. They contain file names, folders and your Windows user name; replace anything private before posting.
       render: text

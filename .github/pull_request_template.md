@@ -5,6 +5,6 @@
 ## Checklist
 
 - [ ] A test covers the change (written first and seen failing)
-- [ ] `dotnet test ConvertAnything.sln` passes
-- [ ] `dotnet format ConvertAnything.sln --verify-no-changes` passes
+- [ ] `dotnet test Flevert.sln` passes
+- [ ] `dotnet format Flevert.sln --verify-no-changes` passes
 - [ ] Specs, ADRs or the README are updated if behaviour changed

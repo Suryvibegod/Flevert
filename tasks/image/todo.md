@@ -6,17 +6,17 @@ Mỗi task xong khi đạt acceptance criteria **và** Definition of Done.
 
 ## Task 1: Project + Magick.NET + MagickSetup
 - Acceptance:
-  - [x] `src/ConvertAnything.Image` tham chiếu Core + Magick.NET-Q8-x64 15.0.0; `tests/ConvertAnything.Image.Tests`
+  - [x] `src/Flevert.Image` tham chiếu Core + Magick.NET-Q8-x64 15.0.0; `tests/Flevert.Image.Tests`
   - [x] Ảnh khai báo 100 000 × 100 000 px bị từ chối nhanh (< 2 s), không cấp phát lớn
   - [x] File `.jpg` có nội dung MVG/MSL/TEXT bị từ chối (không đọc file khác)
 - Verify: `dotnet test --filter MagickSetup`
-- Files: `src/ConvertAnything.Image/*.csproj`, `MagickSetup.cs`, tests
+- Files: `src/Flevert.Image/*.csproj`, `MagickSetup.cs`, tests
 - Scope: M
 
 ## Task 2: Lát dọc JPG → PNG
 - Acceptance:
   - [x] `image.to-png` trên JPG có EXIF orientation 6 ra PNG đã xoay
-  - [x] Catalog `ca.exe` có thao tác; menu `.jpg` hiện `Convert > PNG`, menu `.png` không có `Convert > PNG`
+  - [x] Catalog `flevert.exe` có thao tác; menu `.jpg` hiện `Convert > PNG`, menu `.png` không có `Convert > PNG`
   - [x] Bấm thật qua MenuProbe ra PNG
 - Verify: `dotnet test`; MenuProbe
 - Files: `ImageOperation.cs`, `ImageOperations.cs`, `Program.cs`, tests
@@ -106,7 +106,7 @@ CR = code-reviewer, SA = security-auditor, DD = doubt-driven. Không có Critica
 
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|
-| Callback tiến độ trỏ vào delegate đã bị GC sau Coalesce/Optimize, tiến trình chết (CR-C1, DD1) | Critical | Hợp lệ, do K7 gây ra | Đã sửa `eb5bd6c` |
+| Callback tiến độ trỏ vào delegate đã bị GC sau Coalesce/Optimize, tiến trình chết (CR-C1, DD1) | Critical | Hợp lệ, do K7 gây ra | Đã sửa `d7bcc6b` |
 | Remove metadata đổi chroma subsampling JPEG (xóa thuộc tính `jpeg:sampling-factor`): ảnh điện thoại to thêm 8–16% (CR-R1, DD3) | Required | Hợp lệ, do K2 gây ra | L1 |
 | Policy lạ (thư mục làm việc, MAGICK_HOME, XDG/LOCALAPPDATA ImageMagick) vẫn qua kiểm tra 3 coder, đổi được temp path, delegate (SA-M1) | Medium | Hợp lệ; lời "fail closed" trong SPEC/ADR nói quá | L2 |
 | Remove metadata ghi TIFF không nén (2 KB → 2 MB; trang lớn → 750 MB) (SA-M2) | Medium | Hợp lệ | L3 |
@@ -126,7 +126,7 @@ CR = code-reviewer, SA = security-auditor, DD = doubt-driven. Không có Critica
 | Nits: doc "never sniffed", `Read` có thể đọc thiếu byte | Nit | Hợp lệ | L9 |
 
 ### Việc vòng 2
-- [x] Sửa crash GC (`eb5bd6c`)
+- [x] Sửa crash GC (`d7bcc6b`)
 - [x] L1: Giữ `jpeg:sampling-factor` của nguồn khi Remove metadata
 - [x] L2: Khởi tạo Magick với thư mục làm việc là thư mục cấu hình riêng; từ chối nếu có `policy.xml`/`delegates.xml` ở thư mục tìm kiếm của ImageMagick; probe kiểm đúng lỗi policy; sửa lời trong SPEC/ADR
 - [x] L3: Giữ kiểu nén TIFF; chặn tổng diện tích khi ghi nhiều trang
@@ -144,14 +144,14 @@ Code-reviewer và security-auditor: không Critical/High/Required; đều kết 
 
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|
-| Remove metadata ghi lại TIFF nén JPEG ở quality ~75 (reader báo 0) (CR-M1) | Medium | Hợp lệ, do L3 gây ra | `05b2440` |
-| Convert > TIFF không nén (8 KB → 8 MB) (SA-M2) | Medium | Hợp lệ | `05b2440` (Zip) |
-| Giới hạn 400 MP tổng trang chặn bản scan nhiều trang bình thường (CR-M2) | Medium | Hợp lệ, do L3 gây ra | `8c04d07`: chỉ chặn khi ghi không nén |
-| File cấu hình khác (colors.xml, type.xml) và APPDATA/USERPROFILE chưa được kiểm; thư mục cấu hình có thể thành tương đối (SA-M1, SA-L1/L2, CR-L1) | Medium | Hợp lệ | `236921b`; SPEC/ADR nói rõ giới hạn thư mục làm việc |
-| Compress giải mã mọi trang TIFF chỉ để đếm; TIFF nhiều trang là "skipped" (CR-L2, SA-L5, core vòng 8) | Low | Hợp lệ | `8c04d07`: đọc tối đa 2 trang, thành lỗi |
-| 4:2:2 không xoay theo ảnh (CR-L3) | Low | Hợp lệ | `b67b828` |
-| `RealFormat` chạy trên luồng gọi (CR-L5) | Low | Hợp lệ | `b67b828` |
-| Đổi thư mục làm việc ảnh hưởng cả tiến trình (CR-L4, SA-L3) | Low | Chấp nhận: ca.exe chỉ dùng đường dẫn tuyệt đối; ghi chú trong code | — |
+| Remove metadata ghi lại TIFF nén JPEG ở quality ~75 (reader báo 0) (CR-M1) | Medium | Hợp lệ, do L3 gây ra | `a7f6a36` |
+| Convert > TIFF không nén (8 KB → 8 MB) (SA-M2) | Medium | Hợp lệ | `a7f6a36` (Zip) |
+| Giới hạn 400 MP tổng trang chặn bản scan nhiều trang bình thường (CR-M2) | Medium | Hợp lệ, do L3 gây ra | `2904b6d`: chỉ chặn khi ghi không nén |
+| File cấu hình khác (colors.xml, type.xml) và APPDATA/USERPROFILE chưa được kiểm; thư mục cấu hình có thể thành tương đối (SA-M1, SA-L1/L2, CR-L1) | Medium | Hợp lệ | `c6ec9c6`; SPEC/ADR nói rõ giới hạn thư mục làm việc |
+| Compress giải mã mọi trang TIFF chỉ để đếm; TIFF nhiều trang là "skipped" (CR-L2, SA-L5, core vòng 8) | Low | Hợp lệ | `2904b6d`: đọc tối đa 2 trang, thành lỗi |
+| 4:2:2 không xoay theo ảnh (CR-L3) | Low | Hợp lệ | `4cea9ae` |
+| `RealFormat` chạy trên luồng gọi (CR-L5) | Low | Hợp lệ | `4cea9ae` |
+| Đổi thư mục làm việc ảnh hưởng cả tiến trình (CR-L4, SA-L3) | Low | Chấp nhận: flevert.exe chỉ dùng đường dẫn tuyệt đối; ghi chú trong code | — |
 | Test "không có file tạm khi đang mã hóa" dựa vào thời gian (CR-L6) | Low | Chấp nhận, có kiểm đối chứng "vẫn đang mã hóa" | — |
 | Ghi nhiều trang dùng cài đặt nén của trang đầu (CR-L7) | Low | Chấp nhận, đã ghi chú trong code | — |
 | Nits: comment MOV/.heic, brand mif2, thông báo "pages or frames" | Nit | Hợp lệ một phần | thông báo đã sửa |
@@ -160,7 +160,7 @@ Doubt-driven vòng 3 (đến sau): 1 High, còn lại Medium/Low; không crash n
 
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|
-| Remove metadata làm hỏng WebP động kiểu gif2webp (frame trộn alpha bị ghi không trộn → gần trong suốt) | High | Hợp lệ (Pillow xác nhận) | `98224dd`: mở rộng frame trước khi ghi; fixture tự sinh + test đọc cờ ANMF |
+| Remove metadata làm hỏng WebP động kiểu gif2webp (frame trộn alpha bị ghi không trộn → gần trong suốt) | High | Hợp lệ (Pillow xác nhận) | `cdc5113`: mở rộng frame trước khi ghi; fixture tự sinh + test đọc cờ ANMF |
 | Under N âm thầm bỏ trang TIFF | Medium | Hợp lệ | báo lỗi như Compress |
 | Compress GIF động "already well compressed" là sai | Medium | Hợp lệ | báo lỗi kèm gợi ý Convert > WEBP |
 | AVIF đặt tên .heic bị coi là HEIC | Low | Hợp lệ | brand cụ thể thắng đuôi; chỉ brand chung (mif1) theo đuôi |
@@ -172,7 +172,7 @@ Doubt-driven vòng 3 (đến sau): 1 High, còn lại Medium/Low; không crash n
 
 ### Review vòng 4 (2026-10-19): đối chiếu
 
-1 reviewer, 3 góc, trên `ef7ef4f..HEAD`. 1 High, 2 Medium, không Critical; mọi bản sửa vòng 3 kiểm lại đều đứng (test hỏng khi gỡ fix).
+1 reviewer, 3 góc, trên `3838a98..HEAD`. 1 High, 2 Medium, không Critical; mọi bản sửa vòng 3 kiểm lại đều đứng (test hỏng khi gỡ fix).
 
 | Finding | Mức | Phân loại | Xử lý |
 |---|---|---|---|

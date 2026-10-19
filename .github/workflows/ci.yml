@@ -22,17 +22,17 @@ jobs:
           # The newest .NET 10 patch, as release.yml uses; global.json accepts any 10.0 SDK from 10.0.100.
           dotnet-version: 10.0.x
       - id: build
-        run: dotnet build ConvertAnything.sln -c Release
-      - run: dotnet format ConvertAnything.sln --verify-no-changes
+        run: dotnet build Flevert.sln -c Release
+      - run: dotnet format Flevert.sln --verify-no-changes
       # One project at a time: run together, the image encodes starved the process-batching tests on the runner (a 1 s
       # copy took 15 s). Separate steps, and the second runs even if the first fails, so neither hides the other.
       # A new test project must be added here and in release.yml.
-      - run: dotnet test tests/ConvertAnything.Core.Tests -c Release --no-build
+      - run: dotnet test tests/Flevert.Core.Tests -c Release --no-build
       - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: dotnet test tests/ConvertAnything.Image.Tests -c Release --no-build
+        run: dotnet test tests/Flevert.Image.Tests -c Release --no-build
       - name: No known-vulnerable packages
         shell: pwsh
         run: |
-          $report = dotnet list ConvertAnything.sln package --vulnerable --include-transitive
+          $report = dotnet list Flevert.sln package --vulnerable --include-transitive
           $report
           if ($report -match 'has the following vulnerable packages') { exit 1 }

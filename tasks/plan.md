@@ -4,13 +4,13 @@ Spec: [docs/specs/core.md](../docs/specs/core.md). Danh sách việc: [todo.md](
 
 ## Overview
 
-Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được (`IOperation`), đặt tên output an toàn, menu chuột phải trong HKCU, gom nhiều file thành một lô xử lý bởi một tiến trình, thông báo một lần cho cả lô, log lỗi. Kiểm chứng toàn bộ bằng thao tác thử `dev.copy` trước khi có module `image`.
+Dựng `flevert.exe` và thư viện `Flevert.Core`: thao tác cắm được (`IOperation`), đặt tên output an toàn, menu chuột phải trong HKCU, gom nhiều file thành một lô xử lý bởi một tiến trình, thông báo một lần cho cả lô, log lỗi. Kiểm chứng toàn bộ bằng thao tác thử `dev.copy` trước khi có module `image`.
 
 ## Architecture Decisions
 
-- **Lát dọc trước, ngang sau.** Task 3 đã chạy được `ca.exe run dev.copy <file>` từ đầu đến cuối (một file, chưa gom lô). Các task sau thêm từng lớp: menu → gom lô → thông báo.
+- **Lát dọc trước, ngang sau.** Task 3 đã chạy được `flevert.exe run dev.copy <file>` từ đầu đến cuối (một file, chưa gom lô). Các task sau thêm từng lớp: menu → gom lô → thông báo.
 - **Phần rủi ro nhất làm sớm.** Menu registry (Task 4) và gom lô nhiều tiến trình (Task 5) là chỗ dễ sai nhất, đặt ở Phase 2 ngay sau khung tối thiểu.
-- **Registry bọc sau interface `IRegistry`.** Unit test dùng bản giả; integration test ghi vào key riêng `ConvertAnything.Test` rồi xóa.
+- **Registry bọc sau interface `IRegistry`.** Unit test dùng bản giả; integration test ghi vào key riêng `Flevert.Test` rồi xóa.
 - **Đồng hồ bọc sau `TimeProvider`** (.NET có sẵn) để test cửa sổ chờ 400 ms không phải sleep thật.
 - **Không NativeAOT.** Cần VS C++ Build Tools và WinForms không hỗ trợ AOT. Dùng self-contained + ReadyToRun; WinForms chỉ nạp khi hiện UI để `run` khởi động nhanh.
 
@@ -19,11 +19,11 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 ### Phase 1: Foundation
 - [x] Task 1: Khung solution, license, gitignore, CI build cục bộ, repo GitHub private
 - [x] Task 2: `OutputPath`: tên không đè + ghi file tạm rồi đổi tên
-- [x] Task 3: Lát dọc đầu tiên: `ca.exe run dev.copy <file>` + log
+- [x] Task 3: Lát dọc đầu tiên: `flevert.exe run dev.copy <file>` + log
 
 ### Checkpoint: Foundation
 - [ ] `dotnet test` xanh, `dotnet format --verify-no-changes` sạch
-- [ ] Chạy `ca.exe run dev.copy "D:\...\Ảnh Đà Lạt\a b.txt"` ra file copy, có dòng log
+- [ ] Chạy `flevert.exe run dev.copy "D:\...\Ảnh Đà Lạt\a b.txt"` ra file copy, có dòng log
 - [ ] Mày xem lại trước khi qua Phase 2
 
 ### Phase 2: Explorer integration
@@ -56,4 +56,4 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 
 ## Decisions
 
-- Commit bằng `Suryvibegod` với email ẩn của GitHub (git config riêng của repo), repo `Suryvibegod/ConvertAnything`.
+- Commit bằng `Suryvibegod` với email ẩn của GitHub (git config riêng của repo), repo `Suryvibegod/Flevert`.

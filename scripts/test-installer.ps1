@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
 End-to-end test of the installer on this machine: installs silently without admin, checks files, menu and a real
-conversion, installs over itself, uninstalls and checks that nothing ConvertAnything wrote is left. Further scenarios
+conversion, installs over itself, uninstalls and checks that nothing Flevert wrote is left. Further scenarios
 cover the uninstall safety net, a classic-menu key the user created, a refused install folder, /DIR, uninstalling
-while ca.exe runs, an install folder that is a junction, one that already holds someone else's files, and setup
+while flevert.exe runs, an install folder that is a junction, one that already holds someone else's files, and setup
 started from a junction.
 
-Uses the real per-user install location and HKCU, so it refuses to run when anything of ConvertAnything is present.
+Uses the real per-user install location and HKCU, so it refuses to run when anything of Flevert is present.
 
 .PARAMETER Setup
-The setup executable; defaults to the newest artifacts\installer\ConvertAnything-Setup-*.exe.
+The setup executable; defaults to the newest artifacts\installer\Flevert-Setup-*.exe.
 #>
 param([string]$Setup)
 
@@ -19,12 +19,12 @@ Add-Type -AssemblyName System.Drawing
 
 $root = Split-Path -Parent $PSScriptRoot
 $arpKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{8B7A3F52-2C64-4F0B-9E3D-5A1C7E2B9D40}_is1'
-$app = Join-Path $env:LOCALAPPDATA 'Programs\ConvertAnything'
-$appData = Join-Path $env:LOCALAPPDATA 'ConvertAnything'
+$app = Join-Path $env:LOCALAPPDATA 'Programs\Flevert'
+$appData = Join-Path $env:LOCALAPPDATA 'Flevert'
 $classes = 'HKCU:\Software\Classes'
 $associations = "$classes\SystemFileAssociations"
 $classicKey = "$classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"
-$heic = Join-Path $root 'tests\ConvertAnything.Image.Tests\fixtures\gradient-320x240.heic'
+$heic = Join-Path $root 'tests\Flevert.Image.Tests\fixtures\gradient-320x240.heic'
 
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw "FAIL: $Message" }
@@ -34,17 +34,17 @@ function Assert([bool]$Condition, [string]$Message) {
 function MenuKeys {
     # Every key named after the app, not only the ones today's code writes, so a new kind of key cannot be left behind.
     @(Get-ChildItem $associations -ErrorAction SilentlyContinue |
-        Where-Object { Test-Path "$($_.PSPath)\shell\ConvertAnything" }) +
-    @(Get-ChildItem $classes -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'ConvertAnything*' })
+        Where-Object { Test-Path "$($_.PSPath)\shell\Flevert" }) +
+    @(Get-ChildItem $classes -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'Flevert*' })
 }
 
 function AssociationNames { @(Get-ChildItem $associations -ErrorAction SilentlyContinue | ForEach-Object { $_.PSChildName }) }
 
-function RunningCa { @(Get-Process ca -ErrorAction SilentlyContinue) }
+function RunningCa { @(Get-Process flevert -ErrorAction SilentlyContinue) }
 
 function StopInstalledCa {
     foreach ($p in RunningCa | Where-Object { $_.Path -like "$app\*" }) {
-        try { $p.Kill(); $p.WaitForExit(10000) | Out-Null } catch { Write-Warning "could not stop ca.exe $($p.Id): $_" }
+        try { $p.Kill(); $p.WaitForExit(10000) | Out-Null } catch { Write-Warning "could not stop flevert.exe $($p.Id): $_" }
     }
 }
 
@@ -98,22 +98,22 @@ function AssertClean {
 }
 
 function RunCaHeadless([string[]]$Arguments, [switch]$NoWait) {
-    $env:CONVERTANYTHING_HEADLESS = '1'
-    try { return Start-Process "$app\ca.exe" -ArgumentList $Arguments -PassThru -WindowStyle Hidden -Wait:(-not $NoWait) }
-    finally { Remove-Item Env:\CONVERTANYTHING_HEADLESS }
+    $env:FLEVERT_HEADLESS = '1'
+    try { return Start-Process "$app\flevert.exe" -ArgumentList $Arguments -PassThru -WindowStyle Hidden -Wait:(-not $NoWait) }
+    finally { Remove-Item Env:\FLEVERT_HEADLESS }
 }
 
 if (-not $Setup) {
-    $Setup = Get-ChildItem (Join-Path $root 'artifacts\installer\ConvertAnything-Setup-*.exe') -ErrorAction SilentlyContinue |
+    $Setup = Get-ChildItem (Join-Path $root 'artifacts\installer\Flevert-Setup-*.exe') -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
 }
 if (-not $Setup -or -not (Test-Path $Setup)) { throw 'No installer found. Run scripts\build-installer.ps1 first.' }
-if (Test-Path $arpKey) { throw 'ConvertAnything is installed on this machine; uninstall it before running this test.' }
+if (Test-Path $arpKey) { throw 'Flevert is installed on this machine; uninstall it before running this test.' }
 if (Test-Path $app) { throw "$app exists; remove it before running this test." }
 if (Test-Path $appData) { throw "$appData exists (logs of a development build?); remove it before running this test." }
-if (@(MenuKeys).Count -gt 0) { throw 'A ConvertAnything menu is registered (ca.exe install-menu?); run ca.exe uninstall-menu first.' }
+if (@(MenuKeys).Count -gt 0) { throw 'A Flevert menu is registered (flevert.exe install-menu?); run flevert.exe uninstall-menu first.' }
 if (Test-Path $classicKey) { throw "The classic-menu key exists already ($classicKey); this test needs to create and remove it." }
-if (@(RunningCa).Count -gt 0) { throw 'ca.exe is running; a running batch leader would take over the conversions this test checks.' }
+if (@(RunningCa).Count -gt 0) { throw 'flevert.exe is running; a running batch leader would take over the conversions this test checks.' }
 $elevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($elevated) { throw 'Run this test without administrator rights: it checks that setup needs none.' }
 
@@ -130,22 +130,22 @@ try {
     $run = Install '1'
     Assert ($run.Seconds -lt 30) 'installs in under 30 s'
     Assert ((Get-Content $run.Log -Raw).Contains('Administrative install mode: No')) 'installed without administrator rights'
-    Assert (Test-Path "$app\ca.exe") 'ca.exe is installed'
+    Assert (Test-Path "$app\flevert.exe") 'flevert.exe is installed'
     Assert (Test-Path "$app\LICENSE.txt") 'LICENSE.txt is installed'
     $notices = Get-Content "$app\THIRD-PARTY-NOTICES.txt" -Raw -ErrorAction SilentlyContinue
     Assert ($notices -and $notices.Contains('ImageMagick License') -and $notices.Contains('.NET Foundation')) 'third-party notices cover ImageMagick and .NET'
     Assert (@(Get-ChildItem $app -Recurse -Filter *.pdb).Count -eq 0) 'no debug symbols shipped'
     Assert (Test-Path $arpKey) 'listed in Installed apps'
-    $command = (Get-ChildItem "$classes\ConvertAnything.Menu.heic" -Recurse |
+    $command = (Get-ChildItem "$classes\Flevert.Menu.heic" -Recurse |
         Where-Object { $_.PSChildName -eq 'command' } | Select-Object -First 1).GetValue('')
-    Assert ($command -like "`"$app\ca.exe`" run *") "the .heic menu runs the installed ca.exe ($command)"
-    Assert (Test-Path "$associations\.jpg\shell\ConvertAnything") 'menu entry for .jpg'
-    Assert ((Get-ItemProperty $classicKey).ConvertAnything -eq '1') 'classic menu key created and marked'
+    Assert ($command -like "`"$app\flevert.exe`" run *") "the .heic menu runs the installed flevert.exe ($command)"
+    Assert (Test-Path "$associations\.jpg\shell\Flevert") 'menu entry for .jpg'
+    Assert ((Get-ItemProperty $classicKey).Flevert -eq '1') 'classic menu key created and marked'
     $menuCount = @(MenuKeys).Count
 
     Copy-Item $heic "$work\photo.heic"
     $code = (RunCaHeadless @('run', 'image.to-jpg', "`"$work\photo.heic`"")).ExitCode
-    Assert ($code -eq 0) "installed ca.exe converts HEIC to JPG (exit $code)"
+    Assert ($code -eq 0) "installed flevert.exe converts HEIC to JPG (exit $code)"
     $jpg = [Drawing.Image]::FromFile("$work\photo.jpg")
     try { Assert ($jpg.RawFormat.Equals([Drawing.Imaging.ImageFormat]::Jpeg) -and $jpg.Width -eq 320 -and $jpg.Height -eq 240) 'photo.jpg is a 320x240 JPEG' }
     finally { $jpg.Dispose() }
@@ -160,9 +160,9 @@ try {
     Uninstall
     AssertClean
 
-    Write-Host 'Scenario 2: the registry is cleaned even when ca.exe cannot run'
+    Write-Host 'Scenario 2: the registry is cleaned even when flevert.exe cannot run'
     Install '1' | Out-Null
-    [IO.File]::WriteAllBytes("$app\ca.exe", [byte[]](1..64))
+    [IO.File]::WriteAllBytes("$app\flevert.exe", [byte[]](1..64))
     Uninstall
     AssertClean
 
@@ -171,7 +171,7 @@ try {
     Set-ItemProperty "$classicKey\InprocServer32" -Name '(default)' -Value ''
     $userClassicKey = $true
     Install '1' | Out-Null
-    Assert ($null -eq (Get-ItemProperty $classicKey).PSObject.Properties['ConvertAnything']) 'user key left unmarked'
+    Assert ($null -eq (Get-ItemProperty $classicKey).PSObject.Properties['Flevert']) 'user key left unmarked'
     Uninstall
     AssertClean
     Assert (Test-Path "$classicKey\InprocServer32") "user's classic menu key kept"
@@ -197,28 +197,28 @@ try {
     $elsewhere = Join-Path $work 'elsewhere'
     $run = Setup @("/DIR=`"$elsewhere`"")
     SetupRefused $run 'installs only into'
-    Assert (-not (Test-Path "$elsewhere\ca.exe")) 'nothing installed there'
+    Assert (-not (Test-Path "$elsewhere\flevert.exe")) 'nothing installed there'
     AssertClean
 
-    Write-Host 'Scenario 6: uninstalling while ca.exe runs is cancelled, never left half done'
+    Write-Host 'Scenario 6: uninstalling while flevert.exe runs is cancelled, never left half done'
     Install '0' | Out-Null
     $menuCount = @(MenuKeys).Count
     # About 20 s of work (one second per file): long enough for a slow first start and the uninstaller's hand-over.
     $inputs = 1..20 | ForEach-Object { $f = "$work\slow$_.txt"; Set-Content $f 'x'; "`"$f`"" }
     $job = RunCaHeadless (@('run', 'dev.slow-copy') + $inputs) -NoWait
-    # The uninstaller only sees ca.exe once it holds the mutex; a fresh binary can take a while to start.
+    # The uninstaller only sees flevert.exe once it holds the mutex; a fresh binary can take a while to start.
     $mutex = $null
     $deadline = (Get-Date).AddSeconds(15)
-    while (-not $job.HasExited -and -not [Threading.Mutex]::TryOpenExisting('ConvertAnything.App', [ref]$mutex) -and (Get-Date) -lt $deadline) {
+    while (-not $job.HasExited -and -not [Threading.Mutex]::TryOpenExisting('Flevert.App', [ref]$mutex) -and (Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 100
     }
-    Assert ($null -ne $mutex) 'ca.exe is running and holds its mutex'
+    Assert ($null -ne $mutex) 'flevert.exe is running and holds its mutex'
     $mutex.Dispose()
     Uninstall
-    Assert (-not $job.HasExited) 'ca.exe was still running when the uninstaller finished, so the test is meaningful'
+    Assert (-not $job.HasExited) 'flevert.exe was still running when the uninstaller finished, so the test is meaningful'
     # A silent uninstall answers the "still running" question with Cancel, so everything must still be there.
     Assert (Test-Path $arpKey) 'still listed in Installed apps'
-    Assert (Test-Path "$app\ca.exe") 'ca.exe still installed'
+    Assert (Test-Path "$app\flevert.exe") 'flevert.exe still installed'
     Assert (@(MenuKeys).Count -eq $menuCount) 'menu still registered'
     $job.WaitForExit()
     Uninstall
@@ -239,7 +239,7 @@ try {
     Set-Content "$app\planted.dll" 'not ours'
     $run = Setup @('/CLASSICMENU=0')
     SetupRefused $run 'already holds files'
-    Assert (-not (Test-Path "$app\ca.exe")) 'nothing installed beside them'
+    Assert (-not (Test-Path "$app\flevert.exe")) 'nothing installed beside them'
     Assert ((Get-Content "$app\planted.dll") -eq 'not ours') 'their files are left alone'
     Remove-Item $app -Recurse -Force
     AssertClean
