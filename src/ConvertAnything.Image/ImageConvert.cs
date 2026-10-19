@@ -21,9 +21,10 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
         var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + extension);
         // Only an animation stays one; the pages of a TIFF are not frames, and other targets hold one image.
         var keepsAnimation = ImageFile.IsAnimationFormat(format) && ImageFile.IsAnimationFormat(ImageFile.FormatOf(Path.GetExtension(inputPath)));
-        return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => Task.Run(() =>
+        return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => ImageFile.RunAsync(() =>
         {
             using var images = ImageFile.Read(inputPath, allFrames: keepsAnimation);
+            ImageFile.StopOnCancel(images, token);
             if (images.Count > 1)
             {
                 // Frames of an optimised GIF only hold what changed; expand them so each one stands on its own.

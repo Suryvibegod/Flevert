@@ -25,12 +25,13 @@ public sealed class ImageStripMetadata : IOperation
         var desired = Path.Combine(
             Path.GetDirectoryName(inputPath)!, $"{Path.GetFileNameWithoutExtension(inputPath)} (no metadata){extension}");
 
-        return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => Task.Run(() =>
+        return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => ImageFile.RunAsync(() =>
         {
             var lossless = target == MagickFormat.WebP && ImageFile.IsLosslessWebP(inputPath);
             // Animations and TIFF pages are all kept; formats with one image need only that one decoded.
             var keepsFrames = ImageFile.IsAnimationFormat(target) || target == MagickFormat.Tiff;
             using var images = ImageFile.Read(inputPath, allFrames: keepsFrames);
+            ImageFile.StopOnCancel(images, token);
             foreach (var frame in images)
             {
                 frame.AutoOrient();

@@ -52,6 +52,31 @@ public static class ImageFile
         return new MagickImageCollection(stream, settings);
     }
 
+    /// <summary>
+    /// Makes <paramref name="images"/> stop as soon as <paramref name="ct"/> is cancelled: ImageMagick checks its progress
+    /// callback while it processes and encodes. The runner abandons a cancelled operation and the process may exit soon
+    /// after, so a long encode must not keep running (and leave its temporary file behind).
+    /// </summary>
+    public static void StopOnCancel(IEnumerable<IMagickImage<byte>> images, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        foreach (var image in images)
+            image.Progress += (_, e) => e.Cancel |= ct.IsCancellationRequested;
+    }
+
+    /// <summary>Runs image work on the thread pool, turning ImageMagick's "cancelled" error into a cancellation.</summary>
+    public static Task RunAsync(Action work, CancellationToken ct) => Task.Run(() =>
+    {
+        try
+        {
+            work();
+        }
+        catch (MagickException) when (ct.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(ct);
+        }
+    }, ct);
+
     /// <summary>Formats whose frames are an animation (as opposed to TIFF, whose frames are pages).</summary>
     public static bool IsAnimationFormat(MagickFormat format) => format is MagickFormat.Gif or MagickFormat.WebP;
 

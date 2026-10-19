@@ -44,6 +44,30 @@ public sealed class ImageIoTests : IDisposable
         Assert.Empty(Directory.GetFiles(_dir.Path, "*.partial", SearchOption.AllDirectories));
     }
 
+    // The runner abandons an operation on Cancel; the batch ends soon after, killing a thread still encoding, and its
+    // .partial file stays behind. Operations must stop promptly themselves.
+    [Theory]
+    [InlineData("image.to-webp")]
+    [InlineData("image.compress-strong")]
+    [InlineData("image.strip-metadata")]
+    public async Task Cancel_stops_a_long_encode_promptly_and_leaves_no_partial_file(string operationId)
+    {
+        var input = _dir.Combine("big.png");
+        using (var image = new MagickImage(MagickColors.Gray, 6000, 4000))
+        {
+            image.AddNoise(NoiseType.Random);
+            image.Write(input, MagickFormat.Png);
+        }
+
+        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(800));
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Op(operationId).RunAsync(input, cancel.Token));
+
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(3), $"took {timer.Elapsed}");
+        Assert.Equal(["big.png"], _dir.FileNames());
+    }
+
     // Strip() also drops the PNG colour chunks; a Display P3 screenshot would then shift colour.
     [Theory]
     [InlineData("image.strip-metadata")]

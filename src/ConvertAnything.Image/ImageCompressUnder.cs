@@ -33,9 +33,10 @@ public sealed class ImageCompressUnder(string id, long limitBytes, string label)
     {
         var desired = Path.Combine(
             Path.GetDirectoryName(inputPath)!, $"{Path.GetFileNameWithoutExtension(inputPath)} (under {label}).jpg");
-        return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => Task.Run(() =>
+        return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => ImageFile.RunAsync(() =>
         {
             using var images = ImageFile.Read(inputPath, allFrames: false); // the result is one JPG
+            ImageFile.StopOnCancel(images, token);
             var original = images[0];
             original.AutoOrient();
             ImageMetadata.StripExceptColourProfile(original);
@@ -65,6 +66,7 @@ public sealed class ImageCompressUnder(string id, long limitBytes, string label)
             ct.ThrowIfCancellationRequested();
             // Always from the original: shrinking an already shrunk copy again would blur it a little more each round.
             using var work = original.Clone();
+            ImageFile.StopOnCancel([work], ct); // event handlers are not cloned
             if (scale < 1)
                 work.Resize(new Percentage(scale * 100));
 
