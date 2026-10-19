@@ -137,3 +137,21 @@ CR = code-reviewer, SA = security-auditor, DD = doubt-driven. Không có Critica
 - [x] L8: Compress TIFF nhiều trang → skipped có thông báo
 - [x] L9: Chỉ nhận brand HEIF/AVIF; nits
 - [ ] Review vòng 3 module image
+
+### Review vòng 3 (2026-10-19): đối chiếu
+
+Code-reviewer và security-auditor: không Critical/High/Required; đều kết luận "ship / approve with fixes". Doubt-driven: chờ kết quả.
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| Remove metadata ghi lại TIFF nén JPEG ở quality ~75 (reader báo 0) (CR-M1) | Medium | Hợp lệ, do L3 gây ra | `05b2440` |
+| Convert > TIFF không nén (8 KB → 8 MB) (SA-M2) | Medium | Hợp lệ | `05b2440` (Zip) |
+| Giới hạn 400 MP tổng trang chặn bản scan nhiều trang bình thường (CR-M2) | Medium | Hợp lệ, do L3 gây ra | `8c04d07`: chỉ chặn khi ghi không nén |
+| File cấu hình khác (colors.xml, type.xml) và APPDATA/USERPROFILE chưa được kiểm; thư mục cấu hình có thể thành tương đối (SA-M1, SA-L1/L2, CR-L1) | Medium | Hợp lệ | `236921b`; SPEC/ADR nói rõ giới hạn thư mục làm việc |
+| Compress giải mã mọi trang TIFF chỉ để đếm; TIFF nhiều trang là "skipped" (CR-L2, SA-L5, core vòng 8) | Low | Hợp lệ | `8c04d07`: đọc tối đa 2 trang, thành lỗi |
+| 4:2:2 không xoay theo ảnh (CR-L3) | Low | Hợp lệ | `b67b828` |
+| `RealFormat` chạy trên luồng gọi (CR-L5) | Low | Hợp lệ | `b67b828` |
+| Đổi thư mục làm việc ảnh hưởng cả tiến trình (CR-L4, SA-L3) | Low | Chấp nhận: ca.exe chỉ dùng đường dẫn tuyệt đối; ghi chú trong code | — |
+| Test "không có file tạm khi đang mã hóa" dựa vào thời gian (CR-L6) | Low | Chấp nhận, có kiểm đối chứng "vẫn đang mã hóa" | — |
+| Ghi nhiều trang dùng cài đặt nén của trang đầu (CR-L7) | Low | Chấp nhận, đã ghi chú trong code | — |
+| Nits: comment MOV/.heic, brand mif2, thông báo "pages or frames" | Nit | Hợp lệ một phần | thông báo đã sửa |
