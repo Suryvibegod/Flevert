@@ -27,9 +27,10 @@ public static class ImageFile
         Formats.TryGetValue(extension, out var format) ? format : throw new NotSupportedException($"{extension} is not a supported image type.");
 
     /// <summary>
-    /// Reads all frames. The coder is chosen from the extension, never sniffed from the content, so a ".jpg" that really
-    /// holds a script or another format fails instead of being interpreted. The file is opened here and handed to
-    /// ImageMagick as a stream: given a path, it would read "%d", "[0]" and similar in it as patterns.
+    /// Reads all frames. ImageMagick is never asked to guess the format: the decoder is chosen by our own signature check,
+    /// within the allow-list, or else by the extension, so a ".jpg" that really holds a script fails instead of being
+    /// interpreted. The file is opened here and handed to ImageMagick as a stream: given a path, it would read "%d", "[0]"
+    /// and similar in it as patterns.
     /// </summary>
     /// <param name="allFrames">False decodes only the first frame or page: a 1000-frame GIF converted to PNG need not
     /// decode the other 999.</param>
@@ -62,7 +63,7 @@ public static class ImageFile
     private static MagickFormat? Signature(Stream stream)
     {
         Span<byte> h = stackalloc byte[12];
-        if (stream.Read(h) < 12)
+        if (stream.ReadAtLeast(h, 12, throwOnEndOfStream: false) < 12)
             return null;
         return h switch
         {
@@ -136,16 +137,23 @@ public static class ImageFile
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         Span<byte> header = stackalloc byte[12];
-        if (stream.Read(header) != 12 || !header[..4].SequenceEqual("RIFF"u8) || !header[8..].SequenceEqual("WEBP"u8))
+        if (stream.ReadAtLeast(header, 12, throwOnEndOfStream: false) != 12 || !header[..4].SequenceEqual("RIFF"u8) || !header[8..].SequenceEqual("WEBP"u8))
             return false;
 
         Span<byte> chunk = stackalloc byte[8];
-        while (stream.Read(chunk) == 8)
+        while (stream.ReadAtLeast(chunk, 8, throwOnEndOfStream: false) == 8)
         {
             if (chunk[..4].SequenceEqual("VP8L"u8))
                 return true;
             if (chunk[..4].SequenceEqual("VP8 "u8))
                 return false;
+            if (chunk[..4].SequenceEqual("ANMF"u8))
+            {
+                // An animation frame: 16 bytes of position and timing, then the frame's own chunks (ALPH, VP8 or VP8L).
+                stream.Seek(16, SeekOrigin.Current);
+                continue;
+            }
+
             var size = BitConverter.ToUInt32(chunk[4..]);
             stream.Seek(size + (size & 1), SeekOrigin.Current); // chunks are padded to an even size
         }

@@ -154,6 +154,33 @@ public sealed class StripMetadataTests : IDisposable
     }
 
     [Fact]
+    public async Task An_animated_lossless_webp_stays_lossless()
+    {
+        // The frames' VP8L data sits inside ANMF chunks (gif2webp writes this by default).
+        var input = _dir.Combine("anim.webp");
+        using (var frames = new MagickImageCollection())
+        {
+            foreach (var color in new[] { MagickColors.Red, MagickColors.Teal })
+            {
+                var frame = new MagickImage(color, 48, 48) { AnimationDelay = 10 };
+                frame.AddNoise(NoiseType.Random);
+                frame.Settings.SetDefine(MagickFormat.WebP, "lossless", "true");
+                frames.Add(frame);
+            }
+
+            frames.Write(input, MagickFormat.WebP);
+        }
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        using var before = new MagickImageCollection(input);
+        using var after = new MagickImageCollection(output);
+        Assert.Equal(before.Count, after.Count);
+        for (var i = 0; i < before.Count; i++)
+            Assert.Equal(0, before[i].Compare(after[i], ErrorMetric.Absolute));
+    }
+
+    [Fact]
     public async Task An_animated_gif_keeps_its_frames()
     {
         var input = _dir.Combine("anim.gif");
