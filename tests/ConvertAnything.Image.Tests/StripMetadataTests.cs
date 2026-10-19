@@ -1,4 +1,4 @@
-﻿using ConvertAnything.Core;
+using ConvertAnything.Core;
 using ImageMagick;
 
 namespace ConvertAnything.Image.Tests;

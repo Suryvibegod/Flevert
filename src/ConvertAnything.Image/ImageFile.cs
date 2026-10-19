@@ -166,6 +166,11 @@ public static class ImageFile
         }
     }, ct);
 
+    /// <summary>Whether the source stores its colours at 4:2:0 like camera photos: HEIC/HEIF/AVIF, or WebP that is not lossless.</summary>
+    public static bool IsLossyPhotoSource(string path, MagickFormat source) =>
+        source is MagickFormat.Heic or MagickFormat.Heif or MagickFormat.Avif
+        || (source == MagickFormat.WebP && !IsLosslessWebP(path));
+
     /// <summary>Formats whose frames are an animation (as opposed to TIFF, whose frames are pages).</summary>
     public static bool IsAnimationFormat(MagickFormat format) => format is MagickFormat.Gif or MagickFormat.WebP;
 
@@ -224,22 +229,29 @@ public static class ImageFile
     }
 
     /// <summary>
-    /// Whether frames totalling <paramref name="totalArea"/> pixels may be encoded in memory. Only uncompressed output
-    /// grows with the pixels (a few KB of crafted TIFF could otherwise produce gigabytes); compressed scans are small
-    /// however many pages they have (a 300 dpi A4 page is 8.7 MP, so a pixel cap alone refused 50-page scans).
+    /// Whether frames whose worst-case raw size (width x height x channels x bit depth) totals <paramref name="rawBytes"/>
+    /// may be encoded in memory. Compression proves nothing (a 2.2 MB crafted TIFF of Deflate pages produced 435 MB), but
+    /// raw size scales with what a page really holds: 60 black-and-white A4 scans are 65 MB raw, 60 colour ones 1.5 GB.
     /// </summary>
-    internal static bool FitsInMemory(ulong totalArea, MagickFormat format, CompressionMethod compression) =>
-        totalArea <= MagickSetup.MaxArea
-        || !(format == MagickFormat.Tiff && compression is CompressionMethod.NoCompression or CompressionMethod.Undefined);
+    internal static bool FitsInMemory(ulong rawBytes) => rawBytes <= MaxInMemoryBytes;
+
+    private const ulong MaxInMemoryBytes = 1UL << 30;
+
+    /// <summary>
+    /// Pages of a TIFF, not counting reduced-resolution thumbnails stored as extra images (NewSubfileType = 1), which
+    /// scanners and cameras add.
+    /// </summary>
+    public static int PageCount(MagickImageCollection images) =>
+        images.Count(image => image.GetAttribute("tiff:subfiletype") != "REDUCEDIMAGE");
 
     /// <summary>Writes every frame (an animation or pages) to a new file through a stream.</summary>
     public static void Write(MagickImageCollection images, string path, MagickFormat format)
     {
         // The pages are encoded in memory below, outside ImageMagick's limits. Only one frame's settings decide the
-        // compression of a collection write; the first page's is carried over (Remove metadata) or set (Convert).
-        var area = images.Aggregate(0UL, (sum, image) => sum + ((ulong)image.Width * image.Height));
-        if (!FitsInMemory(area, format, images[0].Settings.Compression))
-            throw new InvalidOperationException("The image has too many large pages or frames to write uncompressed.");
+        // compression of a collection write (Remove metadata chooses one that suits every page).
+        var raw = images.Aggregate(0UL, (sum, image) => sum + ((ulong)image.Width * image.Height * image.ChannelCount * image.Depth / 8));
+        if (!FitsInMemory(raw))
+            throw new InvalidOperationException("The image has too many large pages or frames to process.");
 
         // Multi-page TIFF cannot be written to a .NET stream (libtiff fails linking directories); an in-memory blob works.
         var bytes = images.ToByteArray(format);

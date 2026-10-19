@@ -169,3 +169,23 @@ Doubt-driven vòng 3 (đến sau): 1 High, còn lại Medium/Low; không crash n
 | Hủy giữa AutoOrient ra ObjectDisposedException | Low | Hợp lệ | chuyển thành hủy |
 | SPEC lỗi thời (skip, TIFF) | Low | Hợp lệ | đã cập nhật |
 | WebP động trộn lossy/lossless thành một kiểu | Low | Chấp nhận (hiếm) | — |
+
+### Review vòng 4 (2026-10-19): đối chiếu
+
+1 reviewer, 3 góc, trên `ef7ef4f..HEAD`. 1 High, 2 Medium, không Critical; mọi bản sửa vòng 3 kiểm lại đều đứng (test hỏng khi gỡ fix).
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| TIFF nhiều trang trộn kiểu nén: Remove metadata dùng kiểu nén trang đầu cho mọi trang → trang màu thành trắng đen (bằng chứng mới cho CR-L7 vòng 3) | High | Hợp lệ | một kiểu nén chung; khác nhau thì Zip; fixture `mixed-g4-colour.tif` |
+| Ảnh thu nhỏ trong TIFF tính là trang 2 → Compress/Under N từ chối | Medium | Hợp lệ | `PageCount` bỏ qua REDUCEDIMAGE; fixture `with-thumbnail.tif` |
+| `FitsInMemory` bị vượt: nén không bảo đảm output nhỏ (2,2 MB → 435 MB) | Medium | Hợp lệ | chặn theo kích thước thô tệ nhất 1 GB |
+| JPEG-in-TIFF q95 làm to bản scan chất lượng thấp | Low | Chấp nhận, ghi SPEC | — |
+| WebP lossy → JPG ra 4:4:4 | Low | Hợp lệ | 4:2:0 cho nguồn ảnh chụp lossy |
+| Ép 4:2:0 với AVIF 4:4:4 | Low | Chấp nhận (hiếm, ảnh chụp là chủ yếu) | — |
+| WebP động lớn giờ bị giới hạn frame × canvas khi Remove metadata | Low | Chấp nhận, ghi SPEC | — |
+| Thiếu test: ánh xạ ObjectDisposedException, `Write` gọi `FitsInMemory`, WebP động trong suốt | Low | Ghi nhận | — |
+| Thư mục cấu hình tương đối được tạo trước khi bị từ chối | Low | Hợp lệ | kiểm trước khi tạo |
+| Biến môi trường LOCALAPPDATA/APPDATA khác known folder | Low | Chấp nhận (cần môi trường đã bị sửa) | — |
+| README fixtures hỏng mã "×", BOM | Nit | Hợp lệ | đã sửa |
+
+- [ ] Review vòng 5 module image (sau các bản sửa này)

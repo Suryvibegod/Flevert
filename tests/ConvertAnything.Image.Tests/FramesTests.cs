@@ -165,19 +165,48 @@ public sealed class FramesTests : IDisposable
     }
 
     // A 300 dpi A4 page is 8.7 MP: a 400 MP cap on all pages refused scans from about 47 pages, although G4 or LZW pages
-    // encode to a few MB. Pixels only bound memory when the output is uncompressed.
+    // encode to a few MB. Whether the output is compressed proves nothing either: a 2.2 MB crafted TIFF of Deflate pages
+    // produced 435 MB. What bounds the in-memory encode is the worst-case raw size: a bilevel page counts 1/24 of a colour one.
     [Theory]
-    [InlineData(CompressionMethod.Group4, true)]
-    [InlineData(CompressionMethod.LZW, true)]
-    [InlineData(CompressionMethod.Zip, true)]
-    [InlineData(CompressionMethod.NoCompression, false)]
-    [InlineData(CompressionMethod.Undefined, false)]
-    public void Many_large_pages_are_refused_only_when_they_would_be_written_uncompressed(CompressionMethod compression, bool allowed)
+    [InlineData(1u, 1u, true)]   // 60 black-and-white A4 pages: 65 MB raw
+    [InlineData(3u, 8u, false)]  // 60 colour A4 pages: 1.5 GB raw
+    public void Many_pages_are_judged_by_their_worst_case_raw_size(uint channels, uint depth, bool fits)
     {
-        const ulong sixtyA4Pages = 60UL * 2480 * 3508;
+        var page = (Width: 2480UL, Height: 3508UL);
+        var sixtyPages = Enumerable.Repeat(page.Width * page.Height * channels * depth / 8, 60).Aggregate(0UL, (a, b) => a + b);
 
-        Assert.Equal(allowed, ImageFile.FitsInMemory(sixtyA4Pages, MagickFormat.Tiff, compression));
-        Assert.True(ImageFile.FitsInMemory(100_000_000, MagickFormat.Tiff, compression), "small totals always fit");
+        Assert.Equal(fits, ImageFile.FitsInMemory(sixtyPages));
+        Assert.True(ImageFile.FitsInMemory(100_000_000), "small totals always fit");
+    }
+
+    [Fact]
+    public async Task Removing_metadata_keeps_the_colour_page_of_a_mixed_scan_in_colour()
+    {
+        // Page 1 Group 4 (black and white), page 2 colour LZW. One compression for all pages made page 2 bilevel.
+        var input = _dir.Combine("scan.tif");
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "fixtures", "mixed-g4-colour.tif"), input);
+
+        var output = await Op("image.strip-metadata").RunAsync(input, CancellationToken.None);
+
+        using var pages = new MagickImageCollection(output);
+        Assert.Equal(2, pages.Count);
+        var red = pages[1].GetPixels().GetPixel(100, 75).ToColor()!;
+        Assert.True(red.R > 200 && red.G < 80 && red.B < 80, $"page 2 should still be red, was {red}");
+    }
+
+    // A reduced-resolution thumbnail stored as a second image is not a second page.
+    [Theory]
+    [InlineData("image.compress-balanced")]
+    [InlineData("image.compress-under-1mb")]
+    public async Task A_tiff_with_a_thumbnail_is_not_treated_as_multi_page(string operationId)
+    {
+        var input = _dir.Combine("photo.tif");
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "fixtures", "with-thumbnail.tif"), input);
+
+        var output = await Op(operationId).RunAsync(input, CancellationToken.None);
+
+        using var jpg = new MagickImage(output);
+        Assert.Equal((300u, 200u), (jpg.Width, jpg.Height));
     }
 
     [Fact]

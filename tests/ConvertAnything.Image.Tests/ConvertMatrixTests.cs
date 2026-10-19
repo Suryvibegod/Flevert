@@ -142,6 +142,24 @@ public sealed class ConvertMatrixTests : IDisposable
         Assert.StartsWith("2x2", jpg.GetAttribute("jpeg:sampling-factor"), StringComparison.Ordinal);
     }
 
+    // Lossy WebP is always 4:2:0; written as JPG at q92 it became 4:4:4 and grew from 131 KB to 441 KB.
+    [Fact]
+    public async Task Lossy_webp_becomes_a_jpg_with_4_2_0_subsampling()
+    {
+        var input = _dir.Combine("download.webp");
+        using (var image = new MagickImage(MagickColors.SteelBlue, 200, 150))
+        {
+            image.AddNoise(NoiseType.Gaussian, 0.3);
+            image.Quality = 80;
+            image.Write(input, MagickFormat.WebP);
+        }
+
+        var output = await Op("image.to-jpg").RunAsync(input, CancellationToken.None);
+
+        using var jpg = new MagickImage(output);
+        Assert.StartsWith("2x2", jpg.GetAttribute("jpeg:sampling-factor"), StringComparison.Ordinal);
+    }
+
     private static IOperation Op(string id) => ImageOperations.All.Single(op => op.Id == id);
 
     private string Source(string extension)

@@ -55,12 +55,12 @@ internal static class ImageMetadata
     }
 
     /// <summary>
-    /// A HEIC/HEIF/AVIF photo written as JPG gets 4:2:0 chroma subsampling, as phone cameras use: at quality >= 90
-    /// ImageMagick would otherwise pick 4:4:4, and an iPhone photo turned into JPG grew to 144%.
+    /// A photo from a lossy 4:2:0 format (HEIC/HEIF/AVIF, lossy WebP) written as JPG keeps 4:2:0 chroma subsampling: at
+    /// quality >= 90 ImageMagick would otherwise pick 4:4:4, and an iPhone photo grew to 144%, a WebP from 131 to 441 KB.
     /// </summary>
-    public static void PhotoSubsamplingForJpeg(IMagickImage<byte> image, MagickFormat source, MagickFormat target)
+    public static void PhotoSubsamplingForJpeg(IMagickImage<byte> image, bool lossyPhotoSource, MagickFormat target)
     {
-        if (target == MagickFormat.Jpeg && source is MagickFormat.Heic or MagickFormat.Heif or MagickFormat.Avif)
+        if (target == MagickFormat.Jpeg && lossyPhotoSource)
             image.Settings.SetDefine(MagickFormat.Jpeg, "sampling-factor", "4:2:0");
     }
 

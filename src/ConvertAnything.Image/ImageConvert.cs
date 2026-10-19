@@ -25,6 +25,7 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
             // off the caller's thread: a slow share or an offline cloud file must not freeze the progress window.
             var source = ImageFile.RealFormat(inputPath);
             var keepsAnimation = ImageFile.IsAnimationFormat(format) && ImageFile.IsAnimationFormat(source);
+            var lossyPhoto = ImageFile.IsLossyPhotoSource(inputPath, source);
             using var images = ImageFile.Read(inputPath, allFrames: keepsAnimation);
             ImageFile.StopOnCancel(images, token);
             if (images.Count > 1)
@@ -32,18 +33,18 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
                 // Frames of an optimised GIF only hold what changed; expand them so each one stands on its own.
                 ImageFile.Coalesce(images, token);
                 foreach (var frame in images)
-                    Prepare(frame, source);
+                    Prepare(frame, lossyPhoto);
                 ImageFile.Write(images, temp, format);
                 return;
             }
 
             var image = images[0];
-            Prepare(image, source);
+            Prepare(image, lossyPhoto);
             ImageFile.Write(image, temp, format);
         }, token), ct);
     }
 
-    private void Prepare(IMagickImage<byte> image, MagickFormat source)
+    private void Prepare(IMagickImage<byte> image, bool lossyPhotoSource)
     {
         // Rotate the pixels so viewers that ignore EXIF orientation still show the image upright.
         ImageMetadata.AutoOrient(image);
@@ -54,7 +55,7 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
         if (quality is { } q)
             image.Quality = q;
 
-        ImageMetadata.PhotoSubsamplingForJpeg(image, source, format);
+        ImageMetadata.PhotoSubsamplingForJpeg(image, lossyPhotoSource, format);
 
         // The TIFF writer defaults to no compression: an 8 KB PNG of 8000x8000 became an 8 MB TIFF (measured; far more
         // for photos).

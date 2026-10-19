@@ -32,6 +32,10 @@ public sealed class ImageStripMetadata : IOperation
             var keepsFrames = ImageFile.IsAnimationFormat(target) || target == MagickFormat.Tiff;
             using var images = ImageFile.Read(inputPath, allFrames: keepsFrames);
             ImageFile.StopOnCancel(images, token);
+            // One compression is written for every page. Keep the source's when all pages share it; a scanner that mixes
+            // Group 4 text pages with colour pages gets lossless Zip, or its colour pages would turn black and white.
+            var tiffCompressions = images.Select(f => f.Compression).Distinct().ToList();
+            var tiffCompression = tiffCompressions.Count == 1 ? tiffCompressions[0] : CompressionMethod.Zip;
             // gif2webp-style frames cover the canvas and are alpha-blended (transparent = keep the previous frame);
             // ImageMagick writes WebP frames without blending, so expand them first or most of each frame turns clear.
             if (target == MagickFormat.WebP && images.Count > 1)
@@ -48,13 +52,13 @@ public sealed class ImageStripMetadata : IOperation
                     frame.Quality = HighQuality;
                 if (target == MagickFormat.Jpeg)
                     ImageMetadata.FlattenOntoWhite(frame); // HEIC/HEIF with transparency becoming JPG
-                ImageMetadata.PhotoSubsamplingForJpeg(frame, source, target);
+                ImageMetadata.PhotoSubsamplingForJpeg(frame, source is MagickFormat.Heic or MagickFormat.Heif, target);
                 // The TIFF writer ignores the compression the file was read with and writes uncompressed: 2 KB became 2 MB.
                 if (target == MagickFormat.Tiff)
                 {
-                    frame.Settings.Compression = frame.Compression;
+                    frame.Settings.Compression = tiffCompression;
                     // The TIFF reader reports quality 0, so JPEG-in-TIFF would be re-encoded at libtiff's default (~75).
-                    if (frame.Compression == CompressionMethod.JPEG)
+                    if (tiffCompression == CompressionMethod.JPEG)
                         frame.Quality = HighQuality;
                 }
             }

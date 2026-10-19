@@ -39,7 +39,7 @@ public sealed class ImageCompressUnder(string id, long limitBytes, string label)
             using var images = ImageFile.RealFormat(inputPath) == MagickFormat.Tiff
                 ? ImageFile.Read(inputPath, maxFrames: 2)
                 : ImageFile.Read(inputPath, allFrames: false);
-            if (images.Count > 1)
+            if (ImageFile.PageCount(images) > 1)
                 throw new InvalidOperationException("The TIFF has several pages and this makes a single image; use Remove metadata to keep every page.");
             ImageFile.StopOnCancel(images, token);
             var original = images[0];

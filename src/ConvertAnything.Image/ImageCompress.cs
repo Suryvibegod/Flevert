@@ -50,7 +50,7 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
                 : ImageFile.Read(inputPath, allFrames: ImageFile.IsAnimationFormat(source));
             // The result is one JPG: Compress cannot fulfil the request without dropping pages, so it fails (a skip would
             // claim there is nothing to gain).
-            if (source == MagickFormat.Tiff && images.Count > 1)
+            if (source == MagickFormat.Tiff && ImageFile.PageCount(images) > 1)
                 throw new InvalidOperationException("The TIFF has several pages and Compress makes a single image; use Remove metadata to keep every page.");
             ImageFile.StopOnCancel(images, ct);
             var target = Target(source, animated: images.Count > 1);

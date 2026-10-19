@@ -66,6 +66,11 @@ public static class MagickSetup
             if (_initialized)
                 return;
 
+            // Relative only if the user's app-data folder could not be resolved; the folder then depends on the working
+            // directory, which is exactly what must not decide the configuration. Checked before anything is created.
+            if (!Path.IsPathFullyQualified(ConfigurationDirectory))
+                throw new InvalidOperationException("Cannot locate the user's local application data folder.");
+
             // ImageMagick reads policy.xml from disk; a folder other accounts can write would let them relax it.
             Directory.CreateDirectory(ConfigurationDirectory);
             SecureDirectory.RestrictToOwnerAndAdmins(ConfigurationDirectory);
@@ -76,10 +81,6 @@ public static class MagickSetup
             // redirect temporary files (decoded pixels) or enable delegates while the coder probes below still pass, so
             // refuse to start if any exists. The working directory is one of those folders (Explorer starts verbs in the
             // clicked file's folder, e.g. Downloads): load with ours as the working directory instead.
-            // Relative only if the user's app-data folder could not be resolved; the folder then depends on the working
-            // directory, which is exactly what must not decide the configuration.
-            if (!Path.IsPathFullyQualified(ConfigurationDirectory))
-                throw new InvalidOperationException("Cannot locate the user's local application data folder.");
             if (ForeignConfiguration(ConfigurationSearchFolders()) is { } foreign)
                 throw new InvalidOperationException($"Found ImageMagick configuration at {foreign}; refusing to process images with it.");
 
