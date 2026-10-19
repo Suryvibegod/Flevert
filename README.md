@@ -67,7 +67,7 @@ It usually happens when:
 - someone changed the permissions of `%LOCALAPPDATA%\Programs` or of the folder itself;
 - `%LOCALAPPDATA%\Programs\ConvertAnything` already holds files from something else.
 
-Put the folder back where Windows keeps it with its default permissions (or delete `%LOCALAPPDATA%\Programs\ConvertAnything` if it holds leftover files), then run setup again. If setup did install ConvertAnything and only the menu was refused (the folder changed during setup), remove it [by hand](#uninstall) rather than with its uninstaller: another account may have changed the files the uninstaller would run. If you are not sure what changed, [open an issue](https://github.com/Suryvibegod/ConvertAnything/issues/new/choose) with the message setup showed.
+Put the folder back where Windows keeps it with its default permissions (or delete `%LOCALAPPDATA%\Programs\ConvertAnything` if it holds leftover files), then run setup again. If ConvertAnything is already installed in a folder that setup now refuses (for example when updating), do not use its uninstaller and do not just repair the permissions: another account may have changed the files there. Remove it [by hand](#uninstall), then run setup again. If you are not sure what changed, [open an issue](https://github.com/Suryvibegod/ConvertAnything/issues/new/choose) with the message setup showed.
 
 ### Uninstall
 
@@ -81,14 +81,16 @@ Get-ChildItem HKCU:\Software\Classes\SystemFileAssociations | ForEach-Object { R
 Get-ChildItem HKCU:\Software\Classes | Where-Object PSChildName -like 'ConvertAnything.Menu*' | Remove-Item -Recurse
 # The classic menu, only if setup turned it on (it marks the key; a key you created yourself is left alone)
 $k = 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}'
-if ((Get-Item -LiteralPath $k -ErrorAction SilentlyContinue).GetValue('ConvertAnything')) { Remove-Item -LiteralPath $k -Recurse }
-# The program, its entry in Installed apps, and its logs and settings
-Remove-Item -LiteralPath "$env:LOCALAPPDATA\Programs\ConvertAnything" -Recurse
-Remove-Item -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{8B7A3F52-2C64-4F0B-9E3D-5A1C7E2B9D40}_is1'
-'logs', 'pipes', 'magick' | ForEach-Object { Remove-Item -LiteralPath "$env:LOCALAPPDATA\ConvertAnything\$_" -Recurse -ErrorAction SilentlyContinue }
+if (Get-ItemProperty -LiteralPath $k -Name ConvertAnything -ErrorAction SilentlyContinue) { Remove-Item -LiteralPath $k -Recurse }
+# The entry in Installed apps
+Remove-Item -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{8B7A3F52-2C64-4F0B-9E3D-5A1C7E2B9D40}_is1' -ErrorAction SilentlyContinue
+# The program, its logs and settings (rmdir removes a junction itself, never what it points to)
+cmd /c 'rmdir /s /q "%LOCALAPPDATA%\Programs\ConvertAnything" 2>nul'
+cmd /c 'for %d in (logs pipes magick) do @rmdir /s /q "%LOCALAPPDATA%\ConvertAnything\%d" 2>nul'
+cmd /c 'rmdir "%LOCALAPPDATA%\ConvertAnything" 2>nul'
 ```
 
-Then delete `%LOCALAPPDATA%\ConvertAnything` if it is empty, and sign out and back in.
+Then sign out and back in.
 
 ## What each command does
 
