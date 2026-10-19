@@ -23,6 +23,17 @@ internal static class ImageMetadata
             image.SetProfile(colourProfile);
     }
 
+    /// <summary>
+    /// Converts a CMYK image to sRGB through its own CMYK profile (or a common press profile when it has none).
+    /// Converting the numbers without a profile shifts colours by tens of levels.
+    /// </summary>
+    public static void ToSrgb(IMagickImage<byte> image)
+    {
+        if (image.ColorSpace != ColorSpace.CMYK)
+            return;
+        image.TransformColorSpace(image.GetColorProfile() ?? ColorProfiles.USWebCoatedSWOP, ColorProfiles.SRGB);
+    }
+
     /// <summary>Replaces transparency with white, for targets without an alpha channel (JPG, BMP).</summary>
     public static void FlattenOntoWhite(IMagickImage<byte> image)
     {

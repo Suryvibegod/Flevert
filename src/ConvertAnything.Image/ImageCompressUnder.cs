@@ -52,7 +52,10 @@ public sealed class ImageCompressUnder(string id, long limitBytes, string label)
         var profile = image.GetColorProfile();
         if (image.ColorSpace == ColorSpace.CMYK || (profile is not null && profile.ToByteArray().Length > limitBytes * MaxProfileShareOfLimit))
         {
-            image.TransformColorSpace(profile ?? ColorProfiles.USWebCoatedSWOP, ColorProfiles.SRGB);
+            if (image.ColorSpace == ColorSpace.CMYK)
+                ImageMetadata.ToSrgb(image);
+            else
+                image.TransformColorSpace(profile!, ColorProfiles.SRGB);
             image.RemoveProfile("icc"); // sRGB is what viewers assume without a profile
         }
     }

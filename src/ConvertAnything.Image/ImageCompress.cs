@@ -83,6 +83,7 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
     {
         image.AutoOrient();
         ImageMetadata.StripExceptColourProfile(image);
+        ImageMetadata.ToSrgb(image); // also drops the large CMYK profile from the output
 
         if (target == MagickFormat.Png)
         {
@@ -96,11 +97,8 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
         if (target == MagickFormat.Gif)
             return; // palette format; frames were coalesced and are optimised as a whole
 
-        if (image.HasAlpha && target == MagickFormat.Jpeg)
-        {
-            image.BackgroundColor = MagickColors.White;
-            image.Alpha(AlphaAction.Remove);
-        }
+        if (target == MagickFormat.Jpeg)
+            ImageMetadata.FlattenOntoWhite(image);
 
         if (level == CompressLevel.Strong && Math.Max(image.Width, image.Height) > StrongMaxEdge)
             image.Resize(new MagickGeometry(StrongMaxEdge, StrongMaxEdge)); // keeps the aspect ratio, only shrinks here

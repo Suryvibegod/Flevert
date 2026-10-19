@@ -45,11 +45,9 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
     {
         // Rotate the pixels so viewers that ignore EXIF orientation still show the image upright.
         image.AutoOrient();
-        if (!HasAlpha && image.HasAlpha)
-        {
-            image.BackgroundColor = MagickColors.White;
-            image.Alpha(AlphaAction.Remove);
-        }
+        ImageMetadata.ToSrgb(image);
+        if (!HasAlpha)
+            ImageMetadata.FlattenOntoWhite(image);
 
         if (quality is { } q)
             image.Quality = q;

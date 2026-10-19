@@ -68,6 +68,47 @@ public sealed class ImageIoTests : IDisposable
         Assert.Equal(["big.png"], _dir.FileNames());
     }
 
+    // A CMYK JPG (from print workflows) carries a CMYK profile; converting it to RGB without that profile shifts colours
+    // by tens of levels.
+    [Theory]
+    [InlineData("image.to-png")]
+    [InlineData("image.to-webp")]
+    [InlineData("image.compress-balanced")]
+    public async Task Cmyk_images_are_converted_to_srgb_through_their_profile(string operationId)
+    {
+        var input = _dir.Combine("print.jpg");
+        using (var image = new MagickImage(new MagickColor("#3a9be0"), 64, 64))
+        {
+            image.SetProfile(ColorProfiles.SRGB);
+            image.TransformColorSpace(ColorProfiles.SRGB, ColorProfiles.USWebCoatedSWOP);
+            image.Quality = 98;
+            image.Write(input, MagickFormat.Jpeg);
+        }
+
+        IMagickColor<byte> managed, naive;
+        using (var reference = new MagickImage(input))
+        {
+            Assert.Equal(ColorSpace.CMYK, reference.ColorSpace);
+            using var naiveCopy = reference.Clone();
+            naiveCopy.ColorSpace = ColorSpace.sRGB;
+            naive = naiveCopy.GetPixels().GetPixel(32, 32).ToColor()!;
+            reference.TransformColorSpace(ColorProfiles.USWebCoatedSWOP, ColorProfiles.SRGB);
+            managed = reference.GetPixels().GetPixel(32, 32).ToColor()!;
+        }
+
+        Assert.True(Distance(naive, managed) > 15, $"control: naive {naive} vs managed {managed}");
+
+        var output = await Op(operationId).RunAsync(input, CancellationToken.None);
+
+        using var result = new MagickImage(output);
+        Assert.Equal(ColorSpace.sRGB, result.ColorSpace);
+        var actual = result.GetPixels().GetPixel(32, 32).ToColor()!;
+        Assert.True(Distance(actual, managed) <= 8, $"got {actual}, colour-managed {managed}, naive {naive}");
+    }
+
+    private static int Distance(IMagickColor<byte> a, IMagickColor<byte> b) =>
+        Math.Max(Math.Abs(a.R - b.R), Math.Max(Math.Abs(a.G - b.G), Math.Abs(a.B - b.B)));
+
     // Strip() also drops the PNG colour chunks; a Display P3 screenshot would then shift colour.
     [Theory]
     [InlineData("image.strip-metadata")]

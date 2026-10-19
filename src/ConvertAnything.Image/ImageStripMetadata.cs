@@ -43,6 +43,8 @@ public sealed class ImageStripMetadata : IOperation
                     frame.Settings.SetDefine(MagickFormat.WebP, "lossless", "true");
                 else if (target is MagickFormat.WebP or MagickFormat.Avif)
                     frame.Quality = HighQuality;
+                if (target != source)
+                    ImageMetadata.FlattenOntoWhite(frame); // HEIC/HEIF with transparency becoming JPG
             }
 
             if (images.Count > 1)
