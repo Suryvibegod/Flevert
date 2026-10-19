@@ -53,8 +53,13 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 }
 
 Step 'Commit identity (this repository only)'
-git config user.name 'Suryvibegod'
-git config user.email '79949229+Suryvibegod@users.noreply.github.com'
+# Only on the maintainer's machines: contributors keep their own identity. The GitHub no-reply address keeps personal
+# email out of the public history.
+$login = if (Get-Command gh -ErrorAction SilentlyContinue) { gh api user --jq .login 2>$null } else { $null }
+if ($login -eq 'Suryvibegod') {
+    git config user.name 'Suryvibegod'
+    git config user.email '79949229+Suryvibegod@users.noreply.github.com'
+}
 "{0} <{1}>" -f (git config user.name), (git config user.email)
 
 Step 'Global git URL rewrite'

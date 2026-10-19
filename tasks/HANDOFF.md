@@ -20,7 +20,7 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 - **Không hỏi người dùng**, tự quyết và ghi lý do vào spec/ADR. Cross-model review (Gemini/Codex) bỏ qua, ghi rõ là bỏ qua.
 - Xong hết: repo **public**, release có installer, README có ảnh/GIF demo, topics GitHub, soạn sẵn bài giới thiệu để người dùng tự đăng (Reddit, Facebook nhóm dev VN, ...).
 - Ngôn ngữ: UI/README/commit tiếng Anh; spec/plan nội bộ tiếng Việt.
-- Commit: `Suryvibegod <79949229+Suryvibegod@users.noreply.github.com>`, kết thúc message bằng dòng `Co-Authored-By`. Mỗi commit một việc; kiểm `dotnet format --verify-no-changes` bằng **exit code** (đừng nối qua `| head`).
+- Commit: `Suryvibegod` với email ẩn của GitHub (`79949229+Suryvibegod@users.noreply.github.com`, script setup đặt khi `gh` đăng nhập Suryvibegod; **không** dùng email cá nhân), kết thúc message bằng dòng `Co-Authored-By`. Mỗi commit một việc; kiểm `dotnet format --verify-no-changes` bằng **exit code** (đừng nối qua `| head`).
 
 ## Trạng thái
 

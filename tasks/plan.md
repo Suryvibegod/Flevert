@@ -56,4 +56,4 @@ Dựng `ca.exe` và thư viện `ConvertAnything.Core`: thao tác cắm được
 
 ## Decisions
 
-- Commit bằng `Suryvibegod <79949229+Suryvibegod@users.noreply.github.com>` (git config riêng của repo; các commit đầu dùng email cũ), repo `Suryvibegod/ConvertAnything` (private; bản cũ ở `old-account/ConvertAnything` không còn dùng).
+- Commit bằng `Suryvibegod` với email ẩn của GitHub (git config riêng của repo), repo `Suryvibegod/ConvertAnything`.
