@@ -30,7 +30,7 @@ Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, kh�
 | installer (v0.1) | Xong, review 5 vòng ([installer/todo.md](installer/todo.md)); menu cổ điển kiểm tay đạt (ADR-0005). |
 | media, pdf | Chưa làm. Spec nháp: [docs/specs/media.md](../docs/specs/media.md), [docs/specs/pdf.md](../docs/specs/pdf.md). |
 
-Test: Core 204 (+1 skip), Image 221. Test đầu-cuối installer: `scripts/test-installer.ps1` (9 kịch bản, chạy tay trên máy thật). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` (release notes lấy từ `CHANGELOG.md`).
+Test: Core 204 (+1 skip), Image 240. Test đầu-cuối installer: `scripts/test-installer.ps1` (9 kịch bản, chạy tay trên máy thật). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` (release notes lấy từ `CHANGELOG.md`).
 
 ## Việc đang làm: phát hành v0.1.0
 
@@ -38,11 +38,20 @@ Repo **`Suryvibegod/Flevert`** (tạo lại để GitHub không còn phục vụ
 
 Tiếp theo: CI xanh 3 lần trên repo mới → tag `v0.1.0` → kiểm bản nháp theo RELEASING → người dùng cài bản nháp, kiểm ảnh iPhone dọc có GPS, chụp lại menu (tên mới) cho README → quét VirusTotal (API key người dùng đưa trong chat, chỉ dùng trong lệnh, **không ghi vào file nào**) → người dùng Publish.
 
-Sau v0.1.0: nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview trên web, soạn bài giới thiệu (Reddit, nhóm dev VN). Rồi pdf (v0.2): hoàn thiện spec `docs/specs/pdf.md`, mở rộng `IOperation` cho batch operations (chọn nhiều ảnh bất kỳ sang 1 PDF, ghép PDF), tích hợp qpdf (Apache-2.0) và Docnet.Core/PDFiumCore. Sau đó mới tới media (v0.3).
+Sau v0.1.0: nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview trên web, soạn bài giới thiệu (Reddit, nhóm dev VN). Rồi pdf (v0.2): hoàn thiện spec `docs/specs/pdf.md`, mở rộng `IOperation` cho batch operations (chọn nhiều ảnh bất kỳ sang 1 PDF, ghép PDF), tích hợp qpdf (Apache-2.0) và pdfium. Sau đó mới tới media (v0.3).
+
+Điều kiện v0.2 (từ review trước phát hành, phải nằm trong plan):
+- Script `scripts/fetch-deps.ps1` tải qpdf/pdfium bản cố định vào `deps/`, kiểm SHA256; CI và release dùng nó; không commit binary.
+- pdfium phải là bản mới (vd. `bblanchon/pdfium-binaries`, ghim hash), **không** dùng Docnet.Core/PDFiumCore vì kèm pdfium cũ 2021–2023 (PDF là input không tin cậy).
+- `build-installer.ps1` gom notice của deps (pdfium kèm FreeType, libjpeg-turbo, OpenJPEG, lcms2, zlib; qpdf và thư viện kèm) vào bộ cài.
+- `IOperation` nhiều input → một output (N→1) và một input → nhiều output, có tiến độ; giới hạn trang và kích thước (sau khi nhân DPI); pdfium không thread-safe: tuần tự hóa toàn tiến trình.
+- Mật khẩu cho qpdf không qua dòng lệnh (`--password-file` hoặc `@-` qua stdin).
+- Spec pdf.md cần sửa: PDFsharp 6.5+ là AGPL nhưng ≤6.2.4 là MIT; "CLI không GUI" mâu thuẫn hộp thoại mật khẩu; mục tiêu "dưới 200ms" chỉ cho khởi động; extract-images giữ JPEG gốc thay vì ép PNG; giới hạn trang **và** kích thước.
+- Giữ setup 0.1.0 làm fixture test nâng cấp; bật `RestorePackagesWithLockFile` + `--locked-mode`.
 
 ## Dựng máy mới
 
-Người dùng chỉ clone repo, mở Claude Code trong thư mục repo rồi gõ "làm tiếp đi". [CLAUDE.md](../CLAUDE.md) chỉ Claude chạy `scripts/setup-dev.ps1`: cài .NET 10 SDK cho riêng user nếu thiếu, nhắc cài/đăng nhập GitHub CLI, đặt danh tính commit, sửa rule git rewrite hỏng, cài plugin agent-skills, build và chạy test. Plugin cài giữa phiên chỉ nạp sau khi khởi động lại hoặc `/reload-plugins`; trong lúc đó đọc skill từ `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/`.
+Người dùng (chủ repo) chỉ clone repo, mở Claude Code trong thư mục repo rồi gõ "làm tiếp đi". [CLAUDE.md](../CLAUDE.md) chỉ Claude chạy `scripts/setup-dev.ps1`: cài .NET 10 SDK cho riêng user nếu thiếu, nhắc cài/đăng nhập GitHub CLI; **chỉ trên máy chủ repo** (gh đăng nhập tài khoản ID 79949229) mới cài Inno Setup, đặt danh tính commit, sửa rule git rewrite hỏng, cài plugin agent-skills; rồi build và chạy test từng project. Các việc phát hành (tag, publish) chỉ chủ repo làm. Plugin cài giữa phiên chỉ nạp sau khi khởi động lại hoặc `/reload-plugins`; trong lúc đó đọc skill từ `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/`.
 
 Lưu ý môi trường (đã gặp):
 - SDK cài cho riêng user: shell mở trước khi chạy setup không có `dotnet` trong PATH; đặt `$env:Path = "$env:LOCALAPPDATA\Microsoft\dotnet;$env:Path"; $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"`.

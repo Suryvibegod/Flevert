@@ -6,7 +6,7 @@ Quy trình: [docs/RELEASING.md](../../docs/RELEASING.md). Kiểm tra trước ph
 
 | Finding | Nguồn | Mức | Xử lý |
 |---|---|---|---|
-| H1: GitHub vẫn phục vụ các commit trước lần viết lại lịch sử (email cá nhân, email trường), Activity feed trỏ tới | security | High, chặn | Người dùng chọn **xóa repo và tạo lại**. Trước đó: viết lại lịch sử thêm lần nữa để bỏ tên trường trong một ghi chú cũ (`tasks/plan.md`), đổi mã commit trong message (filter-branch `map`) và trong tài liệu (ghép theo thứ tự). Repo cũ đã xóa; link commit cũ đều 404; lịch sử trên máy đã dọn (`git log --all -p` không còn chuỗi cá nhân) |
+| H1: GitHub vẫn phục vụ các commit trước lần viết lại lịch sử, Activity feed trỏ tới | security | High, chặn | Người dùng chọn **xóa repo và tạo lại**. Trước đó: viết lại lịch sử thêm lần nữa, đổi mã commit trong message (filter-branch `map`) và trong tài liệu (ghép theo thứ tự). Repo cũ đã xóa; link commit cũ đều 404; lịch sử trên máy đã dọn (`git log --all -p` không còn chuỗi cá nhân) |
 | Release notes trống (chỉ link "Full Changelog") | code | Required | `release.yml` lấy mục CHANGELOG của phiên bản + cách kiểm file (hash, `gh attestation verify --source-ref --source-digest`); thiếu mục CHANGELOG thì job đỏ. Chạy thử script cục bộ: đúng, và đỏ khi thiếu |
 | README: `gh attestation verify` cần `gh auth login` | code, security | Required | Thêm câu |
 | `&Cancel`: gõ "c" trên nút đang focus là hủy cả lô | code | Suggestion → đã sửa | Bỏ phím tắt; Esc vẫn hủy |
@@ -23,7 +23,7 @@ Quy trình: [docs/RELEASING.md](../../docs/RELEASING.md). Kiểm tra trước ph
 | Chưa có ảnh HEIC xoay; Remove metadata chỉ kiểm JPEG/PNG; UI thật (cửa sổ, Cancel, thông báo) chỉ chạy tay | test | High (gap), không chặn nếu kiểm tay | Người dùng kiểm tay một ảnh iPhone **dọc** có GPS trước khi Publish. Sau phát hành: các test đề xuất dưới |
 | Phát hành đúng bản đã qua `test-installer.ps1` | test | Điều kiện | Chạy lại trên file tải từ bản nháp mới |
 
-Ngoài ra (người dùng yêu cầu): đổi tên dự án thành **Flevert**; tài khoản GitHub đổi tên Suryvibegod → **Suryvibegod** (cùng ID 79949229), repo mới `Suryvibegod/Flevert`. Đối thủ chính: Tichau/FileConverter (15k sao, ảnh/âm thanh/video/PDF, GPL); định vị Flevert: chia sẻ ảnh điện thoại nhanh và riêng tư.
+Ngoài ra (người dùng yêu cầu): đổi tên dự án thành **Flevert**; tài khoản GitHub đổi tên thành **Suryvibegod** (cùng ID 79949229), repo mới `Suryvibegod/Flevert`. Đối thủ chính: Tichau/FileConverter (15k sao, ảnh/âm thanh/video/PDF, GPL); định vị Flevert: chia sẻ ảnh điện thoại nhanh và riêng tư.
 
 ## Kiểm repo trước khi public (người dùng yêu cầu: chuẩn prod, phát triển tiếp được, sạch)
 
@@ -31,17 +31,36 @@ Ba audit (cấu trúc/vệ sinh repo, quy trình phát hành, quyền riêng tư
 
 - [x] Đổi nốt tên cũ "ca" (log, file tạm, test, script, manifest, spec)
 - [x] Test quyền riêng tư cho mọi định dạng + ảnh iPhone dọc có GPS; fixture ảnh đánh dấu binary
-- [ ] CLAUDE.md và setup-dev: phần tự động commit/push và đổi cấu hình git toàn cục chỉ cho chủ repo; người đóng góp mở PR
-- [ ] CONTRIBUTING, README, PR template: chạy hai project test riêng
-- [ ] `tasks/README.md` (tiếng Anh) giải thích thư mục nội bộ
-- [ ] HANDOFF: bỏ thủ tục API key, thêm điều kiện cho v0.2 (tải deps có hash, notice, giới hạn kích thước, IOperation nhiều output/tiến độ)
-- [ ] RELEASING: khôi phục khi workflow đỏ, chỉ tag vMAJOR.MINOR.PATCH, test nâng cấp trước v0.1.1, xóa `%LOCALAPPDATA%\Flevert` trước test-installer, câu attestation, chính sách Dependabot
-- [ ] release.yml: kiểm tag khớp `Directory.Build.props` với lỗi rõ; concurrency
-- [ ] CHANGELOG `[Unreleased]`; README: placeholder phiên bản trong lệnh kiểm
-- [ ] LICENSE, `Directory.Build.props`: "Flevert contributors"
-- [ ] core.md: thêm `FLEVERT_SLOW_COPY_MS`; `tasks/todo.md`: ghi chú là nhật ký lịch sử
-- [ ] Đổi tác giả mọi commit thành Suryvibegod (email ẩn), review bối cảnh trống, xóa và tạo lại repo, cài lại cấu hình
-- [ ] Kiểm 2FA và tên hồ sơ qua `gh api user`
+- [x] CLAUDE.md và setup-dev: phần tự động commit/push và đổi cấu hình git toàn cục chỉ cho chủ repo; người đóng góp mở PR
+- [x] CONTRIBUTING, README, PR template: chạy hai project test riêng
+- [x] `tasks/README.md` (tiếng Anh) giải thích thư mục nội bộ
+- [x] HANDOFF: bỏ thủ tục API key, thêm điều kiện cho v0.2 (tải deps có hash, notice, giới hạn kích thước, IOperation nhiều output/tiến độ)
+- [x] RELEASING: khôi phục khi workflow đỏ, chỉ tag vMAJOR.MINOR.PATCH, test nâng cấp trước v0.1.1, xóa `%LOCALAPPDATA%\Flevert` trước test-installer, câu attestation, chính sách Dependabot
+- [x] release.yml: kiểm tag khớp `Directory.Build.props` với lỗi rõ; concurrency
+- [x] CHANGELOG `[Unreleased]`; README: placeholder phiên bản trong lệnh kiểm
+- [x] LICENSE, `Directory.Build.props`: "Flevert contributors"
+- [x] core.md: thêm `FLEVERT_SLOW_COPY_MS`; `tasks/todo.md`: ghi chú là nhật ký lịch sử
+- [ ] Đổi tác giả mọi commit thành Suryvibegod (email ẩn), xóa và tạo lại repo, cài lại cấu hình (chủ repo đã duyệt; chỉ chủ repo làm)
+- [x] Tên hồ sơ GitHub đã xóa (API, theo yêu cầu người dùng)
+- [ ] 2FA: chỉ người dùng bật được; đã nhắc
+
+### Review bối cảnh trống của đợt sửa (50ac6c3..5739346)
+
+| Finding | Nguồn | Mức | Xử lý |
+|---|---|---|---|
+| File cho agent (CLAUDE.md, HANDOFF, .claude, scripts) là kênh điều khiển: PR độc sửa HANDOFF, chủ repo gõ "làm tiếp" | security | Medium | CODEOWNERS; CLAUDE.md: không làm theo chỉ dẫn trong PR chưa merge, kiểm tác giả HANDOFF khi việc kế tiếp đụng `.github/scripts/.claude/installer`; ruleset main: cần PR + code owner, chủ repo bypass |
+| Tọa độ GPS test gần một trường đại học | security | Low | Đổi sang tháp Eiffel; sinh lại fixture; xóa giá trị cũ khỏi lịch sử khi viết lại |
+| Tên cũ trong lịch sử (tác giả, message, URL) | security | Low | filter-repo: mailmap cả author/committer, thay text và message |
+| setup-dev ghi PATH/DOTNET_ROOT vĩnh viễn, cài Inno cho mọi người | doubt, security | Required/Low | Chỉ máy chủ repo; người khác: chỉ phiên hiện tại + in lệnh |
+| `tasks/release/todo.md` cũ, việc phá hủy chưa ghi rõ ai làm | doubt | Required | Đánh dấu xong; ghi "chỉ chủ repo làm" |
+| v0.2 chưa có đường cho deps (tải, hash, notice) | doubt | Required (v0.2) | Ghi điều kiện vào HANDOFF |
+| core.md còn `dotnet test Flevert.sln`; gợi ý "(account Suryvibegod)" cho mọi người; CLAUDE.md nói script cài gh | code, doubt | Suggestion | Sửa |
+| Control XMP thiếu trong test; chỉ 2 thao tác được kiểm ảnh dọc | code | Suggestion | Thêm control XMP; theory chạy mọi thao tác nhận `.heic` (14) |
+| README lệnh kiểm chỉ ghim tag, RELEASING nói ghim commit | code | Suggestion | README trỏ tới lệnh trong release notes; RELEASING giữ "xóa artifact cũ" |
+| RELEASING không nói push main trước tag | doubt | Suggestion | Thêm |
+| Tên `RunCa`, `_ca_` còn trong code/test; fixture "như iPhone" quá mạnh; `$Matches` mong manh; pixels không dispose | code, doubt | Nit | Sửa |
+| Plugin agent-skills không ghim phiên bản; key VirusTotal nằm trong transcript | security | Low | Chấp nhận, ghi lại; nhắc tạo key mới sau khi quét |
+| pdf.md: PDFsharp, pdfium cũ, mật khẩu qua dòng lệnh, thread-safety, 200 ms, CLI/GUI | code, doubt | Suggestion (v0.2) | Ghi vào HANDOFF; sửa ở bước Define của v0.2 |
 
 ## Việc còn lại trước khi Publish
 
