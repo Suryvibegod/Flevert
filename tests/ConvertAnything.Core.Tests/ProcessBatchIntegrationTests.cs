@@ -97,6 +97,25 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         Assert.False(File.Exists(Path.Combine(real, "x (copy).txt")));
     }
 
+    [SkippableFact]
+    public async Task A_short_8dot3_path_gives_an_output_named_after_the_long_name()
+    {
+        // Explorer passes 8.3 names for long paths; the output is named from the pinned file's real path.
+        var full = _dir.File("Ảnh Đà Lạt rất dài tên.txt");
+        var buffer = new char[1024];
+        var length = GetShortPathNameW(full, buffer, (uint)buffer.Length);
+        var shortPath = new string(buffer, 0, (int)length);
+        Skip.If(length == 0 || shortPath == full, "8.3 short names are disabled on this volume.");
+
+        using var ca = Ca("dev.copy", shortPath);
+        await ExitAllOk([ca]);
+
+        Assert.True(File.Exists(_dir.Combine("Ảnh Đà Lạt rất dài tên (copy).txt")), string.Join(", ", Directory.GetFiles(_dir.Path)));
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetShortPathNameW(string longPath, [System.Runtime.InteropServices.Out] char[] shortPath, uint length);
+
     [Fact]
     public async Task Relative_paths_resolve_against_the_directory_ca_was_started_in()
     {
