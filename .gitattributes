@@ -4,3 +4,8 @@
 *.png binary
 *.jpg binary
 *.ico binary
+*.heic binary
+*.webp binary
+*.tif binary
+*.avif binary
+*.gif binary

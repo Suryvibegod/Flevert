@@ -60,6 +60,54 @@ public sealed class StripMetadataTests : IDisposable
         Assert.Equal((20u, 40u), (result.Width, result.Height)); // rotated, since the orientation tag is gone
     }
 
+    // The promise users act on before sharing a photo: no location, camera or embedded text is left, in any format that
+    // can carry them. Checked on the profiles and on the raw bytes, so a copy hidden elsewhere in the file also fails.
+    [Theory]
+    [InlineData("photo.jpg", MagickFormat.Jpeg)]
+    [InlineData("photo.png", MagickFormat.Png)]
+    [InlineData("photo.webp", MagickFormat.WebP)]
+    [InlineData("photo.avif", MagickFormat.Avif)]
+    // TIFF is missing because ImageMagick cannot write EXIF into a TIFF to build the input (ADR-0004); HEIC, which it
+    // cannot write at all, has its own fixture made by pillow-heif (portrait-gps.heic).
+    public async Task Location_and_camera_details_are_removed_from_every_format_that_carries_them(string name, MagickFormat format)
+    {
+        var input = _dir.Combine(name);
+        using (var image = new MagickImage(MagickColors.Gray, 64, 48))
+        {
+            var exif = new ExifProfile();
+            exif.SetValue(ExifTag.Make, "SecretCamMake");
+            exif.SetValue(ExifTag.GPSLatitudeRef, "N");
+            exif.SetValue(ExifTag.GPSLatitude, [new Rational(48, 1), new Rational(51, 1), new Rational(30, 1)]);
+            exif.SetValue(ExifTag.GPSLongitudeRef, "E");
+            exif.SetValue(ExifTag.GPSLongitude, [new Rational(2, 1), new Rational(17, 1), new Rational(40, 1)]);
+            image.SetProfile(exif);
+            image.SetProfile(new XmpProfile(System.Text.Encoding.UTF8.GetBytes(
+                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">"
+                + "<rdf:Description xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>SecretXmpTitle</dc:title></rdf:Description>"
+                + "</rdf:RDF></x:xmpmeta>")));
+            image.Write(input, format);
+        }
+
+        using (var check = new MagickImage(input))
+            Assert.True(check.GetExifProfile()?.GetValue(ExifTag.GPSLatitude) is not null, $"control: {format} input carries GPS");
+        Assert.Contains("SecretCamMake", Latin1(input), StringComparison.Ordinal);
+
+        var output = await StripOp().RunAsync(input, CancellationToken.None);
+
+        using (var result = new MagickImage(output))
+        {
+            Assert.Null(result.GetExifProfile());
+            Assert.Null(result.GetXmpProfile());
+        }
+
+        var bytes = Latin1(output);
+        Assert.DoesNotContain("SecretCamMake", bytes, StringComparison.Ordinal);
+        Assert.DoesNotContain("SecretXmpTitle", bytes, StringComparison.Ordinal);
+        Assert.DoesNotContain("xmpmeta", bytes, StringComparison.Ordinal);
+    }
+
+    private static string Latin1(string path) => System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(path));
+
     [Theory]
     [InlineData("chart.png", "chart (no metadata).png")]
     [InlineData("pic.webp", "pic (no metadata).webp")]
