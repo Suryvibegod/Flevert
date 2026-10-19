@@ -66,6 +66,8 @@ public static class MagickSetup
             // ImageMagick reads policy.xml from disk; a folder other accounts can write would let them relax it.
             Directory.CreateDirectory(ConfigurationDirectory);
             SecureDirectory.RestrictToOwnerAndAdmins(ConfigurationDirectory);
+            // Also the pixel-cache folder for decoded images; ca.exe labels the whole app-data folder, other hosts may not.
+            SecureDirectory.TryApplyNoReadUpLabel(ConfigurationDirectory);
 
             WriteConfiguration(ConfigurationDirectory);
             MagickNET.Initialize(ConfigurationDirectory);
@@ -80,7 +82,37 @@ public static class MagickSetup
             ResourceLimits.ListLength = 1_000;
             ResourceLimits.Time = 120;
 
+            VerifyPolicy();
             _initialized = true;
+        }
+    }
+
+    /// <summary>
+    /// Proves the script coders are refused. ImageMagick also loads a <c>policy.xml</c> from the working directory and
+    /// applies it after ours, so a permissive file planted there (for example in Downloads, where Explorer starts verbs)
+    /// would re-enable them. ca.exe moves its working directory first; this check makes the module fail closed anyway.
+    /// </summary>
+    internal static void VerifyPolicy()
+    {
+        foreach (var format in new[] { MagickFormat.Mvg, MagickFormat.Msl, MagickFormat.Text })
+        {
+            try
+            {
+                using var image = new MagickImage();
+                image.Read("viewbox 0 0 1 1\n"u8.ToArray(), new MagickReadSettings { Format = format, Width = 1, Height = 1 });
+            }
+            catch (MagickPolicyErrorException)
+            {
+                continue; // refused, as it must be
+            }
+#pragma warning disable CA1031 // Any other outcome means the coder ran; never continue with that policy.
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"ImageMagick's {format} coder is not blocked by policy; refusing to process images.", ex);
+            }
+#pragma warning restore CA1031
+
+            throw new InvalidOperationException($"ImageMagick's {format} coder is not blocked by policy; refusing to process images.");
         }
     }
 }

@@ -36,6 +36,9 @@ public static class ImageFile
         if (!Formats.TryGetValue(Path.GetExtension(path), out var format))
             throw new NotSupportedException($"{Path.GetExtension(path)} is not a supported image type.");
 
-        return new MagickImageCollection(path, new MagickReadSettings { Format = format });
+        var settings = new MagickReadSettings { Format = format };
+        // Photoshop layers embedded in a TIFF are parsed by a separate, larger decoder; the composite image is enough.
+        settings.SetDefine(MagickFormat.Tiff, "ignore-layers", "true");
+        return new MagickImageCollection(path, settings);
     }
 }

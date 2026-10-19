@@ -51,6 +51,32 @@ public sealed class MagickSetupTests : IDisposable
     }
 
     [Fact]
+    public void The_loaded_policy_is_verified_to_refuse_script_coders()
+    {
+        // ImageMagick also loads a policy.xml from the working directory, after ours; a permissive one there would
+        // re-enable MVG/MSL/TEXT. Initialisation must prove the coders are refused, and fail closed otherwise.
+        MagickSetup.VerifyPolicy();
+    }
+
+    [Fact]
+    public void The_folder_for_policy_and_decoded_image_caches_is_labelled_no_read_up()
+    {
+        // Pixel caches of decoded images live here; a low-integrity process of the same user must not read them.
+        // Reading the label through .NET needs SeSecurityPrivilege; icacls shows it without.
+        using var icacls = Process.Start(new ProcessStartInfo("icacls.exe", $"\"{MagickSetup.ConfigurationDirectory}\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            CreateNoWindow = true,
+        })!;
+        var output = icacls.StandardOutput.ReadToEnd();
+        icacls.WaitForExit();
+
+        Assert.Contains("Mandatory Level", output, StringComparison.Ordinal);
+        Assert.Contains("NR", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_stale_or_tampered_policy_on_disk_is_replaced_before_loading()
     {
         File.WriteAllText(Path.Combine(_dir.Path, "policy.xml"), "<policymap></policymap>");
