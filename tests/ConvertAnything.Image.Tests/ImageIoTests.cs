@@ -4,6 +4,7 @@ using ImageMagick;
 namespace ConvertAnything.Image.Tests;
 
 /// <summary>Behaviour shared by every operation: how files are read and written, and what survives.</summary>
+[Collection(nameof(SequentialTimingTests))]
 public sealed class ImageIoTests : IDisposable
 {
     private readonly TempDir _dir = new();
@@ -75,7 +76,9 @@ public sealed class ImageIoTests : IDisposable
         decode.Stop();
         var bound = TimeSpan.FromSeconds(Math.Max(5, 1 + 2 * decode.Elapsed.TotalSeconds));
 
-        // Cancel once this machine has decoded the image, so the cancel lands in the encode the test is about.
+        // Cancel once this machine has decoded the image, so the cancel usually lands in the encode the test is about
+        // (the operation's own decode can still be slower). ImageMagick reports encode progress row by row for PNG, JPEG
+        // and WebP (4000 events for this image, gaps under 2 s), so a cancelled encode stops quickly.
         using var cancel = new CancellationTokenSource(decode.Elapsed + TimeSpan.FromMilliseconds(500));
         var timer = System.Diagnostics.Stopwatch.StartNew();
         var cancelledAt = TimeSpan.Zero;
