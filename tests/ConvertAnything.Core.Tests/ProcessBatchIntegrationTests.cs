@@ -72,9 +72,13 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         await ExitAllOk([leader, late]);
 
         Assert.Equal(3, Directory.GetFiles(_dir.Path, "* (copy).txt").Length);
-        // Failed once in six full-suite runs (two batches after ~11 s); the log shows which process did what.
+        // Has failed under heavy parallel load (the image suite encoding at the same time): two batches after ~11 s, once
+        // with an empty log. Report everything needed to tell why.
         Assert.True(LoggedProcessIds().Length == 1,
-            $"leader {leader.Id}, late {late.Id}:\n" + string.Join('\n', Directory.GetFiles(_logs.Path).SelectMany(File.ReadAllLines)));
+            $"leader {leader.Id} exit {leader.ExitCode}, late {late.Id} exit {late.ExitCode}\n"
+            + $"logs: {string.Join(", ", Directory.GetFiles(_logs.Path).Select(f => $"{Path.GetFileName(f)} ({new FileInfo(f).Length} B)"))}\n"
+            + $"outputs: {string.Join(", ", Directory.GetFiles(_dir.Path).Select(Path.GetFileName))}\n"
+            + string.Join('\n', Directory.GetFiles(_logs.Path).SelectMany(File.ReadAllLines)));
     }
 
     [Fact]
