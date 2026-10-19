@@ -57,8 +57,6 @@ UninstallDisplayIcon={app}\{#AppExe}
 AppMutex={#AppMutexName}
 CloseApplications=yes
 RestartApplications=no
-; PrepareToInstall unpacks a second copy of the app (about 140 MB) into {tmp}, usually on the same drive as {app}.
-ExtraDiskSpaceRequired=150000000
 ; Tells Explorer the menu changed, also when only the uninstall safety net below could clean up.
 ChangesAssociations=yes
 
@@ -295,17 +293,25 @@ begin
     // {app} stays unexpanded: this extracts the files meant for {app} into a folder literally named {tmp}\{app}.
     ExtractTemporaryFiles('{app}\*');
   except
-    Result := 'Setup could not unpack its files into ' + ExpandConstant('{tmp}') + ' to check the install folder: ' +
-      GetExceptionMessage + ' Make sure the drive has free space, then run setup again.';
+    // A second copy of the app (about 140 MB) goes here; a full drive is the likeliest cause.
+    Result := 'Setup could not unpack its files into ' + ExpandConstant('{tmp}') + ' to check the install folder (' +
+      GetExceptionMessage + '). Make sure the drive has free space and that security software did not block setup, ' +
+      'then run setup again.';
   end;
   if (Result = '') and not RunCaIn(Checker, 'check-location "' + App + '"', Started, Code, Reason) then
   begin
-    if Reason = '' then
-      Reason := 'Other accounts may be able to change ' + App + '.';
     if Started and (Code = ExitRefusedLocation) then
-      Result := Reason + ' See {#AppUrl}#setup-refused-the-install-folder'
-    else if Started and (Code >= 1) and (Code <= 3) then
-      Result := Format('Setup could not check the install folder (code %d): %s', [Code, Reason])
+    begin
+      if Reason = '' then
+        Reason := 'Other accounts may be able to change ' + App + '.';
+      Result := Reason + ' See {#AppUrl}#setup-refused-the-install-folder';
+    end
+    else if Started and (Code >= 1) and (Code <= 2) then
+    begin
+      if Reason = '' then
+        Reason := 'ConvertAnything gave no reason.';
+      Result := Format('Setup could not check the install folder (code %d): %s', [Code, Reason]);
+    end
     else
       Result := Format('Setup could not check the install folder (code %d). Windows, or a security policy that ' +
         'blocks programs in the temporary folder, stopped ConvertAnything from running. See {#AppUrl}#smart-app-control', [Code]);
