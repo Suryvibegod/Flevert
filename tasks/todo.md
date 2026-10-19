@@ -388,3 +388,15 @@ Nguồn: 1 reviewer bối cảnh trống, 3 góc (code, bảo mật, doubt), 202
 - [x] P2: Bỏ kiểm đuôi trước pin khi tên có `~` (kiểm lại trên đường dẫn thật); test với đuôi 4 chữ
 - [x] P3: SPEC biến môi trường; comment test; todo H3
 - [ ] Test gom lô qua junction hỏng một lần nữa khi chạy cả solution (bộ image mã hóa song song), log rỗng; không tái hiện trong 5 lần chạy sau; test giờ in mã thoát, file log, output khi hỏng
+
+# Phase 9: Review vòng 8 (core)
+
+Nguồn: 1 reviewer bối cảnh trống, 3 góc, 2026-10-19, trên `37a6037..HEAD`. Không có Critical/High/Required; kết luận "ship". Medium/Low đã xử lý:
+
+- [x] Quy tắc "không lỗi" (mã thoát) chuyển vào `BatchOutcome.NoFailures`, có test; CLI dùng chung
+- [x] Cả lô bị bỏ qua: nói lý do chung, hoặc chỉ tới log (và bấm thông báo mở log) khi lý do khác nhau
+- [x] `FileResult` bị bỏ qua không bao giờ tính là thành công; `OperationSkippedException()` có thông báo mặc định
+- [x] Hợp đồng bỏ qua: "đầu vào đã đáp ứng yêu cầu"; yêu cầu không làm được là lỗi; ném trực tiếp, trước khi ghi output (doc + SPEC-core)
+- [x] SPEC-core: trạng thái `skipped` trong log, cách thông báo, ý nghĩa mã thoát
+- [x] Chẩn đoán của test gom lô qua junction chạy được cả khi assert trước đó hỏng
+- [ ] TIFF nhiều trang trong Compress chuyển từ "skipped" sang lỗi (thuộc module image, làm cùng review vòng 3 image)

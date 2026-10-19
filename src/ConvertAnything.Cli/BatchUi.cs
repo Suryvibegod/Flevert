@@ -49,7 +49,7 @@ internal sealed class BatchUi : ApplicationContext
         work.ContinueWith(t => Finish(t.Result), TaskScheduler.FromCurrentSynchronizationContext());
     }
 
-    public bool AllSucceeded { get; private set; }
+    public bool NoFailures { get; private set; }
 
     public static bool Run(IOperation operation, BatchLeader leader, RunLog log)
     {
@@ -57,7 +57,7 @@ internal sealed class BatchUi : ApplicationContext
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         using var ui = new BatchUi(operation, leader, log);
         Application.Run(ui);
-        return ui.AllSucceeded;
+        return ui.NoFailures;
     }
 
     private void Finish(BatchOutcome outcome)
@@ -68,7 +68,7 @@ internal sealed class BatchUi : ApplicationContext
         exit.Tick += (_, _) => ExitThread();
         exit.Start();
 
-        AllSucceeded = outcome.Results.Count == outcome.Total && outcome.Results.All(r => !r.Failed);
+        NoFailures = outcome.NoFailures;
         try
         {
             _form.Finishing = true;
@@ -76,7 +76,7 @@ internal sealed class BatchUi : ApplicationContext
 
             var summary = BatchSummary.Describe(outcome.Results, outcome.Total, Path.GetDirectoryName(_logFile)!);
             _tray = new NotifyIcon { Icon = _form.Icon, Text = "ConvertAnything", Visible = true };
-            if (summary.HasFailures)
+            if (summary.ShowsLog)
                 _tray.BalloonTipClicked += (_, _) => OpenLog();
             _tray.BalloonTipClosed += (_, _) => ExitThread();
             _tray.ShowBalloonTip((int)NotificationLifetime.TotalMilliseconds, "ConvertAnything", summary.Text,

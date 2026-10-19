@@ -69,17 +69,26 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         var leader = CaVia(viaLink, "dev.slow-copy", _dir.File("1.txt"), _dir.File("2.txt"));
         await Task.Delay(TimeSpan.FromSeconds(1.2));
         var late = CaVia(viaLink, "dev.slow-copy", _dir.File("3.txt"));
-        await ExitAllOk([leader, late]);
 
-        Assert.Equal(3, Directory.GetFiles(_dir.Path, "* (copy).txt").Length);
         // Has failed under heavy parallel load (the image suite encoding at the same time): two batches after ~11 s, once
-        // with an empty log. Report everything needed to tell why.
-        Assert.True(LoggedProcessIds().Length == 1,
-            $"leader {leader.Id} exit {leader.ExitCode}, late {late.Id} exit {late.ExitCode}\n"
-            + $"logs: {string.Join(", ", Directory.GetFiles(_logs.Path).Select(f => $"{Path.GetFileName(f)} ({new FileInfo(f).Length} B)"))}\n"
-            + $"outputs: {string.Join(", ", Directory.GetFiles(_dir.Path).Select(Path.GetFileName))}\n"
-            + string.Join('\n', Directory.GetFiles(_logs.Path).SelectMany(File.ReadAllLines)));
+        // with an empty log. Any failed assertion below carries everything needed to tell why.
+        try
+        {
+            await ExitAllOk([leader, late]);
+            Assert.Equal(3, Directory.GetFiles(_dir.Path, "* (copy).txt").Length);
+            Assert.Single(LoggedProcessIds());
+        }
+        catch (Xunit.Sdk.XunitException failure)
+        {
+            throw new Xunit.Sdk.XunitException(failure.Message + "\n" + Diagnostics(leader, late));
+        }
     }
+
+    private string Diagnostics(params Process[] processes) =>
+        string.Join(", ", processes.Select(p => $"pid {p.Id} " + (p.HasExited ? $"exit {p.ExitCode}" : "running"))) + "\n"
+        + $"logs: {string.Join(", ", Directory.GetFiles(_logs.Path).Select(f => $"{Path.GetFileName(f)} ({new FileInfo(f).Length} B)"))}\n"
+        + $"outputs: {string.Join(", ", Directory.GetFiles(_dir.Path).Select(Path.GetFileName))}\n"
+        + string.Join('\n', Directory.GetFiles(_logs.Path).SelectMany(File.ReadAllLines));
 
     [Fact]
     public async Task A_name_ending_in_a_dot_is_not_resolved_to_the_file_without_it()

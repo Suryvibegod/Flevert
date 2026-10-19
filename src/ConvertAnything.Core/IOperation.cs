@@ -26,12 +26,14 @@ public interface IOperation
 }
 
 /// <summary>
-/// Thrown by an operation that chooses not to produce an output for a file, for a reason the user should see (for
-/// example "already well compressed"). Reported as skipped, with the message and no stack trace, not as a failure.
+/// Thrown by an operation when the input already satisfies the request, so there is nothing worth writing (for example
+/// "already well compressed"). Reported as skipped, with the message and no stack trace, and not as a failure; a request
+/// the operation cannot fulfil is a failure, not a skip. Throw it directly (not wrapped), before any output is committed.
 /// </summary>
 public sealed class OperationSkippedException : Exception
 {
     public OperationSkippedException()
+        : base("Nothing to gain.")
     {
     }
 

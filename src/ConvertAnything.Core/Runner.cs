@@ -7,7 +7,7 @@ namespace ConvertAnything.Core;
 /// <param name="Skipped">The operation chose not to produce an output (nothing to gain); not a failure.</param>
 public sealed record FileResult(string Input, string? Output, string? Error, bool Skipped = false)
 {
-    public bool Succeeded => Error is null;
+    public bool Succeeded => Error is null && !Skipped;
 
     public bool Failed => Error is not null && !Skipped;
 }
@@ -16,7 +16,11 @@ public sealed record BatchProgress(int Completed, int Total, string? Current);
 
 /// <param name="Results">Finished files, in processing order. A file interrupted by cancellation is not included.</param>
 /// <param name="Total">Every distinct file the batch received, including those left unprocessed by cancellation.</param>
-public sealed record BatchOutcome(IReadOnlyList<FileResult> Results, int Total);
+public sealed record BatchOutcome(IReadOnlyList<FileResult> Results, int Total)
+{
+    /// <summary>Every file was processed and none failed (skipped files are fine). Decides the exit code.</summary>
+    public bool NoFailures => Results.Count == Total && Results.All(r => !r.Failed);
+}
 
 public sealed class Runner(RunLog log)
 {

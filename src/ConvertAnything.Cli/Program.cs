@@ -93,7 +93,7 @@ internal static class Program
         }
 
         // No separate 8.3 expansion here: Path.GetFullPath above already expands short names (it calls GetLongPathNameW,
-        // which touches the path before any check; accepted, see tasks/todo.md Phase 8), and outputs are named from the
+        // which touches the path before any check; accepted, see ADR-0001), and outputs are named from the
         // pinned file's real, long path in any case.
         var inputs = run.Files.ToList();
         // No synchronization context exists yet, so blocking here cannot deadlock. Followers exit without loading WinForms.
@@ -123,6 +123,6 @@ internal static class Program
         var outcome = new Runner(log)
             .RunAsync(operation, leader.ReadAllAsync(CancellationToken.None), () => leader.Pending, progress: null, CancellationToken.None)
             .GetAwaiter().GetResult();
-        return outcome.Results.Count == outcome.Total && outcome.Results.All(r => !r.Failed) ? Ok : SomeFilesFailed;
+        return outcome.NoFailures ? Ok : SomeFilesFailed;
     }
 }
