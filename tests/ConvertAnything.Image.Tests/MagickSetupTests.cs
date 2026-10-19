@@ -27,13 +27,30 @@ public sealed class MagickSetupTests : IDisposable
     }
 
     [Fact]
-    public void Jpg_whose_content_is_another_format_is_not_decoded_as_that_format()
+    public void A_jpg_holding_a_script_is_not_handed_to_any_other_decoder()
     {
-        var disguised = Path.Combine(_dir.Path, "photo.jpg");
-        using (var png = new MagickImage(MagickColors.Red, 8, 8))
-            png.Write(disguised, MagickFormat.Png);
+        // ImageMagick is never asked to guess; only our own signature check picks another decoder, and only from the
+        // allow-list. MVG text matches none, so it is decoded as JPEG and fails.
+        var disguised = _dir.File("photo.jpg", "push graphic-context\nviewbox 0 0 8 8\npop graphic-context\n");
 
         Assert.ThrowsAny<MagickException>(() => ImageFile.Read(disguised));
+    }
+
+    [Theory]
+    [InlineData("photo.jpg", MagickFormat.Png)]
+    [InlineData("photo.png", MagickFormat.WebP)]
+    [InlineData("photo.jpg", MagickFormat.Gif)]
+    public void A_file_named_with_the_wrong_extension_is_read_as_what_it_is(string name, MagickFormat actual)
+    {
+        // Chat apps and browsers often save WebP or PNG images as ".jpg".
+        var path = Path.Combine(_dir.Path, name);
+        using (var image = new MagickImage(MagickColors.Red, 8, 8))
+            image.Write(path, actual);
+
+        using var images = ImageFile.Read(path);
+
+        Assert.Equal(actual, images[0].Format);
+        Assert.Equal(8u, images[0].Width);
     }
 
     // TEXT, URL and EPHEMERAL are allowed by the default policy; MVG and MSL are listed for completeness.

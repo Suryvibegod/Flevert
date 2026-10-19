@@ -39,6 +39,13 @@ public static class ImageFile
         if (!Formats.TryGetValue(Path.GetExtension(path), out var format))
             throw new NotSupportedException($"{Path.GetExtension(path)} is not a supported image type.");
 
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        // Downloads are often misnamed (a WebP or PNG saved as ".jpg"). Our own signature check may pick another decoder,
+        // but only from the allow-list; ImageMagick itself is never asked to guess.
+        if (Signature(stream) is { } actual && Family(actual) != Family(format))
+            format = actual;
+        stream.Position = 0;
+
         var settings = new MagickReadSettings { Format = format };
         if (!allFrames)
         {
@@ -48,9 +55,35 @@ public static class ImageFile
 
         // Photoshop layers embedded in a TIFF are parsed by a separate, larger decoder; the composite image is enough.
         settings.SetDefine(MagickFormat.Tiff, "ignore-layers", "true");
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         return new MagickImageCollection(stream, settings);
     }
+
+    /// <summary>The allowed format whose signature starts the file, or <c>null</c> if none matches.</summary>
+    private static MagickFormat? Signature(Stream stream)
+    {
+        Span<byte> h = stackalloc byte[12];
+        if (stream.Read(h) < 12)
+            return null;
+        return h switch
+        {
+            [0xFF, 0xD8, 0xFF, ..] => MagickFormat.Jpeg,
+            [0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A, ..] => MagickFormat.Png,
+            [(byte)'G', (byte)'I', (byte)'F', (byte)'8', (byte)'7' or (byte)'9', (byte)'a', ..] => MagickFormat.Gif,
+            [(byte)'R', (byte)'I', (byte)'F', (byte)'F', _, _, _, _, (byte)'W', (byte)'E', (byte)'B', (byte)'P'] => MagickFormat.WebP,
+            [(byte)'B', (byte)'M', ..] => MagickFormat.Bmp,
+            [(byte)'I', (byte)'I', 42, 0, ..] or [(byte)'M', (byte)'M', 0, 42, ..] => MagickFormat.Tiff,
+            [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', (byte)'a', (byte)'v', (byte)'i', (byte)'f' or (byte)'s'] => MagickFormat.Avif,
+            [_, _, _, _, (byte)'f', (byte)'t', (byte)'y', (byte)'p', ..] => MagickFormat.Heic, // heic, heix, mif1, ...
+            _ => null,
+        };
+    }
+
+    // HEIC, HEIF and AVIF share a container: a generic brand (mif1) cannot tell them apart, so trust the extension there.
+    private static int Family(MagickFormat format) => format switch
+    {
+        MagickFormat.Heic or MagickFormat.Heif or MagickFormat.Avif => 1,
+        _ => (int)format,
+    };
 
     /// <summary>
     /// Makes <paramref name="images"/> stop as soon as <paramref name="ct"/> is cancelled: ImageMagick checks its progress

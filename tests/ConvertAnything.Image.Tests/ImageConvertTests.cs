@@ -55,15 +55,26 @@ public sealed class ImageConvertTests : IDisposable
     }
 
     [Fact]
-    public async Task A_jpg_holding_another_format_is_refused_and_leaves_no_output()
+    public async Task A_jpg_holding_a_script_is_refused_and_leaves_no_output()
     {
-        var disguised = _dir.Combine("photo.jpg");
-        using (var image = new MagickImage(MagickColors.Red, 8, 8))
-            image.Write(disguised, MagickFormat.Png);
+        var disguised = _dir.File("photo.jpg", "push graphic-context\nviewbox 0 0 8 8\npop graphic-context\n");
 
         await Assert.ThrowsAnyAsync<MagickException>(() => ToPng().RunAsync(disguised, CancellationToken.None));
 
         Assert.Equal(["photo.jpg"], _dir.FileNames());
+    }
+
+    [Fact]
+    public async Task A_png_saved_as_jpg_still_converts()
+    {
+        var misnamed = _dir.Combine("download.jpg");
+        using (var image = new MagickImage(MagickColors.Red, 8, 8))
+            image.Write(misnamed, MagickFormat.Png);
+
+        var output = await ImageOperations.All.Single(op => op.Id == "image.to-webp").RunAsync(misnamed, CancellationToken.None);
+
+        using var webp = new MagickImage(output);
+        Assert.Equal(MagickFormat.WebP, webp.Format);
     }
 
     // The runner passes the pinned handle's final path (\\?\C:\…). ImageMagick's filename parser gives meaning to "[n]"
