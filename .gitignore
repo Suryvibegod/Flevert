@@ -24,6 +24,8 @@ mono_crash.*
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
+# ...but not the release notes kept with the task plans.
+!tasks/release/
 x64/
 x86/
 [Ww][Ii][Nn]32/
@@ -483,3 +485,6 @@ $RECYCLE.BIN/
 
 # Claude Code: per-user settings and approved commands, which can hold secrets typed into a command
 .claude/settings.local.json
+
+# Third-party tools fetched by scripts (ffmpeg and the like, from v0.2); never committed.
+deps/
