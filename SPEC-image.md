@@ -59,7 +59,7 @@ Quy tắc chung:
   - PNG: Light/Balanced = nén lossless mức cao nhất; Strong = giảm còn 256 màu.
   - GIF/BMP/TIFF: ghi ra JPG theo mức tương ứng (BMP/TIFF thường không nén; GIF giữ nguyên nếu là ảnh động).
   - Xóa metadata trừ profile màu ICC.
-  - Nếu file nén **không nhỏ hơn** file gốc thì vẫn ghi, nhưng báo trong log `not smaller`. **Hoãn:** `IOperation` chỉ trả về đường dẫn output, chưa có kênh ghi chú vào dòng log; làm khi mở rộng hợp đồng core (cùng lúc với thông báo cho người dùng), không tự đổi interface trong task này.
+  - Nếu file nén **không nhỏ hơn** file gốc (JPG đã nén sẵn ở quality ~70, PNG đã tối ưu, GIF động không có metadata) thì **báo lỗi, không ghi file**: một bản "compressed" to hơn sẽ đánh lừa người dùng. (Thay quy tắc cũ "vẫn ghi + log not smaller", theo review module.)
 - **Under N**: luôn ra JPG. Tìm nhị phân quality 40–92; nếu quality 40 vẫn quá lớn thì thu kích thước 15% mỗi bước rồi tìm lại. Kết quả phải < N (1 MB = 1 000 000 byte cho dễ hiểu với người dùng).
 - **Remove metadata**: xóa EXIF, GPS, XMP, IPTC, comment; giữ ICC; giữ định dạng (trừ HEIC → JPG).
 - **Convert** giữ metadata (trừ khi định dạng đích không chứa được). Giới hạn đã biết: bộ ghi TIFF của ImageMagick bỏ khối EXIF, nên `Convert > TIFF` mất EXIF (không ảnh hưởng ảnh; chấp nhận, vì vá phải tự chép từng thẻ EXIF sang thẻ TIFF).
@@ -108,7 +108,7 @@ tests/ConvertAnything.Image.Tests/
 
 1. `IMG.heic` → `Convert > JPG` ra JPG đúng chiều, mở được trong Photos.
 2. Mọi cặp nguồn → đích trong bảng chuyển được (test ma trận).
-3. Compress Balanced trên ảnh chụp 12 MP JPG cho file nhỏ hơn ≥ 40%.
+3. Compress Balanced trên ảnh chụp gốc 12 MP (JPG quality ≥ 92, 4:2:0 như điện thoại) cho file nhỏ hơn ≥ 40%. Với ảnh đã nén sẵn (quality ≤ 85) mức giảm ít hơn nhiều, hoặc bị từ chối vì không nhỏ hơn.
 4. Under 1 MB cho kết quả < 1 000 000 byte với ảnh 12 MP nhiễu.
 5. Remove metadata: output không còn GPS/EXIF (kiểm bằng Magick.NET đọc lại), vẫn còn ICC.
 6. GIF động → WebP vẫn động (số frame bằng nhau).

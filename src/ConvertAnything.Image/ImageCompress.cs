@@ -61,6 +61,11 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
                     ImageFile.Write(image, temp, target);
                 }
 
+                // An already well-compressed source (a chat download at quality 70, a tiny PNG) can grow; a bigger
+                // "compressed" copy would mislead, so refuse it and let the temporary file be deleted.
+                if (new FileInfo(temp).Length >= new FileInfo(inputPath).Length)
+                    throw new InvalidOperationException("The image is already well compressed: the result is not smaller than the original.");
+
                 return Task.CompletedTask;
             }, ct).ConfigureAwait(false);
         }, ct);
