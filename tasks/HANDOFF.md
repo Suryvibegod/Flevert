@@ -59,12 +59,21 @@ Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile
 
 **Đánh số phiên bản** (người dùng đổi 2026-10-20): từ bản tiếp theo, số đầu là 1: bản tính năng tăng số giữa (1.3.0, 1.4.0), bản cập nhật/sửa lỗi tăng số cuối (1.2.2, 1.3.1). Hai bản đã phát hành v0.2.0 và v0.2.1 giữ tên cũ (release bất biến) và được xem là 1.2.0 và 1.2.1; bản đang làm là **1.2.2**. Tên nhánh `feat/v0.*` cũ giữ nguyên.
 
-**Việc tiếp theo** (spec đã duyệt 2026-10-20), hai nhánh song song, mỗi nhánh mở pull request; maintainer review (code, security, doubt) rồi gộp, v0.2.1 trước:
-- (xong, v1.2.2) [docs/specs/pdf.md](../docs/specs/pdf.md), mục "v1.2.2" (8 công cụ PDF tham khảo Stirling-PDF trong cửa sổ "More PDF tools…", menu ảnh và PDF sắp lại cho người dùng thật, icon Fluent). Thứ tự phát hành: v0.2.1 → v1.2.2 → v1.3.0 → v1.4.0 (OCR).
-- `feat/v0.3-media`: [docs/specs/media.md](../docs/specs/media.md) (ffmpeg bản GPL, menu video 16 mục). Tiến độ: `tasks/media/plan.md`, `tasks/media/todo.md`. Rebase lên `main` sau khi v0.2.1 được gộp.
-- `feat/v0.3.1-media` (sau v1.3.0): [docs/specs/media.md](../docs/specs/media.md), mục "v1.3.1" (Trim, xoay/lật không mã hóa lại, tắt tiếng, làm đều âm lượng, lấy khung hình, ghép clip an toàn, nén theo nơi gửi Email 18 MB/WhatsApp 16 MB/Messenger 25 MB, cửa sổ Video/Audio tools).
-- **Ký số (SignPath Foundation, miễn phí; người dùng chọn 2026-10-21):** đã có [docs/code-signing-policy.md](../docs/code-signing-policy.md) và mục "Code signing policy" trong README (ghi công SignPath theo điều khoản). **Người dùng làm:** nộp đơn tại https://signpath.org/ bằng danh tính của người duy trì, bật MFA cho GitHub (đã bật) và cho tài khoản SignPath. **Khi được duyệt (maintainer/Claude làm):** thêm bước ký vào `release.yml` (action chính thức của SignPath, ghim SHA, bí mật API token trong GitHub Secrets, phê duyệt thủ công mỗi lần ký), ký installer và `flevert.exe`/`Flevert.*.dll`, thêm câu ghi công vào release notes, kiểm chữ ký bằng `Get-AuthenticodeSignature` ở bước kiểm bản nháp (RELEASING), cập nhật README/install.md bỏ câu "not code-signed", ADR-0005.
-- **Bản hiệu năng** (người dùng yêu cầu 2026-10-20, số phiên bản linh hoạt: 1.2.3 hoặc 1.3.2): sau v1.2.2 và v1.3.x, đo tốc độ theo skill `performance-optimization` (đo, sửa một chỗ, đo lại, giữ hoặc hoàn tác, ghi sổ). Chỉ phát hành khi số đo chậm hơn mục tiêu; đã nhanh thì bỏ. Mục tiêu trên máy 4 nhân: khởi động lạnh `flevert.exe run` ≤ 300 ms; ảnh HEIC 12 MP → JPG ≤ 1 s/ảnh; PDF → JPG ≤ 0,3 s/trang A4 ở 150 DPI; Compress for sharing ≤ 2 s/trang; Merge/Rotate 100 trang ≤ 2 s; video 1080p Convert/Compress ≤ 2× thời lượng. Công cụ đo có sẵn: `scripts/measure-startup.ps1`, `scripts/measure-convert.ps1`.
+**Việc tiếp theo** (cập nhật 2026-10-21, dừng theo yêu cầu người dùng). Làm theo thứ tự; người dùng muốn tự làm hết, không hỏi; mỗi bản: code đủ trước, rồi review tổng thể (code, security, doubt) + kiểm thật trên Windows + RELEASING.
+
+1. **v1.3.0 (video và âm thanh), nhánh `feat/v0.3-media`, PR #3.** Code của agent media xong; đã gộp `main` 1.2.2 (merge commit `56a6a9f`), menu video/audio theo nguyên tắc 1.2.2 (icon Fluent, đường kẻ, `music_note_2` mới), tài liệu đổi sang 1.3. CI `build-and-test` xanh trên `1c63f1e`. Còn lại, theo thứ tự:
+   1. **Giấy phép ffmpeg (chặn phát hành):** commit giấy phép của các thư viện trong bản dựng BtbN vào `installer/notices/ffmpeg/` từ artifact `ffmpeg-licences` của workflow `ffmpeg-source.yml` (`gh run list --workflow ffmpeg-source.yml --branch feat/v0.3-media`, rồi `gh run download`); chỉ giữ văn bản giấy phép (`.gitattributes` đã đặt `-text` cho thư mục đó). Rồi chạy lại cả bốn project test (Core đọc thư mục này).
+   2. Ba review bối cảnh trống trên `git diff main..feat/v0.3-media` (gồm workflow `ffmpeg-source.yml` tạo asset mã nguồn ~2,2 GB nhiều phần, trần bộ nhớ 4 GB của ffmpeg so với spec 2 GB), reconcile, sửa, một reviewer soát lại.
+   3. Kiểm thật trên Windows (báo người dùng trước): `build-installer.ps1` (bộ cài ước tính ~94 MB, giới hạn test 110 MB), `test-installer.ps1` (nâng cấp từ 1.2.2 đã ghim), cài rồi chạy từng thao tác video/âm thanh, MenuProbe `.mp4` `.mkv` `.mp3` (≤ 16 mục, icon), màu HDR, bộ nhớ trên máy nhiều nhân; `uninstall`.
+   4. `<Version>1.3.0`, CHANGELOG `[1.3.0]`, CI ×3, tag `v1.3.0`, kiểm bản nháp (hash, attestation, test-installer, Defender, VirusTotal), publish, ghim 1.3.0.
+2. **Ký số SignPath Foundation (miễn phí).** Đã có [docs/code-signing-policy.md](../docs/code-signing-policy.md) và mục "Code signing policy" trong README. Đơn: đã mở form đăng ký điền sẵn mọi ô về dự án; **chưa rõ người dùng đã bấm Submit chưa** → hỏi lại. Người dùng tự điền tên, email, tích 2 ô đồng ý, reCAPTCHA. Khi được duyệt: thêm bước ký vào `release.yml` (action chính thức của SignPath ghim SHA; token trong GitHub Secrets, không bao giờ dán vào chat), ký installer và `flevert.exe`/`Flevert.*.dll`, câu ghi công trong release notes, kiểm `Get-AuthenticodeSignature` ở bước kiểm bản nháp (RELEASING), bỏ câu "not code-signed" trong README/install.md, cập nhật ADR-0005.
+3. **v1.3.1** (sau 1.3.0): [docs/specs/media.md](../docs/specs/media.md), mục "v1.3.1": mũi tên thứ hai "Flevert video tools" (Trim, Rotate, Remove sound, Make volume even, Save a frame, Merge videos, Send by Email/WhatsApp/Messenger); âm thanh một mũi tên. Không cửa sổ công cụ.
+4. **Bản hiệu năng 1.2.3 hoặc 1.3.2, chỉ khi đo thấy chậm** (mục tiêu ở dòng dưới). Ứng viên đã thấy: qpdf đếm trang 3–8 s với PDF lớn/độc.
+5. **v1.4.0: OCR** (Tesseract Apache-2.0 + dữ liệu `vie`); viết spec khi bắt đầu.
+
+**Quy tắc người dùng đã chốt (2026-10-20/21):** Flevert chỉ là menu chuột phải, không cửa sổ chọn công cụ; thêm việc thì thêm mũi tên thứ hai cho loại file đó; hộp thoại chỉ cho chữ người dùng phải gõ (mật khẩu, watermark, thời điểm Trim), kiểu hộp thoại mật khẩu. Đánh số từ 1 (bản tính năng 1.x.0, cập nhật 1.x.y). Tối đa 2–3 agent cùng lúc. Test bật cửa sổ chỉ chạy khi đã báo người dùng (hộp thoại luôn ở trên cùng bắt phím người dùng đang gõ). `test-installer.ps1` từ chối chạy khi có menu Flevert dev hoặc bất kỳ `flevert.exe` nào đang chạy (agent đang chạy test): tạm dừng agent trước khi chạy.
+
+- **Mục tiêu tốc độ cho bản hiệu năng** (người dùng yêu cầu 2026-10-20, số phiên bản linh hoạt: 1.2.3 hoặc 1.3.2): sau v1.2.2 và v1.3.x, đo tốc độ theo skill `performance-optimization` (đo, sửa một chỗ, đo lại, giữ hoặc hoàn tác, ghi sổ). Chỉ phát hành khi số đo chậm hơn mục tiêu; đã nhanh thì bỏ. Mục tiêu trên máy 4 nhân: khởi động lạnh `flevert.exe run` ≤ 300 ms; ảnh HEIC 12 MP → JPG ≤ 1 s/ảnh; PDF → JPG ≤ 0,3 s/trang A4 ở 150 DPI; Compress for sharing ≤ 2 s/trang; Merge/Rotate 100 trang ≤ 2 s; video 1080p Convert/Compress ≤ 2× thời lượng. Công cụ đo có sẵn: `scripts/measure-startup.ps1`, `scripts/measure-convert.ps1`.
 
 **Ghi chú kỹ thuật:**
 - qpdf tự mở rộng ký tự đại diện trong đối số dòng lệnh (làm hỏng `\\?\` đường dẫn dài): đường dẫn đưa cho qpdf qua stdin `@-`; tùy chọn có `*`/`?`/`@` bị từ chối.
@@ -76,7 +85,7 @@ Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile
 
 ## Sau v0.2
 
-- v1.3 (media): sau v0.2; quyết GPL hay LGPL ffmpeg (spec, Open Question 1) ở bước Plan.
+- v1.3 (media): ffmpeg bản GPL (đã chốt, ADR-0009 trên nhánh media).
 
 ## Dựng máy mới
 
