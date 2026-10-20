@@ -3,7 +3,9 @@ namespace Flevert.Core.Tests;
 /// <summary>Who may still join a batch of a joining operation (ADR-0007, part 2), without processes or pipes.</summary>
 public sealed class JoinRulesTests
 {
-    private static readonly DateTime T0 = new(2026, 10, 20, 9, 0, 0, DateTimeKind.Utc);
+    // In the past: a gate ignores a previous close later than the real clock (it went back), so a later T0 would turn
+    // its tests on and off with the time of day.
+    private static readonly DateTime T0 = new(2026, 1, 20, 9, 0, 0, DateTimeKind.Utc);
 
     private static ProcessStamp P(uint id, double seconds) => new(id, T0.AddSeconds(seconds));
 
@@ -61,6 +63,17 @@ public sealed class JoinRulesTests
         Assert.Equal(Arrival.OnTime, JoinRecord.Classify(P(1, 86_400), record, T0.AddSeconds(86_401), Dead));
         // Its own record still dates the batch before it.
         Assert.Equal(Arrival.Late, JoinRecord.Classify(P(1, -31), record, T0.AddSeconds(1), Dead));
+    }
+
+    [Fact]
+    public void A_gate_ignores_a_previous_close_in_the_future()
+    {
+        // The clock went back: otherwise every sender would be turned away until it caught up.
+        // Relative to the real clock, which the gate reads: a fixed date would pass or fail depending on the time of day.
+        var now = DateTime.UtcNow;
+        var gate = new JoinGate(new ProcessStamp(9, now), previousClose: now.AddHours(1), () => []);
+
+        Assert.True(gate.Admits(new ProcessStamp(1, now.AddSeconds(0.1))));
     }
 
     [Fact]

@@ -82,7 +82,9 @@ internal sealed class JoinGate(ProcessStamp leader, DateTime? previousClose, Fun
         }
     }
 
-    private bool IsBeforePreviousClose(DateTime created) => previousClose is { } closed && created < closed;
+    // A close in the future means the clock went back since: it says nothing, or every sender would be turned away.
+    private bool IsBeforePreviousClose(DateTime created) =>
+        previousClose is { } closed && closed <= DateTime.UtcNow && created < closed;
 
     /// <returns>The processes running now.</returns>
     private List<ProcessStamp> Look()
