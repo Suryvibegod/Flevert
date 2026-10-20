@@ -73,6 +73,7 @@ public sealed class PdfSplit : IOperation
         progress?.Report(new FileProgress("page", 1, total));
         var scratch = Path.Combine(folder, $".qpdf-{Guid.NewGuid():N}");
         PrivateFolder.Create(scratch);
+        var deleted = false;
         try
         {
             var split = _qpdf.SplitPagesAsync(inputPath, scratch, ct);
@@ -87,18 +88,52 @@ public sealed class PdfSplit : IOperation
                 var name = PageName(stem, page.ToString("D" + digits, CultureInfo.InvariantCulture));
                 await CopyNewAsync(pages[page - 1], Path.Combine(folder, name), ct).ConfigureAwait(false);
             }
+
+            // It is inside the output folder: the pages are never handed over with it.
+            await DeleteScratchAsync(scratch, ct).ConfigureAwait(false);
+            deleted = true;
         }
         finally
         {
-            // Only qpdf's pages are in it: nobody else can add to it, so nothing in it is a link to follow.
-            try
+            if (!deleted)
+                TryDeleteScratch(scratch);
+        }
+    }
+
+    /// <summary>How long a program holding one of qpdf's pages (a scanner, an indexer) is waited for.</summary>
+    private static readonly TimeSpan ScratchDeleteWait = TimeSpan.FromSeconds(5);
+
+    private static async Task DeleteScratchAsync(string scratch, CancellationToken ct)
+    {
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        while (!TryDeleteScratch(scratch))
+        {
+            if (timer.Elapsed >= ScratchDeleteWait)
             {
-                Directory.Delete(scratch, recursive: true);
+                throw new IOException(
+                    "Flevert could not remove its working copy of the pages: another program is using one of them. Try again.");
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                // Left in the temporary folder, which then stays, visible, beside the input (OutputPath).
-            }
+
+            await Task.Delay(100, ct).ConfigureAwait(false);
+        }
+    }
+
+    // Only qpdf's pages are in it: nobody else can add to it, so nothing in it is a link to follow. What cannot be deleted
+    // stays in the temporary folder, which then stays, visible, beside the input (OutputPath).
+    private static bool TryDeleteScratch(string scratch)
+    {
+        try
+        {
+            Directory.Delete(scratch, recursive: true);
+            return true;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 

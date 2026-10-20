@@ -330,4 +330,81 @@ public sealed class PdfSplitTests : IDisposable
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), $"took {timer.Elapsed}");
         Assert.Equal(["book.pdf"], Entries(_dir.Path));
     }
+
+    [Fact]
+    public async Task A_page_held_open_in_qpdfs_folder_fails_the_split_rather_than_leaving_that_folder_in_the_output()
+    {
+        // What a scanner or indexer holding one of qpdf's pages looks like: the private folder cannot be deleted.
+        var input = _dir.Combine("book.pdf");
+        WriteBlank(input, 1_500, resources: true);
+        FileStream? held = null;
+        var progress = new SynchronousProgress(report =>
+        {
+            if (report.Position > 1)
+                held ??= HoldAPageOfQpdf();
+        });
+
+        try
+        {
+            var ex = await Assert.ThrowsAsync<IOException>(() => Op().RunAsync(input, progress, CancellationToken.None));
+
+            Assert.NotNull(held);
+            Assert.Equal("Flevert could not remove its working copy of the pages: another program is using one of them. Try again.", ex.Message);
+            Assert.DoesNotContain("book (pages)", Entries(_dir.Path));
+        }
+        finally
+        {
+            held?.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task A_page_held_open_in_qpdfs_folder_for_a_moment_is_waited_for()
+    {
+        var input = _dir.Combine("book.pdf");
+        WriteBlank(input, 1_500, resources: true);
+        FileStream? held = null;
+        Task? released = null;
+        var progress = new SynchronousProgress(report =>
+        {
+            if (report.Position > 1 && held is null && HoldAPageOfQpdf() is { } page)
+            {
+                held = page;
+                released = ReleaseAfterTheLastCopyAsync(held, Path.GetDirectoryName(Path.GetDirectoryName(held.Name))!, 1_500);
+            }
+        });
+
+        string folder;
+        try
+        {
+            folder = await Op().RunAsync(input, progress, CancellationToken.None);
+            await released!;
+        }
+        finally
+        {
+            held?.Dispose();
+        }
+
+        Assert.Equal(1_500, Entries(folder).Length);
+        Assert.All(Entries(folder), name => Assert.EndsWith(".pdf", name, StringComparison.Ordinal));
+    }
+
+    // Half a second after the last page has been copied out, when the split first tries to delete qpdf's folder.
+    private static async Task ReleaseAfterTheLastCopyAsync(FileStream held, string partial, int pages)
+    {
+        while (Directory.GetFiles(partial, "*.pdf").Length < pages)
+            await Task.Delay(10);
+        await Task.Delay(500);
+        await held.DisposeAsync();
+    }
+
+    // Opened for reading without sharing delete, while qpdf is still writing the other pages; null when no page is
+    // there yet (the next report tries again).
+    private FileStream? HoldAPageOfQpdf()
+    {
+        var partial = Assert.Single(Directory.GetDirectories(_dir.Path, ".flevert-*.partial"));
+        var scratch = Assert.Single(Directory.GetDirectories(partial, ".qpdf-*"));
+        var page = Directory.GetFiles(scratch, "*.pdf").Order(StringComparer.Ordinal).FirstOrDefault();
+        return page is null ? null : new FileStream(page, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+    }
 }
