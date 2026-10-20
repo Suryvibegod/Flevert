@@ -9,7 +9,9 @@
      repository's commit identity, repairs a known-broken global git rewrite that breaks plugin installs, and installs
      the agent-skills plugin for Claude Code. Contributors keep their own tools, identity and global settings; for those
      steps the script only prints advice.
-  3. Builds the solution and runs each test project in turn.
+  3. Warns when accounts other than this user, SYSTEM and Administrators can change the checkout (they could replace
+     deps\ binaries or add git hooks), with the icacls command that fixes it; it changes no permissions itself.
+  4. Fetches pdfium and qpdf, builds the solution and runs each test project in turn.
 #>
 $ErrorActionPreference = 'Stop'
 $repo = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -144,6 +146,14 @@ if (-not $isMaintainer) {
 } else {
     Write-Warning 'claude CLI not found; install the plugin from Claude Code with /plugin install agent-skills@addy-agent-skills'
 }
+
+Step 'Who else can change this checkout'
+# Only warns: changing permissions is the developer's call. The git folder holds the hooks; in a worktree it lies elsewhere.
+$gitFolder = Invoke-Tolerant { git rev-parse --path-format=absolute --git-common-dir 2>$null }
+$folders = @($repo.Path) + @($gitFolder | Where-Object { $_ -and (Test-Path $_) } | ForEach-Object { (Resolve-Path $_).Path } |
+    Where-Object { -not $_.StartsWith($repo.Path + '\', 'OrdinalIgnoreCase') })
+try { & (Join-Path $PSScriptRoot 'check-checkout.ps1') -Path $folders }
+catch { Write-Warning "Could not check who can change $($folders -join ', '): $_" }
 
 Step 'Third-party tools (pdfium, qpdf), pinned by SHA256'
 & (Join-Path $PSScriptRoot 'fetch-deps.ps1')
