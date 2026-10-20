@@ -118,6 +118,40 @@ public sealed class NoticesScriptTests : IDisposable
         Assert.Contains("tool.exe", run.Output, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void The_real_manifest_gives_every_binary_fetch_deps_keeps_its_licences()
+    {
+        // CI never builds the installer, so check here what a release would refuse: the files Flevert.Pdf.csproj copies
+        // next to flevert.exe (deps\pdfium\bin\pdfium.dll, deps\qpdf\bin\*.exe and *.dll) against the real deps.json
+        // and the licence files fetch-deps.ps1 put in the real deps\.
+        var deps = Path.Combine(InstallerScriptTests.RepositoryRoot(), "deps");
+        var shipped = Directory.GetFiles(Path.Combine(deps, @"pdfium\bin"), "pdfium.dll")
+            .Concat(Directory.GetFiles(Path.Combine(deps, @"qpdf\bin"), "*.exe"))
+            .Concat(Directory.GetFiles(Path.Combine(deps, @"qpdf\bin"), "*.dll"))
+            .ToList();
+        Assert.True(shipped.Count >= 3, "deps\\ is incomplete: run scripts\\fetch-deps.ps1");
+        foreach (var file in shipped)
+            Write(Path.Combine(_publish, Path.GetFileName(file)), "binary");
+
+        var run = PowerShellScript.Run("write-notices.ps1", ["-Publish", _publish, "-Packages", _packages]);
+
+        Assert.True(run.ExitCode == 0, run.Output);
+        var notices = NoticesText();
+        Assert.All(RealNoticeTexts, text => Assert.Contains(text, notices, StringComparison.Ordinal));
+    }
+
+    private static readonly string[] RealNoticeTexts =
+    [
+        "Benoit Blanchon", // pdfium-binaries
+        "The PDFium Authors",
+        "Jay Berkenbilt", // qpdf's NOTICE
+        "Apache License",
+        "OpenSSL 3",
+        "Jean-loup Gailly", // zlib
+        "This software is based in part on the work of the Independent JPEG Group", // the IJG licence asks for this sentence
+        "Microsoft Visual C++",
+    ];
+
     private void Package(string id, string version, string licenceName, string text) =>
         Write(Path.Combine(_packages, id.ToLowerInvariant(), version, licenceName), text);
 

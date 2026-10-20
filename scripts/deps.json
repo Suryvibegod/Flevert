@@ -1,5 +1,5 @@
 {
-  "comment": "Third-party binaries fetched into deps/ by scripts/fetch-deps.ps1, never committed. Each download is pinned by SHA256 (GitHub publishes a digest for every release asset). Change a version here, then run the script and the tests. docs/adr/0008-pdf-engines-pdfium-and-qpdf.md",
+  "comment": "Third-party binaries fetched into deps/ by scripts/fetch-deps.ps1, never committed. Each download is pinned by SHA256 (GitHub publishes a digest for every release asset). Change a version here, then run the script and the tests. 'notices' names every file the installer ships from deps/ and its licences (paths from the repository root); scripts/write-notices.ps1 refuses a file that has none. docs/adr/0008-pdf-engines-pdfium-and-qpdf.md",
   "items": [
     {
       "name": "pdfium",
@@ -37,6 +37,41 @@
       "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
       "kind": "file",
       "target": "qpdf/licenses/openssl-LICENSE.txt"
+    }
+  ],
+  "notices": [
+    {
+      "title": "PDFium chromium/8100, as built by bblanchon/pdfium-binaries",
+      "files": ["pdfium.dll"],
+      "note": "pdfium.dll contains PDFium and the libraries whose licences follow LICENSE, the licence of the build scripts.",
+      "licences": ["deps/pdfium/LICENSE", "deps/pdfium/licenses/*"]
+    },
+    {
+      "title": "qpdf 12.4.2",
+      "files": ["qpdf.exe", "qpdf30.dll"],
+      "licences": ["deps/qpdf/licenses/qpdf-LICENSE.txt", "deps/qpdf/licenses/qpdf-NOTICE.md"]
+    },
+    {
+      "title": "OpenSSL 3, linked into qpdf30.dll",
+      "files": ["qpdf30.dll"],
+      "licences": ["deps/qpdf/licenses/openssl-LICENSE.txt"]
+    },
+    {
+      "title": "zlib 1.3.2, linked into qpdf30.dll",
+      "files": ["qpdf30.dll"],
+      "note": "The licence text is the copy pdfium-binaries ships for its own zlib; zlib's licence is the same in every version.",
+      "licences": ["deps/pdfium/licenses/zlib.txt"]
+    },
+    {
+      "title": "libjpeg-turbo 3.2.0, linked into qpdf30.dll",
+      "files": ["qpdf30.dll"],
+      "note": "This software is based in part on the work of the Independent JPEG Group. The licence texts are the copies pdfium-binaries ships for its own libjpeg-turbo, under the same licences.",
+      "licences": ["deps/pdfium/licenses/libjpeg_turbo.md", "deps/pdfium/licenses/libjpeg_turbo.ijg"]
+    },
+    {
+      "title": "Microsoft Visual C++ runtime 14.51, shipped with qpdf 12.4.2",
+      "files": ["concrt140.dll", "msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll", "msvcp140_atomic_wait.dll", "msvcp140_codecvt_ids.dll", "vcruntime140.dll", "vcruntime140_1.dll"],
+      "licences": ["installer/notices/msvc-runtime.txt"]
     }
   ]
 }

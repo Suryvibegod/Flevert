@@ -1,0 +1,9 @@
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+These are the Microsoft Visual C++ runtime libraries that qpdf's own Windows release (qpdf-<version>-msvc64.zip from
+https://github.com/qpdf/qpdf/releases) ships next to qpdf.exe. Flevert redistributes them unmodified, only so that
+qpdf.exe runs, and they are not covered by Flevert's licence.
+
+They are Distributable Code ("VC\redist" in the Distributable Code list,
+https://learn.microsoft.com/visualstudio/releases/2026/redistribution) under the Microsoft Software License Terms for
+Visual Studio, https://visualstudio.microsoft.com/license-terms/, and remain subject to those terms.
