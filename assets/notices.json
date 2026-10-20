@@ -1,0 +1,11 @@
+{
+  "comment": "Third-party assets committed in this repository that the installer ships, with their licences: the same shape as \"notices\" in scripts/deps.json, read by scripts/write-notices.ps1 after it. Paths of files are relative to the publish folder, of licences to the repository root.",
+  "notices": [
+    {
+      "title": "Fluent UI System Icons (microsoft/fluentui-system-icons at 83b26348c811f072429427ff48362238656524fe)",
+      "files": ["icons/*.ico"],
+      "note": "The menu and PDF tools icons, drawn from its SVG files by scripts/make-menu-icons.py.",
+      "licences": ["assets/menu/LICENSE-fluentui-system-icons.txt"]
+    }
+  ]
+}

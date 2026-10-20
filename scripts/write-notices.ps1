@@ -11,6 +11,8 @@ The NuGet global-packages folder (dotnet nuget locals global-packages --list).
 
 .PARAMETER Manifest
 Lists, under "notices", the files that come from elsewhere than NuGet and their licences; defaults to scripts\deps.json.
+assets\notices.json under Root, when it exists, lists the same way the third-party assets committed in the repository
+(the menu icons).
 
 .PARAMETER Root
 The folder the licence paths in the manifest are relative to; defaults to the repository root.
@@ -72,14 +74,23 @@ foreach ($library in $target.Value.PSObject.Properties) {
     }
 }
 
-$listed = ([IO.File]::ReadAllText($Manifest) | ConvertFrom-Json).PSObject.Properties['notices']
-foreach ($entry in @(if ($listed) { $listed.Value })) {
+$entries = foreach ($list in @($Manifest) + @(Join-Path $Root 'assets\notices.json' | Where-Object { Test-Path -LiteralPath $_ })) {
+    $listed = ([IO.File]::ReadAllText($list) | ConvertFrom-Json).PSObject.Properties['notices']
+    foreach ($entry in @(if ($listed) { $listed.Value })) { [pscustomobject]@{ Manifest = $list; Entry = $entry } }
+}
+foreach ($listing in @($entries)) {
+    $entry = $listing.Entry
     foreach ($file in $entry.files) {
+        # A wildcard covers a folder of like files, such as the menu icons (icons\*.ico); it must still match one.
+        $shipped = @(if ($file.Contains('*')) {
+                Get-ChildItem -Path (Join-Path ([Management.Automation.WildcardPattern]::Escape($publishRoot)) $file) -File -Force -ErrorAction SilentlyContinue |
+                    ForEach-Object { $_.FullName.Substring($publishRoot.Length + 1) }
+            } elseif (Test-Path -LiteralPath (Join-Path $publishRoot $file) -PathType Leaf) { $file })
         # An entry left behind by an update would otherwise cover a renamed binary by its old name.
-        if (-not (Test-Path -LiteralPath (Join-Path $publishRoot $file) -PathType Leaf)) {
-            throw "$Manifest lists $file under ""$($entry.title)"", but the publish folder has no such file: make the notices match what the build ships."
+        if ($shipped.Count -eq 0) {
+            throw "$($listing.Manifest) lists $file under ""$($entry.title)"", but the publish folder has no such file: make the notices match what the build ships."
         }
-        $covered[$file] = $true
+        foreach ($name in $shipped) { $covered[$name] = $true }
     }
     $preface = @("Shipped as: $($entry.files -join ', ')")
     if ($entry.PSObject.Properties['note']) { $preface += $entry.note }
@@ -88,7 +99,7 @@ foreach ($entry in @(if ($listed) { $listed.Value })) {
         $matched = @(Get-ChildItem -Path (Join-Path ([Management.Automation.WildcardPattern]::Escape($Root)) $pattern) -File -Force -ErrorAction SilentlyContinue |
             Sort-Object Name)
         if ($matched.Count -eq 0) {
-            throw "Nothing matches $pattern, a licence of ""$($entry.title)"" listed in $Manifest. Run scripts\fetch-deps.ps1, or fix the notices."
+            throw "Nothing matches $pattern, a licence of ""$($entry.title)"" listed in $($listing.Manifest). Run scripts\fetch-deps.ps1, or fix the notices."
         }
         foreach ($licence in $matched) {
             [void]$notices.AppendLine().AppendLine(('=' * 78)).AppendLine("$($entry.title) - $($licence.Name)").AppendLine(('=' * 78))
