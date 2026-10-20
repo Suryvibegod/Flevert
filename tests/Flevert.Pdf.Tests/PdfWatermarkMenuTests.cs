@@ -80,6 +80,7 @@ public sealed class PdfWatermarkMenuTests
     [InlineData("", WatermarkPrompts.EmptyMessage)]
     [InlineData("   ", WatermarkPrompts.EmptyMessage)]
     [InlineData("two\nlines", WatermarkPrompts.NotOneLineMessage)]
+    [InlineData("two\u2028lines", WatermarkPrompts.NotOneLineMessage)]
     [InlineData("Chỉ dùng để nộp hồ sơ vay vốn", null)]
     public void The_dialog_lets_through_one_line_of_text(string text, string? problem)
     {
@@ -92,6 +93,46 @@ public sealed class PdfWatermarkMenuTests
         Assert.Equal(100, WatermarkPrompts.MaxLength);
         Assert.Null(WatermarkPrompts.Problem(new string('ư', 100)));
         Assert.Equal(WatermarkPrompts.TooLongMessage, WatermarkPrompts.Problem(new string('ư', 101)));
+    }
+
+    [Fact]
+    public void Letters_typed_as_several_code_points_count_as_one()
+    {
+        // "ệ" typed as e + two combining marks: 300 UTF-16 units, 100 letters.
+        var decomposed = string.Concat(Enumerable.Repeat("e\u0323\u0302", 100));
+
+        Assert.Null(WatermarkPrompts.Problem(decomposed));
+        Assert.Equal(WatermarkPrompts.TooLongMessage, WatermarkPrompts.Problem(decomposed + "a"));
+        Assert.True(WatermarkPrompts.FieldMaxLength >= 4 * WatermarkPrompts.MaxLength);
+    }
+
+    [Theory]
+    [InlineData("Bản\u200Bsao")] // zero-width space
+    [InlineData("\u202EBản sao")] // right-to-left override
+    [InlineData("\uFEFFBản sao")] // byte order mark, a format character too
+    public void Invisible_characters_are_refused_with_a_reason(string text)
+    {
+        Assert.Equal(WatermarkPrompts.InvisibleMessage, WatermarkPrompts.Problem(text));
+        Assert.Null(PdfEdit.WatermarkText(text));
+    }
+
+    [Fact]
+    public void A_lone_surrogate_is_refused_as_invisible()
+    {
+        // Built here: an attribute's string cannot hold one.
+        var text = "Bản sao" + '\uD800';
+
+        Assert.Equal(WatermarkPrompts.InvisibleMessage, WatermarkPrompts.Problem(text));
+        Assert.Null(PdfEdit.WatermarkText(text));
+    }
+
+    [SkippableFact]
+    public void Characters_arial_cannot_draw_are_refused_naming_them()
+    {
+        Skip.IfNot(File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "arial.ttf")), "Arial is not installed");
+
+        Assert.Equal(WatermarkPrompts.NoGlyphMessage("😀, 中"), WatermarkPrompts.Problem("Bản sao 😀 中 😀"));
+        Assert.Null(WatermarkPrompts.Problem("Bản sao – Ấn bản ₫ © ½"));
     }
 
     private sealed class FakePrompt(WatermarkAnswer answer) : IWatermarkPrompt

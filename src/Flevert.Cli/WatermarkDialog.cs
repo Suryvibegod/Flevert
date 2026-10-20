@@ -72,7 +72,7 @@ internal sealed class WatermarkForm : Form
     {
         AccessibleName = "Watermark text",
         PlaceholderText = "For example: Chỉ dùng để nộp hồ sơ …",
-        MaxLength = WatermarkPrompts.MaxLength,
+        MaxLength = WatermarkPrompts.FieldMaxLength,
     };
     private readonly CheckBox _forAll = new() { AutoSize = true, Checked = true, Visible = false };
     // Read out as soon as it changes: the reason OK did nothing.

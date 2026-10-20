@@ -77,26 +77,42 @@ public static class WatermarkPrompts
     public const string NoTextMessage = "No watermark text was given.";
     public const string EmptyMessage = "Type the text to write on the pages.";
     public const string NotOneLineMessage = "The text must be one line.";
+    public const string InvisibleMessage =
+        "The text has an invisible character (such as a direction mark or a zero-width space), which could make the watermark read other than it shows: type it again without it.";
 
-    /// <summary>The most characters the text holds (the tool's own limit).</summary>
+    /// <summary>The most characters the text holds (the tool's own limit), counted as people count them.</summary>
     public static int MaxLength { get; } =
         PdfTools.All.Single(t => t.OperationId == PdfWatermarkMenu.OperationId).Options.Single(o => o.Key == PdfTools.Text).MaxLength;
 
+    /// <summary>What the text box lets the user type: room for letters typed as several code points (e with two marks
+    /// is three), so the box never cuts a letter or an emoji in half; <see cref="Problem"/> counts.</summary>
+    public static int FieldMaxLength { get; } = 4 * MaxLength;
+
     public static string TooLongMessage { get; } = $"The text can be at most {MaxLength} characters.";
+
+    /// <summary>The reason for characters Windows' Arial, the watermark's font, has no glyph for.</summary>
+    public static string NoGlyphMessage(string characters) =>
+        $"The watermark is written in Arial, which cannot draw {characters}: leave {(characters.Contains(',', StringComparison.Ordinal) ? "them" : "it")} out.";
 
     /// <summary>Refuses every question, at once: nothing may wait for an answer no one can give.</summary>
     public static IWatermarkPrompt NoWindow { get; } = new NoWindowPrompt();
 
-    /// <summary>Why the text cannot be used, or <c>null</c> when it can. Counted as the text box counts, in UTF-16 units
-    /// (a Vietnamese letter typed with Telex or VNI is one).</summary>
+    /// <summary>
+    /// Why the text cannot be used, or <c>null</c> when it can: the watermark tool's own rule (<see cref="PdfEdit.Check"/>:
+    /// one line, no invisible character, at most <see cref="MaxLength"/> characters as people count them), and every
+    /// character one Arial can draw.
+    /// </summary>
     public static string? Problem(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        if (string.IsNullOrWhiteSpace(text))
-            return EmptyMessage;
-        if (text.Any(char.IsControl))
-            return NotOneLineMessage;
-        return text.Trim().Length > MaxLength ? TooLongMessage : null;
+        return PdfEdit.Check(text, out var normal) switch
+        {
+            WatermarkTextProblem.Empty => EmptyMessage,
+            WatermarkTextProblem.NotOneLine => NotOneLineMessage,
+            WatermarkTextProblem.Invisible => InvisibleMessage,
+            WatermarkTextProblem.TooLong => TooLongMessage,
+            _ => FontGlyphs.Arial?.Missing(normal) is { Count: > 0 } missing ? NoGlyphMessage(string.Join(", ", missing)) : null,
+        };
     }
 
     private sealed class NoWindowPrompt : IWatermarkPrompt

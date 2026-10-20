@@ -52,7 +52,7 @@ internal sealed record PdfEdit(PdfEditKind Kind)
 {
     private const char Separator = '\u001F';
 
-    /// <summary>The longest watermark, in characters as people count them (Unicode scalar values).</summary>
+    /// <summary>The longest watermark, in characters as people count them (text elements).</summary>
     public const int MaxWatermarkLength = 100;
 
     public PdfPageNumberPosition Position { get; init; }
@@ -102,38 +102,53 @@ internal sealed record PdfEdit(PdfEditKind Kind)
 
     /// <summary>
     /// The watermark as written: <paramref name="text"/> in composed form (NFC: a Vietnamese letter is one character, as
-    /// Arial draws it), without the spaces it starts or ends with; <c>null</c> when that is empty, longer than
-    /// <see cref="MaxWatermarkLength"/>, holds a line break or another control character, or is not valid Unicode.
+    /// Arial draws it), without the spaces it starts or ends with; <c>null</c> when <see cref="Check"/> finds a problem.
     /// </summary>
-    public static string? WatermarkText(string text)
+    public static string? WatermarkText(string text) => Check(text, out var normal) is null ? normal : null;
+
+    /// <summary>
+    /// What is wrong with <paramref name="text"/> as a watermark, or <c>null</c>, with the text as written in
+    /// <paramref name="normal"/>: it must not be empty; must be one line (no control character, no U+2028 or U+2029); must
+    /// hold no invisible character (a format character such as a direction override or a zero-width space, a lone
+    /// surrogate, a noncharacter), which would make the mark read other than it shows; and may hold at most
+    /// <see cref="MaxWatermarkLength"/> characters as people count them (text elements: a letter with its marks, an emoji).
+    /// </summary>
+    internal static WatermarkTextProblem? Check(string text, out string normal)
     {
         ArgumentNullException.ThrowIfNull(text);
+        normal = "";
         for (var i = 0; i < text.Length; i++)
         {
             if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
                 i++;
             else if (char.IsSurrogate(text[i]))
-                return null; // a lone surrogate: no character at all
+                return WatermarkTextProblem.Invisible; // a lone surrogate: no character at all
         }
 
-        string normal;
-        try
-        {
-            normal = text.Normalize(NormalizationForm.FormC).Trim();
-        }
-        catch (ArgumentException)
-        {
-            return null; // a lone surrogate
-        }
-
-        if (normal.Length == 0 || normal.EnumerateRunes().Count() > MaxWatermarkLength)
-            return null;
+        normal = text.Normalize(NormalizationForm.FormC).Trim();
+        if (normal.Length == 0)
+            return WatermarkTextProblem.Empty;
         foreach (var rune in normal.EnumerateRunes())
         {
-            if (Rune.IsControl(rune) || rune.Value is 0x2028 or 0x2029 or 0xFFFE or 0xFFFF)
-                return null;
+            if (Rune.IsControl(rune) || rune.Value is 0x2028 or 0x2029)
+                return WatermarkTextProblem.NotOneLine;
         }
 
-        return normal;
+        foreach (var rune in normal.EnumerateRunes())
+        {
+            if (Rune.GetUnicodeCategory(rune) == UnicodeCategory.Format || rune.Value is 0xFFFE or 0xFFFF)
+                return WatermarkTextProblem.Invisible;
+        }
+
+        return new StringInfo(normal).LengthInTextElements > MaxWatermarkLength ? WatermarkTextProblem.TooLong : null;
     }
+}
+
+/// <summary>Why a text cannot be a watermark (<see cref="PdfEdit.Check"/>).</summary>
+internal enum WatermarkTextProblem
+{
+    Empty,
+    NotOneLine,
+    Invisible,
+    TooLong,
 }
