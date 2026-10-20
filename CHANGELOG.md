@@ -8,12 +8,13 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 - **Compress > For sharing** for PDFs: pictures above 150 DPI become 150 DPI JPEGs, so a scan often comes out at a quarter to a half of its size, depending on the scan, and still reads on a phone. Text, drawings and pictures already at 150 DPI or less stay exactly as they were.
 - **Convert > Text** for PDFs: `report.txt` with the text of every page, a page break between pages, in UTF-8 that Notepad reads. A scan has no text to extract: Flevert does not recognise text in pictures.
-- When Flevert had to repair a damaged PDF to read it, the notification says so and asks you to check that the pages look right. A repaired result that does not open, or has a different number of pages than Flevert counted, fails instead. Pages lost by the repair itself cannot be detected: every PDF reader repairs the same way.
 
 ### Changed
 
-- **Split into pages** writes to a folder named `report (split)`, no longer `report (pages)`, the name **Convert** > JPG pages and PNG pages give their pictures of the same PDF.
-- **Compress** for PDFs is now a submenu: **Lossless** (what **Compress** did) and **For sharing**. The PDF menu has its 16 entries, all that Explorer shows.
+- **Split into pages** writes to a folder named `report (split)` instead of `report (pages)`, which is the name of the pictures from **Convert** > JPG pages and PNG pages.
+- **Compress** for PDFs is now a submenu: **Lossless** (what **Compress** did) and **For sharing**.
+- Every action that writes a PDF says when Flevert had to repair the PDF to read it, and asks you to check that the pages look right. A repaired result that does not open, or has a different number of pages than Flevert counted, fails instead. Pages lost by the repair itself cannot be detected: every PDF reader repairs the same way. **Compress** > Lossless writes the repaired copy even when it is not smaller.
+- **Remove metadata**, **Protect with password** and **Remove password** copy the PDF's streams as they are: content stored uncompressed is no longer compressed in the result.
 - **Compress** > Lossless stops decompressing a PDF's streams after 10 seconds plus 1 second per MB. It then packs the PDF's objects but leaves its streams as they were, and the notification says the PDF was compressed only in part.
 - **Convert** > JPG pages and PNG pages check, before the first page, that the pictures fit on the disk, and refuse PDFs whose pages together pass 5000 megapixels (2000 A4 pages at 150 DPI are 4350).
 - **Compress**, **Remove metadata**, **Protect with password** and **Remove password** refuse PDFs of more than 2000 pages, as the other PDF actions do, and say when a signed PDF's signature is not valid in the result.
