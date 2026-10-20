@@ -231,6 +231,26 @@ public sealed partial class ExternalToolTests : IDisposable
     }
 
     [Fact]
+    public async Task A_tool_asked_to_run_below_normal_priority_does_and_so_does_what_it_starts()
+    {
+        // The pause lets the run lower the tool before it looks; the child is started after that, and inherits.
+        const string Report =
+            "Start-Sleep -Milliseconds 500; [Diagnostics.Process]::GetCurrentProcess().PriorityClass; " +
+            "& $env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -NonInteractive -Command '[Diagnostics.Process]::GetCurrentProcess().PriorityClass'";
+        string[] report = ["-NoProfile", "-NonInteractive", "-Command", Report];
+
+        var lowered = await ExternalTool.RunAsync(PowerShell, report, Generous, limits: new ExternalToolLimits { BelowNormalPriority = true });
+        var normal = await ExternalTool.RunAsync(PowerShell, report, Generous);
+
+        Assert.Equal(["BelowNormal", "BelowNormal"], Lines(lowered.StandardOutput));
+        // Control: without the limit both run at the test's own priority.
+        using var self = Process.GetCurrentProcess();
+        Assert.Equal([self.PriorityClass.ToString(), self.PriorityClass.ToString()], Lines(normal.StandardOutput));
+
+        static string[] Lines(string text) => text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    [Fact]
     public async Task The_tool_inherits_the_environment_with_the_given_changes()
     {
         // Set in the test process, as a variable of the user's would be; names no other test uses.

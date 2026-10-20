@@ -37,6 +37,12 @@ public sealed record ExternalToolLimits
     /// The tool cannot start other processes: Windows refuses the start. Only for tools that never need to, such as qpdf.
     /// </summary>
     public bool SingleProcess { get; init; }
+
+    /// <summary>
+    /// The tool runs below normal priority, and so does what it starts (Windows passes the priority on), so a tool that
+    /// keeps every core busy for minutes, such as ffmpeg, leaves the machine responsive.
+    /// </summary>
+    public bool BelowNormalPriority { get; init; }
 }
 
 /// <summary>
@@ -174,6 +180,8 @@ public static partial class ExternalTool
             {
                 afterStart?.Invoke(process);
                 assign(job, process);
+                if (limits?.BelowNormalPriority == true)
+                    Lower(process);
             }
             catch (Win32Exception e) when (e.NativeErrorCode == ErrorAccessDenied && process.HasExited)
             {
@@ -415,6 +423,21 @@ public static partial class ExternalTool
         }
         catch (IOException)
         {
+        }
+    }
+
+    // Set on the process rather than as a limit of its job: the job's priority limit is documented to need the privilege to
+    // raise priority (SeIncreaseBasePriorityPrivilege), which a standard user does not hold. Best effort, like flevert.exe
+    // lowering itself: a tool that already exited has nothing to lower, and a refusal is no reason not to convert.
+    private static void Lower(Process process)
+    {
+        try
+        {
+            process.PriorityClass = ProcessPriorityClass.BelowNormal;
+        }
+        catch (Exception e) when (e is InvalidOperationException or Win32Exception)
+        {
+            Trace.TraceWarning($"Could not lower the priority of {process.StartInfo.FileName}: {e.Message}");
         }
     }
 
