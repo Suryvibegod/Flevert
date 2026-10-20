@@ -61,6 +61,39 @@ public sealed class VideoStripMetadataTests : IDisposable
     }
 
     [Fact]
+    public async Task A_camcorder_clip_remuxed_to_mp4_loses_what_its_h264_carries_too()
+    {
+        // AVCHD clips are often remuxed to MP4 or MKV, keeping MDPM with them (re-check review, RC2-1). The SEI is added
+        // as camcorders write it: user data under MDPM's UUID, its payload starting "MDPM".
+        var input = _dir.Combine("camcorder.mp4");
+        await TestFfmpeg.RunRawAsync("-i", await Fixtures.SmallClipAsync(), "-c:v", "libx264", "-preset", "ultrafast",
+            "-bsf:v", "h264_metadata=sei_user_data=17ee8c60f84d11d98cd60800200c9a66+MDPM+48.8577+002.2950", "-c:a", "copy", "-f", "mp4", input);
+        Assert.Contains("MDPM+48.8577", System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(input)), StringComparison.Ordinal);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        var bytes = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(output));
+        Assert.DoesNotContain("MDPM", bytes, StringComparison.Ordinal);
+        Assert.DoesNotContain("x264 - core", bytes, StringComparison.Ordinal);
+        Assert.Equal(await PicturesHash(input), await PicturesHash(output));
+    }
+
+    [Fact]
+    public async Task A_stream_seeked_by_its_recovery_points_keeps_its_sei()
+    {
+        // Intra refresh, as dashcams write it: one keyframe, then recovery points in SEI. Dropping them would leave nothing
+        // to seek by (re-check review, RC-3), so such a stream is copied whole.
+        var input = _dir.Combine("dashcam.mp4");
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30:duration=15", "-c:v", "libx264", "-preset", "ultrafast",
+            "-x264-params", "intra-refresh=1:keyint=60", "-metadata", "title=Route", "-f", "mp4", input);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.Contains("x264 - core", System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(output)), StringComparison.Ordinal);
+        Assert.Equal(await PacketsHash(input, "v"), await PacketsHash(output, "v"));
+    }
+
+    [Fact]
     public async Task The_first_sound_track_is_kept_with_its_language()
     {
         var input = await Fixtures.CopyAsync(Fixtures.TwoAudioMkvAsync(), _dir, "film.mkv");

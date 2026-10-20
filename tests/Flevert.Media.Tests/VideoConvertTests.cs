@@ -155,6 +155,7 @@ public sealed class VideoConvertTests : IDisposable
         var bytes = await File.ReadAllBytesAsync(piece);
         await File.WriteAllBytesAsync(input, [.. bytes, .. bytes, .. bytes]);
         File.Delete(piece);
+        Assert.True((await TestFfmpeg.Instance.ProbeAsync(input, CancellationToken.None)).Duration < TimeSpan.FromSeconds(30));
 
         var output = await Op("video.to-mp4").RunAsync(input, CancellationToken.None);
 
@@ -198,6 +199,33 @@ public sealed class VideoConvertTests : IDisposable
     {
         Assert.Equal(TimeSpan.FromSeconds(70), Ffmpeg.MaxTime(TimeSpan.FromSeconds(40), 10_000));
         Assert.Equal(TimeSpan.FromSeconds(1000), Ffmpeg.MaxTime(TimeSpan.FromSeconds(40), 1_000_000));
+    }
+
+    [Theory]
+    [InlineData("video.to-mp4", true, true)]
+    [InlineData("video.to-webm", true, true)]
+    [InlineData("video.compress-balanced", true, true)]
+    [InlineData("video.to-gif", true, false)]
+    [InlineData("video.strip-metadata", false, false)]
+    [InlineData("video.extract-mp3", false, false)]
+    public async Task Video_encodes_are_bounded_in_time_and_threads_and_copies_and_sound_are_not(string id, bool encodes, bool encoder)
+    {
+        var calls = new List<IReadOnlyList<string>>();
+        var recording = new Ffmpeg(TestFfmpeg.Instance.FfmpegPath, TestFfmpeg.Instance.FfprobePath, (tool, arguments, timeout, line, ct) =>
+        {
+            if (tool == TestFfmpeg.Instance.FfmpegPath)
+                calls.Add(arguments);
+            return TestFfmpeg.Instance.Run(tool, arguments, timeout, line, ct);
+        });
+        var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mkv");
+
+        await MediaOperations.Create(recording).OfType<IOperation>().Single(op => op.Id == id).RunAsync(input, CancellationToken.None);
+
+        var arguments = Assert.Single(calls).ToList();
+        var at = arguments.IndexOf("-i");
+        Assert.Equal(encodes, arguments.Skip(at).Contains("-t"));
+        Assert.Equal(encodes, arguments.Take(at).Contains("-threads"));
+        Assert.Equal(encoder, arguments.Skip(at).Contains("-threads"));
     }
 
     [Fact]

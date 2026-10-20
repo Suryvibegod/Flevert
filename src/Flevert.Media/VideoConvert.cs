@@ -19,7 +19,8 @@ internal sealed record VideoFormat(string Label, string Extension, string Muxer,
     /// may take twice as long.
     /// </summary>
     public static VideoFormat Webm { get; } = new("WEBM", ".webm", "webm",
-        ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", "-c:a", "libopus", "-b:a", "128k"],
+        ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", .. VideoEncoding.EncoderThreads,
+            "-c:a", "libopus", "-b:a", "128k"],
         Slowness: 2);
 
     // Not MKV: few people need it as an output (docs/specs/media.md); it stays a source.

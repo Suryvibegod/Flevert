@@ -91,8 +91,12 @@ internal static partial class MediaJob
     public static long MaxOutputBytes(string inputPath, long estimatedBytes, string outputPath)
     {
         var limit = Math.Max(4 * new FileInfo(inputPath).Length + 100 * Megabyte, 2 * estimatedBytes);
-        return FreeBytes(outputPath) is { } free ? Math.Clamp(free - SpareBytes, Megabyte, limit) : limit;
+        return WithinFreeSpace(limit, outputPath);
     }
+
+    /// <summary><paramref name="limit"/>, or the room on the disk of <paramref name="outputPath"/> past the spare, if less.</summary>
+    public static long WithinFreeSpace(long limit, string outputPath) =>
+        FreeBytes(outputPath) is { } free ? Math.Clamp(free - SpareBytes, Math.Min(Megabyte, limit), limit) : limit;
 
     /// <summary>The size of <paramref name="duration"/> at <paramref name="bitsPerSecond"/>.</summary>
     public static long Bytes(TimeSpan duration, long bitsPerSecond) => (long)(duration.TotalSeconds * bitsPerSecond / 8);

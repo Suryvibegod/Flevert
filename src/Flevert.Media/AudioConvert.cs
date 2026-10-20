@@ -97,7 +97,10 @@ public sealed class AudioConvert : IOperation
         var audio = (_fromVideo ? VideoEncoding.FirstAudio(info) : info.Audio) is [var first, ..]
             ? first
             : throw new MediaException(_fromVideo ? MediaException.NoSoundToExtractMessage : MediaException.NoSoundMessage);
-        var estimate = MediaJob.Bytes(info.Duration, _format.BitsPerSecond(audio));
+        // ffprobe only estimates the length of a raw AAC or an MP3 without a VBR header; no sound is coded below 32 kbit/s
+        // but speech, so the file's bytes say how long it at least may be (re-check review, RC2-4).
+        var duration = TimeSpan.FromSeconds(Math.Max(info.Duration.TotalSeconds, new FileInfo(inputPath).Length * 8.0 / 32_000));
+        var estimate = MediaJob.Bytes(duration, _format.BitsPerSecond(audio));
         var desired = MediaJob.Beside(inputPath, _format.Extension);
         MediaJob.RequireSpace(desired, estimate);
         string[] options = ["-map", $"0:{audio.Index}", .. MediaJob.MetadataOptions(info, [audio]), .. _format.Codec(audio)];

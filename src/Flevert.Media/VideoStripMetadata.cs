@@ -70,7 +70,7 @@ public sealed class VideoStripMetadata : IOperation
         MediaJob.RequireSpace(desired, inputBytes);
         string[] options =
         [
-            .. VideoEncoding.Maps(info, audio), "-c", "copy", .. video.Codec == "h264" && Avchd.Contains(extension) ? DropSei : [],
+            .. VideoEncoding.Maps(info, audio), "-c", "copy", .. DropsSei(inputPath, extension, video) ? DropSei : [],
             "-map_metadata", "-1", "-map_chapters", "-1",
             .. info.Tags.TryGetValue("creation_time", out var date) && date.Length > 0 && !date.Contains('\0', StringComparison.Ordinal)
                 ? (string[])["-metadata", $"creation_time={date}"]
@@ -79,21 +79,57 @@ public sealed class VideoStripMetadata : IOperation
         ];
         // The same streams in less metadata: never much more than the input (MPEG-TS packets of 188 bytes become 192).
         return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _ffmpeg.EncodeAsync(
-            inputPath, options, temp, muxer.Muxer, info.Duration, (inputBytes * 105 / 100) + (10 * 1_000_000), MediaJob.Percent(progress), token), ct)
+            inputPath, options, temp, muxer.Muxer, info.Duration, MediaJob.WithinFreeSpace((inputBytes * 105 / 100) + (10 * 1_000_000), desired),
+            MediaJob.Percent(progress), token), ct)
             .ConfigureAwait(false);
     }
 
     /// <summary>
     /// H.264's SEI messages, where AVCHD camcorders keep the camera, the time and, with GPS, the place (Sony and
-    /// Panasonic's "MDPM"), none of which ffprobe shows as tags (security review, SEC-2). ffmpeg can only drop them all,
-    /// and with them the recovery points a stream without keyframes (a dashcam's intra refresh) is seeked by (re-check
-    /// review, RC-3): so only for AVCHD, whose streams have keyframes. Pictures decoded from the start are the same;
-    /// the packets are no longer byte for byte the input's. Elsewhere, and in HEVC (whose SEI holds the HDR mastering
-    /// data), the stream is copied whole.
+    /// Panasonic's "MDPM"), which ffprobe does not show as tags (security review, SEC-2). ffmpeg can only drop them all,
+    /// and with them the recovery points a stream without regular keyframes (a dashcam's intra refresh) is seeked by
+    /// (re-check review, RC-3), so only where a camcorder's data is (<see cref="DropsSei"/>). Pictures decoded from the
+    /// start are the same; the packets are no longer byte for byte the input's. Other streams, whose SEI holds at most an
+    /// encoder's settings, and HEVC, whose SEI holds the HDR mastering data, are copied whole.
     /// </summary>
     private static readonly string[] DropSei = ["-bsf:v", "filter_units=remove_types=6"];
 
     private static readonly HashSet<string> Avchd = new(StringComparer.OrdinalIgnoreCase) { ".mts", ".m2ts" };
+
+    // MDPM's payload begins with these bytes, which hold no two zero bytes H.264 would have to escape, so they appear in
+    // the file as they are. Camcorders write it in every GOP: the first megabytes show it.
+    private static readonly byte[] CamcorderData = "MDPM"u8.ToArray();
+    private const int CamcorderDataWindow = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// Whether to drop an H.264 stream's SEI: in an AVCHD file, or in any file whose first megabytes hold a camcorder's
+    /// MDPM, as an AVCHD clip remuxed to MP4 or MKV does (re-check review, RC2-1).
+    /// </summary>
+    internal static bool DropsSei(string inputPath, string extension, VideoTrack video)
+    {
+        if (video.Codec != "h264")
+            return false;
+        if (Avchd.Contains(extension))
+            return true;
+        using var file = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        var buffer = new byte[64 * 1024];
+        var carried = 0;
+        for (var read = 0; read < CamcorderDataWindow;)
+        {
+            var count = file.Read(buffer, carried, buffer.Length - carried);
+            if (count == 0)
+                return false;
+            read += count;
+            var filled = carried + count;
+            if (buffer.AsSpan(0, filled).IndexOf(CamcorderData) >= 0)
+                return true;
+            // A match may straddle two reads: keep the last bytes.
+            carried = Math.Min(CamcorderData.Length - 1, filled);
+            buffer.AsSpan(filled - carried, carried).CopyTo(buffer);
+        }
+
+        return false;
+    }
 
     // Containers and streams that can hold what ffprobe does not show as tags: XMP and makers' own boxes in MOV and MP4
     // (a dashcam's GPS track), an AVCHD camcorder's data in its H.264 stream. Such a file always gets its copy, rather
