@@ -38,10 +38,17 @@ public sealed class PdfStripMetadata : IOperation
     /// <summary>Where the operation's private folders go: the user's temporary folder, or a test's.</summary>
     internal string ScratchRoot { get; init; } = Path.GetTempPath();
 
-    public Task<string> RunAsync(string inputPath, CancellationToken ct)
+    public async Task<string> RunAsync(string inputPath, CancellationToken ct)
     {
+        // At most 2 000 pages, like every PDF operation (T18), and a note when a signature no longer matches.
+        await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
+        var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);
+
         var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + " (no metadata).pdf");
-        return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => WriteAsync(inputPath, temp, token), ct);
+        var output = await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => WriteAsync(inputPath, temp, token), ct).ConfigureAwait(false);
+        if (signed)
+            OutputNote.Add(PdfSignature.NotValidNote);
+        return output;
     }
 
     private async Task WriteAsync(string inputPath, string outputPath, CancellationToken ct)

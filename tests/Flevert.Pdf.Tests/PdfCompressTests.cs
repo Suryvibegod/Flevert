@@ -180,6 +180,51 @@ public sealed class PdfCompressTests : IDisposable
     }
 
     [Fact]
+    public async Task A_pdf_that_takes_too_long_to_decode_is_compressed_without_decoding_and_says_so()
+    {
+        // 20 000 small objects that object streams pack, and 10 KB of Flate inside Flate that inflates to 4 GB (15 to 20 s
+        // to decode and compress again, T18): the full run stops after 3 s, and the second copies every stream as it is.
+        var input = _dir.Combine("bomb.pdf");
+        MaliciousPdf.WriteManyObjectsAndBomb(input, 20_000);
+        using var logs = new TempDir();
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op(), [input], null, CancellationToken.None);
+
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), $"took {timer.Elapsed}");
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal("Flevert compressed this PDF only in part: compressing it fully took too long.", result.Note);
+        Assert.True(new FileInfo(result.Output!).Length < new FileInfo(input).Length / 2,
+            $"{new FileInfo(input).Length} → {new FileInfo(result.Output!).Length} bytes");
+        // The bomb is copied as it was: still Flate inside Flate.
+        var filters = (await QpdfObjects(result.Output!)).EnumerateObject()
+            .Where(entry => entry.Value.TryGetProperty("stream", out _))
+            .Select(entry => entry.Value.GetProperty("stream").GetProperty("dict"))
+            .Where(dict => dict.TryGetProperty("/Filter", out _))
+            .Select(dict => dict.GetProperty("/Filter").ToString());
+        Assert.Contains(filters, filter => filter.Replace(" ", "", StringComparison.Ordinal) == """["/FlateDecode","/FlateDecode"]""");
+    }
+
+    [Fact]
+    public void The_full_run_gets_three_seconds_plus_one_per_megabyte()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(3), PdfCompress.FullRunTimeoutFor(0));
+        Assert.Equal(TimeSpan.FromSeconds(103), PdfCompress.FullRunTimeoutFor(100L << 20));
+    }
+
+    [Fact]
+    public async Task A_pdf_of_more_than_2000_pages_is_refused_before_anything_is_written()
+    {
+        var input = MaliciousPdf.Write("count-lie-low", _dir.Combine("many.pdf"));
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.TooManyPages, ex.Error);
+        Assert.Equal(["many.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
     public async Task Cancelling_stops_qpdf_and_leaves_no_partial_file()
     {
         var input = _dir.Combine("big.pdf");

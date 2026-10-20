@@ -121,10 +121,11 @@ public sealed class Qpdf
     /// </exception>
     /// <exception cref="IOException">qpdf could not write <paramref name="outputPath"/>.</exception>
     /// <exception cref="FileNotFoundException">qpdf.exe is missing.</exception>
-    public async Task TransformAsync(string inputPath, string outputPath, IEnumerable<string> options, CancellationToken ct)
+    /// <param name="timeout">How long qpdf may take, instead of <see cref="TimeoutFor"/>; past it, <see cref="PdfError.TooSlow"/>.</param>
+    public async Task TransformAsync(string inputPath, string outputPath, IEnumerable<string> options, CancellationToken ct, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var run = await RunCheckedAsync([.. options], [inputPath], [inputPath, outputPath], outputPath, ct).ConfigureAwait(false);
+        var run = await RunCheckedAsync([.. options], [inputPath], [inputPath, outputPath], outputPath, ct, timeout: timeout).ConfigureAwait(false);
         RequireOutput(run, outputPath);
     }
 
@@ -188,8 +189,8 @@ public sealed class Qpdf
         $"This PDF has more than {PdfDocument.MaxPages} pages; Flevert works with at most {PdfDocument.MaxPages}."));
 
     /// <summary>
-    /// The option every qpdf operation that only moves pages around passes (rotate, merge, split): streams are copied as
-    /// they are, never decoded nor compressed. By default qpdf decodes a stream whose filters it would not keep as they are
+    /// The option every qpdf operation passes but Compress (rotate, merge, split, remove metadata, protect, remove password):
+    /// streams are copied as they are, never decoded nor compressed (encrypting or decrypting them still happens). By default qpdf decodes a stream whose filters it would not keep as they are
     /// (two Flate filters, say) and compresses it again, so a 10 KB stream that inflates to 4 GB took 15 to 20 s to rotate
     /// (T18); <c>--decode-level=none</c> alone still took 16 s, since compressing streams (<c>--compress-streams=y</c>,
     /// the default) decodes such a stream to compress it once. <c>preserve</c> turns off both, and the bomb rotates in
@@ -230,7 +231,7 @@ public sealed class Qpdf
     public async Task UpdateFromJsonAsync(string inputPath, string jsonPath, string outputPath, CancellationToken ct)
     {
         RequireArgumentLine(jsonPath, nameof(jsonPath));
-        var run = await RunCheckedAsync([], [inputPath], [UpdateFromJson + jsonPath, inputPath, outputPath], outputPath, ct)
+        var run = await RunCheckedAsync([KeepStreamsAsTheyAre], [inputPath], [UpdateFromJson + jsonPath, inputPath, outputPath], outputPath, ct)
             .ConfigureAwait(false);
         RequireOutput(run, outputPath);
     }
@@ -254,6 +255,8 @@ public sealed class Qpdf
             ExitPasswordRequired => PdfEncryption.NeedsPassword,
             ExitWarnings => PdfEncryption.OpensWithoutPassword,
             ExitError when !run.StandardError.TrimEnd().Split('\n')[^1].StartsWith("qpdf: ", StringComparison.Ordinal) => PdfEncryption.None,
+            ExitError when UnsupportedEncryption(run) => throw new PdfException(PdfError.UnsupportedEncryption,
+                PdfDocument.UnsupportedEncryptionMessage, new QpdfException(run.ExitCode, Detail(run))),
             _ => throw new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage, new QpdfException(run.ExitCode, Detail(run))),
         };
     }
@@ -271,7 +274,8 @@ public sealed class Qpdf
         // The passwords come before --bits: qpdf 12.4.2 reads --user-password after it as an unrecognized argument, and
         // repeats it in its error. "--" ends the encryption options.
         var secret = new Secret(password, EncryptOptionsBeforePasswords, ["--user-password=", "--owner-password="], ["--bits=256", EndOfPages]);
-        var run = await RunCheckedAsync(["--encrypt"], [inputPath], [inputPath, outputPath], outputPath, ct, secret).ConfigureAwait(false);
+        var run = await RunCheckedAsync([KeepStreamsAsTheyAre, "--encrypt"], [inputPath], [inputPath, outputPath], outputPath, ct, secret)
+            .ConfigureAwait(false);
         RequireOutput(run, outputPath);
     }
 
@@ -286,7 +290,7 @@ public sealed class Qpdf
     {
         ArgumentNullException.ThrowIfNull(password);
         var secret = new Secret(password, [], ["--password="], []);
-        var run = await RunCheckedAsync(["--decrypt"], [inputPath], [inputPath, outputPath], outputPath, ct, secret, opening: password)
+        var run = await RunCheckedAsync([KeepStreamsAsTheyAre, "--decrypt"], [inputPath], [inputPath, outputPath], outputPath, ct, secret, opening: password)
             .ConfigureAwait(false);
         RequireOutput(run, outputPath);
     }
@@ -359,7 +363,7 @@ public sealed class Qpdf
     /// a password that does not open the input is <see cref="PdfError.WrongPassword"/>.</param>
     private async Task<ExternalToolResult> RunCheckedAsync(
         string[] options, IReadOnlyList<string> inputs, string[] lines, string? output, CancellationToken ct,
-        Secret? secret = null, PdfPassword? opening = null, Action<string>? outputLine = null)
+        Secret? secret = null, PdfPassword? opening = null, Action<string>? outputLine = null, TimeSpan? timeout = null)
     {
         // The options stay on the command line, where qpdf's C runtime would expand them as wildcards.
         if (options.FirstOrDefault(option => option.AsSpan().ContainsAny('*', '?')) is { } wild)
@@ -388,7 +392,7 @@ public sealed class Qpdf
         }
 
         var maxMemory = MaxMemoryBytes ?? MaxMemoryFor(total);
-        var run = await RunWithLinesAsync(options, lines, Timeout ?? TimeoutFor(total), maxMemory, ct, secret, outputLine).ConfigureAwait(false);
+        var run = await RunWithLinesAsync(options, lines, Timeout ?? timeout ?? TimeoutFor(total), maxMemory, ct, secret, outputLine).ConfigureAwait(false);
         if (run.ExitCode is 0 or ExitWarnings)
             return run;
 
