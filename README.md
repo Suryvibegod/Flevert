@@ -22,7 +22,7 @@ iPhone photos to JPG, smaller files, copies without GPS, photos into one PDF. Fr
 - **Photos that fit**: compress them for chat and email, or to under 500 KB, 1 MB or 5 MB.
 - **Seven formats**: convert between JPG, PNG, WebP, AVIF, GIF, BMP and TIFF. Animations stay animated in GIF and WebP.
 - **No location in what you share**: remove GPS and camera details first.
-- **PDF tools**: photos into one PDF, pages into pictures, merge, split, rotate, compress, add or remove a password, and more in one window: remove blank pages, watermark, page numbers, pages per sheet.
+- **PDF tools**: photos into one PDF, pages into pictures, merge, split, rotate, compress, add or remove a password; remove blank pages, add page numbers or a watermark, print 2 or 4 pages per sheet.
 - **Up to 100 files at once**, with one notification at the end.
 - **Originals untouched**: results are saved beside them and never overwrite a file.
 
@@ -59,10 +59,23 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 | **Merge PDFs** | `report (merged).pdf`, in name order |
 | **Split into pages** | a folder `report (split)` with one PDF per page |
 | **Convert to** > JPG images, PNG images | a folder `report (pages)` with `report 001.jpg`, … |
+| **Convert to** > Text | `report.txt`, the text of every page (scans have none: Flevert does not recognise text in pictures) |
 | **Rotate** > Right 90°, Left 90°, 180° | `report (rotated).pdf` |
 | **Protect with password**, **Remove password** | `report (protected).pdf` (AES-256), `report (unlocked).pdf` |
 | **Remove hidden info** | `report (no metadata).pdf`, without author, dates, XMP, attachments or scripts |
-| **More PDF tools…** | a window with more tools, one choice for all the selected PDFs: remove blank pages, 2 or 4 pages per sheet, fit pages to A4, split into parts under 10 MB or 25 MB, add a watermark or page numbers, flatten forms and comments, extract the text (`report.txt`; scans have none: Flevert does not recognise text in pictures) or the images |
+
+PDFs also have a second entry, **Flevert PDF tools**:
+
+| Flevert PDF tools > | You get |
+|---|---|
+| **Remove blank pages** | `report (no blank pages).pdf`, without the empty pages a two-sided scan leaves |
+| **Add page numbers** | `report (numbered).pdf`, numbered "1 / 12" at the bottom centre |
+| **Add watermark…** | `report (watermarked).pdf` with your text across every page, such as what the copy is for; it asks for the text once for all the PDFs you selected. Anyone with a PDF editor can still remove it |
+| **Print layout** > 2 pages per sheet, 4 pages per sheet | `report (2 per sheet).pdf` or `report (4 per sheet).pdf` on A4, to print on less paper |
+| **Fit pages to A4** | `report (A4).pdf`: Letter, A3 and odd sizes scaled to A4 |
+| **Flatten forms and comments** | `report (flattened).pdf`: filled forms and comments become part of the page |
+| **Split by size** > Under 10 MB, Under 25 MB | a folder `report (parts)` with parts small enough to attach to an email or a chat |
+| **Extract images** | a folder `report (images)` with the pictures, photos exactly as they are in the PDF |
 
 PDFs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
 

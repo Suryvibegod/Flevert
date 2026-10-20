@@ -549,3 +549,44 @@ Ba review bối cảnh trống (code, security, doubt) trên nhánh trước ph�
 **Kiểm thật trước phát hành** (maintainer, máy Windows, 2026-10-20): `test-installer.ps1` đạt cả 10 kịch bản trên bộ cài 0.2.1, gồm nâng cấp từ bản 0.2.0 đã phát hành. Sau nâng cấp vẫn giữ menu cổ điển và lựa chọn kiểm bản mới; 235 file, không file thừa.
 
 **Kiểm sau khi sửa (máy Windows dev, 2026-10-20):** build và `dotnet format --verify-no-changes` sạch; ba project test chạy lần lượt: Core 498 đạt (2 bỏ qua), Image 245 đạt, Pdf 879/880: ca hỏng duy nhất là `bomb-content` × `pdf.to-png` (TooSlow sau 10,9 s thay vì NeedsTooMuchMemory), đúng ca đã hỏng khi chạy cả project **trước** mọi sửa đổi ở trên (cùng commit gốc, cùng máy); chạy riêng thì đạt (0,9 s). Là test nhạy thời gian khi máy bận, không liên quan các sửa đổi này; CI sẽ kiểm lại. Chưa chạy: MenuProbe, `flevert.exe` thật, `test-installer.ps1` (bước Verify của maintainer).
+
+# v0.2.2
+
+## Phần A: menu mới, icon, menu thứ hai "Flevert PDF tools" (nhánh `feat/v0.2.2-ui`, 2026-10-20)
+
+Làm song song với phần B (các công cụ PDF, `src/Flevert.Pdf/PdfTools.cs`, nhánh khác). Người dùng muốn nhanh, không bám spec quá chặt: làm đủ và tốt cho người dùng thật, review đầy đủ để sau.
+
+**Quyết định của người dùng giữa chừng (2026-10-20): giữ thuần chuột phải, không cửa sổ công cụ; thêm menu thứ hai Flevert PDF tools.** Cửa sổ "Flevert — PDF tools" và thao tác `pdf.tools` đã làm xong (commit `208739a`…`3df6763`) rồi được gỡ hết: các công cụ nằm trong menu `Flevert PDF tools`, chạy thẳng với tùy chọn mặc định; chỉ watermark hỏi chữ, trong hộp thoại kiểu hộp thoại mật khẩu. Spec (mục "Menu", "Đã quyết" 4) đã cập nhật.
+
+- [x] **Đo đường kẻ trước** (MenuProbe, Explorer thật, Windows 11): đường kẻ **không** tính vào 16 mục (16 lệnh + 8 đường kẻ hiện đủ; lệnh thứ 17 vẫn bị bỏ). Ghi vào spec. MenuProbe nay in đường kẻ là `----`.
+- [x] **Giới hạn 16 tính theo từng cascade:** MenuProbe trên menu thật thấy cả `Flevert` (16 mục) lẫn `Flevert PDF tools` (12 mục) của `.pdf` hiện đủ, cạnh nhau.
+- [x] `MenuInstaller`: `MenuEntryLook(Icon, Group)` theo nhãn mục trên cùng → `Icon` = `"<thư mục cài>\icons\<tên>.ico",0` (chỉ khi file có; bản dev thiếu icon vẫn ghi menu), `CommandFlags` = `0x20` (DWORD) khi đổi nhóm; mục con không icon. `MenuCascade` (`Flevert` / `Flevert.Tools` → "Flevert PDF tools", khóa `Flevert.Menu<ext>.tools`, icon `toolbox`) và `IMenuPlacement`: thao tác nằm ở menu nào. Uninstall xóa mọi cascade của `MenuCascade.All`; thao tác ở cascade lạ bị từ chối. Thao tác có `MenuPath` rỗng không vào menu. `IRegistry.SetDword`.
+- [x] Lưới an toàn của installer (`SweepRegistry`) xóa thêm `shell\Flevert.Tools`; `InstallerScriptTests` kiểm; `test-installer.ps1`: `MenuKeys` bắt mọi khóa `shell\Flevert*`, kiểm menu thứ hai và icon của cả hai menu `.pdf`.
+- [x] Menu PDF `Flevert` (16) và ảnh (16 với `.jpg`, `.heic`) đúng sơ đồ spec; nhãn mới, op-id giữ nguyên; `Text` ở lại `Convert to`.
+- [x] Menu `Flevert PDF tools` (12): `PdfToolMenu` đặt op-id của `PdfTools` vào menu (`PlacedOperation`), Add page numbers mặc định dưới giữa, `1 / N`. Catalog của `flevert.exe`: các mục menu + công cụ nào menu bỏ sót (theo id), không trùng id.
+- [x] `Add watermark…` (`PdfWatermarkMenu`): `BatchWatermarks` (một câu hỏi mỗi lần, câu trả lời cho N file), `WatermarkPrompts` (rỗng / nhiều dòng / > 100 ký tự), hộp thoại `WatermarkForm` + `DialogWatermarkPrompt` (Cli). Hộp thoại mật khẩu và watermark dùng chung `IBatchQuestion`.
+- [x] Icon Fluent (MIT) ở commit ghim `83b26348…`: `scripts/make-menu-icons.py` (SHA256 từng SVG, venv tạm resvg-py 0.5.0 + Pillow 13.0.0, không ship), `.ico` 16/20/24/32/40/48 px BMP 32-bit, chạy lại ra đúng từng byte. 18 icon trong `assets/menu/`.
+- [x] Build chép `assets/menu/*.ico` vào `icons\` cạnh `flevert.exe` (cả publish) → installer đóng gói theo dòng `[Files]` đầu tiên vào `{app}\icons`. Giấy phép: `assets/notices.json` + `write-notices.ps1` (wildcard `icons/*.ico`).
+- [x] Test: menu (thứ tự, nhãn, op-id, icon, đường kẻ, ≤ 16 mỗi menu, hai menu, gỡ sạch cả trên registry thật), watermark (một câu hỏi cho 5 file, Cancel, Cancel cho tất cả, không cửa sổ, chữ hợp lệ), UI Automation hộp thoại watermark (bật bằng `FLEVERT_UI_TESTS=1`).
+
+**Kiểm thật (2026-10-20, máy dev, menu của bản dev rồi `uninstall-menu`):**
+- MenuProbe: `.pdf` → `Flevert` 16 mục + 1 đường kẻ, `Flevert PDF tools` 12 mục + 2 đường kẻ; `.jpg`, `.heic` 16 mục + 1 đường kẻ.
+- Ảnh chụp (PrintWindow, chỉ cửa sổ của tiến trình chụp): menu thật dựng trong tiến trình riêng (IContextMenu của shell, `TrackPopupMenuEx`, chế độ sáng/tối bằng `SetPreferredAppMode`), cho `.pdf` (cả hai menu và các submenu), `.jpg`, `.heic`, sáng và tối, 100% DPI. Không chụp 150%: màn hình máy là 96 DPI và không đổi thiết lập hiển thị của người dùng.
+- Hộp thoại watermark với 3 file: một hộp thoại "Use this text for all 3 files"; chữ rỗng bị từ chối với lý do; Cancel → 3 file skipped "No watermark text was given.", mã thoát 0 0 0, không file mới. Điều khiển bằng UI Automation (Invoke, ValuePattern), không gửi phím.
+- **Phát hiện:** hộp thoại (luôn trên cùng, như hộp thoại mật khẩu) lấy focus bàn phím, nên vài phím người dùng đang gõ ở cửa sổ khác lọt vào ô chữ trong lúc test chạy ("eeee", "oi"). Đúng hành vi mong muốn khi người dùng tự mở menu, nhưng test UI chỉ nên chạy khi người dùng biết trước (đã là opt-in).
+- `uninstall-menu` sau mỗi lần thử: không còn khóa `Flevert*` nào trong `HKCU\Software\Classes` hay `SystemFileAssociations\*\shell`.
+
+**Lệch so với spec / quyết định khi làm:**
+1. **Biến thể icon:** chỉ `shield` và `toolbox` dùng Color. `lock_closed` có Color nhưng dùng **Filled** để đi cặp với `lock_open` (không có Color). Filled tô `#2F80ED`: 3,67:1 trên `#F9F9F9`, 3,61:1 trên `#2C2C2C` (script tự kiểm ≥ 3:1).
+2. **Icon của watermark:** phần B đặt `stamp` cho công cụ, nhưng Fluent chỉ có `stamp` dạng nét mảnh 32 px; menu dùng `draw_text`.
+3. **Giấy phép icon không nằm trong `scripts/deps.json`:** mục `notices` ở đó được `InstallerScriptTests` và `test-installer.ps1` coi là binary chỉ nạp khi chuyển đổi. Icon là tài sản commit trong repo nên có `assets/notices.json`.
+4. **Installer không có dòng `[Files]` riêng cho icon:** icon đi theo thư mục build (`icons\`), dòng `{#SourceDir}\*` đã đệ quy.
+5. **Tooltip cho Remove hidden info:** menu cổ điển không hiện tooltip cho verb tĩnh; lời giải thích nằm ở README.
+6. **Watermark:** ≤ 100 ký tự tính theo đơn vị UTF-16 (như `TextBox.MaxLength`; chữ Việt gõ Telex/VNI là một), lấy từ `PdfTools.All` (giới hạn của công cụ), một dòng, cắt khoảng trắng hai đầu. Hỏi trước khi công cụ đọc PDF (khác mật khẩu, vốn kiểm mã hóa trước): công cụ của phần B tự kiểm PDF khi chạy.
+7. **Tích hợp với phần B:** chỉ dùng API công khai của `PdfTools` (`All`, `Create(id, options)`, `Operations`, các hằng tùy chọn). `PdfTools.Stub.cs` là bản sao API của B (commit `581ce32`) để nhánh này tự build; xóa khi gộp `PdfTools.cs` của B. Dòng catalog trong `Program.cs` khác của B (lọc công cụ đã có trong menu).
+8. **Nhãn theo sơ đồ spec:** PDF `Convert to > JPG images / PNG images / Text`, `Rotate > Right 90° / Left 90° / 180°`. Thông báo lỗi cũ nhắc nhãn cũ ("Convert > WEBP", "Remove metadata") đã đổi theo.
+
+**Còn mở:**
+- Ảnh chụp 150% DPI (cần màn hình 150%).
+- Tên file output trong README cho các công cụ (`(2 per sheet)`, `(parts)`…) lấy từ spec; phần B kiểm lại khi gộp.
+- Review đầy đủ (code, bảo mật, doubt) trước phát hành; kịch bản tìm việc ≤ 2 lần di chuột cho reviewer doubt.

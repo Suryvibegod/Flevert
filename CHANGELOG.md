@@ -4,6 +4,16 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+
+- PDFs have a second entry beside **Flevert**, **Flevert PDF tools**, with its own list: **Remove blank pages**, **Add page numbers**, **Add watermark…**, **Print layout** > 2 or 4 pages per sheet, **Fit pages to A4**, **Flatten forms and comments**, **Split by size** > Under 10 MB or 25 MB, **Extract images**. Each runs straight from the menu; only **Add watermark…** asks something, the text, once for all the PDFs you selected.
+- Icons beside every entry of the Flevert menus, from Microsoft's Fluent UI System Icons, readable on the light and the dark menu, and separators between groups of entries.
+
+### Changed
+
+- The right-click menus are laid out for the jobs people do most, with plain names. Pictures: **Convert to**, **Compress**, **Remove hidden info**, **Combine into PDF**. PDFs: **Compress**, **Merge PDFs**, **Split into pages**, **Convert to**, **Rotate**, **Protect with password**, **Remove password**, **Remove hidden info**.
+- New names: **Remove metadata** is **Remove hidden info**; **Convert** is **Convert to**, with WebP spelled that way; picture **Compress** levels are **Light (best quality)**, **Balanced** and **Strong (smallest)**; PDF **Compress** > Lossless and For sharing are **Smaller, same quality** and **Smallest, for sharing**; PDF **Convert** > JPG pages and PNG pages are **JPG images** and **PNG images**; **Rotate** > 90° right and 90° left are **Right 90°** and **Left 90°**. What each one does is unchanged.
+
 ## [0.2.1] - 2026-10-20
 
 ### Added
