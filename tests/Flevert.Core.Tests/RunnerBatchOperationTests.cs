@@ -288,7 +288,7 @@ public sealed class RunnerBatchOperationTests : IDisposable
     public async Task An_input_the_operation_cannot_use_fails_the_output_and_is_named()
     {
         var files = new[] { _dir.File("1.txt"), _dir.File("2.txt") };
-        var op = new RecordingJoin(onRun: inputs => throw new BatchInputException(inputs[1], "This file is damaged."));
+        var op = new RecordingJoin(onRun: inputs => throw BatchInputException.ForInput(inputs[1], "This file is damaged."));
 
         var outcome = await NewRunner().RunAsync(op, files, progress: null, CancellationToken.None);
 
@@ -297,6 +297,32 @@ public sealed class RunnerBatchOperationTests : IDisposable
         Assert.Equal(files[1], result.Input);
         Assert.StartsWith("Failed: 2.txt: This file is damaged.", BatchSummary.Describe(outcome, _logs.Path).Text, StringComparison.Ordinal);
         Assert.Contains(nameof(BatchInputException), result.Error, StringComparison.Ordinal); // the log keeps the stack
+    }
+
+    [Fact]
+    public async Task A_batch_input_exception_that_names_no_input_does_not_blame_the_first_file()
+    {
+        // The standard constructors carry no path: the notification must not pin the fault on whichever file sorts first.
+        var files = new[] { _dir.File("1.txt"), _dir.File("2.txt") };
+        var op = new RecordingJoin(onRun: _ => throw new BatchInputException("One of the photos is damaged."));
+
+        var outcome = await NewRunner().RunAsync(op, files, progress: null, CancellationToken.None);
+
+        Assert.True(Assert.Single(outcome.Results).Failed);
+        Assert.StartsWith("Failed: One of the photos is damaged.", BatchSummary.Describe(outcome, _logs.Path).Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_batch_input_exception_for_an_input_keeps_the_path_apart_from_the_message()
+    {
+        var inner = new InvalidDataException("bad marker");
+
+        var ex = BatchInputException.ForInput(@"C:\ảnh 2.jpg", "This photo is damaged.", inner);
+
+        Assert.Equal(@"C:\ảnh 2.jpg", ex.InputPath);
+        Assert.Equal("This photo is damaged.", ex.Message);
+        Assert.Same(inner, ex.InnerException);
+        Assert.Null(new BatchInputException("This photo is damaged.").InputPath);
     }
 
     [Fact]

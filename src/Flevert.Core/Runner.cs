@@ -164,10 +164,10 @@ public sealed class Runner(RunLog log)
             var reason = string.IsNullOrWhiteSpace(ex.Message) ? new OperationSkippedException().Message : ex.Message;
             result = new FileResult(first, null, reason, Skipped: true);
         }
-        catch (BatchInputException ex)
+        catch (BatchInputException ex) when (ex.InputPath is not null)
         {
             // The operation names the real path it was given; report the file as the batch received it.
-            var culprit = inputs.Where(i => i.Real == ex.InputPath).Select(i => i.Given).FirstOrDefault() ?? ex.InputPath ?? first;
+            var culprit = inputs.Where(i => i.Real == ex.InputPath).Select(i => i.Given).FirstOrDefault() ?? ex.InputPath;
             result = new FileResult(culprit, null, $"{Path.GetFileName(culprit)}: {ex.Message}{Environment.NewLine}{ex}");
         }
 #pragma warning disable CA1031 // Whatever the operation throws, the batch ends with a result and a notification.

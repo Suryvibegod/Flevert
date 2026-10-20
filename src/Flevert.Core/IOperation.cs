@@ -99,8 +99,14 @@ public interface IBatchOperation : IMenuOperation
 
 /// <summary>
 /// Thrown by an <see cref="IBatchOperation"/> when one input cannot be used (a corrupt image, a damaged PDF), so the whole
-/// output fails and the notification names that file. The message says what is wrong with it, without its name.
+/// output fails and the notification names that file. Create it with <see cref="ForInput"/>; the message says what is
+/// wrong with the file, without its name.
 /// </summary>
+/// <remarks>
+/// The standard constructors exist for the usual exception contract and name no input, so the failure is reported with
+/// its message alone, like any other failure. A path and a message are both strings, which is why the constructor that
+/// takes both is private: <c>new BatchInputException(path, message)</c> and <c>(message, …)</c> were easy to swap.
+/// </remarks>
 public sealed class BatchInputException : Exception
 {
     public BatchInputException()
@@ -117,13 +123,21 @@ public sealed class BatchInputException : Exception
     {
     }
 
-    public BatchInputException(string inputPath, string message, Exception? innerException = null)
+    private BatchInputException(string inputPath, string message, Exception? innerException)
         : base(message, innerException)
     {
         InputPath = inputPath;
     }
 
-    /// <summary>The input that could not be used, as the operation received it.</summary>
+    /// <param name="inputPath">The input that cannot be used, exactly as the operation received it.</param>
+    /// <param name="message">What is wrong with it, without its name ("This photo is damaged.").</param>
+    public static BatchInputException ForInput(string inputPath, string message, Exception? innerException = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(inputPath);
+        return new BatchInputException(inputPath, message, innerException);
+    }
+
+    /// <summary>The input that could not be used, as the operation received it; <c>null</c> when none was named.</summary>
     public string? InputPath { get; }
 }
 
