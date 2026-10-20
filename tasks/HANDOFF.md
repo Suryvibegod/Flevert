@@ -2,9 +2,9 @@
 
 File này thay cho trí nhớ của phiên làm việc trước: mọi bối cảnh cần để làm tiếp nằm ở đây và trong các file được trỏ tới. Cập nhật mỗi khi xong một việc.
 
-## BẮT BUỘC: quy trình agent-skills của Addy Osmani
+## Quy trình agent-skills của Addy Osmani: xây trước, verify một lần trước khi phát hành
 
-Người dùng yêu cầu tuân thủ quy trình này cho mọi thay đổi, không ngoại lệ. Mỗi module, mỗi task:
+Từ 2026-10-20 người dùng muốn bớt quy trình: **xây hết rồi mới verify ở bước cuối**. Mỗi task chỉ còn: viết code cùng test (TDD khi rẻ), build + format + ba project test xanh trước mỗi commit, ghi chú ngắn trong todo. **Không** chạy agent review sau từng task, không vòng re-review, không chạy thật từng task. Bước 4 (Verify) và 5 (Review) dưới đây làm **một lần cho cả bản phát hành**, trước T20; vòng soát lại phần sửa dùng một reviewer gộp. Chạy song song tối đa 2–3 agent. Các bước gốc, để tham chiếu:
 
 1. **Define:** spec (`docs/specs/<module>.md`) đủ 6 mục, success criteria kiểm được; nếu thiếu thì `interview-me` / `idea-refine` trước.
 2. **Plan:** `planning-and-task-breakdown` ra `tasks/<module>/plan.md` + `todo.md`; không ghi đè plan còn việc dở.

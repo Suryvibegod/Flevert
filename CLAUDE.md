@@ -14,11 +14,13 @@ Continue the project without asking questions:
 2. Read `tasks/HANDOFF.md` and do the next unfinished item listed there.
 3. Keep `tasks/HANDOFF.md` up to date as you go: state, next task, anything the next session must know. Commit and push after every finished task so another machine can pick up.
 
-## Mandatory process: Addy Osmani's agent-skills
+## Process: Addy Osmani's agent-skills, verified once per release
 
-The user requires this process for every change, with no exceptions. The skills come from the plugin `agent-skills@addy-agent-skills`. If they are not loaded in this session (a plugin installed during a session only loads after a restart or `/reload-plugins`), read the skill files directly from the plugin cache, e.g. `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/<skill>/SKILL.md`, and follow them.
+Since 2026-10-20 the user wants the work built first and verified at the end, not reviewed task by task. The skills come from the plugin `agent-skills@addy-agent-skills`. If they are not loaded in this session (a plugin installed during a session only loads after a restart or `/reload-plugins`), read the skill files directly from the plugin cache, e.g. `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/<skill>/SKILL.md`, and follow them.
 
-Per module and per task: spec → plan/tasks → test first (see it fail, then pass) → thin vertical slices → verify at runtime → three fresh-context, read-only reviews (code-reviewer, security-auditor, doubt-driven) → reconcile every finding → re-review until no Critical/High/Required remain → docs/ADRs → ship. Details and the Definition of Done are in `tasks/HANDOFF.md`.
+- **Per task (keep it light):** spec/plan as needed → thin vertical slices with their tests (test first where it is cheap) → build, format and the three test projects green before each commit → short notes in the todo. No per-task review agents, no re-review rounds, no per-task runtime checks.
+- **Once, before a release:** run the app for real (MenuProbe, real `flevert.exe`, installer tests), then three fresh-context, read-only reviews (code-reviewer, security-auditor, doubt-driven) of everything since the last release, reconcile every finding, fix, and re-check the fixes with one combined reviewer until no Critical/High/Required remain → docs/ADRs → ship.
+- Keep at most two or three agents running at once: more starves the timing-sensitive tests and trips Smart App Control. Details are in `tasks/HANDOFF.md`.
 
 ## Conventions
 
