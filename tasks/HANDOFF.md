@@ -71,7 +71,7 @@ Review ba góc cho T1–T10 đã chạy (bảng reconcile "Review vòng 1" trong
 4. T4 (phần còn lại sau F4: check-location, `test-installer.ps1`), T6 merge, T8 split, T12–T14 (đọc ghi chú T14 về mật khẩu), T15–T17 tùy chọn, T18, T19.
 5. Trước T20: verify một lần (chạy thật + ba review + reconcile), rồi phát hành theo RELEASING (có bước dọn repo).
 
-**Chặn phát hành v0.2, người dùng quyết:** quyền phân phối lại DLL MSVC runtime đi kèm qpdf (đề xuất: người dùng chấp nhận license Visual Studio Community, giữ 3 DLL qpdf thật sự dùng; chi tiết trong review doubt F4, ADR-0008 Consequences). Đã ghi thành bước 6 "Before tagging" trong `docs/RELEASING.md`: xóa bước đó khi đã quyết.
+**Đã quyết (2026-10-21):** người dùng chấp nhận license Visual Studio Community; Flevert giữ 3 DLL MSVC runtime qpdf dùng (ADR-0008 Consequences). Bước chặn trong RELEASING đã xóa.
 
 **Cách làm agent:** việc độc lập giao cho agent `general-purpose` với `isolation: worktree`, **tối đa 2–3 agent cùng lúc** (nhiều hơn làm test lô N→1 lỗi ngẫu nhiên và Smart App Control chặn DLL mới build). Prompt: đọc CLAUDE.md, plan, todo; test cùng code; danh tính commit Suryvibegod (`git -c user.name=... -c user.email=... commit`); không push. Xong thì gộp, chạy lại ba project test, xóa worktree và nhánh. Trước khi đổi máy: dừng agent, commit `wip:` phần dở, push lên `wip/*`.
 

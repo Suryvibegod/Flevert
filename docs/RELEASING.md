@@ -9,7 +9,6 @@ For maintainers. Releases are built only by [`.github/workflows/release.yml`](..
 3. CI is green on the commit three times in a row (re-run it from the Actions tab).
 4. The three reviews (code, security, doubt) of every change since the last release found nothing Critical, High or Required.
 5. From v0.1.1 on, upgrade over the previous release: install the previous published setup, convert a file, run the new setup over it (from the draft, below), and check the menu still works and uninstalling removes everything.
-6. **Blocked for v0.2 until the maintainer decides:** no release that ships qpdf (v0.2 and later) is tagged before the maintainer has decided whether Flevert may pass on the three MSVC runtime DLLs (`msvcp140.dll`, `vcruntime140.dll`, `vcruntime140_1.dll`) it copies from qpdf's release. Microsoft lets only licensed Visual Studio users redistribute them ("Distributable Code") and advises against app-local copies, which get security fixes only when qpdf's release does ([ADR-0008, Consequences](adr/0008-pdf-engines-pdfium-and-qpdf.md#consequences); the doubt review of F4 in [tasks/pdf/todo.md](../tasks/pdf/todo.md#review-f4-vòng-1-reconcile)). The choices: accept the Visual Studio licence terms (Community is enough) and keep the three DLLs, or require the Visual C++ Redistributable and ship none. Record the decision in ADR-0008, change the build to match if needed, then delete this step.
 
 ## Clean the repository
 
