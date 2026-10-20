@@ -221,6 +221,35 @@ public sealed class PdfMergeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_repaired_merge_with_more_pages_than_counted_is_refused()
+    {
+        // b.pdf, counted with one page, becomes three pages whose startxref points nowhere before qpdf reads it again:
+        // qpdf repairs it (exit code 3) and the merge has four pages, not the two counted.
+        string[] inputs = [Pdf("a.pdf", 100), Pdf("b.pdf", 200)];
+        var op = new PdfMerge(Qpdf.NextToApp)
+        {
+            AfterCounting = input =>
+            {
+                if (input == inputs[1])
+                {
+                    WriteWidths(input, 200, 201, 202);
+                    var bytes = File.ReadAllBytes(input);
+                    var at = System.Text.Encoding.Latin1.GetString(bytes).LastIndexOf("startxref", StringComparison.Ordinal);
+                    File.WriteAllBytes(input, [.. bytes.AsSpan(0, at), .. "startxref\n12\n%%EOF\n"u8]);
+                }
+
+                return Task.CompletedTask;
+            },
+        };
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => op.RunAsync(inputs, null, CancellationToken.None));
+
+        Assert.Equal(PdfError.RepairFailed, ex.Error);
+        Assert.Equal("This PDF is damaged: the result would not have the same pages.", ex.Message);
+        Assert.Equal(["a.pdf", "b.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
     public async Task A_pdf_that_cannot_be_read_for_the_signature_check_is_named()
     {
         string[] inputs = [Pdf("a.pdf", 100), Pdf("b.pdf", 200)];

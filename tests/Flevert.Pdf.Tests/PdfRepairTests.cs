@@ -22,6 +22,18 @@ public sealed class PdfRepairTests : IDisposable
     }
 
     [Fact]
+    public async Task A_repaired_output_with_more_than_the_pages_counted_fails()
+    {
+        var output = _dir.Combine("out.pdf");
+        WriteWidths(output, 100, 200, 300);
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => PdfRepair.CheckAsync(Qpdf.NextToApp, repaired: true, pages: 2, output, CancellationToken.None));
+
+        Assert.Equal(PdfError.RepairFailed, ex.Error);
+        Assert.Equal("This PDF is damaged: the result would not have the same pages.", ex.Message);
+    }
+
+    [Fact]
     public async Task A_repaired_output_that_does_not_open_fails_as_too_damaged()
     {
         var output = _dir.File("out.pdf", "%PDF-1.7\nnothing here\n");

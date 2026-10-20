@@ -18,6 +18,8 @@ internal static class PdfRepair
 
     public const string MissingPagesMessage = "This PDF is damaged: the result would be missing pages.";
 
+    public const string OtherPagesMessage = "This PDF is damaged: the result would not have the same pages.";
+
     public const string UnreadableMessage = "This PDF is too damaged: Flevert could not write a copy of it that opens.";
 
     /// <summary>
@@ -36,9 +38,15 @@ internal static class PdfRepair
         var written = await CountWrittenAsync(qpdf, outputPath, ct).ConfigureAwait(false)
             ?? throw new PdfException(PdfError.RepairFailed, UnreadableMessage);
 
-        if (written != pages)
-            throw new PdfException(PdfError.RepairFailed, MissingPagesMessage);
+        RequireCounted(written, pages);
         OutputNote.Add(RepairedNote);
+    }
+
+    /// <summary>Fails unless an output written from a repaired input has the <paramref name="counted"/> pages.</summary>
+    public static void RequireCounted(int written, int counted)
+    {
+        if (written != counted)
+            throw new PdfException(PdfError.RepairFailed, written < counted ? MissingPagesMessage : OtherPagesMessage);
     }
 
     /// <summary>The pages qpdf counts in the output it wrote, or <c>null</c> when it cannot read that output.</summary>
