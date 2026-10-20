@@ -537,7 +537,7 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
 **Add watermark** (`pdf.watermark`):
 - Tùy chọn: chữ, bắt buộc, tối đa 100 ký tự, tiếng Việt được. Ô nhập có gợi ý "Chỉ dùng để nộp hồ sơ …".
 - Chữ xám, độ mờ 30%, xoay 45°, lặp thành lưới phủ cả trang (một dấu duy nhất trên bản scan giấy tờ thì dễ cắt bỏ). Cỡ chữ theo khổ trang.
-- Font: **Arial của Windows**, nhúng phần cần dùng lúc chạy (`FPDFText_LoadFont` với byte của `%WINDIR%\Fonts\arial.ttf`). Không đóng gói font. Thiếu Arial → lỗi rõ.
+- Font: **Arial của Windows**, nạp lúc chạy (`FPDFText_LoadFont` với byte của `%WINDIR%\Fonts\arial.ttf`) và nhúng **cả font**: pdfium không cắt font (subset), nên mỗi file watermark nặng thêm khoảng 0,6–1 MB (README và CHANGELOG nói "about 1 MB"). Cắt font, ví dụ bằng `hb-subset` của HarfBuzz (MIT), để cho bản sau. Không đóng gói font. Thiếu Arial → lỗi rõ.
 - Hộp thoại watermark phải nói rõ: watermark nằm trên trang nhưng **không** chống được việc sửa (người có công cụ vẫn xóa được).
 
 **Split into parts** (`pdf.split-10mb` / `pdf.split-25mb`):
