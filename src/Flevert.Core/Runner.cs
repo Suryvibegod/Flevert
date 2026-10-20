@@ -390,7 +390,8 @@ public sealed class Runner(RunLog log)
         catch (Exception ex)
 #pragma warning restore CA1031
         {
-            result = new FileResult(file, null, ex.ToString());
+            // The message on the first line for the notification, as a join does; the stack for the log after it.
+            result = new FileResult(file, null, $"{ex.Message}{Environment.NewLine}{ex}");
         }
         finally
         {

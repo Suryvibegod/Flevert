@@ -50,6 +50,38 @@ public sealed class BatchSummaryTests
     }
 
     [Fact]
+    public void A_single_file_that_failed_is_named_with_the_first_line_of_its_reason()
+    {
+        // Not "Done: 0 files, 1 failed": nothing was done, and the user should see why without opening the log.
+        var failed = new FileResult(@"C:\x\scan.pdf", null, $"This PDF is damaged.{Environment.NewLine}System.IO.InvalidDataException: …{Environment.NewLine}   at Op");
+
+        var summary = BatchSummary.Describe([failed], total: 1, LogDir);
+
+        Assert.Equal(@"Failed: scan.pdf: This PDF is damaged. Details: D:\logs", summary.Text);
+        Assert.True(summary.HasFailures);
+        Assert.True(summary.ShowsLog);
+    }
+
+    [Fact]
+    public void Several_files_that_all_failed_are_counted_without_done()
+    {
+        var summary = BatchSummary.Describe([Failed("a"), Failed("b"), Failed("c")], total: 3, LogDir);
+
+        Assert.Equal(@"Failed: 3 files. Details: D:\logs", summary.Text);
+        Assert.True(summary.HasFailures);
+        Assert.True(summary.ShowsLog);
+    }
+
+    [Fact]
+    public void Files_that_failed_or_were_skipped_with_none_done_say_failed()
+    {
+        var summary = BatchSummary.Describe([Failed("a"), Skipped("b")], total: 2, LogDir);
+
+        Assert.Equal(@"Failed: 1 file, 1 skipped. Details: D:\logs", summary.Text);
+        Assert.True(summary.HasFailures);
+    }
+
+    [Fact]
     public void Failures_and_skips_are_both_reported()
     {
         var summary = BatchSummary.Describe([Ok("a"), Skipped("b"), Failed("c")], total: 3, LogDir);

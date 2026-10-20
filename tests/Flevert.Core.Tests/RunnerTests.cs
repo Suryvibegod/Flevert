@@ -375,6 +375,29 @@ public sealed class RunnerTests : IDisposable
         Assert.Equal("Nothing to gain.", Assert.Single(outcome.Results).Error);
     }
 
+    [Fact]
+    public async Task A_failed_file_carries_the_reason_on_its_first_line_and_the_stack_after_it()
+    {
+        // The notification shows the first line (BatchSummary); the log keeps the rest.
+        var file = _dir.File("a.txt");
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
+            new FailingOp(), [file], progress: null, CancellationToken.None);
+
+        var error = Assert.Single(outcome.Results).Error!;
+        Assert.StartsWith("The file is damaged." + Environment.NewLine, error, StringComparison.Ordinal);
+        Assert.Contains(nameof(InvalidDataException), error, StringComparison.Ordinal);
+        Assert.Contains(nameof(FailingOp), error, StringComparison.Ordinal);
+    }
+
+    private sealed class FailingOp : IOperation
+    {
+        public string Id => "test.fail";
+        public string MenuPath => "Test/Fail";
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+        public Task<string> RunAsync(string inputPath, CancellationToken ct) => throw new InvalidDataException("The file is damaged.");
+    }
+
     private sealed class SkippingOp(string reason = "nothing to gain") : IOperation
     {
         public string Id => "test.skip";

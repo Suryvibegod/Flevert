@@ -200,7 +200,7 @@ Mỗi file được mở giữ (pin) không cho xóa/đổi tên trong lúc xử
 
 ### Log
 
-`%LOCALAPPDATA%\Flevert\logs\flevert-YYYYMMDD.log`, mỗi dòng: thời gian, pid, op-id, file, kết quả (`ok` / `skipped` / `failed`), thời gian xử lý, output hoặc lý do. Lỗi kèm stack; file bị bỏ qua chỉ ghi lý do; file bị ngắt khi Cancel ghi `failed` với lý do `cancelled`. Giữ 7 ngày. Không ghi nội dung file.
+`%LOCALAPPDATA%\Flevert\logs\flevert-YYYYMMDD.log`, mỗi dòng: thời gian, pid, op-id, file, kết quả (`ok` / `skipped` / `failed`), thời gian xử lý, output hoặc lý do. Lỗi ghi message rồi stack; file bị bỏ qua chỉ ghi lý do; file bị ngắt khi Cancel ghi `failed` với lý do `cancelled`. Giữ 7 ngày. Không ghi nội dung file.
 
 ### Báo bản mới
 
@@ -218,6 +218,8 @@ Người dùng cài từ file setup, không có kho ứng dụng tự cập nh�
 ### Bỏ qua (skipped)
 
 Thao tác ném `OperationSkippedException` khi đầu vào đã đáp ứng yêu cầu, không có gì đáng ghi (ví dụ ảnh đã nén tốt); yêu cầu không làm được là lỗi, không phải bỏ qua. File bị bỏ qua không tính là lỗi. Thông báo: `Done: 2 files, 30 skipped`; cả lô bị bỏ qua: `Nothing to do: 3 files skipped (<lý do>)`, hoặc chỉ tới log nếu lý do khác nhau; một file: `Skipped: <lý do>`.
+
+Thông báo khi có file lỗi: còn file xong thì `Done: 28 files, 2 failed. Details: <thư mục log>`; không file nào xong thì không nói `Done:`: một file → `Failed: <file>: <lý do> Details: <thư mục log>` (dòng đầu của lỗi, tức message của exception, tối đa 120 ký tự; stack ở log), nhiều file → `Failed: 3 files. Details: <thư mục log>` (kèm `, 1 skipped` nếu có file bị bỏ qua).
 
 Bấm vào thông báo mở log khi thông báo có chỉ tới log: có file lỗi (kể cả lô bị hủy giữa chừng), hoặc cả lô bị bỏ qua vì nhiều lý do khác nhau.
 

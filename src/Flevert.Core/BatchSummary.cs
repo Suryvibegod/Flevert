@@ -58,6 +58,15 @@ public sealed record BatchSummary(string Text, bool HasFailures, bool ShowsLog)
                 : new($"Nothing to do: {skipped} files skipped. Details: {logDirectory}", false, true);
         }
 
+        if (succeeded == 0 && failed > 0)
+        {
+            // Not "Done: 0 files": nothing was done. One file alone is named, with why.
+            if (results is [{ Error: { } error } only])
+                return new($"Failed: {Path.GetFileName(only.Input)}: {Reason(error)} Details: {logDirectory}", true, true);
+            var counts = CountOfFiles(failed) + (skipped > 0 ? $", {skipped} skipped" : "");
+            return new($"Failed: {counts}. Details: {logDirectory}", true, true);
+        }
+
         var text = $"Done: {CountOfFiles(succeeded)}" + (skipped > 0 ? $", {skipped} skipped" : "");
         if (failed > 0)
             // The balloon may be gone before the user reads it, so name the place rather than relying on a click.
