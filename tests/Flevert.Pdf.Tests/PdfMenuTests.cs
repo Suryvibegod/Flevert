@@ -14,10 +14,11 @@ public sealed class PdfMenuTests
         new MenuInstaller(_registry, Exe).Install([.. ImageOperations.All, .. PdfOperations.All]);
 
     [Fact]
-    public void A_pdf_gets_the_flevert_menu_with_only_the_rotations()
+    public void A_pdf_gets_the_flevert_menu_with_its_page_conversions_and_rotations()
     {
         Assert.Equal("Flevert.Menu.pdf", _registry.GetValue(@"SystemFileAssociations\.pdf\shell\Flevert", "ExtendedSubCommandsKey"));
-        Assert.Equal(["Rotate"], Labels(@"Flevert.Menu.pdf\shell"));
+        Assert.Equal(["Convert", "Rotate"], Labels(@"Flevert.Menu.pdf\shell"));
+        Assert.Equal(["JPG pages", "PNG pages"], Labels(@"Flevert.Menu.pdf\Convert\shell"));
         Assert.Equal(["90° right", "90° left", "180°"], Labels(@"Flevert.Menu.pdf\Rotate\shell"));
         Assert.Equal(
             ["pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180"],

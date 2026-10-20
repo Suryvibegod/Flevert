@@ -29,13 +29,15 @@ public sealed class PdfRotateTests : IDisposable
             Enumerable.Range(0, pdf.PageCount).Select(page => MarkCorner(pdf, page)));
     }
 
+    private static IOperation[] Rotations() => [.. PdfOperations.All.OfType<PdfRotate>()];
+
     [Fact]
     public void The_three_rotations_are_named_and_placed_as_in_the_spec()
     {
         Assert.Equal(
             [("pdf.rotate-right", "Rotate/90° right"), ("pdf.rotate-left", "Rotate/90° left"), ("pdf.rotate-180", "Rotate/180°")],
-            PdfOperations.All.Select(op => (op.Id, op.MenuPath)));
-        foreach (var op in PdfOperations.All)
+            Rotations().Select(op => (op.Id, op.MenuPath)));
+        foreach (var op in Rotations())
         {
             Assert.Equal([".pdf"], op.Extensions);
             // qpdf runs as its own single-threaded process, one per file.

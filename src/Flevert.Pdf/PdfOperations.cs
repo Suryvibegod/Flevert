@@ -7,6 +7,7 @@ public static class PdfOperations
 {
     public static IReadOnlyList<IOperation> All { get; } =
     [
+        .. PdfRenderOperations.All,
         new PdfRotate(90, Qpdf.NextToApp),
         new PdfRotate(270, Qpdf.NextToApp),
         new PdfRotate(180, Qpdf.NextToApp),
