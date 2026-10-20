@@ -191,8 +191,11 @@ public sealed class VideoConvertTests : IDisposable
         int width, int height, double fps, bool hdr, double factor, double slowness)
     {
         Assert.Equal(slowness, VideoEncoding.Slowness(new VideoTrack(0, "h264", width, height, 0, hdr, fps), factor), 6);
-        Assert.Equal(Ffmpeg.MaxTimeout, Ffmpeg.TimeoutFor(TimeSpan.FromHours(12), VideoEncoding.MaxSlowness));
     }
+
+    [Fact]
+    public void No_pass_may_take_longer_than_two_days() =>
+        Assert.Equal(Ffmpeg.MaxTimeout, Ffmpeg.TimeoutFor(TimeSpan.FromHours(12), VideoEncoding.MaxSlowness));
 
     [Fact]
     public void A_video_encode_takes_in_half_as_much_again_as_ffprobe_read_or_what_its_bytes_hold_at_8_kbit_s()

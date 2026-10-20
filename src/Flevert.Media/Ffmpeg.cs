@@ -185,7 +185,7 @@ public sealed class Ffmpeg
     /// 8 kbit/s, whichever is longer. ffprobe estimates the length of joined MPEG-TS recordings from the first (50 s read
     /// as 20 s), and a real file must never be cut (re-check review, RC-1). No video with its sound comes near 8 kbit/s; a
     /// file that holds more stops there, and fails (<see cref="MediaException.LongerThanItSaysMessage"/>) rather than pass
-    /// a cut output for the whole. A crafted file can still claim a long time: the timeout and <c>-fs</c> bound it then.
+    /// a cut output for the whole. A crafted file can still claim a long time: the timeout bounds it then (RC2-5).
     /// </summary>
     internal static TimeSpan MaxTime(TimeSpan duration, long inputBytes) =>
         TimeSpan.FromSeconds(Math.Max(duration.TotalSeconds * 1.5 + 10, inputBytes * 8.0 / 8_000));
