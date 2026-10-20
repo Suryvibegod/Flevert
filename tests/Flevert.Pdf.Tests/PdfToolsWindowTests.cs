@@ -39,13 +39,20 @@ public sealed class PdfToolsWindowTests : IDisposable
             Assert.All(named, e => Assert.False(string.IsNullOrWhiteSpace(e.Current.Name), $"a {e.Current.ControlType.ProgrammaticName} has no name"));
             var tools = named.Where(e => e.Current.ControlType == ControlType.RadioButton).Select(e => e.Current.Name).ToList();
             Assert.Equal(PdfTools.All.Select(t => t.Name).Order(), tools.Order());
-            // The sentence that says what each tool does is read with it.
-            Assert.All(named.Where(e => e.Current.ControlType == ControlType.RadioButton), e => Assert.False(string.IsNullOrWhiteSpace(e.Current.HelpText)));
+            // The sentence that says what each tool does comes right after it, as a screen reader moves on.
+            Assert.All(named.Where(e => e.Current.ControlType == ControlType.RadioButton), radio => Assert.Equal(
+                PdfTools.All.Single(t => t.Name == radio.Current.Name).Description,
+                TreeWalker.ControlViewWalker.GetNextSibling(radio)?.Current.Name));
             Assert.NotNull(Named(window, "1 PDF selected"));
             Assert.NotNull(Named(window, "PDF tools"));
             Assert.NotNull(Named(window, "Actions"));
-            // Usable from the keyboard alone: it opens with a tool focused, so Enter runs it and the arrows choose another.
-            Assert.Contains(AutomationElement.FocusedElement.Current.Name, tools);
+            // Usable from the keyboard alone: it opens with a tool selected and focused, so Enter runs it and the arrows
+            // choose another. (Windows gives the window the focus only when it may come to the front.)
+            var selected = named.Where(e => e.Current.ControlType == ControlType.RadioButton
+                && ((SelectionItemPattern)e.GetCurrentPattern(SelectionItemPattern.Pattern)).Current.IsSelected).ToList();
+            Assert.True(Assert.Single(selected).Current.IsKeyboardFocusable);
+            if (AutomationElement.FocusedElement.Current.ProcessId == flevert.Id)
+                Assert.Equal(selected[0].Current.Name, AutomationElement.FocusedElement.Current.Name);
 
             Invoke(Named(window, "Cancel")!);
 

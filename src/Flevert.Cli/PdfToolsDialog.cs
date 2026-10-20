@@ -131,6 +131,7 @@ internal sealed class PdfToolsForm : Form
         LiveSetting = AutomationLiveSetting.Assertive,
     };
     private readonly Dictionary<string, RadioButton> _radios = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Label> _descriptions = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Control> _optionControls = new(StringComparer.Ordinal);
     private readonly List<System.Drawing.Image> _images = [];
     private readonly Font _countFont;
@@ -171,6 +172,9 @@ internal sealed class PdfToolsForm : Form
         _options.Padding = Pad(8, 4, 8, 4);
         _options.Controls.Add(_optionRows);
         _problem.MaximumSize = new Size(_list.Width, 0);
+        // A line kept for the reason Run did nothing, so showing or clearing it does not move the window's contents
+        // (a relayout scrolled the list back to the top while the user typed).
+        _problem.MinimumSize = new Size(0, Font.Height);
         _problem.Margin = Pad(0, 6, 0, 0);
 
         // No access key on the buttons: on a focused button a bare letter would press it. Enter is Run, Esc is Cancel.
@@ -263,7 +267,7 @@ internal sealed class PdfToolsForm : Form
                 };
                 _radios[tool.OperationId] = radio;
                 rows.Controls.Add(radio);
-                rows.Controls.Add(new Label
+                var description = new Label
                 {
                     Text = tool.Description,
                     AutoSize = true,
@@ -271,7 +275,9 @@ internal sealed class PdfToolsForm : Form
                     ForeColor = SystemColors.GrayText,
                     MaximumSize = new Size(width - LogicalToDeviceUnits(DescriptionIndent), 0),
                     Margin = Pad(DescriptionIndent, 0, 0, 4),
-                });
+                };
+                _descriptions[tool.OperationId] = description;
+                rows.Controls.Add(description);
             }
         }
 
@@ -349,7 +355,11 @@ internal sealed class PdfToolsForm : Form
 
         _optionRows.ResumeLayout();
         if (_radios.TryGetValue(tool.OperationId, out var radio))
+        {
+            // The tool with the sentence under it, both in view.
+            _list.ScrollControlIntoView(_descriptions[tool.OperationId]);
             _list.ScrollControlIntoView(radio);
+        }
     }
 
     private void ShowFileCount()
@@ -383,6 +393,8 @@ internal sealed class PdfToolsForm : Form
 
     private void ClearProblem()
     {
+        if (_problem.Text.Length == 0)
+            return;
         _problem.Text = "";
         foreach (var field in _optionControls.Values)
             field.AccessibleDescription = null;
