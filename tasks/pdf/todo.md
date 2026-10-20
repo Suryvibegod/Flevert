@@ -33,7 +33,7 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 - Kiểm: test đỏ trước; `flevert.exe run pdf.rotate-right` thật; `install-menu --dev --allow-insecure-location` → MenuProbe thấy `Flevert > Rotate > 90° right` trên `.pdf`; `uninstall-menu`
 - Phụ thuộc: T1, T2. Cỡ: M
 
-### T4: Đóng gói qpdf
+### T4: Đóng gói qpdf và pdfium
 - [ ] `build-installer.ps1` chép `deps/qpdf/bin/*` cần thiết; `THIRD-PARTY-NOTICES.txt` có qpdf (LICENSE + NOTICE), OpenSSL, zlib, libjpeg-turbo, MSVC runtime; thiếu → build lỗi
 - [ ] Check-location của setup không giải nén qpdf vào thư mục tạm
 - [ ] `test-installer.ps1`: có `qpdf.exe`, notices đủ; xoay một PDF bằng bản đã cài; giới hạn kích thước 80 MB; gỡ sạch
@@ -83,7 +83,7 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 - Phụ thuộc: T1. Cỡ: M
 
 ### T10: `pdf.to-jpg`, `pdf.to-png`
-- [ ] 150 DPI, JPEG q90; thư mục `<tên> (pages)`; tiến độ theo trang; đóng gói `pdfium.dll` + notices (freetype, libjpeg-turbo, openjpeg, lcms, zlib, …)
+- [ ] 150 DPI, JPEG q90; thư mục `<tên> (pages)`; tiến độ theo trang (đóng gói `pdfium.dll` + notices chuyển sang T4, làm chung với qpdf)
 - Kiểm: PDF 200 trang (fixture sinh) → 200 ảnh, hủy giữa chừng sạch; test-installer kiểm `pdfium.dll` và notices
 - Phụ thuộc: T7, T9. Cỡ: M
 
