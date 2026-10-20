@@ -16,6 +16,7 @@ Thứ tự làm:
 core → image → installer   ⇒ v0.1 (ảnh, bộ cài, báo bản mới)
      → pdf                 ⇒ v0.2 (kèm thay đổi core: N→1, 1→N, công cụ ngoài)
      → media               ⇒ v0.3
+     → pdf (OCR)           ⇒ v0.4 (PDF scan thành PDF tìm và chép được chữ, tiếng Việt)
 ```
 
 Module id chốt một lần, không đổi. Mỗi module có spec riêng: `docs/specs/<module-id>.md`.

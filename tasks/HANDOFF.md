@@ -47,6 +47,7 @@ Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile
 
 **Việc tiếp theo** (spec đã duyệt 2026-10-20), hai nhánh song song, mỗi nhánh mở pull request; maintainer review (code, security, doubt) rồi gộp, v0.2.1 trước:
 - `feat/v0.2.1-pdf`: [docs/specs/pdf.md](../docs/specs/pdf.md), mục "v0.2.1" (menu PDF 16 mục, Compress for sharing có spike, Extract text, báo "đã sửa", giới hạn T18 cho mọi thao tác ghi PDF, mục review còn mở, Dependabot). Tiến độ: `tasks/pdf/todo.md`.
+- `feat/v0.2.2-pdf` (tạo sau khi v0.2.1 vào `main`): [docs/specs/pdf.md](../docs/specs/pdf.md), mục "v0.2.2" (8 công cụ PDF tham khảo Stirling-PDF trong cửa sổ "More PDF tools…", menu ảnh và PDF sắp lại cho người dùng thật, icon Fluent). Thứ tự phát hành: v0.2.1 → v0.2.2 → v0.3.0 → v0.4.0 (OCR).
 - `feat/v0.3-media`: [docs/specs/media.md](../docs/specs/media.md) (ffmpeg bản GPL, menu video 16 mục). Tiến độ: `tasks/media/plan.md`, `tasks/media/todo.md`. Rebase lên `main` sau khi v0.2.1 được gộp.
 
 **Ghi chú kỹ thuật:**

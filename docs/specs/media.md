@@ -2,7 +2,7 @@
 
 Module `media` trong [capability-map.md](capability-map.md). Phụ thuộc `core` (dùng lại `ExternalTool`, tiến độ trong file và output nhiều file làm ở v0.2). Phiên bản: **v0.3.0**. Trạng thái: **đã chốt phạm vi** (2026-10-20), **bản bổ sung đã duyệt** (2026-10-20: menu, giấy phép GPL, thứ tự làm, phạm vi nhánh); bản dựng ffmpeg và preset được đo lại ở bước Plan.
 
-Làm trên nhánh `feat/v0.3-media` từ `main` sau v0.2.0, song song với v0.2.1 (nhánh `feat/v0.2.1-pdf`). v0.2.1 phát hành trước; khi nó vào `main`, nhánh này rebase lên `main` rồi mới mở (hoặc cập nhật) pull request. Để ít đụng nhau: chỉ thêm file trong `src/Flevert.Media/`, `tests/Flevert.Media.Tests/`, `docs/adr/0009-…`, và sửa tối thiểu ở chỗ chung (đăng ký thao tác trong `Program.cs`, danh sách đuôi của menu, `scripts/deps.json`, `Flevert.sln`, CI, installer, notices).
+Làm trên nhánh `feat/v0.3-media` từ `main` sau v0.2.0, song song với v0.2.1 (nhánh `feat/v0.2.1-pdf`). Thứ tự phát hành: v0.2.1 → v0.2.2 → v0.3.0. Khi v0.2.1 rồi v0.2.2 vào `main`, nhánh này rebase lên `main` rồi mới mở (hoặc cập nhật) pull request. Menu video/audio theo nguyên tắc menu của v0.2.2 (pdf.md, mục "Menu: sắp lại theo người dùng thật"): nhãn "Convert to ▸", việc hay làm đứng trên, icon Fluent (MIT) cho nhóm và việc đơn lẻ. Để ít đụng nhau: chỉ thêm file trong `src/Flevert.Media/`, `tests/Flevert.Media.Tests/`, `docs/adr/0009-…`, và sửa tối thiểu ở chỗ chung (đăng ký thao tác trong `Program.cs`, danh sách đuôi của menu, `scripts/deps.json`, `Flevert.sln`, CI, installer, notices).
 
 ## Objective
 
