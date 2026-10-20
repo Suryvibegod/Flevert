@@ -83,8 +83,9 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 - Phụ thuộc: T1. Cỡ: M
 
 ### T10: `pdf.to-jpg`, `pdf.to-png`
-- [ ] 150 DPI, JPEG q90; thư mục `<tên> (pages)`; tiến độ theo trang (đóng gói `pdfium.dll` + notices chuyển sang T4, làm chung với qpdf)
+- [x] 150 DPI, JPEG q90; thư mục `<tên> (pages)`; tiến độ theo trang (đóng gói `pdfium.dll` + notices chuyển sang T4, làm chung với qpdf)
 - Kiểm: PDF 200 trang (fixture sinh) → 200 ảnh, hủy giữa chừng sạch; test-installer kiểm `pdfium.dll` và notices
+- Đã làm (2026-10-20): `PdfToImages` (`pdf.to-jpg`, `pdf.to-png`, `MaxParallel = 1`) trong `src/Flevert.Pdf/PdfToImages.cs`, công khai qua `PdfRenderOperations.All` (danh sách riêng cạnh `PdfOperations.All` của T3). **Chưa vào catalog**: dòng đăng ký trong `Program.cs` thêm lúc merge với T3 (T10 không sửa `Program.cs`, bộ cài, `build-installer.ps1`); chạy thật qua `flevert.exe`/menu làm lúc đó. Pixel BGRA của pdfium → `MagickImage.ReadPixels` (không coder nào parse gì) → JPEG q90 4:2:0 / PNG RGB, ghi DPI thật; mỗi trang xin `MemoryBudget.Shared` 3 × `GetRenderSize(...).Bytes` trước khi render. Trang hỏng → cả file lỗi, thông báo nêu số trang; PDF 0 trang → "This PDF has no pages.". 17 test (`PdfToImagesTests`), đỏ cả 16 với stub (`NotImplementedException`) rồi xanh; đột biến bỏ xin bộ nhớ / bỏ số chữ số tối thiểu → test tương ứng đỏ (bỏ `Alpha(Off)` thì không: bộ mã PNG tự bỏ alpha khi mọi điểm ảnh đục). Thời gian (máy dev, cả bộ test chạy cùng): 200 trang Letter trống 150 DPI → JPEG 5,6 s, PNG 11,5 s; 1 000 trang ở 2 DPI 0,6 s.
 - Phụ thuộc: T7, T9. Cỡ: M
 
 ### T11: `pdf.from-images` (ảnh → một PDF)

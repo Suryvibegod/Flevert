@@ -47,7 +47,7 @@ Quy tắc chung:
 - **Ảnh → PDF**: mỗi ảnh một trang, kích thước trang theo ảnh ở 150 DPI nếu ảnh không ghi DPI (ảnh điện thoại 4000 px → trang ~68 cm là quá to: trang lớn hơn A4 thì thu về vừa A4 hoặc Letter theo chiều dài nhất, giữ tỉ lệ). Xoay đúng chiều theo EXIF như module `image`. JPEG nhúng **nguyên byte** (DCTDecode, không nén lại, không mất chất lượng; EXIF/GPS bị bỏ khỏi luồng nhúng). Ảnh khác: HEIC/HEIF/AVIF/WebP chụp → JPEG q92; PNG/GIF/BMP/TIFF → nén Flate không mất dữ liệu; nền trong suốt thành trắng. Metadata của PDF tạo ra: chỉ `Producer: Flevert`.
 - **1 → N**: thư mục output có tên chưa tồn tại (quy tắc `(1)` của core áp cho thư mục); file đánh số đủ chữ số (`001` khi ≤ 999 trang).
 - **PDF có mật khẩu mở**: mọi thao tác trừ `pdf.unlock` báo lỗi rõ "This PDF needs a password: use Remove password first" (không hỏi mật khẩu cho từng thao tác ở v0.2).
-- **Render** (`to-jpg`, `to-png`): 150 DPI mặc định (đủ đọc trên điện thoại, nhỏ), giới hạn ở dưới. JPEG q90.
+- **Render** (`to-jpg`, `to-png`): 150 DPI mặc định (đủ đọc trên điện thoại, nhỏ), giới hạn ở dưới. JPEG q90, 4:2:0 (file nhỏ hơn; ImageMagick tự để 4:4:4 từ q90); PNG không mất dữ liệu, không kênh alpha (trang vẽ trên nền trắng). Ảnh ghi DPI thật của trang (in đúng khổ). Một trang pdfium không đọc được → cả file lỗi, thông báo nêu số trang (thư mục ghi nguyên vẹn hoặc không có gì; thiếu một trang mà trông như đủ thì tệ hơn). PDF không có trang → lỗi "This PDF has no pages.". Mỗi trang xin `MemoryBudget` (chung với module ảnh) gấp 3 lần ảnh BGRA trước khi render.
 
 ### Mật khẩu (protect / unlock)
 
