@@ -82,9 +82,11 @@ internal sealed partial class PartialFolder : IDisposable
     }
 
     /// <summary>
-    /// The folder's real, fully resolved path (extended-length form), with every junction and symbolic link in the
-    /// spelling the caller gave resolved away, so every component is a real directory locked by the handle while it is held.
-    /// Each path used afterwards (the writer's, the listing, the deletes, the rename destination) is built from this.
+    /// The folder's real, fully resolved path, with every junction and symbolic link in the spelling the caller gave
+    /// resolved away, so every component is a real directory locked by the handle while it is held. Without the
+    /// extended-length prefix where a shorter spelling names the same folder (<see cref="InputPin.Shorten"/>); a long path
+    /// or a volume without a drive letter keeps it. Each path used afterwards (the writer's, the listing, the deletes, the
+    /// rename destination) is built from this.
     /// </summary>
     public string Path { get; private set; }
 
@@ -92,6 +94,13 @@ internal sealed partial class PartialFolder : IDisposable
     /// Creates <paramref name="path"/> (which must not exist), opens it, checks through the handle that it is an ordinary
     /// empty directory and not a link put in its place, replaces <see cref="Path"/> with its real resolved path, and anchors it.
     /// </summary>
+    /// <remarks>
+    /// The folder is created and opened by the caller's spelling; only once it is held are its real parents locked. A
+    /// junction higher in that spelling, re-pointed between the create and the open, would make this hold a folder of the
+    /// same name in the junction's new target. Callers therefore pass a parent that is already a real path held by this
+    /// process: operations write beside their input, whose real path the runner resolved and pins (and the pin locks its
+    /// parents). Direct callers with an untrusted spelling should resolve the parent first.
+    /// </remarks>
     public static PartialFolder Create(string path)
     {
         if (!CreateDirectoryW(InputPin.ToExtendedPath(path), 0))
@@ -158,7 +167,8 @@ internal sealed partial class PartialFolder : IDisposable
                 using var handle = CreateFileW(InputPin.ToExtendedPath(entry), FileReadAttributes | FileWriteAttributes | Synchronize,
                     FileShareRead | FileShareWrite | FileShareDelete, 0, OpenExisting, FileFlagBackupSemantics | FileFlagOpenReparsePoint, 0);
                 // A hard link someone planted points at a file outside the folder; changing its attributes would reach that
-                // file, so it is left alone. A reparse point is left alone too.
+                // file, so it is left alone. A reparse point is left alone too. A page of the user's that someone else
+                // hard-linked elsewhere is skipped the same way and keeps NotContentIndexed: harmless, it is still there.
                 if (!handle.IsInvalid && !HasMultipleLinks(handle))
                     ChangeAttributes(handle, a => (a & FileAttributeReparsePoint) != 0 ? a : a & ~FileAttributeNotContentIndexed);
             }
@@ -286,6 +296,7 @@ internal sealed partial class PartialFolder : IDisposable
         }
 
         // A file system that cannot name an open file (some third-party ones) has no junctions either: NTFS and ReFS can.
+        // An assumption, not checked against every user-mode file system (WinFsp, Dokan): ADR-0007 records it.
         if (!IsLink(_folder)
             && (FinalNtPath(_folder), FinalNtPath(anchor)) is var (folder, inside)
             && (folder is null || inside is null || string.Equals(inside, folder + @"\" + AnchorName, StringComparison.OrdinalIgnoreCase)))

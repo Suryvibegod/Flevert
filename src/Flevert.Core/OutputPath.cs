@@ -80,7 +80,10 @@ public static class OutputPath
     /// <c>.flevert.lock</c> when handed over; the writer creates each file with <see cref="FileMode.CreateNew"/>, since
     /// other accounts that can write beside the input can also add entries to it, and never makes subfolders.
     /// </remarks>
-    /// <returns>The folder created.</returns>
+    /// <returns>
+    /// The folder created, by its real path (junctions in the spelling given resolved away), without the extended-length
+    /// prefix on a drive-letter or UNC path.
+    /// </returns>
     public static Task<string> WriteDirectoryAtomicallyAsync(
         string desiredDirectory,
         Func<string, CancellationToken, Task> write,
