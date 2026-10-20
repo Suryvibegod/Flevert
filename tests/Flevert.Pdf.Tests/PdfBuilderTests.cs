@@ -103,6 +103,43 @@ public sealed class PdfBuilderTests : IDisposable
     }
 
     [Fact]
+    public void A_very_thin_or_tiny_image_gets_a_page_no_smaller_than_pdf_allows_with_the_image_centred_and_not_stretched()
+    {
+        // 3 x 3 pt is the smallest page the PDF 1.7 reference (appendix C) has viewers accept. 2000 x 2 px at 150 DPI is
+        // 960 x 0.96 pt, scaled down to A4's long side: 841.89 x 0.84 pt. 1 x 1 px is 0.48 pt. Stored 2000 x 2 with EXIF 6,
+        // upright 2 x 2000: 0.84 x 841.89 pt.
+        var thinJpeg = JpegSegments.Strip(TestJpeg.Make(2000, 2, image => TestJpeg.SetOrientation(image, 6)));
+        var path = Build(builder =>
+        {
+            builder.AddBitmapPage(SolidBitmap(2000, 2, red: 255, green: 0, blue: 0), 2000, 2, 150);
+            builder.AddBitmapPage(SolidBitmap(1, 1, red: 0, green: 0, blue: 255), 1, 1, 150);
+            builder.AddJpegPage(thinJpeg, 150);
+        });
+
+        using var pdf = PdfDocument.Open(path);
+        AssertSize(A4Long, 3, pdf.GetPageSize(0));
+        var strip = pdf.Render(0, 720); // 8419 x 30 px; the image covers rows 11 to 19
+        Assert.Equal(Colour.Red, At(strip, 0.5, 0.5));
+        Assert.Equal(Colour.White, At(strip, 0.5, 0.1));
+        Assert.Equal(Colour.White, At(strip, 0.5, 0.9));
+
+        AssertSize(3, 3, pdf.GetPageSize(1));
+        var dot = pdf.Render(1, 720); // 30 x 30 px; the image covers 4.8 px in the middle
+        Assert.Equal(Colour.Blue, At(dot, 0.5, 0.5));
+        Assert.Equal(Colour.White, At(dot, 0.1, 0.1));
+        Assert.Equal(Colour.White, At(dot, 0.9, 0.9));
+
+        AssertSize(3, A4Long, pdf.GetPageSize(2));
+        var turned = pdf.Render(2, 720);
+        Assert.NotEqual(Colour.White, At(turned, 0.5, 0.25));
+        Assert.Equal(Colour.White, At(turned, 0.1, 0.25));
+        Assert.Equal(Colour.White, At(turned, 0.9, 0.25));
+
+        var (exitCode, output) = Qpdf("--check", path);
+        Assert.True(exitCode == 0, output);
+    }
+
+    [Fact]
     public void Embeds_the_stripped_jpeg_byte_for_byte_and_the_bitmap_compressed()
     {
         var jpeg = JpegSegments.Strip(TestJpeg.Make(160, 120));
@@ -525,6 +562,14 @@ public sealed class PdfBuilderTests : IDisposable
             }
         }
 
+        return bgra;
+    }
+
+    private static byte[] SolidBitmap(int width, int height, byte red, byte green, byte blue)
+    {
+        var bgra = new byte[width * height * 4];
+        for (var at = 0; at < bgra.Length; at += 4)
+            (bgra[at], bgra[at + 1], bgra[at + 2], bgra[at + 3]) = (blue, green, red, 255);
         return bgra;
     }
 

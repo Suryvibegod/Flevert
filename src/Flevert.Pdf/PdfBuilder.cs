@@ -42,6 +42,12 @@ internal sealed class PdfBuilder : IDisposable
     /// <summary>297 mm, the long side of A4, in points: a larger page is scaled down to it.</summary>
     public const double A4LongSide = 297 / 25.4 * PointsPerInch;
 
+    /// <summary>
+    /// The shortest side a page gets: 3 pt, the smallest page size the PDF 1.7 reference (appendix C, "Architectural
+    /// limits") has viewers accept. A thinner or smaller image is centred on a white page of that side, never stretched.
+    /// </summary>
+    public const double MinPageSide = 3;
+
     private const double PointsPerInch = 72;
 
     /// <summary>The Producer of every PDF built here, its only metadata (docs/specs/pdf.md).</summary>
@@ -306,13 +312,18 @@ internal sealed class PdfBuilder : IDisposable
     // pdfium frees it, and on failure the page is removed again, so the document never keeps half a page.
     private void AddPage(ref nint image, PdfPageSize size, int orientation, long bytes)
     {
+        // The image fills the page unless a side is under MinPageSide: then the page is that side and the image centred.
+        var pageWidth = Math.Max(size.Width, MinPageSide);
+        var pageHeight = Math.Max(size.Height, MinPageSide);
         var (a, b, c, d, e, f) = Matrix(size, orientation);
+        e += (pageWidth - size.Width) / 2;
+        f += (pageHeight - size.Height) / 2;
         if (PdfiumNative.FPDFImageObj_SetMatrix(image, a, b, c, d, e, f) == 0)
             throw new InvalidOperationException("pdfium could not place the image.");
 
         var index = PageCount;
         var added = false;
-        using (var page = PageHandle.New(_document, index, size.Width, size.Height))
+        using (var page = PageHandle.New(_document, index, pageWidth, pageHeight))
         {
             var native = page.DangerousGetHandle();
             var inserted = PdfiumNative.FPDFPage_InsertObject(native, image) != 0;
