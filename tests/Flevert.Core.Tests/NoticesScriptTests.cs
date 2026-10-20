@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Flevert.Core.Tests;
 
@@ -166,6 +168,57 @@ public sealed class NoticesScriptTests : IDisposable
         Assert.True(run.ExitCode == 0, run.Output);
         var notices = NoticesText();
         Assert.All(RealNoticeTexts, text => Assert.Contains(text, notices, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Every_file_a_real_publish_of_flevert_ships_has_its_notice()
+    {
+        // Final audit of v0.2.0: openssl.cnf, which Flevert.Pdf.csproj copies into the build, stopped
+        // build-installer.ps1 while the faked publish folders above all passed. CI never builds the installer, so publish
+        // flevert.exe for real (without ReadyToRun, which changes no file name) and run the script on what comes out.
+        var publish = _dir.Combine("real publish");
+        var dotnet = Dotnet();
+        var published = Run(dotnet, ["publish", Path.Combine(InstallerScriptTests.RepositoryRoot(), "src", "Flevert.Cli"),
+            "-c", "Release", "-r", "win-x64", "--self-contained", "-o", publish, "-nodeReuse:false", "-p:UseSharedCompilation=false"]);
+        Assert.True(published.ExitCode == 0, published.Output);
+        var locals = Run(dotnet, ["nuget", "locals", "global-packages", "--list"]);
+        var packages = Regex.Match(locals.Output, @"^global-packages:\s*(.+?)\s*$", RegexOptions.Multiline).Groups[1].Value;
+        Assert.True(Directory.Exists(packages), locals.Output);
+
+        var run = PowerShellScript.Run("write-notices.ps1", ["-Publish", publish, "-Packages", packages]);
+
+        Assert.True(run.ExitCode == 0, run.Output);
+        var notices = File.ReadAllText(Path.Combine(publish, "THIRD-PARTY-NOTICES.txt"));
+        Assert.All(RealNoticeTexts, text => Assert.Contains(text, notices, StringComparison.Ordinal));
+    }
+
+    /// <summary>The dotnet that runs these tests: DOTNET_ROOT, else PATH, else the per-user and machine-wide installs.</summary>
+    private static string Dotnet()
+    {
+        var folders = new[] { Environment.GetEnvironmentVariable("DOTNET_ROOT") }
+            .Concat((Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator))
+            .Append(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "dotnet"))
+            .Append(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet"));
+        var found = folders.Where(f => !string.IsNullOrWhiteSpace(f)).Select(f => Path.Combine(f!.Trim('"'), "dotnet.exe")).FirstOrDefault(File.Exists);
+        Assert.True(found is not null, "dotnet.exe not found");
+        return found!;
+    }
+
+    private static (int ExitCode, string Output) Run(string program, IEnumerable<string> arguments)
+    {
+        var start = new ProcessStartInfo(program) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in arguments)
+            start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(600_000))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException($"{program} {string.Join(' ', start.ArgumentList)} did not finish in 10 minutes");
+        }
+
+        return (process.ExitCode, output.Result + error.Result);
     }
 
     private static readonly string[] RealNoticeTexts =

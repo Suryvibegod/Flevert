@@ -50,8 +50,10 @@ foreach ($library in $deps.libraries.PSObject.Properties | Where-Object { $_.Val
 # What may ship: the assets of the libraries in flevert.deps.json (the packages and runtime packs above, and Flevert's
 # own projects), flevert's host and settings files, and the files of each "notices" entry in the manifest. The
 # installer packs the whole folder but symbol files (Flevert.iss), so anything else would ship without its licence.
+# openssl.cnf is Flevert's own (MIT, like the rest of the repository): the empty OpenSSL configuration qpdf is pointed
+# at (ADR-0008), copied into the build by Flevert.Pdf.csproj.
 $covered = @{} # case-insensitive, as file names are
-foreach ($own in 'flevert.exe', 'flevert.deps.json', 'flevert.runtimeconfig.json', 'THIRD-PARTY-NOTICES.txt', 'LICENSE.txt') {
+foreach ($own in 'flevert.exe', 'flevert.deps.json', 'flevert.runtimeconfig.json', 'THIRD-PARTY-NOTICES.txt', 'LICENSE.txt', 'openssl.cnf') {
     $covered[$own] = $true
 }
 $target = $deps.targets.PSObject.Properties[$deps.runtimeTarget.name]
