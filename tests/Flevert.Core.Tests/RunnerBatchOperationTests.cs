@@ -220,6 +220,56 @@ public sealed class RunnerBatchOperationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_join_that_finishes_while_it_is_given_time_to_stop_is_reported_and_logged()
+    {
+        // The output exists: saying "Cancelled." and logging nothing would hide a file the user now has.
+        var files = new[] { _dir.File("1.txt", "một"), _dir.File("2.txt", "hai") };
+        using var cts = new CancellationTokenSource();
+        var op = new StubbornJoin(onStart: cts.Cancel, finishAfter: TimeSpan.FromMilliseconds(300));
+
+        var outcome = await NewRunner().RunAsync(op, files, progress: null, cts.Token);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded);
+        Assert.Equal(_dir.Combine("1 (stubborn).txt"), result.Output);
+        Assert.True(File.Exists(result.Output));
+        Assert.Equal("Done: 1 (stubborn).txt", BatchSummary.Describe(outcome, _logs.Path).Text);
+        var lines = File.ReadAllLines(Assert.Single(Directory.GetFiles(_logs.Path, "flevert-*.log")));
+        Assert.Equal(2, lines.Length);
+        Assert.All(lines, line =>
+        {
+            Assert.Equal("ok", line.Split('\t')[4]);
+            Assert.EndsWith("\t" + result.Output, line, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task A_join_that_ignores_cancellation_is_abandoned_after_its_grace_period_and_its_inputs_are_released()
+    {
+        var files = new[] { _dir.File("1.txt"), _dir.File("2.txt") };
+        using var cts = new CancellationTokenSource();
+        var never = new TaskCompletionSource();
+        var op = new StubbornJoin(onStart: cts.Cancel, finishAfter: TimeSpan.Zero, hold: never.Task);
+        var timer = Stopwatch.StartNew();
+        try
+        {
+            var outcome = await NewRunner().RunAsync(op, files, progress: null, cts.Token).WaitAsync(TimeSpan.FromSeconds(20));
+
+            Assert.InRange(timer.Elapsed, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(15));
+            Assert.Empty(outcome.Results);
+            Assert.Equal("Cancelled.", BatchSummary.Describe(outcome, _logs.Path).Text);
+            Assert.Contains("\tcancelled", File.ReadAllText(Assert.Single(Directory.GetFiles(_logs.Path, "flevert-*.log"))), StringComparison.Ordinal);
+            foreach (var file in files)
+                File.Delete(file); // unpinned once the operation is abandoned
+            Assert.Empty(_dir.FileNames());
+        }
+        finally
+        {
+            never.SetResult();
+        }
+    }
+
+    [Fact]
     public async Task Cancelling_while_files_are_still_arriving_runs_nothing()
     {
         using var cts = new CancellationTokenSource();
@@ -342,6 +392,31 @@ public sealed class RunnerBatchOperationTests : IDisposable
             Calls.Add([.. inputPaths]);
             onRun?.Invoke(inputPaths);
             return Task.FromResult(inputPaths[0]);
+        }
+    }
+
+    /// <summary>Ignores the token: the cancelled batch must wait for it a while, then let go.</summary>
+    private sealed class StubbornJoin(Action onStart, TimeSpan finishAfter, Task? hold = null) : IBatchOperation
+    {
+        public string Id => "test.stubborn-join";
+
+        public string MenuPath => "Test/Stubborn join";
+
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+
+        public async Task<string> RunAsync(IReadOnlyList<string> inputPaths, IProgress<FileProgress>? progress, CancellationToken ct)
+        {
+            onStart();
+            if (hold is not null)
+            {
+                await hold.ConfigureAwait(false);
+                throw new OperationCanceledException(ct); // released by the test once it is done; writes nothing
+            }
+
+            await Task.Delay(finishAfter, CancellationToken.None).ConfigureAwait(false);
+            var desired = Path.Combine(Path.GetDirectoryName(inputPaths[0])!, Path.GetFileNameWithoutExtension(inputPaths[0]) + " (stubborn).txt");
+            return await OutputPath.WriteAtomicallyAsync(desired, (temp, _) => File.WriteAllTextAsync(temp, "joined", CancellationToken.None), CancellationToken.None)
+                .ConfigureAwait(false);
         }
     }
 

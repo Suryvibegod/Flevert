@@ -143,9 +143,16 @@ public sealed class Runner(RunLog log)
         {
             if (running is not null)
                 await Task.WhenAny(running, Task.Delay(JoinStopGrace, CancellationToken.None)).ConfigureAwait(false);
-            lock (gate)
-                finished = true;
-            return Cancelled(operation, first, timer);
+            if (running is not { IsCompletedSuccessfully: true })
+            {
+                _ = running?.Exception; // observed: it stopped as asked, failed, or is abandoned
+                lock (gate)
+                    finished = true;
+                return Cancelled(operation, first, timer);
+            }
+
+            // It had already written its output when it stopped: the file exists, so report and log it like any other.
+            result = new FileResult(first, running.Result, null);
         }
         catch (OperationSkippedException ex)
         {
