@@ -98,7 +98,7 @@ public sealed class MenuTests
             ["Merge PDFs"] = new("merge", 1),
             ["Protect with password"] = new("lock_closed", 2),
             ["Remove password"] = new("lock_open", 2),
-            ["More PDF tools…"] = new("toolbox", 3),
+            ["Remove hidden info"] = new("shield", 3),
         };
         new MenuInstaller(_registry, Exe, iconExists: _ => true).Install(
             [
@@ -106,7 +106,7 @@ public sealed class MenuTests
                 new FakeOp("pdf.merge", "Merge PDFs", ".pdf"),
                 new FakeOp("pdf.protect", "Protect with password", ".pdf"),
                 new FakeOp("pdf.unlock", "Remove password", ".pdf"),
-                new FakeOp("pdf.tools", "More PDF tools…", ".pdf"),
+                new FakeOp("pdf.strip-metadata", "Remove hidden info", ".pdf"),
             ], looks);
 
         // ECF_SEPARATORBEFORE. Separators do not count toward the 16 entries Explorer shows (measured with MenuProbe).
@@ -173,16 +173,6 @@ public sealed class MenuTests
     }
 
     [Fact]
-    public void An_operation_without_a_menu_path_is_left_out_of_the_menu()
-    {
-        // A PDF tool the PDF tools window runs, or flevert.exe run, under its id.
-        Install(new FakeOp("pdf.flatten", "", ".pdf"), new FakeOp("pdf.merge", "Merge PDFs", ".pdf"));
-
-        Assert.Equal(["Merge PDFs"], _registry.KeysUnder(@"Flevert.Menu.pdf\shell").Select(k => _registry.GetValue(k, "MUIVerb")));
-        Assert.DoesNotContain(_registry.Snapshot().Values, v => v.Contains("pdf.flatten", StringComparison.Ordinal));
-    }
-
-    [Fact]
     public void Operation_does_not_appear_for_extensions_it_does_not_support()
     {
         Install(new FakeOp("image.to-png", "Convert/PNG", ".jpg"), new DevCopy());
@@ -235,12 +225,14 @@ public sealed class MenuTests
     }
 
     [Fact]
-    public void An_operation_without_a_menu_path_is_run_by_id_only_and_writes_nothing_to_the_menu()
+    public void An_operation_without_a_menu_path_writes_nothing_to_the_menu()
     {
-        // The PDF tools window runs such operations (docs/specs/pdf.md, v0.2.2); flevert.exe run still finds them.
-        Install(new FakeOp("pdf.flatten", "", ".pdf"), new FakeOp("image.to-png", "Convert/PNG", ".jpg"));
+        // A PDF tool as PdfTools makes it, before the menu places it (docs/specs/pdf.md, v0.2.2): no key, no command.
+        Install(new FakeOp("pdf.flatten", "", ".pdf"), new FakeOp("pdf.merge", "Merge PDFs", ".pdf"), new FakeOp("image.to-png", "Convert/PNG", ".jpg"));
 
-        Assert.DoesNotContain(_registry.Snapshot().Keys, key => key.Contains(".pdf", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(["Merge PDFs"], _registry.KeysUnder(@"Flevert.Menu.pdf\shell").Select(k => _registry.GetValue(k, "MUIVerb")));
+        Assert.DoesNotContain(_registry.Snapshot().Values, v => v.Contains("pdf.flatten", StringComparison.Ordinal));
+        Assert.DoesNotContain(_registry.Snapshot().Keys, key => key.Contains("flatten", StringComparison.OrdinalIgnoreCase));
         Assert.Single(_registry.KeysUnder(@"Flevert.Menu.jpg\shell"));
     }
 

@@ -171,9 +171,8 @@ public sealed class PdfMenuTests
         Assert.Equal(16, CountEntries(@"Flevert.Menu.heic\shell"));
     }
 
-    // What flevert.exe can run (Program): the menus' operations and any PDF tool they leave out.
-    private static List<IMenuOperation> Catalog =>
-        [.. MenuOperations.All, .. PdfTools.Operations.Where(tool => !MenuOperations.All.Any(op => op.Id == tool.Id))];
+    // What flevert.exe can run (Program): the menus' operations.
+    private static List<IMenuOperation> Catalog => [.. MenuOperations.All];
 
     private static string Id(string command) => command[$"\"{Exe}\" run ".Length..].Split(' ')[0];
 

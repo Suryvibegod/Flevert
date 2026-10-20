@@ -5,7 +5,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Sentence-style test names read as specifications. -->
     <NoWarn>$(NoWarn);CA1707</NoWarn>
-    <!-- UI Automation (UIAutomationClient) for the PDF tools window test. -->
+    <!-- UI Automation (UIAutomationClient) for the watermark dialog test. -->
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 

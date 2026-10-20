@@ -554,7 +554,7 @@ Ba review bối cảnh trống (code, security, doubt) trên nhánh trước ph�
 
 # v0.2.2 (phần B: tám công cụ PDF mới; nhánh `feat/v0.2.2-tools`, 2026-10-20)
 
-Phần A (menu mới, icon, cửa sổ "PDF tools", thao tác `pdf.tools`) làm song song ở nhánh khác. Phần B chỉ thêm thao tác và hợp đồng `PdfTools` cho phần A dùng; không sửa menu, installer, icon.
+Phần A (menu mới, icon, menu thứ hai `Flevert PDF tools`) làm song song ở nhánh khác. Phần B chỉ thêm thao tác và hợp đồng `PdfTools` cho phần A dùng; không sửa menu, installer, icon. (Lúc làm, phần A định có cửa sổ "PDF tools" và thao tác `pdf.tools`; người dùng bỏ cửa sổ đó, xem phần A. Kiểm cuối v0.2.2 bỏ luôn phần hợp đồng chỉ cửa sổ dùng: tên, mô tả, nhóm, icon của `PdfTool`, nhãn tùy chọn, `PdfTools.Operations`.)
 
 ## Đã làm
 

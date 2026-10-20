@@ -13,35 +13,12 @@ public sealed class PdfToolsTests
     private static readonly string[] WorkerTools = ["pdf.remove-blank-pages", "pdf.n-up-2", "pdf.fit-a4", "pdf.watermark", "pdf.page-numbers", "pdf.extract-images"];
 
     [Fact]
-    public void The_tools_are_in_order_by_group()
+    public void The_tools_are_the_operations_of_v022()
     {
         Assert.Equal(
-            [
-                ("pdf.remove-blank-pages", "Remove blank pages", PdfToolGroup.Pages),
-                ("pdf.n-up-2", "2 pages per sheet", PdfToolGroup.Pages),
-                ("pdf.n-up-4", "4 pages per sheet", PdfToolGroup.Pages),
-                ("pdf.fit-a4", "Fit pages to A4", PdfToolGroup.Pages),
-                ("pdf.split-10mb", "Split into parts under 10 MB", PdfToolGroup.Pages),
-                ("pdf.split-25mb", "Split into parts under 25 MB", PdfToolGroup.Pages),
-                ("pdf.watermark", "Add watermark", PdfToolGroup.AddToPages),
-                ("pdf.page-numbers", "Add page numbers", PdfToolGroup.AddToPages),
-                ("pdf.flatten", "Flatten forms and comments", PdfToolGroup.AddToPages),
-                ("pdf.extract-text", "Extract text", PdfToolGroup.Extract),
-                ("pdf.extract-images", "Extract images", PdfToolGroup.Extract),
-            ],
-            PdfTools.All.Select(tool => (tool.OperationId, tool.Name, tool.Group)));
-    }
-
-    [Fact]
-    public void Every_tool_says_in_one_sentence_what_it_gives_and_has_an_icon()
-    {
-        Assert.All(PdfTools.All, tool =>
-        {
-            Assert.EndsWith(".", tool.Description, StringComparison.Ordinal);
-            Assert.Matches("^[a-z0-9_]+$", tool.Icon);
-        });
-        // It must be said that a watermark does not stop editing (docs/specs/pdf.md, "Add watermark").
-        Assert.Contains("does not stop", PdfTools.All.Single(tool => tool.OperationId == "pdf.watermark").Description, StringComparison.Ordinal);
+            ["pdf.remove-blank-pages", "pdf.n-up-2", "pdf.n-up-4", "pdf.fit-a4", "pdf.split-10mb", "pdf.split-25mb", "pdf.watermark",
+                "pdf.page-numbers", "pdf.flatten", "pdf.extract-text", "pdf.extract-images"],
+            PdfTools.All.Select(tool => tool.OperationId));
     }
 
     [Fact]
@@ -50,8 +27,8 @@ public sealed class PdfToolsTests
         var numbers = PdfTools.All.Single(tool => tool.OperationId == "pdf.page-numbers").Options;
         Assert.Equal(
             [
-                new PdfToolOption("position", "Position", PdfToolOptionKind.Choice, ["bottom-center", "bottom-right", "top-right"], "bottom-center", 0),
-                new PdfToolOption("style", "Style", PdfToolOptionKind.Choice, ["1", "1 / N", "Page 1 of N"], "1", 0),
+                new PdfToolOption("position", PdfToolOptionKind.Choice, ["bottom-center", "bottom-right", "top-right"], "bottom-center", 0),
+                new PdfToolOption("style", PdfToolOptionKind.Choice, ["1", "1 / N", "Page 1 of N"], "1", 0),
             ],
             numbers,
             new OptionComparer());
@@ -106,25 +83,25 @@ public sealed class PdfToolsTests
         Assert.Throws<ArgumentException>(() => PdfTools.Create(operationId, options));
 
     [Fact]
-    public void Every_tool_but_extract_text_is_in_the_catalog_without_a_menu_path()
+    public void Every_tool_but_extract_text_is_placed_once_in_flevert_pdf_tools_and_runs_by_its_id()
     {
-        Assert.Equal(PdfTools.All.Select(tool => tool.OperationId).Where(id => id != "pdf.extract-text"), PdfTools.Operations.Select(op => op.Id));
-        Assert.All(PdfTools.Operations, op => Assert.Equal("", op.MenuPath));
-        // Extract text is there already; the menu places each of the other tools in Flevert PDF tools, once.
+        var placed = MenuOperations.All.Where(op => op is Core.Menu.IMenuPlacement { Cascade: var cascade } && cascade == Core.Menu.MenuCascade.PdfTools).ToList();
+
+        Assert.Equal(PdfTools.All.Select(tool => tool.OperationId).Where(id => id != "pdf.extract-text").Order(StringComparer.Ordinal),
+            placed.Select(op => op.Id).Order(StringComparer.Ordinal));
+        // Extract text is Convert to > Text; flevert.exe's catalog (the menus' operations) has every id once.
         Assert.Contains(PdfRenderOperations.All, op => op.Id == "pdf.extract-text");
-        Assert.All(PdfTools.Operations, tool =>
-            Assert.Equal(Core.Menu.MenuCascade.PdfTools, Assert.IsAssignableFrom<Core.Menu.IMenuPlacement>(MenuOperations.All.Single(op => op.Id == tool.Id)).Cascade));
-        _ = new OperationCatalog([.. MenuOperations.All, .. PdfTools.Operations]);
+        _ = new OperationCatalog([.. MenuOperations.All]);
     }
 
     [Fact]
     public void Operations_that_run_a_worker_run_one_file_at_a_time_and_qpdf_ones_four()
     {
-        var parallel = PdfTools.Operations.ToDictionary(op => op.Id, op => op.MaxParallel);
+        int Parallel(string id) => PdfTools.Create(id, NoOptions).MaxParallel;
 
-        Assert.Equal(4, parallel["pdf.split-10mb"]);
-        Assert.Equal(4, parallel["pdf.flatten"]);
-        Assert.All(WorkerTools, id => Assert.Equal(1, parallel[id]));
+        Assert.Equal(4, Parallel("pdf.split-10mb"));
+        Assert.Equal(4, Parallel("pdf.flatten"));
+        Assert.All(WorkerTools, id => Assert.Equal(1, Parallel(id)));
     }
 
     private sealed class OptionComparer : IEqualityComparer<PdfToolOption>

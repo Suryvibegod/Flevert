@@ -2,27 +2,23 @@ using Flevert.Core;
 
 namespace Flevert.Pdf;
 
-/// <summary>The kinds of PDF tool (docs/specs/pdf.md, v0.2.2): on the pages, added to the pages, taken out of the PDF.</summary>
-public enum PdfToolGroup { Pages, AddToPages, Extract }
-
 /// <summary>What the user gives an option: one of its choices, or text.</summary>
 public enum PdfToolOptionKind { Choice, Text }
 
 /// <summary>
-/// An option of a tool: its key in <see cref="PdfTools.Create"/>'s options, the label a dialog would show, its kind, the
-/// values it may take (<see cref="PdfToolOptionKind.Choice"/>; empty for text), the value it has when not given, and
-/// the most characters it holds (<see cref="PdfToolOptionKind.Text"/>; 0 for a choice).
+/// An option of a tool: its key in <see cref="PdfTools.Create"/>'s options, its kind, the values it may take
+/// (<see cref="PdfToolOptionKind.Choice"/>; empty for text), the value it has when not given, and the most characters it
+/// holds (<see cref="PdfToolOptionKind.Text"/>, as people count them; 0 for a choice).
 /// </summary>
-public sealed record PdfToolOption(string Key, string Label, PdfToolOptionKind Kind, IReadOnlyList<string> Choices, string Default, int MaxLength);
+public sealed record PdfToolOption(string Key, PdfToolOptionKind Kind, IReadOnlyList<string> Choices, string Default, int MaxLength);
 
-// Icon: a Fluent UI System Icons name such as "document_page_number". The menu draws its own (MenuOperations.Looks).
-/// <summary>A PDF tool of Flevert PDF tools: its operation, short name, one sentence saying what it gives, group, icon and options.</summary>
-public sealed record PdfTool(string OperationId, string Name, string Description, PdfToolGroup Group, string Icon, IReadOnlyList<PdfToolOption> Options);
+/// <summary>A PDF tool: its operation and its options. The menu names and places it (<see cref="PdfToolMenu"/>).</summary>
+public sealed record PdfTool(string OperationId, IReadOnlyList<PdfToolOption> Options);
 
 /// <summary>
-/// The tools of the second PDF menu, Flevert PDF tools (docs/specs/pdf.md, v0.2.2; placed by <see cref="PdfToolMenu"/>),
-/// and the operation each runs with the options given. Every tool also runs headless with its defaults (<c>flevert.exe run &lt;op-id&gt; &lt;file&gt;</c>):
-/// <see cref="Operations"/> are in flevert.exe's catalog, without a menu path.
+/// The PDF tools of v0.2.2 (docs/specs/pdf.md), and the operation each runs with the options given. The second PDF menu,
+/// Flevert PDF tools, places them (<see cref="PdfToolMenu"/>), and flevert.exe runs them by id from there
+/// (<c>flevert.exe run &lt;op-id&gt; &lt;file&gt;</c>); Extract text is Convert to &gt; Text of the Flevert menu.
 /// </summary>
 public static class PdfTools
 {
@@ -42,40 +38,25 @@ public static class PdfTools
     private static readonly IReadOnlyList<string> Positions = [BottomCenter, BottomRight, TopRight];
     private static readonly IReadOnlyList<string> Styles = [NumberStyle, OfTotalStyle, WordsStyle];
 
-    /// <summary>
-    /// In order of group: Pages (Remove blank pages, 2 pages per sheet, 4 pages per sheet, Fit pages to A4, Split into parts
-    /// under 10 MB, … 25 MB), AddToPages (Add watermark, Add page numbers, Flatten forms and comments), Extract (Extract
-    /// text, Extract images).
-    /// </summary>
+    /// <summary>Every tool, by operation id.</summary>
     public static IReadOnlyList<PdfTool> All { get; } =
     [
-        new("pdf.remove-blank-pages", "Remove blank pages", "Drops the empty pages a two-sided scan leaves.", PdfToolGroup.Pages, "document_dismiss", []),
-        new("pdf.n-up-2", "2 pages per sheet", "Puts two pages side by side on each A4 sheet, to print on less paper.", PdfToolGroup.Pages, "layout_column_two", []),
-        new("pdf.n-up-4", "4 pages per sheet", "Puts four pages on each A4 sheet, to print on less paper.", PdfToolGroup.Pages, "grid", []),
-        new("pdf.fit-a4", "Fit pages to A4", "Scales every page to A4, so Letter, A3 and odd sizes print without being cut off.", PdfToolGroup.Pages, "page_fit", []),
-        new("pdf.split-10mb", "Split into parts under 10 MB", "Splits the PDF into parts small enough to attach to an email.", PdfToolGroup.Pages, "cut", []),
-        new("pdf.split-25mb", "Split into parts under 25 MB", "Splits the PDF into parts for apps that take files up to 25 MB.", PdfToolGroup.Pages, "cut", []),
-        new("pdf.watermark", "Add watermark", "Writes your text across every page to mark what a copy is for. It does not stop anyone from editing the PDF.",
-            PdfToolGroup.AddToPages, "stamp",
-            [new(Text, "Text", PdfToolOptionKind.Text, [], "", PdfEdit.MaxWatermarkLength)]),
-        new("pdf.page-numbers", "Add page numbers", "Numbers every page, at the bottom or at the top right.", PdfToolGroup.AddToPages, "document_page_number",
+        new("pdf.remove-blank-pages", []),
+        new("pdf.n-up-2", []),
+        new("pdf.n-up-4", []),
+        new("pdf.fit-a4", []),
+        new("pdf.split-10mb", []),
+        new("pdf.split-25mb", []),
+        new("pdf.watermark", [new(Text, PdfToolOptionKind.Text, [], "", PdfEdit.MaxWatermarkLength)]),
+        new("pdf.page-numbers",
             [
-                new(Position, "Position", PdfToolOptionKind.Choice, Positions, BottomCenter, 0),
-                new(Style, "Style", PdfToolOptionKind.Choice, Styles, NumberStyle, 0),
+                new(Position, PdfToolOptionKind.Choice, Positions, BottomCenter, 0),
+                new(Style, PdfToolOptionKind.Choice, Styles, NumberStyle, 0),
             ]),
-        new("pdf.flatten", "Flatten forms and comments", "Makes filled forms and comments part of the page, so they can no longer be changed.",
-            PdfToolGroup.AddToPages, "layer", []),
-        new("pdf.extract-text", "Extract text", "Saves the text of every page as a .txt file.", PdfToolGroup.Extract, "document_text", []),
-        new("pdf.extract-images", "Extract images", "Saves every picture in the PDF to a folder, photos exactly as they are in it.", PdfToolGroup.Extract, "image_multiple", []),
+        new("pdf.flatten", []),
+        new("pdf.extract-text", []),
+        new("pdf.extract-images", []),
     ];
-
-    /// <summary>
-    /// Every tool's operation with its default options but Extract text, which the catalog has already
-    /// (<see cref="PdfRenderOperations"/>): what flevert.exe adds to its catalog so <c>run &lt;op-id&gt;</c> works headless.
-    /// None has a menu path. Add watermark has no text: run like this, it fails each file and says why.
-    /// </summary>
-    public static IReadOnlyList<IOperation> Operations { get; } =
-        [.. All.Where(tool => tool.OperationId != "pdf.extract-text").Select(tool => Create(tool.OperationId, new Dictionary<string, string>()))];
 
     /// <summary>
     /// The operation for a tool with the user's options (missing keys → their default), reading PDFs with the flevert.exe

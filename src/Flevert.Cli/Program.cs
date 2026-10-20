@@ -42,9 +42,8 @@ internal static class Program
         if (command is PdfWorkerCommand)
             return PdfRenderWorker.Run(Console.OpenStandardInput(), Console.OpenStandardOutput());
 
-        // The PDF tools are in the menu (Flevert PDF tools) with their defaults; any the menu leaves out still runs by id.
-        var catalog = new OperationCatalog([.. MenuOperations.All, .. PdfTools.Operations.Where(tool => !MenuOperations.All.Any(op => op.Id == tool.Id)),
-            new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
+        // Every operation, the PDF tools with the options of their place in Flevert PDF tools.
+        var catalog = new OperationCatalog([.. MenuOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);

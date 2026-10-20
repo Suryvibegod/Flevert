@@ -11,7 +11,8 @@ public interface IMenuOperation
 
     /// <summary>
     /// Menu location below the Flevert entry; <c>/</c> separates submenus, e.g. <c>Convert/PNG</c>. Empty for an
-    /// operation that is not in the menu and runs only by its id (the PDF tools of v0.2.2, which their window runs).
+    /// operation that is not in the menu as it is (a PDF tool of v0.2.2, which the menu places in Flevert PDF tools with its
+    /// options: <c>IMenuPlacement</c>).
     /// </summary>
     string MenuPath { get; }
 
