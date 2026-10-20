@@ -220,6 +220,43 @@ public sealed class PdfCompressSharingTests(ITestOutputHelper output) : IDisposa
         Assert.Matches(@"/ColorSpace\s*/DeviceGray", System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result)));
     }
 
+    [Fact]
+    public async Task A_scratch_drive_without_twice_the_pdfs_size_free_is_refused_before_anything_is_written()
+    {
+        var input = _dir.Combine("scan.pdf");
+        Write(input, [Jpeg(ScanJpeg(0), 2480, 3508)], [(0, FullPage)]);
+        var op = new PdfCompressSharing(Qpdf.NextToApp, TestPdf.Worker) { ScratchRoot = _dir.Path, FreeSpace = _ => (2 * new FileInfo(input).Length) - 1 };
+
+        var ex = await Assert.ThrowsAsync<IOException>(() => op.RunAsync(input, CancellationToken.None));
+
+        Assert.Equal($"There is not enough free space on {Path.GetPathRoot(_dir.Path)} to compress this PDF for sharing.", ex.Message);
+        Assert.Equal(["scan.pdf"], TestPdf.FileNames(_dir.Path));
+        Assert.Empty(Directory.GetDirectories(_dir.Path));
+    }
+
+    [Fact]
+    public async Task A_working_file_qpdf_cannot_write_fails_as_a_disk_problem_not_as_a_damaged_pdf()
+    {
+        // Folders where qpdf writes the stream data files: it cannot create them, as on a full disk.
+        var input = _dir.Combine("scan.pdf");
+        Write(input, [Jpeg(ScanJpeg(0), 2480, 3508)], [(0, FullPage)]);
+        var op = new PdfCompressSharing(Qpdf.NextToApp, TestPdf.Worker)
+        {
+            ScratchRoot = _dir.Path,
+            BeforeDescribing = scratch =>
+            {
+                for (var number = 1; number <= 10; number++)
+                    Directory.CreateDirectory(Path.Combine(scratch, $"s-{number}"));
+            },
+        };
+
+        var ex = await Assert.ThrowsAsync<IOException>(() => op.RunAsync(input, CancellationToken.None));
+
+        Assert.Equal($"Flevert could not write its working files on {Path.GetPathRoot(_dir.Path)} to compress this PDF for sharing: check that the disk has free space.", ex.Message);
+        Assert.Equal(["scan.pdf"], TestPdf.FileNames(_dir.Path));
+        Assert.Empty(Directory.GetDirectories(_dir.Path));
+    }
+
     [Theory]
     [InlineData(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00 }, 1)]
     [InlineData(new byte[] { 0xFF, 0xD8, 0xFF, 0xC2, 0x00, 0x11, 0x08, 0x00, 0x01, 0x00, 0x01, 0x03, 0x01, 0x22, 0x00 }, 3)]

@@ -249,12 +249,15 @@ public sealed class Qpdf
     /// through <c>@-</c> like the paths.
     /// </summary>
     /// <param name="streamPrefix">Fully qualified, in a folder nobody else can change: qpdf creates the files by name.</param>
+    /// <param name="jsonPath">Fully qualified, in the folder of <paramref name="streamPrefix"/>.</param>
     /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
+    /// <exception cref="IOException">qpdf could not write the description or a stream's file (a full disk, say).</exception>
     public async Task<bool> DescribeWithStreamDataAsync(string inputPath, string jsonPath, string streamPrefix, CancellationToken ct)
     {
         RequireArgumentLine(streamPrefix, nameof(streamPrefix));
+        // qpdf's error names the file it could not write: anything in the folder of both is an output.
         var run = await RunCheckedAsync(["--json-output=2", "--json-stream-data=file", "--decode-level=none"], [inputPath],
-            [JsonStreamPrefix + streamPrefix, inputPath, jsonPath], jsonPath, ct).ConfigureAwait(false);
+            [JsonStreamPrefix + streamPrefix, inputPath, jsonPath], Path.GetDirectoryName(streamPrefix), ct).ConfigureAwait(false);
         RequireOutput(run, jsonPath);
         return Repaired(run);
     }

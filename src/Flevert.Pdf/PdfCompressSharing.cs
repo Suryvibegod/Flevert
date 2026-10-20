@@ -20,6 +20,8 @@ namespace Flevert.Pdf;
 /// <para>
 /// The JPEGs, the description and the stream data go in a folder of their own under the temporary folder that only this
 /// user, SYSTEM and administrators can change (<see cref="PrivateFolder"/>), and are deleted when the operation ends.
+/// The stream data is about the PDF's size: the drive must have twice that free before anything is written, and a file
+/// that cannot be written there fails as a disk problem, never as a damaged PDF.
 /// Like every operation that writes a PDF: at most <see cref="PdfDocument.MaxPages"/> pages, a note for a signed PDF and
 /// for one qpdf had to repair.
 /// </para>
@@ -62,6 +64,12 @@ public sealed class PdfCompressSharing : IOperation
     /// <summary>Where the operation's private folders go: the user's temporary folder, or a test's.</summary>
     internal string ScratchRoot { get; init; } = Path.GetTempPath();
 
+    /// <summary>The free bytes of the volume a folder is on; tests give a smaller disk.</summary>
+    internal Func<string, long?> FreeSpace { get; init; } = PdfRenderBudget.FreeBytes;
+
+    /// <summary>Run with the private folder before qpdf describes the PDF into it, for tests: a file qpdf cannot write.</summary>
+    internal Action<string>? BeforeDescribing { get; init; }
+
     public Task<string> RunAsync(string inputPath, CancellationToken ct) => RunAsync(inputPath, null, ct);
 
     public async Task<string> RunAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
@@ -69,7 +77,14 @@ public sealed class PdfCompressSharing : IOperation
         var pages = await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
         var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);
 
-        var scratch = Path.Combine(Path.GetFullPath(ScratchRoot), $"flevert-{Guid.NewGuid():N}");
+        var root = Path.GetFullPath(ScratchRoot);
+        var drive = Path.GetPathRoot(root);
+        // qpdf writes every stream of the PDF, as stored, into the folder, and the worker its JPEGs: about the PDF's size,
+        // and room to spare. Checked before anything is written; a disk that fills meanwhile fails as a disk below.
+        if (FreeSpace(root) is { } free && free < 2 * new FileInfo(inputPath).Length)
+            throw new IOException($"There is not enough free space on {drive} to compress this PDF for sharing.");
+
+        var scratch = Path.Combine(root, $"flevert-{Guid.NewGuid():N}");
         PrivateFolder.Create(scratch);
         string output;
         try
@@ -80,16 +95,22 @@ public sealed class PdfCompressSharing : IOperation
 
             var described = Path.Combine(scratch, "pdf.json");
             var prefix = Path.Combine(scratch, "s");
-            await _qpdf.DescribeWithStreamDataAsync(inputPath, described, prefix, ct).ConfigureAwait(false);
+            BeforeDescribing?.Invoke(scratch);
             var update = Path.Combine(scratch, "update.json");
             int replaced;
             try
             {
+                await _qpdf.DescribeWithStreamDataAsync(inputPath, described, prefix, ct).ConfigureAwait(false);
                 replaced = await Task.Run(() => ImageReplacement.WriteUpdate(described, prefix, shrunk, update, ct), ct).ConfigureAwait(false);
             }
             catch (InvalidDataException e)
             {
                 throw new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage, e);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                throw new IOException(
+                    $"Flevert could not write its working files on {drive} to compress this PDF for sharing: check that the disk has free space.", e);
             }
 
             if (replaced == 0)
