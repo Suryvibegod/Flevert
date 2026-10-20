@@ -38,9 +38,9 @@ public sealed class PdfExtractTextTests : IDisposable
         Assert.Equal(_dir.Combine("Hóa đơn tháng 1.txt"), output);
         var bytes = await File.ReadAllBytesAsync(output);
         Assert.Equal([0xEF, 0xBB, 0xBF], bytes[..3]);
-        Assert.Equal(
-            "Xin chào Việt Nam\r\nĐây là dòng thứ hai\r\n\fTrang hai: tiếng Việt có dấu\r\n\fTrang ba\r\n",
-            new UTF8Encoding(false).GetString(bytes, 3, bytes.Length - 3));
+        var text = new UTF8Encoding(false).GetString(bytes, 3, bytes.Length - 3);
+        Assert.True(text == "Xin chào Việt Nam\r\nĐây là dòng thứ hai\r\n\fTrang hai: tiếng Việt có dấu\r\n\fTrang ba\r\n",
+            string.Join(' ', text.Select(c => ((int)c).ToString("X4", System.Globalization.CultureInfo.InvariantCulture))));
     }
 
     [Fact]
@@ -138,6 +138,7 @@ public sealed class PdfExtractTextTests : IDisposable
     [InlineData("a\rb\r\n\r\n  ", "a\r\nb")]
     [InlineData("a\0b\fc￾d￿", "abcd")]
     [InlineData(" \r\n\t ", "")]
+    [InlineData("Xin\u00A0chào\u2009Việt\u202FNam", "Xin chào Việt Nam")]
     public void A_pages_text_is_written_with_crlf_and_without_what_cannot_be_read(string pdfium, string written)
     {
         Assert.Equal(written, PdfRenderWorker.PageText(pdfium));

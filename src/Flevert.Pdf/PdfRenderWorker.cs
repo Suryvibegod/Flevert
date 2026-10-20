@@ -361,15 +361,21 @@ public static class PdfRenderWorker
 
     /// <summary>
     /// A page's text as written: every line ended by <c>\r\n</c>, without NUL, form feeds of its own or the noncharacters
-    /// pdfium can give for a glyph without a meaning, and without the blank lines and spaces it ends with; empty for a page
-    /// with nothing but white space.
+    /// pdfium can give for a glyph without a meaning, every kind of space as a plain one, and without the blank lines and
+    /// spaces it ends with; empty for a page with nothing but white space.
     /// </summary>
+    /// <remarks>
+    /// A font that draws the space and the no-break space with one glyph (Arial does) maps that glyph back to only one of
+    /// them, so a PDF can give U+00A0 between every word; searched or pasted, it does not match a space.
+    /// </remarks>
     internal static string PageText(string text)
     {
         var clean = new StringBuilder(text.Length);
         foreach (var c in text)
         {
-            if (c is not ('\0' or '\f' or '\uFFFE' or '\uFFFF'))
+            if (char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.SpaceSeparator)
+                clean.Append(' ');
+            else if (c is not ('\0' or '\f' or '\uFFFE' or '\uFFFF'))
                 clean.Append(c);
         }
 

@@ -44,9 +44,9 @@ public class PdfToImagesTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void The_render_operations_list_offers_both()
+    public void The_render_operations_list_offers_both_and_the_text()
     {
-        Assert.Equal(["pdf.to-jpg", "pdf.to-png"], PdfRenderOperations.All.Select(op => op.Id));
+        Assert.Equal(["pdf.to-jpg", "pdf.to-png", "pdf.extract-text"], PdfRenderOperations.All.Select(op => op.Id));
     }
 
     [Fact]
