@@ -36,6 +36,26 @@ public sealed class BatchProgressTextTests
         Assert.Null(BatchProgressText.DescribeWithin(new BatchProgress(2, 10, @"C:\x\p7.heic")));
     }
 
+    [Fact]
+    public void The_bar_moves_inside_a_single_file_as_its_pages_go_by()
+    {
+        // One PDF of 4 pages: page N has started, so N - 1 are done (review CR nit: the bar stood at 0 until the end).
+        Assert.Equal((0, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, @"C:\x\a.pdf")));
+        Assert.Equal((0, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, @"C:\x\a.pdf", new FileProgress("page", 1, 4))));
+        Assert.Equal((500, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, @"C:\x\a.pdf", new FileProgress("page", 3, 4))));
+        Assert.Equal((1_000, 1_000), BatchProgressText.Bar(new BatchProgress(1, 1, null)));
+    }
+
+    [Fact]
+    public void The_bar_counts_finished_files_and_adds_the_part_of_the_current_one()
+    {
+        Assert.Equal((3_000, 10_000), BatchProgressText.Bar(new BatchProgress(3, 10, @"C:\x\p7.heic")));
+        Assert.Equal((3_250, 10_000), BatchProgressText.Bar(new BatchProgress(3, 10, @"C:\x\d.pdf", new FileProgress("page", 2, 4))));
+        // Before anything is known the bar is empty, never past its end.
+        Assert.Equal((0, 1_000), BatchProgressText.Bar(new BatchProgress(0, 0, null)));
+        Assert.Equal((2_000, 2_000), BatchProgressText.Bar(new BatchProgress(2, 2, @"C:\x\late.pdf", new FileProgress("page", 9, 9))));
+    }
+
     [Theory]
     [InlineData("page", 0, 200)] // positions count from 1: "page 0 of 200" means nothing
     [InlineData("page", 201, 200)]
