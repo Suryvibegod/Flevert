@@ -59,6 +59,15 @@ internal static class PdfToolsWorker
     /// <summary>At most this many copies of the watermark on a page, however small the text is against the page.</summary>
     private const int MaxWatermarkTiles = 300;
 
+    /// <summary>At most this many copies each side of the middle, along each axis.</summary>
+    private const int MaxWatermarkTilesPerAxis = 1000;
+
+    /// <summary>
+    /// The largest side of a page PDF allows, in its units (200 inches; ISO 32000-1, annex C): what the edit tools work on.
+    /// A page larger than that is refused before it is measured, so no size computed from it can overflow.
+    /// </summary>
+    internal const double MaxPageSide = 14_400;
+
     /// <summary>The space around each page on a sheet of several (points).</summary>
     private const double SheetMargin = 10;
 
@@ -167,6 +176,13 @@ internal static class PdfToolsWorker
         var font = edit.Kind == PdfEditKind.Watermark ? ReadArial() : null;
         using var pdf = PdfDocument.Open(file, PdfLimits.Default);
         var total = Start(pdf, lines);
+        for (var index = 0; index < total; index++)
+        {
+            var size = pdf.GetPageSize(index);
+            if (!(size.Width <= MaxPageSide && size.Height <= MaxPageSide))
+                throw new PdfException(PdfError.TooLarge, string.Create(CultureInfo.InvariantCulture, $"Page {index + 1} of this PDF is larger than PDF allows (200 inches on a side), so Flevert cannot change it."));
+        }
+
         switch (edit.Kind)
         {
             case PdfEditKind.PageNumbers:
@@ -311,21 +327,24 @@ internal static class PdfToolsWorker
         var textWidth = metrics.Width * size / 100;
         var middle = metrics.Middle * size / 100;
         var (stepX, stepY) = (textWidth + (3 * size), 5 * size);
-        var (across, along) = ((int)Math.Ceiling(diagonal / 2 / stepX) + 1, (int)Math.Ceiling(diagonal / 2 / stepY) + 1);
-        var tiles = ((2.0 * across) + 1) * ((2.0 * along) + 1);
+        // In doubles, clamped before they become counts: a page of absurd size must not overflow them.
+        var (across, along) = (Math.Ceiling(diagonal / 2 / stepX) + 1, Math.Ceiling(diagonal / 2 / stepY) + 1);
+        var tiles = ((2 * across) + 1) * ((2 * along) + 1);
         if (tiles > MaxWatermarkTiles)
         {
             var spread = Math.Sqrt(tiles / MaxWatermarkTiles);
             (stepX, stepY) = (stepX * spread, stepY * spread);
-            (across, along) = ((int)Math.Ceiling(diagonal / 2 / stepX) + 1, (int)Math.Ceiling(diagonal / 2 / stepY) + 1);
+            (across, along) = (Math.Ceiling(diagonal / 2 / stepX) + 1, Math.Ceiling(diagonal / 2 / stepY) + 1);
         }
+
+        var (columns, rows) = ((int)Math.Clamp(across, 1, MaxWatermarkTilesPerAxis), (int)Math.Clamp(along, 1, MaxWatermarkTilesPerAxis));
 
         var (cos, sin) = (Math.Cos(WatermarkAngle), Math.Sin(WatermarkAngle));
         var (centerX, centerY) = (width / 2, height / 2);
-        for (var row = -along; row <= along; row++)
+        for (var row = -rows; row <= rows; row++)
         {
             var shift = (row & 1) == 0 ? 0 : stepX / 2;
-            for (var column = -across; column <= across; column++)
+            for (var column = -columns; column <= columns; column++)
             {
                 var (u, v) = ((column * stepX) + shift, row * stepY);
                 // The copy's middle; one whose middle is farther from the page's than half the diagonal and half the

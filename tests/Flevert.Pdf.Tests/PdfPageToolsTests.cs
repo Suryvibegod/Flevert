@@ -329,6 +329,28 @@ public sealed class PdfWatermarkTests : IDisposable
     }
 
     [Theory]
+    [InlineData("pdf.watermark")]
+    [InlineData("pdf.page-numbers")]
+    [InlineData("pdf.n-up-4")]
+    public async Task A_page_larger_than_pdf_allows_is_refused_before_it_is_measured(string tool)
+    {
+        var input = _dir.Combine("huge.pdf");
+        ToolPdf.Write(input,
+        [
+            ToolPdf.Ascii("<< /Type /Catalog /Pages 2 0 R >>"),
+            ToolPdf.Ascii("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
+            ToolPdf.Ascii("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100000000000.0 100000000000.0] /Resources << >> >>"),
+        ]);
+        var op = PdfTools.Create(tool, tool == "pdf.watermark" ? new Dictionary<string, string> { [PdfTools.Text] = Text } : [], Qpdf.NextToApp, TestPdf.Worker);
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => op.RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.TooLarge, ex.Error);
+        Assert.Equal("Page 1 of this PDF is larger than PDF allows (200 inches on a side), so Flevert cannot change it.", ex.Message);
+        Assert.Equal(["huge.pdf"], FileNames(_dir.Path));
+    }
+
+    [Theory]
     [InlineData("  Bản sao  ", "Bản sao")]
     [InlineData("Bản sao", "Bản sao")] // decomposed, as some keyboards type it
     public void The_text_is_trimmed_and_composed(string typed, string written) => Assert.Equal(written, Op(typed).Text);
