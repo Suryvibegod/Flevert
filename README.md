@@ -75,7 +75,7 @@ PDFs also have a second entry, **Flevert PDF tools**:
 | **Fit pages to A4** | `report (A4).pdf`: Letter, A3 and odd sizes scaled to A4. Like Print layout, made for printing: bookmarks, links and fillable fields are not kept |
 | **Lock filled forms** | `report (flattened).pdf`: the answers of a filled form, and comments, become part of the page, so nobody can change them |
 | **Split by size** > Under 10 MB, Under 25 MB | a folder `report (parts)` with `report part 1.pdf`, …, in page order. **Under 10 MB** is the safe size for email (Gmail counts 25 MB after encoding, about 18 MB of file; Outlook takes 20 MB); **Under 25 MB** is for chat apps |
-| **Extract images** | a folder `report (images)` with the pictures, photos exactly as they are in the PDF |
+| **Extract images** | a folder `report (images)` with `report 001.jpg`, `report 002.png`, …: photos exactly as they are in the PDF, other pictures as PNG |
 
 PDFs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
 

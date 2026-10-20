@@ -16,7 +16,7 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
   - **Lock filled forms** makes filled forms and comments part of the page, as the PDF draws them, so nobody can change the answers. Flevert draws an answer again only when the form asks for it and the answer is plain ASCII: a form with other answers (Vietnamese ones, say) that the PDF holds no drawing of is left as it is, and the notification says why.
   - **Split by size** > **Under 10 MB** or **Under 25 MB** writes the pages, in order, into as few PDFs as fit under the limit of an email or a chat app.
   - **Extract images** saves the pictures of a PDF to a folder: JPEG photos exactly as they are in it, other pictures as PNG.
-- Icons beside every entry of the Flevert menus, from Microsoft's Fluent UI System Icons, readable on the light and the dark menu, and separators between groups of entries.
+- Icons beside the entries of the Flevert menus (not inside their submenus), from Microsoft's Fluent UI System Icons, readable on the light and the dark menu, and separators between groups of entries.
 
 ### Changed
 
