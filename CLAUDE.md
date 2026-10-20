@@ -32,9 +32,11 @@ Per module and per task: spec → plan/tasks → test first (see it fail, then p
 ## Commands
 
 ```
+powershell -ExecutionPolicy Bypass -File scripts/fetch-deps.ps1
 dotnet build Flevert.sln
 dotnet test tests/Flevert.Core.Tests
 dotnet test tests/Flevert.Image.Tests
+dotnet test tests/Flevert.Pdf.Tests
 dotnet format Flevert.sln --verify-no-changes
 dotnet publish src/Flevert.Cli -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish
 powershell -File scripts/measure-startup.ps1

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Fetched by scripts/fetch-deps.ps1, pinned by SHA256 (ADR-0008); never committed. -->
+    <PdfiumDll>$(MSBuildThisFileDirectory)..\..\deps\pdfium\bin\pdfium.dll</PdfiumDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flevert.Core\Flevert.Core.csproj" />
+    <ProjectReference Include="..\Flevert.Image\Flevert.Image.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flevert.Pdf.Tests" />
+  </ItemGroup>
+
+  <!-- Copied next to every assembly that references this one (the tests now, flevert.exe later). -->
+  <ItemGroup Condition="Exists('$(PdfiumDll)')">
+    <None Include="$(PdfiumDll)" Link="pdfium.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <!-- Fail early and say how to fix it, rather than build something that fails at run time. -->
+  <Target Name="RequirePdfium" BeforeTargets="BeforeBuild" Condition="!Exists('$(PdfiumDll)')">
+    <Error Text="deps\pdfium\bin\pdfium.dll is missing. Run: powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1" />
+  </Target>
+
+</Project>

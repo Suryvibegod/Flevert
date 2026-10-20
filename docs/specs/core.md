@@ -42,7 +42,7 @@ Không thêm package NuGet nào ngoài xUnit cho module này. `Flevert.Core` kh�
 
 ```
 Build:   dotnet build Flevert.sln -c Debug
-Test:    dotnet test tests/Flevert.Core.Tests; dotnet test tests/Flevert.Image.Tests   (lần lượt, không song song)
+Test:    dotnet test tests/Flevert.Core.Tests; dotnet test tests/Flevert.Image.Tests; dotnet test tests/Flevert.Pdf.Tests   (lần lượt, không song song)
 Lint:    dotnet format Flevert.sln --verify-no-changes
 Publish: dotnet publish src/Flevert.Cli -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish
 Startup: powershell -File scripts/measure-startup.ps1
