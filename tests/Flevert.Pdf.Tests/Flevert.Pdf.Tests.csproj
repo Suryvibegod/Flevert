@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <None Include="fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The phone portrait with GPS of the image tests (its README tells how it was made), shared rather than copied. -->
+    <None Include="..\Flevert.Image.Tests\fixtures\portrait-gps.heic" Link="fixtures\portrait-gps.heic" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

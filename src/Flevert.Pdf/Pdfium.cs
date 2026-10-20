@@ -24,12 +24,15 @@ internal static class Pdfium
     }
 }
 
-/// <summary>An FPDF_DOCUMENT and the file it reads from, which must stay open until the document is closed.</summary>
+/// <summary>
+/// An FPDF_DOCUMENT and what it reads from (a <see cref="FileSource"/> or <see cref="BytesSource"/>), which must stay
+/// until the document is closed: pdfium parses objects when it first needs them, saving included.
+/// </summary>
 internal sealed class DocumentHandle : SafeHandleZeroOrMinusOneIsInvalid
 {
-    private readonly FileSource _source;
+    private readonly IDisposable _source;
 
-    public DocumentHandle(nint document, FileSource source) : base(ownsHandle: true)
+    public DocumentHandle(nint document, IDisposable source) : base(ownsHandle: true)
     {
         SetHandle(document);
         _source = source;
@@ -52,17 +55,29 @@ internal sealed class PageHandle : SafeHandleZeroOrMinusOneIsInvalid
     private PageHandle(DocumentHandle document) : base(ownsHandle: true) => _document = document;
 
     /// <summary>Call while holding <see cref="Pdfium.Gate"/>. Throws when pdfium cannot load the page.</summary>
-    public static PageHandle Load(DocumentHandle document, int pageIndex)
+    public static PageHandle Load(DocumentHandle document, int pageIndex) =>
+        Open(document, PdfiumNative.FPDF_LoadPage, pageIndex)
+        ?? throw new PdfException(PdfError.DamagedPage, $"Page {pageIndex + 1} of this PDF is damaged and cannot be read.");
+
+    /// <summary>
+    /// Call while holding <see cref="Pdfium.Gate"/>. Adds a <paramref name="width"/> x <paramref name="height"/> point
+    /// page at <paramref name="pageIndex"/>; throws when pdfium cannot.
+    /// </summary>
+    public static PageHandle New(DocumentHandle document, int pageIndex, double width, double height) =>
+        Open(document, (doc, index) => PdfiumNative.FPDFPage_New(doc, index, width, height), pageIndex)
+        ?? throw new InvalidOperationException("pdfium could not add a page.");
+
+    private static PageHandle? Open(DocumentHandle document, Func<nint, int, nint> open, int pageIndex)
     {
         var page = new PageHandle(document);
         var added = false;
         document.DangerousAddRef(ref added);
-        var native = PdfiumNative.FPDF_LoadPage(document.DangerousGetHandle(), pageIndex);
+        var native = open(document.DangerousGetHandle(), pageIndex);
         if (native == 0)
         {
             document.DangerousRelease();
             page.SetHandleAsInvalid();
-            throw new PdfException(PdfError.DamagedPage, $"Page {pageIndex + 1} of this PDF is damaged and cannot be read.");
+            return null;
         }
 
         page.SetHandle(native);
@@ -83,11 +98,14 @@ internal sealed class BitmapHandle : SafeHandleZeroOrMinusOneIsInvalid
 {
     public BitmapHandle() : base(ownsHandle: true) { }
 
-    /// <summary>Call while holding <see cref="Pdfium.Gate"/>, with <paramref name="pixels"/> pinned until disposed.</summary>
-    public static unsafe BitmapHandle Create(int width, int height, byte* pixels, int stride)
+    /// <summary>
+    /// Call while holding <see cref="Pdfium.Gate"/>, with <paramref name="pixels"/> pinned until disposed.
+    /// <paramref name="format"/> is <see cref="PdfiumNative.BitmapBgra"/> or <see cref="PdfiumNative.BitmapBgr"/>.
+    /// </summary>
+    public static unsafe BitmapHandle Create(int width, int height, byte* pixels, int stride, int format = PdfiumNative.BitmapBgra)
     {
         var bitmap = new BitmapHandle();
-        var native = PdfiumNative.FPDFBitmap_CreateEx(width, height, PdfiumNative.BitmapBgra, pixels, stride);
+        var native = PdfiumNative.FPDFBitmap_CreateEx(width, height, format, pixels, stride);
         if (native == 0)
         {
             bitmap.SetHandleAsInvalid();
@@ -176,5 +194,122 @@ internal sealed unsafe class FileSource : IDisposable
         }
 
         return true;
+    }
+}
+
+/// <summary>
+/// Feeds pdfium bytes already in memory through an FPDF_FILEACCESS. Must stay undisposed while pdfium may read: for
+/// the call that uses <see cref="Access"/> (FPDFImageObj_LoadJpegFileInline), or until the document is closed
+/// (FPDF_LoadCustomDocument, which <see cref="DocumentHandle"/> then owns).
+/// </summary>
+internal sealed unsafe class BytesSource : IDisposable
+{
+    private readonly byte[] _bytes;
+    private GCHandle _self;
+    private PdfiumNative.FileAccess* _access;
+
+    public BytesSource(byte[] bytes)
+    {
+        _bytes = bytes;
+        _self = GCHandle.Alloc(this);
+        _access = (PdfiumNative.FileAccess*)NativeMemory.Alloc((nuint)sizeof(PdfiumNative.FileAccess));
+        *_access = new PdfiumNative.FileAccess
+        {
+            FileLength = (uint)bytes.Length, // at most JpegSegments.MaxBytes
+            GetBlock = &GetBlock,
+            Param = GCHandle.ToIntPtr(_self),
+        };
+    }
+
+    public PdfiumNative.FileAccess* Access => _access;
+
+    public void Dispose()
+    {
+        if (_access is null)
+            return;
+        NativeMemory.Free(_access);
+        _access = null;
+        _self.Free();
+    }
+
+    // Called by pdfium on the thread that holds the gate; nothing may be thrown back into native code.
+    [UnmanagedCallersOnly]
+    private static int GetBlock(nint param, uint position, byte* buffer, uint size)
+    {
+#pragma warning disable CA1031 // An exception must not unwind through pdfium's frames.
+        try
+        {
+            var bytes = ((BytesSource)GCHandle.FromIntPtr(param).Target!)._bytes;
+            if ((ulong)position + size > (ulong)bytes.Length)
+                return 0;
+            bytes.AsSpan((int)position, (int)size).CopyTo(new Span<byte>(buffer, (int)size));
+            return 1;
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
+#pragma warning restore CA1031
+    }
+}
+
+/// <summary>
+/// Receives what FPDF_SaveAsCopy writes, through an FPDF_FILEWRITE, and writes it to a .NET stream. An exception the
+/// stream throws cannot cross pdfium's frames: it is kept, pdfium is told the write failed, and <see cref="ThrowIfFailed"/>
+/// rethrows it once pdfium has returned.
+/// </summary>
+internal sealed unsafe class StreamSink : IDisposable
+{
+    private readonly Stream _stream;
+    private GCHandle _self;
+    private PdfiumNative.FileWrite* _write;
+    private System.Runtime.ExceptionServices.ExceptionDispatchInfo? _error;
+
+    public StreamSink(Stream stream)
+    {
+        _stream = stream;
+        _self = GCHandle.Alloc(this);
+        _write = (PdfiumNative.FileWrite*)NativeMemory.Alloc((nuint)sizeof(PdfiumNative.FileWrite));
+        *_write = new PdfiumNative.FileWrite
+        {
+            Version = 1,
+            WriteBlock = &WriteBlock,
+            Param = GCHandle.ToIntPtr(_self),
+        };
+    }
+
+    public PdfiumNative.FileWrite* Write => _write;
+
+    public void ThrowIfFailed() => _error?.Throw();
+
+    public void Dispose()
+    {
+        if (_write is null)
+            return;
+        NativeMemory.Free(_write);
+        _write = null;
+        _self.Free();
+    }
+
+    [UnmanagedCallersOnly]
+    private static int WriteBlock(PdfiumNative.FileWrite* self, void* data, uint size)
+    {
+        StreamSink? sink = null;
+#pragma warning disable CA1031 // An exception must not unwind through pdfium's frames.
+        try
+        {
+            sink = (StreamSink)GCHandle.FromIntPtr(self->Param).Target!;
+            if (sink._error is not null)
+                return 0; // pdfium may keep writing after a failure; nothing more reaches the stream
+            sink._stream.Write(new ReadOnlySpan<byte>(data, checked((int)size)));
+            return 1;
+        }
+        catch (Exception e)
+        {
+            if (sink is not null)
+                sink._error ??= System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(e);
+            return 0;
+        }
+#pragma warning restore CA1031
     }
 }

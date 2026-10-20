@@ -87,4 +87,60 @@ internal static unsafe partial class PdfiumNative
 
     [LibraryImport(Library)]
     public static partial void FPDF_RenderPageBitmap(nint bitmap, nint page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
+
+    // Creating documents: fpdf_edit.h, fpdf_save.h.
+
+    public const int BitmapBgr = 2;
+
+    // FPDF_SaveAsCopy: write the whole document, never an update appended to an older one.
+    public const uint SaveNoIncremental = 1 << 1;
+
+    /// <summary>
+    /// FPDF_FILEWRITE (version 1), followed by a field of Flevert's own: pdfium hands the callback a pointer to this
+    /// struct, and only reads the first two fields.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FileWrite
+    {
+        public int Version;
+        public delegate* unmanaged<FileWrite*, void*, uint, int> WriteBlock;
+        public nint Param;
+    }
+
+    // fpdf_doc.h. The length in bytes of the tag's UTF-16LE text with its NUL; 0 when there is no Info dictionary.
+    [LibraryImport(Library)]
+    public static partial uint FPDF_GetMetaText(nint document, byte* tag, void* buffer, uint bufferLength);
+
+    [LibraryImport(Library)]
+    public static partial nint FPDFPage_New(nint document, int pageIndex, double width, double height);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPage_Delete(nint document, int pageIndex);
+
+    [LibraryImport(Library)]
+    public static partial nint FPDFPageObj_NewImageObj(nint document);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPageObj_Destroy(nint pageObject);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFImageObj_LoadJpegFileInline(nint* pages, int count, nint imageObject, FileAccess* fileAccess);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFImageObj_SetBitmap(nint* pages, int count, nint imageObject, nint bitmap);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFImageObj_GetImagePixelSize(nint imageObject, uint* width, uint* height);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFImageObj_SetMatrix(nint imageObject, double a, double b, double c, double d, double e, double f);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_InsertObject(nint page, nint pageObject);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_GenerateContent(nint page);
+
+    [LibraryImport(Library)]
+    public static partial int FPDF_SaveAsCopy(nint document, FileWrite* fileWrite, uint flags);
 }
