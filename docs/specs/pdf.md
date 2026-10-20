@@ -158,5 +158,5 @@ public Task<string> RunAsync(string inputPath, CancellationToken ct)
 ## Open Questions
 
 1. Compress for sharing: thay ảnh trong PDF gọn bằng pdfium + qpdf (qpdf có API thay luồng qua JSON `--json-input`/`--update-from-json` từ v11) hay bỏ khỏi v0.2? Quyết ở bước Plan sau khi thử.
-2. qpdf bản msvc64 kèm thư viện crypto nào (OpenSSL hay native)? Ảnh hưởng notices và kích thước.
+2. qpdf bản msvc64 kèm thư viện crypto nào (OpenSSL hay native)? Ảnh hưởng notices và kích thước. **Đã trả lời (F4):** OpenSSL 3 (libcrypto), cùng zlib 1.3.2 và libjpeg-turbo 3.2.0, liên kết tĩnh trong `qpdf30.dll`; DLL runtime MSVC 14.51 là file riêng. Notices: ADR-0008.
 3. Kiểm hash `qpdf.exe`/`pdfium.dll` lúc chạy có đáng không, khi thư mục cài đã được setup kiểm quyền (chỉ chủ và admin ghi được)? Mặc định: không, vì cùng mức tin cậy với `flevert.exe`.

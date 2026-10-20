@@ -55,3 +55,9 @@ Setup installs over an earlier version, so a fixed version reaches users by runn
 ## Dependency updates
 
 Dependabot proposes updates to GitHub Actions and NuGet packages weekly, a week after their release ([`.github/dependabot.yml`](../.github/dependabot.yml)). Merge one only when CI passes and its release notes show nothing surprising; an Action update must keep the commit pin. A Magick.NET update that fixes a security problem in ImageMagick gets a patch release with a CHANGELOG entry naming the advisory. Close updates that are not needed rather than letting them pile up.
+
+Dependabot cannot see pdfium and qpdf, which `scripts/deps.json` pins by URL and SHA256 ([ADR-0008](adr/0008-pdf-engines-pdfium-and-qpdf.md)). Once a month, look for a newer [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries/releases) build and [qpdf](https://github.com/qpdf/qpdf/releases) release, and for security fixes in pdfium, qpdf, OpenSSL, zlib and libjpeg-turbo. To change a pin:
+
+1. Check where the new file comes from, not only its hash: it is a release asset of the project's own repository (`bblanchon/pdfium-binaries`, `qpdf/qpdf`), built by that project's release workflow from a tagged commit, and the pinned SHA256 is the digest GitHub shows for the asset. Read the release notes and the changes to the build scripts since the last pin; a new maintainer, a changed build or signing setup, or an asset uploaded by hand is a reason to wait and ask upstream.
+2. Update the URL, `sha256` and, for a new version, the licence files' tag in `deps.json`; run `scripts/fetch-deps.ps1` and the three test projects.
+3. Update the `notices` in `deps.json` to what the new files contain: a renamed or added binary (a new MSVC runtime DLL, say) fails `NoticesScriptTests` and the installer build until it is listed with its licence, and a version named in a title must match the binary.
