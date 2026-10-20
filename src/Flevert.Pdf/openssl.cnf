@@ -1,0 +1,3 @@
+# Flevert: the OpenSSL configuration qpdf.exe reads (OPENSSL_CONF points here; ADR-0008).
+# It is empty on purpose, so no configuration elsewhere on the machine, or named by the user's
+# environment, decides what OpenSSL loads into qpdf. Keep it without settings.

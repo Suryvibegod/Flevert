@@ -46,14 +46,66 @@ public sealed class QpdfEnvironmentTests : IDisposable
     }
 
     [Fact]
-    public void Every_openssl_setting_that_can_load_code_is_removed()
+    public void Openssl_reads_only_the_empty_configuration_beside_qpdf_and_loads_code_only_from_its_folder()
     {
-        // The modules and engines folders only matter through a configuration, which the test above covers end to end.
-        Assert.Equal(["OPENSSL_CONF", "OPENSSL_ENGINES", "OPENSSL_MODULES"], Qpdf.ToolEnvironment.Keys.Order(StringComparer.Ordinal));
-        Assert.All(Qpdf.ToolEnvironment.Values, Assert.Null);
+        // Review SA-L1: without OPENSSL_CONF, OpenSSL reads C:\Program Files\Common Files\SSL\openssl.cnf, and C: need
+        // not be the system drive. The modules and engines folders matter only through a configuration.
+        var folder = Path.GetDirectoryName(Qpdf.NextToApp.ExePath)!;
+        var environment = Qpdf.NextToApp.ToolEnvironment();
+
+        Assert.Equal(Path.Combine(folder, "openssl.cnf"), environment["OPENSSL_CONF"]);
+        Assert.Equal(folder, environment["OPENSSL_MODULES"]);
+        Assert.Equal(folder, environment["OPENSSL_ENGINES"]);
+        // Review DD-5: paths a configuration's .include would read relative to.
+        Assert.Null(environment["OPENSSL_CONF_INCLUDE"]);
+        var settings = File.ReadAllLines(Path.Combine(folder, "openssl.cnf")).Where(line => line.Trim() is { Length: > 0 } text && text[0] != '#');
+        Assert.Empty(settings);
     }
 
-    // The server closes as soon as a client connects, so OpenSSL reads an empty file instead of waiting on the pipe.
+    [Fact]
+    public async Task Qpdf_ignores_the_qpdf_settings_of_the_users_environment()
+    {
+        // Review SA-I1: QPDF_CRYPTO_PROVIDER picks qpdf's crypto, QPDF_ZOPFLI its compressor. An unknown provider makes
+        // qpdf fail as soon as it hashes, which a rotation does.
+        var input = _dir.Combine("in.pdf");
+        File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
+        var name = "QPDF_CRYPTO_PROVIDER";
+        var previous = Environment.GetEnvironmentVariable(name);
+        Environment.SetEnvironmentVariable(name, "flevert-test-no-such-provider");
+        try
+        {
+            var lines = Encoding.UTF8.GetBytes($"{input}\n{_dir.Combine("direct.pdf")}\n");
+            var direct = await ExternalTool.RunAsync(Qpdf.NextToApp.ExePath, ["--rotate=+90:1-z", "@-"], TimeSpan.FromSeconds(30), lines);
+            // Control: qpdf started with the inherited environment fails.
+            Assert.NotEqual(0, direct.ExitCode);
+
+            await Qpdf.NextToApp.TransformAsync(input, _dir.Combine("wrapped.pdf"), ["--rotate=+90:1-z"], CancellationToken.None);
+
+            Assert.True(File.Exists(_dir.Combine("wrapped.pdf")));
+            Assert.True(Qpdf.NextToApp.ToolEnvironment().TryGetValue(name.ToLowerInvariant(), out var value) && value is null);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(name, previous);
+        }
+    }
+
+    [Fact]
+    public async Task Qpdf_still_encrypts_with_aes_256_under_that_configuration()
+    {
+        // T14 needs AES-256 from the default crypto provider (OpenSSL) with the empty configuration.
+        var input = _dir.Combine("in.pdf");
+        File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
+        var output = _dir.Combine("locked.pdf");
+
+        await Qpdf.NextToApp.TransformAsync(input, output, ["--encrypt", "user", "owner", "256", "--"], CancellationToken.None);
+
+        var show = await ExternalTool.RunAsync(Qpdf.NextToApp.ExePath, ["--password=user", "--show-encryption", output], TimeSpan.FromSeconds(30));
+        Assert.Contains("stream encryption method: AESv3", show.StandardOutput, StringComparison.Ordinal);
+    }
+
+    // The server closes as soon as a client connects, so OpenSSL reads an empty file instead of waiting on the pipe. qpdf
+    // opens the file before it exits, but the connection is awaited briefly in case its completion is still on its way.
     private static async Task<bool> OpensPipe(string name, Func<Task> run)
     {
         var server = new NamedPipeServerStream(name, PipeDirection.Out, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
@@ -66,6 +118,7 @@ public sealed class QpdfEnvironmentTests : IDisposable
         try
         {
             await run();
+            await Task.WhenAny(connection, Task.Delay(TimeSpan.FromMilliseconds(500)));
             return connection.IsCompletedSuccessfully;
         }
         finally

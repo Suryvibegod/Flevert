@@ -28,17 +28,35 @@ public sealed class Qpdf
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     /// <summary>
-    /// What qpdf does not inherit from flevert.exe's environment. qpdf links OpenSSL, which loads the configuration file
+    /// How qpdf's environment differs from flevert.exe's. qpdf links OpenSSL, which loads the configuration file
     /// OPENSSL_CONF names (qpdf 12.4.2 opens it even to rotate), and a configuration can load modules and engines from
-    /// the folders OPENSSL_MODULES and OPENSSL_ENGINES name: code from wherever the user's environment points. Without
-    /// them OpenSSL uses the folders it was built with, under C:\Program Files, which only administrators can change.
+    /// the folders OPENSSL_MODULES and OPENSSL_ENGINES name: code from wherever the user's environment points. Unset,
+    /// OpenSSL would use the folders it was built with, under C:\Program Files, and C: need not be the system drive. So
+    /// all three name Flevert's own folder, which setup checks only the user and administrators can change, and the
+    /// configuration there is empty. qpdf's own variables (QPDF_*) go too: they choose its crypto and compressor.
     /// </summary>
-    internal static IReadOnlyDictionary<string, string?> ToolEnvironment { get; } = new Dictionary<string, string?>
+    internal IReadOnlyDictionary<string, string?> ToolEnvironment()
     {
-        ["OPENSSL_CONF"] = null,
-        ["OPENSSL_MODULES"] = null,
-        ["OPENSSL_ENGINES"] = null,
-    };
+        var folder = Path.GetDirectoryName(ExePath)!;
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["OPENSSL_CONF"] = Path.Combine(folder, OpenSslConfigFileName),
+            ["OPENSSL_MODULES"] = folder,
+            ["OPENSSL_ENGINES"] = folder,
+            ["OPENSSL_CONF_INCLUDE"] = null,
+        };
+        // QPDF_CRYPTO_PROVIDER, QPDF_ZOPFLI and whatever later versions read.
+        foreach (var name in System.Environment.GetEnvironmentVariables().Keys.OfType<string>())
+        {
+            if (name.StartsWith("QPDF_", StringComparison.OrdinalIgnoreCase))
+                environment[name] = null;
+        }
+
+        return environment;
+    }
+
+    /// <summary>An OpenSSL configuration with no settings, shipped beside qpdf.exe (the Flevert.Pdf project copies it).</summary>
+    internal const string OpenSslConfigFileName = "openssl.cnf";
 
     internal const string UnsupportedFileNameMessage =
         "The name of this PDF or of a folder it is in has a character Flevert cannot pass to its PDF tool: rename it and try again.";
@@ -165,7 +183,7 @@ public sealed class Qpdf
         // qpdf starts no process of its own, so it may not start one.
         var limits = new ExternalToolLimits { MaxMemoryBytes = maxMemory, SingleProcess = true };
         var run = await ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, limits: limits,
-            environment: ToolEnvironment, cancellationToken: ct).ConfigureAwait(false);
+            environment: ToolEnvironment(), cancellationToken: ct).ConfigureAwait(false);
         if (Untrustworthy(run, maxMemory) is { } error)
             throw error;
         return run;
