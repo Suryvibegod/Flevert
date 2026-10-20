@@ -18,6 +18,12 @@ public sealed record UpdateCheckCommand(bool On) : Command;
 /// <summary>Setup's check of the install folder before it copies anything there.</summary>
 public sealed record CheckLocationCommand(string Directory) : Command;
 
+/// <summary>
+/// The PDF worker (ADR-0008, "Reading untrusted PDFs in a worker"): started only by flevert.exe itself, never shown in the
+/// usage text. What to read arrives on standard input.
+/// </summary>
+public sealed record PdfWorkerCommand : Command;
+
 public sealed record InvalidCommand(string Message) : Command;
 
 public static class CommandLine
@@ -47,6 +53,7 @@ public static class CommandLine
         ["check-location", var directory] => new CheckLocationCommand(directory),
         ["update-check", "on"] => new UpdateCheckCommand(On: true),
         ["update-check", "off"] => new UpdateCheckCommand(On: false),
+        ["pdf-worker"] => new PdfWorkerCommand(),
         _ => new InvalidCommand(Usage),
     };
 }

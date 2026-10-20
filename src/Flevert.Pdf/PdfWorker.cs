@@ -1,0 +1,336 @@
+using System.Globalization;
+using Flevert.Core;
+
+namespace Flevert.Pdf;
+
+/// <summary>
+/// Runs <c>flevert.exe pdf-worker</c> (ADR-0008, "Reading untrusted PDFs in a worker"): pdfium reads the PDF in a process
+/// of its own, so a crash, a page that never finishes or a page that needs too much memory ends that process and fails this
+/// file, while the batch leader and the other files of the batch carry on.
+/// </summary>
+/// <remarks>
+/// The worker runs through <see cref="ExternalTool"/>, in a job that caps its memory (<see cref="DefaultMaxMemoryBytes"/>),
+/// lets it start no other process, and kills it when flevert.exe ends. A watchdog kills it when it reports nothing new
+/// for longer than the step it is on may take (<see cref="StallWindow"/>); cancelling kills it. Its command line is only
+/// <c>pdf-worker</c>: the request, paths included, goes through standard input (<see cref="PdfRenderRequest"/>).
+/// </remarks>
+public sealed class PdfWorker
+{
+    public const string FileName = "flevert.exe";
+
+    /// <summary>The worker's command, hidden from the usage text (<see cref="PdfWorkerCommand"/>).</summary>
+    internal const string Command = "pdf-worker";
+
+    /// <summary>
+    /// The most memory a worker may commit: a page renders into at most 400 MB, ImageMagick copies it once more to encode
+    /// it, and pdfium needs room for what it decodes to draw the page (a full-page 100 MP image is another 400 MB), beside
+    /// the runtime. A PDF that needs more is refused with "needs more memory" (ADR-0008).
+    /// </summary>
+    public const ulong DefaultMaxMemoryBytes = 5UL << 29; // 2.5 GB
+
+    /// <summary>What the worker may take for a step without a sign of progress, before the size of the page counts.</summary>
+    public static readonly TimeSpan DefaultStallTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>Added to the window per megapixel of the page being drawn: 100 MP (10 000 px square) gets 35 s in all.</summary>
+    private static readonly TimeSpan PerMegapixel = TimeSpan.FromSeconds(0.25);
+
+    /// <summary>Added to the window for opening the PDF per 100 MB of file: pdfium may scan a damaged file whole.</summary>
+    private static readonly TimeSpan PerHundredMegabytes = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// A backstop for the whole run, past anything a PDF Flevert accepts can take (2 000 pages at the largest size); the
+    /// watchdog is what stops a stalled page.
+    /// </summary>
+    private static readonly TimeSpan RunTimeout = TimeSpan.FromHours(6);
+
+    /// <param name="exePath">Absolute path of flevert.exe; checked when the worker is run, not here.</param>
+    public PdfWorker(string exePath) => ExePath = exePath;
+
+    /// <summary>
+    /// flevert.exe in the folder of the running program: the install folder, which setup checks only the user and
+    /// administrators can change (the same trust as qpdf.exe beside it).
+    /// </summary>
+    public static PdfWorker NextToApp { get; } = new(Path.Combine(AppContext.BaseDirectory, FileName));
+
+    public string ExePath { get; }
+
+    /// <summary>A lower limit, for tests.</summary>
+    internal ulong MaxMemoryBytes { get; init; } = DefaultMaxMemoryBytes;
+
+    /// <summary>A shorter wait, for tests.</summary>
+    internal TimeSpan StallTimeout { get; init; } = DefaultStallTimeout;
+
+    /// <summary>
+    /// How long a page of <paramref name="width"/> x <paramref name="height"/> px may go without a sign of progress: the
+    /// stall timeout plus a quarter second per megapixel, since honest work grows with the pixels.
+    /// </summary>
+    internal TimeSpan StallWindow(int width, int height) => StallTimeout + (PerMegapixel * ((double)width * height / 1_000_000));
+
+    /// <summary>
+    /// Renders every page of <paramref name="inputPath"/> into <paramref name="folder"/> as <c>&lt;name&gt; 001.jpg</c>…
+    /// (<see cref="PdfToImages.PageName"/>), reporting each page as it starts, and returns the number of pages.
+    /// </summary>
+    /// <param name="inputPath">The PDF; held open, shared for reading only, until the worker has ended.</param>
+    /// <param name="folder">An empty folder the caller holds (<see cref="OutputPath.WriteDirectoryAtomicallyAsync(string, string, Func{string, CancellationToken, Task}, CancellationToken)"/>).</param>
+    /// <exception cref="PdfException">
+    /// The PDF cannot be used (the same errors as <see cref="PdfDocument"/>), needs more memory than the cap
+    /// (<see cref="PdfError.NeedsTooMuchMemory"/>), took too long (<see cref="PdfError.TooSlow"/>), or the worker ended
+    /// without finishing (<see cref="PdfError.ReaderFailed"/>).
+    /// </exception>
+    /// <exception cref="IOException">A page could not be written.</exception>
+    /// <exception cref="FileNotFoundException">flevert.exe is missing.</exception>
+    /// <exception cref="OperationCanceledException">Cancelled; the worker has been killed and has exited.</exception>
+    public async Task<int> RenderAsync(
+        string inputPath, string folder, PdfPageImageFormat format, double dpi, IProgress<FileProgress>? progress, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(inputPath);
+        ArgumentException.ThrowIfNullOrEmpty(folder);
+        RequireExe();
+
+        // Held until the worker has ended, sharing reading only, like the runner's pin: the worker reopens this path, and
+        // nobody can change, rename or replace the file meanwhile. The worker checks it opened this very file.
+        using var pin = File.OpenHandle(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var length = RandomAccess.GetLength(pin);
+        if (length > PdfDocument.MaxFileBytes)
+            throw PdfDocument.TooLargeError(PdfDocument.MaxFileBytes);
+        var request = new PdfRenderRequest(inputPath, FileIdentity.Of(pin), folder, format, dpi).Encode();
+
+        using var session = new Session(this, StallTimeout + (PerHundredMegabytes * (length / 100_000_000.0)), progress, ct);
+        var limits = new ExternalToolLimits { MaxMemoryBytes = MaxMemoryBytes, SingleProcess = true };
+        ExternalToolResult run;
+        try
+        {
+            run = await ExternalTool.RunAsync(ExePath, [Command], RunTimeout, request, limits: limits,
+                standardOutputLine: session.OnLine, cancellationToken: session.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested && session.Stalled)
+        {
+            throw new PdfException(PdfError.TooSlow, session.TooSlowMessage());
+        }
+        catch (TimeoutException e)
+        {
+            throw new PdfException(PdfError.TooSlow, session.TooSlowMessage(), e);
+        }
+        catch (ProtocolException e)
+        {
+            throw new PdfException(PdfError.ReaderFailed, session.FailedMessage(), e);
+        }
+
+        var total = session.Outcome(run, MaxMemoryBytes);
+        // Every page it said it wrote is there under its name; anything else in the folder was put there by someone else.
+        var stem = Path.GetFileNameWithoutExtension(inputPath);
+        for (var page = 1; page <= total; page++)
+        {
+            if (!File.Exists(Path.Combine(folder, PdfToImages.PageName(stem, page, total, format))))
+                throw new PdfException(PdfError.ReaderFailed, session.FailedMessage(), new PdfWorkerException(run, $"page {page} is missing from the folder"));
+        }
+
+        return total;
+    }
+
+    private void RequireExe()
+    {
+        if (!File.Exists(ExePath))
+        {
+            throw new FileNotFoundException(
+                $"{FileName} is missing from {Path.GetDirectoryName(ExePath)}, where it reads PDFs. Reinstall Flevert.", ExePath);
+        }
+    }
+
+    /// <summary>What one run of the worker has said so far, and the watchdog that ends it when it stops saying anything.</summary>
+    private sealed class Session : IDisposable
+    {
+        private readonly PdfWorker _worker;
+        private readonly IProgress<FileProgress>? _progress;
+        private readonly CancellationToken _cancel;
+        private readonly CancellationTokenSource _stall = new();
+        private readonly CancellationTokenSource _linked;
+        private readonly Lock _gate = new();
+        private TimeSpan _pageWindow;
+        private int _total;
+        private int _current;
+        private int _written;
+        private bool _done;
+        private (string Code, string Message)? _error;
+
+        public Session(PdfWorker worker, TimeSpan openWindow, IProgress<FileProgress>? progress, CancellationToken cancel)
+        {
+            _worker = worker;
+            _progress = progress;
+            _cancel = cancel;
+            _linked = CancellationTokenSource.CreateLinkedTokenSource(cancel, _stall.Token);
+            _stall.CancelAfter(openWindow);
+        }
+
+        /// <summary>Cancelled by the caller, or by the watchdog.</summary>
+        public CancellationToken Token => _linked.Token;
+
+        public bool Stalled => _stall.IsCancellationRequested;
+
+        public void Dispose()
+        {
+            _linked.Dispose();
+            _stall.Dispose();
+        }
+
+        /// <summary>
+        /// One line from the worker; lines come one at a time, in order. A line that breaks the protocol ends the run (the
+        /// worker is killed). The page goes to the progress window outside the lock, which only guards the counts.
+        /// </summary>
+        public void OnLine(string line)
+        {
+            // Nothing more once cancelled: the window must not show a page after "Cancelling…".
+            if (Read(line) is { } page && !_cancel.IsCancellationRequested)
+                _progress?.Report(page);
+        }
+
+        private FileProgress? Read(string line)
+        {
+            var parts = line.Split(' ', 3);
+            lock (_gate)
+            {
+                switch (parts[0])
+                {
+                    case "pages" when parts.Length == 2 && _total == 0:
+                        _total = Number(parts[1], 1, PdfDocument.MaxPages);
+                        Watch(_worker.StallTimeout);
+                        return null;
+                    case "page" when parts.Length == 3 && _total > 0:
+                        var page = Number(parts[1], _current + 1, _current + 1);
+                        if (page > _total || _written != _current)
+                            throw new ProtocolException(line);
+                        var size = parts[2].Split(' ');
+                        if (size.Length != 2)
+                            throw new ProtocolException(line);
+                        _pageWindow = _worker.StallWindow(
+                            Number(size[0], 1, PdfDocument.MaxRenderPixels), Number(size[1], 1, PdfDocument.MaxRenderPixels));
+                        _current = page;
+                        Watch(_pageWindow);
+                        return new FileProgress("page", page, _total);
+                    case "busy" when parts.Length == 2 && _current > _written:
+                        Number(parts[1], _current, _current);
+                        Watch(_pageWindow);
+                        return null;
+                    case "wrote" when parts.Length == 2 && _current > _written:
+                        _written = Number(parts[1], _current, _current);
+                        Watch(_worker.StallTimeout);
+                        return null;
+                    case "done" when parts.Length == 2 && _total > 0 && _written == _total:
+                        Number(parts[1], _total, _total);
+                        _done = true;
+                        _stall.CancelAfter(Timeout.InfiniteTimeSpan);
+                        return null;
+                    case "error" when parts.Length == 3 && _error is null:
+                        _error = (parts[1], PdfRenderWorker.OneLine(parts[2]));
+                        Watch(_worker.StallTimeout); // it is about to exit
+                        return null;
+                    case "pages" or "page" or "busy" or "wrote" or "done" or "error":
+                        throw new ProtocolException(line);
+                    default:
+                        // Not the worker's: a native library writing to standard output. It proves nothing, so it does
+                        // not hold off the watchdog either.
+                        return null;
+                }
+            }
+        }
+
+        private void Watch(TimeSpan window) => _stall.CancelAfter(window);
+
+        private static int Number(string text, int min, int max) =>
+            int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value >= min && value <= max
+                ? value
+                : throw new ProtocolException(text);
+
+        /// <summary>The page count when the worker finished; otherwise the error its end means.</summary>
+        public int Outcome(ExternalToolResult run, ulong maxMemoryBytes)
+        {
+            lock (_gate)
+            {
+                // A refused allocation can make pdfium end the process at once, without a word: the job's report says why.
+                if (run.MemoryLimitExceeded || _error?.Code == nameof(PdfError.NeedsTooMuchMemory))
+                {
+                    throw new PdfException(PdfError.NeedsTooMuchMemory, Qpdf.NeedsTooMuchMemoryMessage(maxMemoryBytes),
+                        new PdfWorkerException(run, _error?.Message));
+                }
+
+                if (_error is var (code, message))
+                {
+                    if (code == "Write")
+                        throw new IOException(message, new PdfWorkerException(run, null));
+                    if (code == "Setup")
+                        throw new InvalidOperationException(message, new PdfWorkerException(run, null));
+                    if (code == nameof(PdfError.PasswordRequired))
+                        throw new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage);
+                    if (Enum.TryParse<PdfError>(code, ignoreCase: false, out var error) && Enum.IsDefined(error) && !code.Any(char.IsDigit))
+                        throw new PdfException(error, message, new PdfWorkerException(run, null));
+                }
+
+                if (run.ExitCode == PdfRenderWorker.ExitDone && _done && _error is null)
+                    return _total;
+                throw new PdfException(PdfError.ReaderFailed, FailedMessage(), new PdfWorkerException(run, null));
+            }
+        }
+
+        // The page the worker was on: the one it announced and has not written, or the next one, whose size it reads
+        // before announcing it.
+        private int? PageAt()
+        {
+            if (_total == 0)
+                return null;
+            return Math.Min(_written < _current ? _current : _current + 1, _total);
+        }
+
+        public string TooSlowMessage()
+        {
+            lock (_gate)
+            {
+                return PageAt() is { } page
+                    ? string.Create(CultureInfo.InvariantCulture, $"Page {page} of this PDF took too long to render: it is too complex, or made to stall PDF readers.")
+                    : "This PDF took too long to open: it is too complex, or made to stall PDF readers.";
+            }
+        }
+
+        public string FailedMessage()
+        {
+            lock (_gate)
+            {
+                return PageAt() is { } page
+                    ? string.Create(CultureInfo.InvariantCulture, $"Flevert's PDF reader stopped on page {page} of this PDF without finishing: the PDF may be damaged, or made to crash PDF readers.")
+                    : "Flevert's PDF reader stopped on this PDF without finishing: it may be damaged, or made to crash PDF readers.";
+            }
+        }
+    }
+
+    /// <summary>A line from the worker that does not follow the protocol (<see cref="PdfRenderWorker"/>).</summary>
+    private sealed class ProtocolException(string line) : Exception($"The PDF worker wrote an unexpected line: {PdfRenderWorker.OneLine(line)}");
+}
+
+/// <summary>How the PDF worker ended, for the log: its exit code and the end of what it wrote to standard error.</summary>
+public sealed class PdfWorkerException : Exception
+{
+    private const int MaxDetailChars = 2_000;
+
+    public PdfWorkerException() { }
+
+    public PdfWorkerException(string message) : base(message) { }
+
+    public PdfWorkerException(string message, Exception innerException) : base(message, innerException) { }
+
+    internal PdfWorkerException(ExternalToolResult run, string? detail)
+        : base(Describe(run, detail)) => ExitCode = run.ExitCode;
+
+    public int ExitCode { get; }
+
+    private static string Describe(ExternalToolResult run, string? detail)
+    {
+        var error = run.StandardError.Trim();
+        if (error.Length > MaxDetailChars)
+            error = "…" + error[^MaxDetailChars..];
+        var text = string.Create(CultureInfo.InvariantCulture, $"The PDF worker ended with exit code {run.ExitCode} (0x{run.ExitCode:X8})");
+        if (run.MemoryLimitExceeded)
+            text += ", after Windows refused it memory past its limit";
+        if (detail is not null)
+            text += $": {detail}";
+        return error.Length == 0 ? text + "." : $"{text}. {error}";
+    }
+}

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Win32.SafeHandles;
 
 namespace Flevert.Pdf;
 
@@ -45,10 +46,19 @@ public sealed class PdfDocument : IDisposable
     /// </summary>
     public static PdfDocument Open(string path) => Open(path, PdfLimits.Default);
 
-    internal static unsafe PdfDocument Open(string path, PdfLimits limits)
+    internal static PdfDocument Open(string path, PdfLimits limits)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
-        var file = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.RandomAccess);
+        return Open(File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.RandomAccess), limits);
+    }
+
+    /// <summary>
+    /// Opens the PDF <paramref name="file"/> is open on, which the document then owns (it is closed with it, or at once
+    /// when this throws). The handle should share reading only, so nobody can change the file under the parser.
+    /// </summary>
+    internal static unsafe PdfDocument Open(SafeFileHandle file, PdfLimits limits)
+    {
+        ArgumentNullException.ThrowIfNull(file);
         FileSource? source = null;
         try
         {
@@ -115,25 +125,46 @@ public sealed class PdfDocument : IDisposable
     }
 
     /// <summary>Renders page <paramref name="pageIndex"/> on white, annotations included, at the size <see cref="GetRenderSize"/> gives.</summary>
-    public unsafe PdfBitmap Render(int pageIndex, double dpi)
+    public PdfBitmap Render(int pageIndex, double dpi)
     {
         lock (Pdfium.Gate)
         {
             var size = GetRenderSize(pageIndex, dpi);
-            var stride = size.Width * 4;
             // At most MaxRenderPixels² × 4 bytes; pdfium draws into it and allocates no bitmap of its own.
-            var pixels = GC.AllocateUninitializedArray<byte>(checked(stride * size.Height));
-            using var page = PageHandle.Load(_handle, pageIndex);
-            fixed (byte* first = pixels)
-            {
-                using var bitmap = BitmapHandle.Create(size.Width, size.Height, first, stride);
-                var native = bitmap.DangerousGetHandle();
-                if (PdfiumNative.FPDFBitmap_FillRect(native, 0, 0, size.Width, size.Height, 0xFFFFFFFF) == 0)
-                    throw new InvalidOperationException("pdfium could not clear the page bitmap.");
-                PdfiumNative.FPDF_RenderPageBitmap(native, page.DangerousGetHandle(), 0, 0, size.Width, size.Height, 0, PdfiumNative.RenderAnnotations);
-            }
-
+            var pixels = GC.AllocateUninitializedArray<byte>(checked((int)size.Bytes));
+            RenderInto(pageIndex, size, pixels);
             return new PdfBitmap(size.Width, size.Height, size.Dpi, pixels);
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Render"/> into <paramref name="pixels"/>, which holds at least <see cref="PdfRenderSize.Bytes"/> of the
+    /// size <see cref="GetRenderSize"/> gives: the PDF worker draws every page into one buffer, grown for the largest page
+    /// so far, instead of a new 400 MB array for each large page (review round 1, CR-11, CR-12). Returns that size; the
+    /// pixels are its first <see cref="PdfRenderSize.Bytes"/> bytes, rows without padding.
+    /// </summary>
+    internal PdfRenderSize RenderInto(int pageIndex, double dpi, Span<byte> pixels)
+    {
+        lock (Pdfium.Gate)
+        {
+            var size = GetRenderSize(pageIndex, dpi);
+            RenderInto(pageIndex, size, pixels);
+            return size;
+        }
+    }
+
+    private unsafe void RenderInto(int pageIndex, PdfRenderSize size, Span<byte> pixels)
+    {
+        var stride = size.Width * 4;
+        ArgumentOutOfRangeException.ThrowIfLessThan(pixels.Length, checked(stride * size.Height), nameof(pixels));
+        using var page = PageHandle.Load(_handle, pageIndex);
+        fixed (byte* first = pixels)
+        {
+            using var bitmap = BitmapHandle.Create(size.Width, size.Height, first, stride);
+            var native = bitmap.DangerousGetHandle();
+            if (PdfiumNative.FPDFBitmap_FillRect(native, 0, 0, size.Width, size.Height, 0xFFFFFFFF) == 0)
+                throw new InvalidOperationException("pdfium could not clear the page bitmap.");
+            PdfiumNative.FPDF_RenderPageBitmap(native, page.DangerousGetHandle(), 0, 0, size.Width, size.Height, 0, PdfiumNative.RenderAnnotations);
         }
     }
 

@@ -37,12 +37,16 @@ internal static class Program
         var invocationDirectory = Environment.CurrentDirectory;
         _running = AppMutex.TryHold();
         SafeStartup.Apply();
+        var command = CommandLine.Parse(args);
+        // Started by flevert.exe itself to read one PDF (ADR-0008); reports on standard output, logs nothing of its own.
+        if (command is PdfWorkerCommand)
+            return PdfRenderWorker.Run(Console.OpenStandardInput(), Console.OpenStandardOutput());
+
         var catalog = new OperationCatalog([.. MenuOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);
 
-        var command = CommandLine.Parse(args);
         if (command is RunCommand run)
         {
             // SafeStartup moved the current directory, so resolve relative paths against where flevert.exe was started.

@@ -331,7 +331,7 @@ public sealed class Qpdf
     }
 
     // The limit grows with the file, so the message names the one this file had: "1.6 GB", or "64 MB" under 1 GB.
-    private static string NeedsTooMuchMemoryMessage(ulong maxMemoryBytes)
+    internal static string NeedsTooMuchMemoryMessage(ulong maxMemoryBytes)
     {
         var limit = maxMemoryBytes >= 1UL << 30
             ? string.Create(CultureInfo.InvariantCulture, $"{maxMemoryBytes / (double)(1UL << 30):0.#} GB")

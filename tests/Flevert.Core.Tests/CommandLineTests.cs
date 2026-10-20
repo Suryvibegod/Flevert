@@ -29,6 +29,16 @@ public sealed class CommandLineTests
     }
 
     [Fact]
+    public void Parses_the_hidden_pdf_worker_command_without_arguments()
+    {
+        // Everything the worker needs arrives on its standard input, never on the command line others can read.
+        Assert.IsType<PdfWorkerCommand>(CommandLine.Parse(["pdf-worker"]));
+        Assert.IsType<InvalidCommand>(CommandLine.Parse(["pdf-worker", @"C:\secret.pdf"]));
+        // Started only by flevert.exe itself, so the usage text people see does not offer it.
+        Assert.DoesNotContain("pdf-worker", CommandLine.Usage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Parses_update_check_on_and_off()
     {
         Assert.Equal(new UpdateCheckCommand(On: true), CommandLine.Parse(["update-check", "on"]));

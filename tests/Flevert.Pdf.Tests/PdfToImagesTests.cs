@@ -10,6 +10,7 @@ using Xunit.Abstractions;
 namespace Flevert.Pdf.Tests;
 
 /// <summary>docs/specs/pdf.md, <c>pdf.to-jpg</c> and <c>pdf.to-png</c>: a folder of one image per page at 150 DPI.</summary>
+[Collection(WorkerProcesses.Name)]
 public class PdfToImagesTests(ITestOutputHelper output)
 {
     private static readonly (byte R, byte G, byte B) Red = (255, 0, 0);
@@ -20,7 +21,11 @@ public class PdfToImagesTests(ITestOutputHelper output)
     private static readonly (int Width, int Height, (byte, byte, byte) Colour)[] ThreeColoursAt150 =
         [(1240, 1754, Red), (1275, 1650, Green), (833, 625, Blue)];
 
-    private static readonly TimeSpan Wait = TimeSpan.FromSeconds(30);
+    // The operations as the product runs them, with the worker of the flevert.exe this solution built: every test here
+    // goes through the full parent path (folder, worker process, progress lines, the pages it wrote).
+    private static PdfToImages Jpg(double dpi = PdfToImages.Dpi) => new(PdfPageImageFormat.Jpeg, dpi, TestPdf.Worker);
+
+    private static PdfToImages Png(double dpi = PdfToImages.Dpi) => new(PdfPageImageFormat.Png, dpi, TestPdf.Worker);
 
     [Fact]
     public void The_operations_are_the_ones_in_the_spec()
@@ -32,7 +37,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         Assert.Equal(("pdf.to-png", "Convert/PNG pages"), (png.Id, png.MenuPath));
         Assert.Equal([".pdf"], jpg.Extensions);
         Assert.Equal([".pdf"], png.Extensions);
-        // pdfium runs one call at a time behind its lock (ADR-0008): a second file at once would only wait.
+        // One worker at a time, each with its own memory cap (ADR-0008).
         Assert.Equal(1, jpg.MaxParallel);
         Assert.Equal(1, png.MaxParallel);
         Assert.Equal(150, PdfToImages.Dpi);
@@ -50,7 +55,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         using var dir = new TempDir();
         var input = CopyFixture(dir, "three-colours.pdf", "Báo cáo quý.pdf");
 
-        var folder = await new PdfToImages(PdfPageImageFormat.Jpeg).RunAsync(input, CancellationToken.None);
+        var folder = await Jpg().RunAsync(input, CancellationToken.None);
 
         Assert.Equal(dir.Combine("Báo cáo quý (pages)"), folder);
         Assert.Equal(["Báo cáo quý 001.jpg", "Báo cáo quý 002.jpg", "Báo cáo quý 003.jpg"], Names(folder));
@@ -76,7 +81,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         using var dir = new TempDir();
         var input = CopyFixture(dir, "three-colours.pdf", "colours.pdf");
 
-        var folder = await new PdfToImages(PdfPageImageFormat.Png).RunAsync(input, CancellationToken.None);
+        var folder = await Png().RunAsync(input, CancellationToken.None);
 
         Assert.Equal(["colours 001.png", "colours 002.png", "colours 003.png"], Names(folder));
         for (var page = 0; page < 3; page++)
@@ -97,7 +102,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         using var dir = new TempDir();
         var input = CopyFixture(dir, "huge-page.pdf", "banner.pdf");
 
-        var folder = await new PdfToImages(PdfPageImageFormat.Png).RunAsync(input, CancellationToken.None);
+        var folder = await Png().RunAsync(input, CancellationToken.None);
 
         using var images = ImageFile.Read(Path.Combine(folder, "banner 001.png"));
         var image = images[0];
@@ -117,7 +122,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         TestPdf.WriteBlank(input, 1_000);
 
         // 2 DPI keeps 1 000 Letter pages tiny (17 x 22 px); the naming is the same at any DPI.
-        var folder = await new PdfToImages(PdfPageImageFormat.Jpeg, 2, new MemoryBudget(1UL << 30)).RunAsync(input, CancellationToken.None);
+        var folder = await Jpg(2).RunAsync(input, CancellationToken.None);
 
         var names = Names(folder);
         Assert.Equal(1_000, names.Length);
@@ -133,7 +138,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         var input = CopyFixture(dir, "three-colours.pdf", "colours.pdf");
         var progress = new Recorder();
 
-        await new PdfToImages(PdfPageImageFormat.Jpeg).RunAsync(input, progress, CancellationToken.None);
+        await Jpg().RunAsync(input, progress, CancellationToken.None);
 
         Assert.Equal([("page", 1, 3), ("page", 2, 3), ("page", 3, 3)], progress.Reports.Select(r => (r.Unit, r.Position, r.Total)));
     }
@@ -152,7 +157,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         });
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => new PdfToImages(PdfPageImageFormat.Png).RunAsync(input, progress, cts.Token));
+            () => Png().RunAsync(input, progress, cts.Token));
 
         Assert.Equal(["many.pdf"], Names(dir.Path));
         Assert.Equal(5, progress.Reports.Count);
@@ -165,7 +170,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         var input = CopyFixture(dir, "password-protected.pdf", "secret.pdf");
 
         var ex = await Assert.ThrowsAsync<PdfException>(
-            () => new PdfToImages(PdfPageImageFormat.Jpeg).RunAsync(input, CancellationToken.None));
+            () => Jpg().RunAsync(input, CancellationToken.None));
 
         Assert.Equal("This PDF needs a password: use Remove password first", ex.Message);
         Assert.Equal(["secret.pdf"], Names(dir.Path));
@@ -180,7 +185,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         WritePages(input, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>", null, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>");
 
         var ex = await Assert.ThrowsAsync<PdfException>(
-            () => new PdfToImages(PdfPageImageFormat.Png).RunAsync(input, CancellationToken.None));
+            () => Png().RunAsync(input, CancellationToken.None));
 
         Assert.Equal(PdfError.DamagedPage, ex.Error);
         Assert.StartsWith("Page 2 of this PDF", ex.Message, StringComparison.Ordinal);
@@ -195,7 +200,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         TestPdf.WriteBlank(input, 0);
 
         var ex = await Assert.ThrowsAsync<PdfException>(
-            () => new PdfToImages(PdfPageImageFormat.Png).RunAsync(input, CancellationToken.None));
+            () => Png().RunAsync(input, CancellationToken.None));
 
         Assert.Equal(PdfError.NoPages, ex.Error);
         Assert.Equal("This PDF has no pages.", ex.Message);
@@ -210,7 +215,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         Directory.CreateDirectory(dir.Combine("colours (pages)"));
         File.WriteAllText(dir.Combine(@"colours (pages)\mine.txt"), "keep me");
 
-        var folder = await new PdfToImages(PdfPageImageFormat.Jpeg).RunAsync(input, CancellationToken.None);
+        var folder = await Jpg().RunAsync(input, CancellationToken.None);
 
         Assert.Equal(dir.Combine("colours (pages) (1)"), folder);
         Assert.Equal(["mine.txt"], Names(dir.Combine("colours (pages)")));
@@ -225,7 +230,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         var before = SHA256.HashData(File.ReadAllBytes(input));
         var written = File.GetLastWriteTimeUtc(input);
 
-        await new PdfToImages(PdfPageImageFormat.Png).RunAsync(input, CancellationToken.None);
+        await Png().RunAsync(input, CancellationToken.None);
 
         Assert.Equal(before, SHA256.HashData(File.ReadAllBytes(input)));
         Assert.Equal(written, File.GetLastWriteTimeUtc(input));
@@ -242,7 +247,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         var longInput = @"\\?\" + dir.Combine(stem + ".pdf");
         File.Move(input, longInput);
 
-        var folder = await new PdfToImages(PdfPageImageFormat.Jpeg, 10, new MemoryBudget(1UL << 30)).RunAsync(longInput, CancellationToken.None);
+        var folder = await Jpg(10).RunAsync(longInput, CancellationToken.None);
 
         var names = Names(folder);
         Assert.Equal(3, names.Length);
@@ -262,32 +267,11 @@ public class PdfToImagesTests(ITestOutputHelper output)
         var longInput = @"\\?\" + dir.Combine(stem + ".pdf");
         File.Move(input, longInput);
 
-        var folder = await new PdfToImages(PdfPageImageFormat.Jpeg, 10, new MemoryBudget(1UL << 30)).RunAsync(longInput, CancellationToken.None);
+        var folder = await Jpg(10).RunAsync(longInput, CancellationToken.None);
 
         Assert.EndsWith(" (pages)", folder, StringComparison.Ordinal);
         Assert.Equal(255, Path.GetFileName(folder).Length);
         Assert.Equal(3, Names(folder).Length);
-    }
-
-    [Fact]
-    public async Task Waits_for_its_share_of_the_memory_budget_before_rendering()
-    {
-        using var dir = new TempDir();
-        var input = CopyFixture(dir, "three-colours.pdf", "colours.pdf");
-        var budget = new MemoryBudget(1_000);
-        var held = await budget.AcquireAsync(1, CancellationToken.None);
-
-        // Every page needs more than this budget, so each runs alone and waits for the byte held here.
-        var run = new PdfToImages(PdfPageImageFormat.Jpeg, PdfToImages.Dpi, budget).RunAsync(input, CancellationToken.None);
-        await Task.Delay(500);
-        Assert.False(run.IsCompleted);
-        Assert.Equal(["colours.pdf"], Names(dir.Path).Where(n => !n.StartsWith(".flevert-", StringComparison.Ordinal)));
-
-        held.Dispose();
-        var folder = await run.WaitAsync(Wait);
-        Assert.Equal(3, Names(folder).Length);
-        // Every share was given back.
-        (await budget.AcquireAsync(1_000, CancellationToken.None).WaitAsync(Wait)).Dispose();
     }
 
     [Theory]
@@ -300,7 +284,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         TestPdf.WriteBlank(input, 200);
 
         var watch = Stopwatch.StartNew();
-        var folder = await new PdfToImages(format).RunAsync(input, CancellationToken.None);
+        var folder = await new PdfToImages(format, PdfToImages.Dpi, TestPdf.Worker).RunAsync(input, CancellationToken.None);
         watch.Stop();
 
         output.WriteLine($"200 Letter pages to {format} at 150 DPI: {watch.Elapsed.TotalSeconds:F1} s");

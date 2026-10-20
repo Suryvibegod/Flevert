@@ -134,6 +134,97 @@ internal static class TestPdf
         Write(string.Create(CultureInfo.InvariantCulture, $"trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"));
     }
 
+    /// <summary>
+    /// One A4 page whose only content is a free-form triangle mesh (shading type 4) of <paramref name="triangles"/>
+    /// triangles that each cover the whole page: a page made to stall a PDF reader. pdfium draws every triangle in one
+    /// call, about 2.5 ms each at 150 DPI on the dev machine (2 000 took 5 s, 20 000 took 50 s), so a million keep it busy
+    /// for about 40 minutes at 77 MB, from a 60 KB file (Flate packs the repeated triangle).
+    /// </summary>
+    public static void WriteStallingPage(string path, int triangles = 1_000_000)
+    {
+        // Per vertex: flag (8 bits), x and y (16 bits each), red, green, blue (8 bits each).
+        byte[] triangle =
+        [
+            0, 0x00, 0x00, 0x00, 0x00, 255, 0, 0,
+            0, 0xFF, 0xFF, 0x00, 0x00, 255, 0, 0,
+            0, 0x00, 0x00, 0xFF, 0xFF, 255, 0, 0,
+        ];
+        var packed = new MemoryStream();
+        using (var zlib = new System.IO.Compression.ZLibStream(packed, System.IO.Compression.CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            for (var i = 0; i < triangles; i++)
+                zlib.Write(triangle);
+        }
+
+        var mesh = packed.ToArray();
+        WriteObjects(path,
+        [
+            Encoding.ASCII.GetBytes("<< /Type /Catalog /Pages 2 0 R >>"),
+            Encoding.ASCII.GetBytes("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
+            Encoding.ASCII.GetBytes("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Shading << /Sh0 4 0 R >> >> /Contents 5 0 R >>"),
+            [
+                .. Encoding.ASCII.GetBytes(string.Create(CultureInfo.InvariantCulture,
+                    $"<< /ShadingType 4 /ColorSpace /DeviceRGB /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8 /Decode [0 1200 0 1700 0 1 0 1 0 1] /Filter /FlateDecode /Length {mesh.Length} >>\nstream\n")),
+                .. mesh,
+                .. "\nendstream"u8,
+            ],
+            Encoding.ASCII.GetBytes("<< /Length 7 >>\nstream\n/Sh0 sh\nendstream"),
+        ]);
+    }
+
+    /// <summary>
+    /// One square page of <paramref name="points"/> points a side, white: 14 400 (the largest PDF allows) renders at
+    /// 10 000 x 10 000 px, 400 MB of pixels.
+    /// </summary>
+    public static void WriteSquarePage(string path, int points)
+    {
+        WriteObjects(path,
+        [
+            Encoding.ASCII.GetBytes("<< /Type /Catalog /Pages 2 0 R >>"),
+            Encoding.ASCII.GetBytes("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
+            Encoding.ASCII.GetBytes(string.Create(CultureInfo.InvariantCulture, $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {points} {points}] /Resources << >> >>")),
+        ]);
+    }
+
+    private static void WriteObjects(string path, IReadOnlyList<byte[]> objects)
+    {
+        using var file = File.Create(path);
+        var offsets = new List<long>();
+        void Write(string text) => file.Write(Encoding.ASCII.GetBytes(text));
+        Write("%PDF-1.4\n");
+        for (var i = 0; i < objects.Count; i++)
+        {
+            offsets.Add(file.Position);
+            Write(string.Create(CultureInfo.InvariantCulture, $"{i + 1} 0 obj\n"));
+            file.Write(objects[i]);
+            Write("\nendobj\n");
+        }
+
+        var xref = file.Position;
+        Write(string.Create(CultureInfo.InvariantCulture, $"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n"));
+        foreach (var offset in offsets)
+            Write(string.Create(CultureInfo.InvariantCulture, $"{offset:D10} 00000 n \n"));
+        Write(string.Create(CultureInfo.InvariantCulture, $"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"));
+    }
+
+    /// <summary>The flevert.exe the solution built, which the tests run as the PDF worker and as the app.</summary>
+    public static string FlevertExe
+    {
+        get
+        {
+            // tests/<project>/bin/<Configuration>/<tfm>/ → repository root is five levels up.
+            var output = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
+            var configuration = output.Parent!.Name;
+            var root = output.Parent!.Parent!.Parent!.Parent!.Parent!.FullName;
+            var exe = Path.Combine(root, "src", "Flevert.Cli", "bin", configuration, output.Name, "flevert.exe");
+            Assert.True(File.Exists(exe), $"Build the solution first; missing {exe}");
+            return exe;
+        }
+    }
+
+    /// <summary>The PDF worker of the built flevert.exe, with the product's limits.</summary>
+    public static PdfWorker Worker => new(FlevertExe);
+
     /// <summary>The pixel at (x, y) as (red, green, blue, alpha).</summary>
     public static (byte R, byte G, byte B, byte A) Pixel(PdfBitmap bitmap, int x, int y)
     {

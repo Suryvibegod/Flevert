@@ -52,6 +52,12 @@ public enum PdfError
 
     /// <summary>The PDF has no pages to work on.</summary>
     NoPages,
+
+    /// <summary>Opening the PDF or rendering one of its pages went on for longer than Flevert waits (the PDF worker was stopped).</summary>
+    TooSlow,
+
+    /// <summary>The PDF worker ended without finishing or saying why: it crashed on the file, or was ended from outside.</summary>
+    ReaderFailed,
 }
 
 /// <summary>A PDF Flevert cannot use, with a message for the user.</summary>
