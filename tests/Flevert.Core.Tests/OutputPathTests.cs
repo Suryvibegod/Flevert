@@ -423,6 +423,82 @@ public sealed class OutputPathTests : IDisposable
         Assert.Equal(["1.txt", "2.txt"], EntryNames(final));
     }
 
+    // Renaming a folder fails with "access denied" while any file in it is open, even with delete sharing: an antivirus
+    // scan, the search indexer, OneDrive or Explorer making a thumbnail must not cost a 200-page render at the very end.
+    [Fact]
+    public async Task WriteDirectoryAtomically_waits_for_another_program_to_close_a_file_in_the_folder()
+    {
+        Task? closed = null;
+
+        var final = await OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
+        {
+            await WritePages(2)(temp, ct);
+            var scanner = new FileStream(Path.Combine(temp, "1.txt"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            closed = Task.Run(async () =>
+            {
+                await Task.Delay(300, CancellationToken.None);
+                await scanner.DisposeAsync();
+            }, CancellationToken.None);
+        }, CancellationToken.None);
+        await closed!;
+
+        Assert.Equal(_dir.Combine("a (pages)"), final);
+        Assert.Equal(["1.txt", "2.txt"], EntryNames(final));
+        Assert.Equal(["a (pages)"], EntryNames(_dir.Path));
+    }
+
+    // Negative control for the test above: the wait is bounded, and giving up still leaves nothing behind.
+    [Fact]
+    public async Task WriteDirectoryAtomically_gives_up_cleanly_when_a_file_stays_open_past_the_retry_window()
+    {
+        FileStream? scanner = null;
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            await Assert.ThrowsAsync<IOException>(() => OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
+            {
+                await WritePages(2)(temp, ct);
+                scanner = new FileStream(Path.Combine(temp, "1.txt"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            }, CancellationToken.None));
+            timer.Stop();
+
+            // Still open: a file deleted with POSIX semantics loses its name at once, so the folder can go too.
+            Assert.Empty(EntryNames(_dir.Path));
+        }
+        finally
+        {
+            scanner?.Dispose();
+        }
+
+        Assert.InRange(timer.Elapsed, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(30));
+    }
+
+    [Fact]
+    public async Task WriteDirectoryAtomically_stops_waiting_for_the_rename_when_cancelled()
+    {
+        using var cts = new CancellationTokenSource();
+        FileStream? scanner = null;
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
+            {
+                await WritePages(2)(temp, ct);
+                scanner = new FileStream(Path.Combine(temp, "1.txt"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                cts.CancelAfter(200);
+            }, cts.Token));
+            timer.Stop();
+
+            Assert.Empty(EntryNames(_dir.Path));
+        }
+        finally
+        {
+            scanner?.Dispose();
+        }
+
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(1.5), $"{timer.Elapsed}");
+    }
+
     // Writers never make folders (PdfToImages, DevSplit), so a folder with something in it was put there by someone else,
     // and going into it by path could be redirected the same way as the temporary folder itself.
     [Fact]

@@ -6,6 +6,13 @@ public static class OutputPath
 {
     private const int MaxFileNameLength = 255;
     private const int MaxAttempts = 10_000;
+    private const int ErrorAccessDenied = 5;
+    private const int ErrorSharingViolation = 32;
+
+    // About 2 s in all: 25, 50, 100, 200, 400 ms, then 400 ms at a time.
+    private static readonly TimeSpan RenameWait = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan FirstRenamePause = TimeSpan.FromMilliseconds(25);
+    private static readonly TimeSpan MaxRenamePause = TimeSpan.FromMilliseconds(400);
 
     /// <summary>
     /// Returns <paramref name="desiredPath"/> or the first free "name (n).ext" beside it. Anything with that name, file or
@@ -105,7 +112,7 @@ public static class OutputPath
         {
             await write(folder.Path, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
-            var final = RenameToFreeName(folder, desiredDirectory, keepSuffix);
+            var final = await RenameToFreeNameAsync(folder, desiredDirectory, keepSuffix, ct).ConfigureAwait(false);
             renamed = true;
             // Emptied by someone else and turned into a junction after the anchor went: the junction is what was renamed.
             // Only the link is removed, and nothing is handed back.
@@ -127,8 +134,14 @@ public static class OutputPath
 
     // Another process can claim the reserved name between Reserve and the rename, so retry on collision. The rename never
     // replaces what is already there: it fails when the name exists, as a file or as a folder.
-    private static string RenameToFreeName(PartialFolder folder, string desiredDirectory, string keepSuffix)
+    //
+    // A folder cannot be renamed while another program has a file in it open, whatever sharing it asked for (access
+    // denied): an antivirus scan, the search indexer, OneDrive or a thumbnailer, each for milliseconds to about a second.
+    // With the name free, the rename is retried for up to RenameWait before giving up, rather than losing every page.
+    private static async Task<string> RenameToFreeNameAsync(PartialFolder folder, string desiredDirectory, string keepSuffix, CancellationToken ct)
     {
+        var waited = TimeSpan.Zero;
+        var pause = FirstRenamePause;
         for (var attempt = 0; ; attempt++)
         {
             var final = ReserveDirectory(desiredDirectory, keepSuffix);
@@ -140,9 +153,24 @@ public static class OutputPath
             var error = folder.TryRenameTo(final);
             if (error == 0)
                 return final;
+            if (IsTaken(final) && attempt < MaxAttempts)
+                continue;
 
-            if (!(IsTaken(final) && attempt < MaxAttempts))
-                throw new IOException($"The finished folder could not be named {Path.GetFileName(final)}: {new Win32Exception(error).Message}");
+            var busy = error is ErrorAccessDenied or ErrorSharingViolation;
+            if (busy && waited < RenameWait)
+            {
+                var delay = pause < RenameWait - waited ? pause : RenameWait - waited;
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+                waited += delay;
+                pause *= 2;
+                if (pause > MaxRenamePause)
+                    pause = MaxRenamePause;
+                continue;
+            }
+
+            throw new IOException(busy
+                ? $"The finished folder could not be named {Path.GetFileName(final)}: another program (an antivirus scan, the search indexer or a sync app) kept a file in it open. Try again."
+                : $"The finished folder could not be named {Path.GetFileName(final)}: {new Win32Exception(error).Message}");
         }
     }
 
