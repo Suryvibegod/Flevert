@@ -73,6 +73,34 @@ public sealed class NoticesScriptTests : IDisposable
     }
 
     [Fact]
+    public void A_hidden_binary_without_a_notices_entry_stops_the_build_too()
+    {
+        // Inno packs hidden and system files like any other.
+        var hidden = Path.Combine(_publish, "tool.dll");
+        Write(hidden, "native code from somewhere");
+        File.SetAttributes(hidden, FileAttributes.Hidden | FileAttributes.System);
+
+        var run = Notices(Manifest());
+
+        Assert.NotEqual(0, run.ExitCode);
+        Assert.Contains("tool.dll", run.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_hidden_licence_file_still_counts()
+    {
+        Write(Path.Combine(_publish, "tool.exe"), "binary");
+        var licence = Path.Combine(_root, @"deps\tool\LICENSE.txt");
+        Write(licence, "Tool licence text");
+        File.SetAttributes(licence, FileAttributes.Hidden);
+
+        var run = Notices(Manifest(Entry("Tool 1.0", ["tool.exe"], ["deps/tool/*"])));
+
+        Assert.True(run.ExitCode == 0, run.Output);
+        Assert.Contains("Tool licence text", NoticesText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_binary_with_a_notices_entry_ships_with_every_licence_the_entry_names()
     {
         Write(Path.Combine(_publish, "tool.exe"), "binary");
