@@ -35,7 +35,7 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         var encryption = nameof(PdfError.UnsupportedEncryption);
         var damaged = nameof(PdfError.DamagedPage);
         // Compress packs the objects of a PDF without a trailer into object streams, and qpdf then cannot read its own
-        // output (PdfRepair). A small PDF gets no smaller.
+        // output (PdfRepair). A small PDF gets no smaller, and is skipped unless qpdf repaired it (cycle-self-reference).
         var repair = nameof(PdfError.RepairFailed);
         // fixture: rotate, split, merge, to-png and to-jpg (the worker), compress, remove metadata, protect
         (string Fixture, string Rotate, string Split, string Merge, string Render, string Compress, string Strip, string Protect)[] table =
@@ -48,7 +48,7 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
             ("cycle-kids-self", notPdf, notPdf, notPdf, damaged, notPdf, notPdf, notPdf),
             ("cycle-kids-loop", notPdf, notPdf, notPdf, Ok, notPdf, notPdf, notPdf),
             ("cycle-parent", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
-            ("cycle-self-reference", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("cycle-self-reference", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
             ("pages-100000", tooMany, tooMany, tooMany, tooMany, tooMany, tooMany, tooMany),
             ("pages-2001", tooMany, tooMany, tooMany, tooMany, tooMany, tooMany, tooMany),
             ("count-lie-low", tooMany, tooMany, tooMany, Ok, tooMany, tooMany, tooMany),

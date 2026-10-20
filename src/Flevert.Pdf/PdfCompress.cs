@@ -6,7 +6,8 @@ namespace Flevert.Pdf;
 /// <c>Compress/Lossless</c> (docs/specs/pdf.md; a menu item of its own until 0.2.0, "Compress"): writes <c>&lt;name&gt; (compressed).pdf</c> beside the original, with the
 /// same content stored in less space. Nothing is re-encoded with loss: images and pages are what they were, so a scan
 /// made of JPEGs gets little smaller (that is <see cref="PdfCompressSharing"/>). A result that is not smaller than the
-/// original is no use, so the file is skipped and nothing is written.
+/// original is no use, so the file is skipped and nothing is written, unless qpdf had to repair the PDF: then the
+/// repaired copy is written whatever its size, with the note that says so.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -86,8 +87,9 @@ public sealed class PdfCompress : IOperation
 
             await PdfRepair.CheckAsync(_qpdf, repaired, pages, temp, token).ConfigureAwait(false);
 
-            // Thrown before the output is committed: WriteAtomicallyAsync deletes the temporary file.
-            if (new FileInfo(temp).Length >= length)
+            // Thrown before the output is committed: WriteAtomicallyAsync deletes the temporary file. A PDF qpdf had to repair
+            // is written whatever its size: the repaired copy is worth having (the README says Lossless repairs PDFs).
+            if (!repaired && new FileInfo(temp).Length >= length)
                 throw new OperationSkippedException(AlreadyCompactMessage);
         }, ct).ConfigureAwait(false);
         if (partly)

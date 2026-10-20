@@ -97,6 +97,26 @@ public sealed class PdfCompressTests : IDisposable
     }
 
     [Fact]
+    public async Task A_damaged_pdf_that_gets_no_smaller_is_still_written_repaired_with_the_note()
+    {
+        // Compressed once, then its startxref broken: qpdf repairs it (exit code 3) into a file no smaller than it. The
+        // repaired copy is what the user needs, so it is written, unlike an undamaged PDF that gets no smaller.
+        var compact = await Op().RunAsync(CopyFixture("three-colours.pdf", "report.pdf"), CancellationToken.None);
+        var damaged = _dir.Combine("damaged.pdf");
+        File.WriteAllBytes(damaged, WithStartxrefBroken(File.ReadAllBytes(compact)));
+        using var logs = new TempDir();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op(), [damaged], null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal(PdfRepair.RepairedNote, result.Note);
+        Assert.True(new FileInfo(result.Output!).Length >= new FileInfo(damaged).Length, "the case needs an output no smaller than its input");
+        AssertLooksTheSame(compact, result.Output!);
+        await AssertValid(result.Output!);
+    }
+
+    [Fact]
     public async Task The_runner_reports_an_already_compact_pdf_as_skipped_not_failed()
     {
         using var logs = new TempDir();
@@ -233,6 +253,14 @@ public sealed class PdfCompressTests : IDisposable
 
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(3), $"took {timer.Elapsed}");
         Assert.Equal(["big.pdf"], FileNames(_dir.Path));
+    }
+
+    // The PDF with its startxref pointing at byte 12, where no cross-reference is: qpdf rebuilds the table by scanning.
+    private static byte[] WithStartxrefBroken(byte[] pdf)
+    {
+        var at = Encoding.Latin1.GetString(pdf).LastIndexOf("startxref", StringComparison.Ordinal);
+        Assert.True(at > 0);
+        return [.. pdf.AsSpan(0, at), .. "startxref\n12\n%%EOF\n"u8];
     }
 
     private static void AssertLooksTheSame(string input, string output)
