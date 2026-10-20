@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <!-- The one place the version is set; the installer reads it back from flevert.exe. -->
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <Authors>Flevert contributors</Authors>
     <Company>Flevert contributors</Company>
     <Copyright>Copyright (c) 2026 Flevert contributors</Copyright>

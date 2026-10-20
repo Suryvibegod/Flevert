@@ -1,9 +1,9 @@
 namespace Flevert.Pdf;
 
 /// <summary>
-/// Whether a PDF is digitally signed, so an operation that writes a new PDF from it (rotate, merge, split) can say the
-/// signature is not valid in the output (docs/specs/pdf.md; T18). A signature covers the exact bytes of the file it is in
-/// (its <c>/ByteRange</c>), and qpdf writes every byte anew.
+/// Whether a PDF is digitally signed, so an operation that writes a new PDF from it (every PDF operation but Convert) can
+/// say the signature is not valid in the output (docs/specs/pdf.md; T18). A signature covers the exact bytes of the file
+/// it is in (its <c>/ByteRange</c>), and qpdf writes every byte anew.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,7 +19,7 @@ namespace Flevert.Pdf;
 /// </remarks>
 public static class PdfSignature
 {
-    /// <summary>What the notification and the log say after a signed PDF was rotated, merged or split.</summary>
+    /// <summary>What the notification and the log say after a new PDF was written from a signed one.</summary>
     public const string NotValidNote = "Signed PDF: the digital signature is not valid in the output.";
 
     private const int ChunkBytes = 1 << 20;

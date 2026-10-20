@@ -30,9 +30,10 @@ public sealed class PasswordLeakTests : IDisposable
         var password = tag + " Mật khẩu 🔑";
         var wrong = tag + " wrong";
         var started = DateTime.UtcNow.AddSeconds(-2);
-        // Large enough that qpdf runs for a while (about 2 s to encrypt), long enough to be read while it does.
+        // Large enough that qpdf runs for a while (about 2 s to encrypt), long enough to be read while it does; one page,
+        // since a PDF of more than 2000 is refused before anyone is asked.
         var input = _dir.Combine("big.pdf");
-        WriteBlank(input, 100_000, resources: true);
+        MaliciousPdf.WriteManyObjects(input, 150_000);
         var locked = _dir.Combine("locked.pdf");
         File.Copy(Fixture("password-protected.pdf"), locked);
 

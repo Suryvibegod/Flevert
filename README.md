@@ -55,14 +55,16 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 | Flevert > | You get |
 |---|---|
 | **Convert** > JPG pages, PNG pages | a folder `report (pages)` with `report 001.jpg`, … |
+| **Convert** > Text | `report.txt`, the text of every page (scans have none: Flevert does not recognise text in pictures) |
 | **Merge PDFs** | `report (merged).pdf`, in name order |
-| **Split into pages** | a folder `report (pages)` with one PDF per page |
+| **Split into pages** | a folder `report (split)` with one PDF per page |
 | **Rotate** > 90° right, 90° left, 180° | `report (rotated).pdf` |
-| **Compress** | `report (compressed).pdf`, smaller with the same quality |
+| **Compress** > Lossless | `report (compressed).pdf`, smaller with the same quality; also rewrites a slightly damaged PDF so that it opens |
+| **Compress** > For sharing | `report (small).pdf`: pictures above 150 DPI brought down to 150 DPI, often a quarter to a half of the size, depending on the scan |
 | **Remove metadata** | `report (no metadata).pdf`, without author, dates, XMP, attachments or scripts |
 | **Protect with password**, **Remove password** | `report (protected).pdf` (AES-256), `report (unlocked).pdf` |
 
-PDFs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. A batch that takes more than two seconds shows a progress window with **Cancel**.
+PDFs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
 
 <p align="center">
 <img src="assets/screenshots/progress.png" width="420" alt="The Flevert progress window converting twelve photos to JPG: 8 of 12 done, with a Cancel button">
@@ -74,7 +76,7 @@ No account, no telemetry, no uploads. At most once a day, after a conversion, Fl
 
 ## Coming next
 
-**0.2.1**: smaller scanned PDFs, reverse page order, repair, and text or pictures out of a PDF. **0.3**: video and audio. Ideas are welcome in [issues](https://github.com/Suryvibegod/Flevert/issues); changes are in the [CHANGELOG](CHANGELOG.md).
+**0.3**: video and audio. Ideas are welcome in [issues](https://github.com/Suryvibegod/Flevert/issues); changes are in the [CHANGELOG](CHANGELOG.md).
 
 ## Troubleshooting
 

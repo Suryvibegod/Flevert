@@ -165,7 +165,7 @@ public sealed class FlevertExeTests : IDisposable
         }
 
         Assert.True(flevert.ExitCode == 0, string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)));
-        var folder = _dir.Combine("Hóa đơn (pages)");
+        var folder = _dir.Combine("Hóa đơn (split)");
         Assert.Equal([100], PageWidths(Path.Combine(folder, "Hóa đơn 001.pdf")));
         Assert.Equal([200], PageWidths(Path.Combine(folder, "Hóa đơn 002.pdf")));
         Assert.Equal([300], PageWidths(Path.Combine(folder, "Hóa đơn 003.pdf")));

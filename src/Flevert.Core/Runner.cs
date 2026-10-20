@@ -21,6 +21,10 @@ public sealed record FileResult(string Input, string? Output, string? Error, boo
 /// <summary>How large a file was and how large its output is, in bytes.</summary>
 public readonly record struct SizeChange(long OriginalBytes, long OutputBytes);
 
+/// <summary>A file of a joining batch that never reached it (<see cref="BatchLeader.Missing"/>).</summary>
+/// <param name="StillRunning">Its process was still running when the batch closed: too slow to start, rather than ended.</param>
+public readonly record struct MissingFile(string Path, bool StillRunning);
+
 /// <param name="Current">The file just started, or the file <paramref name="Within"/> is about; <c>null</c> when a file finished.</param>
 /// <param name="Within">How far <paramref name="Current"/> is inside, when its operation reports it ("page 37 of 200").</param>
 /// <param name="Status">What the batch is doing before any file runs, shown instead of the count ("Waiting for the
@@ -66,7 +70,7 @@ public sealed class Runner(RunLog log)
     /// (their process ended first, <see cref="BatchLeader.Missing"/>). Any of them fails the whole output.</param>
     public async Task<BatchOutcome> RunAsync(
         IBatchOperation operation, IAsyncEnumerable<string> files, IProgress<BatchProgress>? progress, CancellationToken ct,
-        Func<IReadOnlyList<string>>? missing = null)
+        Func<IReadOnlyList<MissingFile>>? missing = null)
     {
         var timer = Stopwatch.StartNew();
         var received = new List<string>();
@@ -92,11 +96,15 @@ public sealed class Runner(RunLog log)
 
         if (missing?.Invoke() is { Count: > 0 } lost)
         {
-            // Joining without them would write an output that looks complete. ADR-0007, part 2.
-            return Failed(operation, [.. lost.Select(f => (f, "never reached Flevert: its process ended before handing it over"))],
+            // Joining without them would write an output that looks complete. ADR-0007, part 2. A process still running
+            // was too slow to start: it did not end, and its file, if it comes, is dropped without a second notification.
+            var verb = lost.All(f => f.StillRunning) ? "did not reach Flevert in time" : "never reached Flevert";
+            return Failed(operation, [.. lost.Select(f => (f.Path, f.StillRunning
+                    ? "did not reach Flevert in time: it arrived too late to be included"
+                    : "never reached Flevert: its process ended before handing it over"))],
                 timer, (name, others) => others == 0
-                    ? $"{name} never reached Flevert, so nothing was joined. Select the files again."
-                    : $"{name} and {others} more {Files(others)} never reached Flevert, so nothing was joined. Select the files again.");
+                    ? $"{name} {verb}, so nothing was joined. Select the files again."
+                    : $"{name} and {others} more {Files(others)} {verb}, so nothing was joined. Select the files again.");
         }
 
         if (received.Count == 0)
@@ -169,6 +177,21 @@ public sealed class Runner(RunLog log)
                 ? $"{name} was left out: it arrived while Flevert was joining other files. Select the files again."
                 : $"{name} and {others} more {Files(others)} were left out: they arrived while Flevert was joining other files. Select the files again.");
     }
+
+    /// <summary>
+    /// Logs <paramref name="files"/> as skipped, without a notification: their batch already told the user about them
+    /// (<see cref="BatchLeader.AccountedFor"/>).
+    /// </summary>
+    public void LogAccountedFor(IBatchOperation operation, IReadOnlyList<string> files)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        ArgumentNullException.ThrowIfNull(files);
+        foreach (var file in files)
+            log.Write(operation.Id, new FileResult(file, null, AccountedForReason, Skipped: true), TimeSpan.Zero);
+    }
+
+    internal const string AccountedForReason =
+        "not joined: its batch had been cancelled, or had already reported it as not reaching Flevert in time";
 
     /// <summary>The progress window's line while a join collects its files.</summary>
     internal const string CollectingStatus = "Waiting for the selected files…";

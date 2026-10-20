@@ -51,7 +51,7 @@ public sealed class PdfSplitTests : IDisposable
 
         var folder = await Op().RunAsync(input, CancellationToken.None);
 
-        Assert.Equal(_dir.Combine("report (pages)"), folder);
+        Assert.Equal(_dir.Combine("report (split)"), folder);
         Assert.Equal(["report 001.pdf", "report 002.pdf", "report 003.pdf", "report 004.pdf"], Entries(folder));
         Assert.Equal([[101], [102], [103], [104]], Entries(folder).Select(name => PageWidths(Path.Combine(folder, name))));
     }
@@ -105,8 +105,8 @@ public sealed class PdfSplitTests : IDisposable
         var first = await Op().RunAsync(input, CancellationToken.None);
         var second = await Op().RunAsync(input, CancellationToken.None);
 
-        Assert.Equal(_dir.Combine("report (pages)"), first);
-        Assert.Equal(_dir.Combine("report (pages) (1)"), second);
+        Assert.Equal(_dir.Combine("report (split)"), first);
+        Assert.Equal(_dir.Combine("report (split) (1)"), second);
         Assert.Equal(["report 001.pdf", "report 002.pdf"], Entries(second));
     }
 
@@ -120,7 +120,7 @@ public sealed class PdfSplitTests : IDisposable
 
         var folder = await Op().RunAsync(input, CancellationToken.None);
 
-        Assert.EndsWith(" (pages)", folder, StringComparison.Ordinal);
+        Assert.EndsWith(" (split)", folder, StringComparison.Ordinal);
         Assert.Equal(255, Path.GetFileName(folder).Length);
         var names = Entries(@"\\?\" + folder);
         Assert.Equal(3, names.Length);
@@ -287,7 +287,7 @@ public sealed class PdfSplitTests : IDisposable
 
         var output = await Op().RunAsync(input, CancellationToken.None);
 
-        Assert.Equal(Path.Combine(folder, "Hóa đơn \U0001F9FE (pages)"), output);
+        Assert.Equal(Path.Combine(folder, "Hóa đơn \U0001F9FE (split)"), output);
         Assert.Equal(["Hóa đơn \U0001F9FE 001.pdf", "Hóa đơn \U0001F9FE 002.pdf"], Entries(output));
     }
 
@@ -307,7 +307,7 @@ public sealed class PdfSplitTests : IDisposable
 
         var result = Assert.Single(outcome.Results);
         Assert.True(result.Succeeded, result.Error);
-        Assert.Equal(Path.Combine(folder, Path.GetFileNameWithoutExtension(input) + " (pages)"), result.Output);
+        Assert.Equal(Path.Combine(folder, Path.GetFileNameWithoutExtension(input) + " (split)"), result.Output);
         Assert.Equal(2, Directory.GetFiles(@"\\?\" + result.Output!).Length);
     }
 
@@ -338,19 +338,15 @@ public sealed class PdfSplitTests : IDisposable
         var input = _dir.Combine("book.pdf");
         WriteBlank(input, 1_500, resources: true);
         FileStream? held = null;
-        var progress = new SynchronousProgress(report =>
-        {
-            if (report.Position > 1)
-                held ??= HoldAPageOfQpdf();
-        });
+        var op = new PdfSplit(Qpdf.NextToApp) { AfterQpdf = scratch => held = HoldAPage(scratch) };
 
         try
         {
-            var ex = await Assert.ThrowsAsync<IOException>(() => Op().RunAsync(input, progress, CancellationToken.None));
+            var ex = await Assert.ThrowsAsync<IOException>(() => op.RunAsync(input, CancellationToken.None));
 
             Assert.NotNull(held);
             Assert.Equal("Flevert could not remove its working copy of the pages: another program is using one of them. Try again.", ex.Message);
-            Assert.DoesNotContain("book (pages)", Entries(_dir.Path));
+            Assert.DoesNotContain("book (split)", Entries(_dir.Path));
         }
         finally
         {
@@ -365,19 +361,19 @@ public sealed class PdfSplitTests : IDisposable
         WriteBlank(input, 1_500, resources: true);
         FileStream? held = null;
         Task? released = null;
-        var progress = new SynchronousProgress(report =>
+        var op = new PdfSplit(Qpdf.NextToApp)
         {
-            if (report.Position > 1 && held is null && HoldAPageOfQpdf() is { } page)
+            AfterQpdf = scratch =>
             {
-                held = page;
-                released = ReleaseAfterTheLastCopyAsync(held, Path.GetDirectoryName(Path.GetDirectoryName(held.Name))!, 1_500);
-            }
-        });
+                held = HoldAPage(scratch);
+                released = ReleaseAfterTheLastCopyAsync(held, Path.GetDirectoryName(scratch)!, 1_500);
+            },
+        };
 
         string folder;
         try
         {
-            folder = await Op().RunAsync(input, progress, CancellationToken.None);
+            folder = await op.RunAsync(input, CancellationToken.None);
             await released!;
         }
         finally
@@ -398,13 +394,10 @@ public sealed class PdfSplitTests : IDisposable
         await held.DisposeAsync();
     }
 
-    // Opened for reading without sharing delete, while qpdf is still writing the other pages; null when no page is
-    // there yet (the next report tries again).
-    private FileStream? HoldAPageOfQpdf()
+    // One of qpdf's pages, opened for reading without sharing delete, as a scanner would.
+    private static FileStream HoldAPage(string scratch)
     {
-        var partial = Assert.Single(Directory.GetDirectories(_dir.Path, ".flevert-*.partial"));
-        var scratch = Assert.Single(Directory.GetDirectories(partial, ".qpdf-*"));
-        var page = Directory.GetFiles(scratch, "*.pdf").Order(StringComparer.Ordinal).FirstOrDefault();
-        return page is null ? null : new FileStream(page, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var page = Directory.GetFiles(scratch, "*.pdf").Order(StringComparer.Ordinal).First();
+        return new FileStream(page, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
     }
 }

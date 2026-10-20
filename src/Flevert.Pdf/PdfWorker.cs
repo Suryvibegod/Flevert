@@ -98,8 +98,68 @@ public sealed class PdfWorker
     public async Task<int> RenderAsync(
         string inputPath, string folder, PdfPageImageFormat format, double dpi, IProgress<FileProgress>? progress, CancellationToken ct)
     {
-        ArgumentException.ThrowIfNullOrEmpty(inputPath);
         ArgumentException.ThrowIfNullOrEmpty(folder);
+        var (total, run) = await RunAsync(inputPath, input => new PdfRenderRequest(inputPath, input, folder, format, dpi), "render", progress, ct)
+            .ConfigureAwait(false);
+        // Every page it said it wrote is there under its name; anything else in the folder was put there by someone else.
+        var stem = Path.GetFileNameWithoutExtension(inputPath);
+        for (var page = 1; page <= total; page++)
+        {
+            if (!File.Exists(Path.Combine(folder, PdfToImages.PageName(stem, page, total, format))))
+                throw new PdfException(PdfError.ReaderFailed, FailedMessage(page, "render"), new PdfWorkerException(run, $"page {page} is missing from the folder"));
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// Writes the text of every page of <paramref name="inputPath"/> into the new file <paramref name="outputPath"/>
+    /// (<see cref="PdfExtractText"/>), reporting each page as it starts, and returns the number of pages.
+    /// </summary>
+    /// <param name="outputPath">A path no file has yet: the worker creates it.</param>
+    /// <exception cref="OperationSkippedException">The PDF has no text (a scan).</exception>
+    /// <exception cref="PdfException">As for <see cref="RenderAsync"/>, and <see cref="PdfError.TooLarge"/> past 100 MB of text.</exception>
+    /// <exception cref="IOException">The text could not be written.</exception>
+    public async Task<int> ExtractTextAsync(string inputPath, string outputPath, IProgress<FileProgress>? progress, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+        var (total, run) = await RunAsync(inputPath, input => new PdfRenderRequest(inputPath, input, outputPath, PdfPageImageFormat.Jpeg, 72) { Task = PdfWorkerTask.Text },
+            "read", progress, ct).ConfigureAwait(false);
+        if (!File.Exists(outputPath))
+            throw new PdfException(PdfError.ReaderFailed, FailedMessage(null, "read"), new PdfWorkerException(run, "the text file is missing"));
+        return total;
+    }
+
+    /// <summary>
+    /// Writes into <paramref name="folder"/> a smaller JPEG, <c>&lt;hash&gt;.jpg</c>, of every image of
+    /// <paramref name="inputPath"/> drawn above <paramref name="dpi"/> wherever it is drawn (<see cref="PdfCompressSharing"/>),
+    /// reporting each page as its images are looked at, and returns them.
+    /// </summary>
+    /// <param name="folder">An empty folder only this user, SYSTEM and administrators can change.</param>
+    /// <exception cref="PdfException">As for <see cref="RenderAsync"/>.</exception>
+    /// <exception cref="IOException">An image could not be written.</exception>
+    internal async Task<IReadOnlyList<PdfShrunkImage>> ShrinkImagesAsync(
+        string inputPath, string folder, double dpi, IProgress<FileProgress>? progress, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(folder);
+        IReadOnlyList<PdfShrunkImage>? shrunk = null;
+        var (_, run) = await RunAsync(inputPath, input => new PdfRenderRequest(inputPath, input, folder, PdfPageImageFormat.Jpeg, dpi) { Task = PdfWorkerTask.ShrinkImages },
+            "read", progress, ct, images => shrunk = images).ConfigureAwait(false);
+        foreach (var image in shrunk!)
+        {
+            if (!File.Exists(image.Path))
+                throw new PdfException(PdfError.ReaderFailed, FailedMessage(null, "read"), new PdfWorkerException(run, $"{image.Hash}.jpg is missing"));
+        }
+
+        return shrunk;
+    }
+
+    // Runs one worker on the request made for the pinned input; "render" or "read" is what the messages say it was doing.
+    private async Task<(int Total, ExternalToolResult Run)> RunAsync(
+        string inputPath, Func<FileIdentity, PdfRenderRequest> makeRequest, string doing, IProgress<FileProgress>? progress, CancellationToken ct,
+        Action<IReadOnlyList<PdfShrunkImage>>? shrunk = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(inputPath);
         RequireExe();
 
         // Held until the worker has ended, sharing reading only, like the runner's pin: the worker reopens this path, and
@@ -108,9 +168,13 @@ public sealed class PdfWorker
         var length = RandomAccess.GetLength(pin);
         if (length > PdfDocument.MaxFileBytes)
             throw PdfDocument.TooLargeError(PdfDocument.MaxFileBytes);
-        var request = new PdfRenderRequest(inputPath, FileIdentity.Of(pin), folder, format, dpi).Encode();
+        var made = makeRequest(FileIdentity.Of(pin));
+        var request = made.Encode();
 
-        using var session = new Session(this, StallTimeout + (PerHundredMegabytes * (length / 100_000_000.0)), progress, ct);
+        using var session = new Session(this, StallTimeout + (PerHundredMegabytes * (length / 100_000_000.0)), doing, progress, ct)
+        {
+            ShrinkFolder = made.Task == PdfWorkerTask.ShrinkImages ? made.Folder : null,
+        };
         var limits = new ExternalToolLimits { MaxMemoryBytes = MaxMemoryBytes, SingleProcess = true };
         ExternalToolResult run;
         try
@@ -136,16 +200,17 @@ public sealed class PdfWorker
         }
 
         var total = session.Outcome(run, MaxMemoryBytes);
-        // Every page it said it wrote is there under its name; anything else in the folder was put there by someone else.
-        var stem = Path.GetFileNameWithoutExtension(inputPath);
-        for (var page = 1; page <= total; page++)
-        {
-            if (!File.Exists(Path.Combine(folder, PdfToImages.PageName(stem, page, total, format))))
-                throw new PdfException(PdfError.ReaderFailed, session.FailedMessage(), new PdfWorkerException(run, $"page {page} is missing from the folder"));
-        }
-
-        return total;
+        shrunk?.Invoke(session.Shrunk);
+        return (total, run);
     }
+
+    private static string TooSlowMessage(int? page, string doing) => page is { } p
+        ? string.Create(CultureInfo.InvariantCulture, $"Page {p} of this PDF took too long to {doing}: it is too complex, or made to stall PDF readers.")
+        : "This PDF took too long to open: it is too complex, or made to stall PDF readers.";
+
+    private static string FailedMessage(int? page, string doing) => page is { } p
+        ? string.Create(CultureInfo.InvariantCulture, $"Flevert's PDF reader stopped on page {p} of this PDF without finishing: the PDF may be damaged, or made to crash PDF readers.")
+        : "Flevert's PDF reader stopped on this PDF without finishing: it may be damaged, or made to crash PDF readers.";
 
     /// <summary>
     /// The changes to the environment the worker inherits from flevert.exe (ADR-0008): every <c>MAGICK_*</c> variable,
@@ -175,9 +240,10 @@ public sealed class PdfWorker
     }
 
     /// <summary>What one run of the worker has said so far, and the watchdog that ends it when it stops saying anything.</summary>
-    private sealed class Session : IDisposable
+    internal sealed class Session : IDisposable
     {
         private readonly PdfWorker _worker;
+        private readonly string _doing;
         private readonly IProgress<FileProgress>? _progress;
         private readonly CancellationToken _cancel;
         private readonly CancellationTokenSource _stall = new();
@@ -191,10 +257,27 @@ public sealed class PdfWorker
         private int _written;
         private bool _done;
         private (string Code, string Message)? _error;
+        private readonly List<PdfShrunkImage> _shrunk = [];
+        private readonly HashSet<string> _shrunkHashes = new(StringComparer.Ordinal);
+        private string? _encoding;
 
-        public Session(PdfWorker worker, TimeSpan openWindow, IProgress<FileProgress>? progress, CancellationToken cancel)
+        /// <summary>For a request to shrink images: the folder they are written to.</summary>
+        public string? ShrinkFolder { get; init; }
+
+        /// <summary>The images the worker said it wrote, once it is done.</summary>
+        public IReadOnlyList<PdfShrunkImage> Shrunk
+        {
+            get
+            {
+                lock (_gate)
+                    return [.. _shrunk];
+            }
+        }
+
+        public Session(PdfWorker worker, TimeSpan openWindow, string doing, IProgress<FileProgress>? progress, CancellationToken cancel)
         {
             _worker = worker;
+            _doing = doing;
             _progress = progress;
             _cancel = cancel;
             _linked = CancellationTokenSource.CreateLinkedTokenSource(cancel, _stall.Token, _budget.Token);
@@ -266,7 +349,31 @@ public sealed class PdfWorker
                         _written = Number(parts[1], _current, _current);
                         Watch(_worker.StallTimeout);
                         return null;
-                    case "done" when parts.Length == 2 && _total > 0 && _written == _total:
+                    case "encode" when ShrinkFolder is not null && parts.Length == 3 && _total > 0 && _written == _total && _encoding is null:
+                        var encode = parts[2].Split(' ');
+                        if (encode.Length != 2 || !IsHash(parts[1]) || _shrunkHashes.Contains(parts[1]))
+                            throw new ProtocolException(line);
+                        var (width, height) = ImageSize(encode[0], encode[1], line);
+                        _encoding = parts[1];
+                        // Decoding and encoding grow with the pixels, as drawing a page does.
+                        Watch(_worker.StallWindow(width, height));
+                        return null;
+                    case "image" when _encoding is not null && parts.Length == 3 && parts[1] == _encoding:
+                        var image = parts[2].Split(' ');
+                        if (image.Length != 3 || image[2] is not ("gray" or "rgb"))
+                            throw new ProtocolException(line);
+                        var (shrunkWidth, shrunkHeight) = ImageSize(image[0], image[1], line);
+                        _shrunk.Add(new PdfShrunkImage(parts[1], Path.Combine(ShrinkFolder!, parts[1] + ".jpg"), shrunkWidth, shrunkHeight, image[2] == "gray"));
+                        _shrunkHashes.Add(parts[1]);
+                        _encoding = null;
+                        Watch(_worker.StallTimeout);
+                        return null;
+                    case "kept" when _encoding is not null && parts.Length == 2 && parts[1] == _encoding:
+                        _shrunkHashes.Add(parts[1]);
+                        _encoding = null;
+                        Watch(_worker.StallTimeout);
+                        return null;
+                    case "done" when parts.Length == 2 && _total > 0 && _written == _total && _encoding is null:
                         Number(parts[1], _total, _total);
                         _done = true;
                         _stall.CancelAfter(Timeout.InfiniteTimeSpan);
@@ -276,7 +383,7 @@ public sealed class PdfWorker
                         _error = (parts[1], PdfRenderWorker.OneLine(parts[2]));
                         Watch(_worker.StallTimeout); // it is about to exit
                         return null;
-                    case "pages" or "page" or "busy" or "wrote" or "done" or "error":
+                    case "pages" or "page" or "busy" or "wrote" or "done" or "error" or "encode" or "image" or "kept":
                         throw new ProtocolException(line);
                     default:
                         // Not the worker's: a native library writing to standard output. It proves nothing, so it does
@@ -287,6 +394,17 @@ public sealed class PdfWorker
         }
 
         private void Watch(TimeSpan window) => _stall.CancelAfter(window);
+
+        // The pixel size of an image the worker decodes or wrote: at most MaxRenderPixels² in all, the most it decodes.
+        private static (int Width, int Height) ImageSize(string width, string height, string line)
+        {
+            const int MaxPixels = PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels;
+            var size = (Width: Number(width, 1, MaxPixels), Height: Number(height, 1, MaxPixels));
+            return (long)size.Width * size.Height <= MaxPixels ? size : throw new ProtocolException(line);
+        }
+
+        // A SHA-256 as the worker writes it: 64 lower-case hexadecimal digits, which is also a safe file name.
+        private static bool IsHash(string text) => text.Length == 64 && text.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f'));
 
         private static int Number(string text, int min, int max) =>
             int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value >= min && value <= max
@@ -313,6 +431,8 @@ public sealed class PdfWorker
                         throw new InvalidOperationException(message, new PdfWorkerException(run, null));
                     if (code == nameof(PdfError.PasswordRequired))
                         throw new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage);
+                    if (code == PdfRenderWorker.NoTextCode)
+                        throw new OperationSkippedException(PdfRenderWorker.NoTextMessage);
                     if (Enum.TryParse<PdfError>(code, ignoreCase: false, out var error) && Enum.IsDefined(error) && !code.Any(char.IsDigit))
                         throw new PdfException(error, message, new PdfWorkerException(run, null));
                 }
@@ -335,26 +455,18 @@ public sealed class PdfWorker
         public string TooSlowMessage()
         {
             lock (_gate)
-            {
-                return PageAt() is { } page
-                    ? string.Create(CultureInfo.InvariantCulture, $"Page {page} of this PDF took too long to render: it is too complex, or made to stall PDF readers.")
-                    : "This PDF took too long to open: it is too complex, or made to stall PDF readers.";
-            }
+                return PdfWorker.TooSlowMessage(PageAt(), _doing);
         }
 
         public string FailedMessage()
         {
             lock (_gate)
-            {
-                return PageAt() is { } page
-                    ? string.Create(CultureInfo.InvariantCulture, $"Flevert's PDF reader stopped on page {page} of this PDF without finishing: the PDF may be damaged, or made to crash PDF readers.")
-                    : "Flevert's PDF reader stopped on this PDF without finishing: it may be damaged, or made to crash PDF readers.";
-            }
+                return PdfWorker.FailedMessage(PageAt(), _doing);
         }
     }
 
     /// <summary>A line from the worker that does not follow the protocol (<see cref="PdfRenderWorker"/>).</summary>
-    private sealed class ProtocolException(string line) : Exception($"The PDF worker wrote an unexpected line: {PdfRenderWorker.OneLine(line)}");
+    internal sealed class ProtocolException(string line) : Exception($"The PDF worker wrote an unexpected line: {PdfRenderWorker.OneLine(line)}");
 }
 
 /// <summary>How the PDF worker ended, for the log: its exit code and the end of what it wrote to standard error.</summary>

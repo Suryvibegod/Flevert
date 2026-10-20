@@ -16,6 +16,9 @@ public sealed class PdfMerge : IBatchOperation
 {
     internal const string NeedsTwoMessage = "Select at least two PDFs to merge.";
 
+    internal static readonly string TooManyPagesTogetherMessage = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+        $"Together these PDFs have more than {PdfDocument.MaxPages} pages; Flevert makes PDFs of at most {PdfDocument.MaxPages}.");
+
     private readonly Qpdf _qpdf;
 
     public PdfMerge(Qpdf qpdf)
@@ -23,6 +26,10 @@ public sealed class PdfMerge : IBatchOperation
         ArgumentNullException.ThrowIfNull(qpdf);
         _qpdf = qpdf;
     }
+
+    /// <summary>Run after the pages of each input are counted, before it is checked for a signature, for tests: an input
+    /// changing meanwhile, or one that can no longer be read.</summary>
+    internal Func<string, Task>? AfterCounting { get; init; }
 
     public string Id => "pdf.merge";
 
@@ -46,6 +53,8 @@ public sealed class PdfMerge : IBatchOperation
             try
             {
                 total += await _qpdf.CountPagesAsync(input, ct).ConfigureAwait(false);
+                if (AfterCounting is not null)
+                    await AfterCounting(input).ConfigureAwait(false);
                 signed |= await PdfSignature.IsSignedAsync(input, ct).ConfigureAwait(false);
             }
             catch (Exception e) when (e is PdfException or IOException or UnauthorizedAccessException)
@@ -64,10 +73,24 @@ public sealed class PdfMerge : IBatchOperation
         var desired = Path.Combine(Path.GetDirectoryName(first)!, Path.GetFileNameWithoutExtension(first) + " (merged).pdf");
         var output = await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
         {
-            await _qpdf.MergeAsync(inputPaths, temp, token).ConfigureAwait(false);
+            var repaired = await _qpdf.MergeAsync(inputPaths, temp, token).ConfigureAwait(false);
             // An input read again for the merge may not be the one counted (a file changing on a share): the limit holds
-            // for what was written, which fails here rather than being kept.
-            await _qpdf.CountPagesAsync(temp, token).ConfigureAwait(false);
+            // for what was written, which fails here rather than being kept, in the words of a merge.
+            int written;
+            try
+            {
+                written = await _qpdf.CountPagesAsync(temp, token).ConfigureAwait(false);
+            }
+            catch (PdfException e) when (e.Error == PdfError.TooManyPages)
+            {
+                throw new PdfException(PdfError.TooManyPages, TooManyPagesTogetherMessage, e);
+            }
+
+            // Other pages than counted, from inputs qpdf had to repair: pages were lost or found on the way (P4). Which
+            // input it was is not known.
+            if (repaired)
+                PdfRepair.RequireCounted(written, total);
+            PdfRepair.Note(repaired);
         }, ct).ConfigureAwait(false);
         if (signed)
             OutputNote.Add(PdfSignature.NotValidNote);

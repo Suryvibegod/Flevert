@@ -42,14 +42,17 @@ public sealed class PdfRotate : IOperation
     public async Task<string> RunAsync(string inputPath, CancellationToken ct)
     {
         // At most 2 000 pages, like every PDF operation (T18); qpdf walks the page tree, whatever /Count says.
-        await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
+        var pages = await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
         var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);
 
         var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + " (rotated).pdf");
         // "+" turns relative to each page's current /Rotate; "1-z" is every page.
         var rotate = string.Create(CultureInfo.InvariantCulture, $"--rotate=+{_degrees}:1-z");
-        var output = await OutputPath.WriteAtomicallyAsync(desired,
-            (temp, token) => _qpdf.TransformAsync(inputPath, temp, [Qpdf.KeepStreamsAsTheyAre, rotate], token), ct).ConfigureAwait(false);
+        var output = await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
+        {
+            var repaired = await _qpdf.TransformAsync(inputPath, temp, [Qpdf.KeepStreamsAsTheyAre, rotate], token).ConfigureAwait(false);
+            await PdfRepair.CheckAsync(_qpdf, repaired, pages, temp, token).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
         if (signed)
             OutputNote.Add(PdfSignature.NotValidNote);
         return output;

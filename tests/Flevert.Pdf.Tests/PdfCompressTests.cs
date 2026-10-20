@@ -26,7 +26,7 @@ public sealed class PdfCompressTests : IDisposable
     {
         var op = Op();
 
-        Assert.Equal("Compress", op.MenuPath);
+        Assert.Equal("Compress/Lossless", op.MenuPath);
         Assert.Equal([".pdf"], op.Extensions);
         Assert.Equal(4, op.MaxParallel);
     }
@@ -94,6 +94,50 @@ public sealed class PdfCompressTests : IDisposable
         Assert.Equal("This PDF is already compact: compressing it would not make it smaller.", ex.Message);
         Assert.Equal(before, FileNames(_dir.Path));
         Assert.Empty(Directory.GetDirectories(_dir.Path));
+    }
+
+    [Fact]
+    public async Task A_damaged_pdf_that_gets_no_smaller_is_still_written_repaired_with_the_note()
+    {
+        // Compressed once, then its startxref broken: qpdf repairs it (exit code 3) into a file no smaller than it. The
+        // repaired copy is what the user needs, so it is written, unlike an undamaged PDF that gets no smaller.
+        var compact = await Op().RunAsync(CopyFixture("three-colours.pdf", "report.pdf"), CancellationToken.None);
+        var damaged = _dir.Combine("damaged.pdf");
+        File.WriteAllBytes(damaged, WithStartxrefBroken(File.ReadAllBytes(compact)));
+        using var logs = new TempDir();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op(), [damaged], null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal(PdfRepair.RepairedNote, result.Note);
+        Assert.True(new FileInfo(result.Output!).Length >= new FileInfo(damaged).Length, "the case needs an output no smaller than its input");
+        AssertLooksTheSame(compact, result.Output!);
+        await AssertValid(result.Output!);
+    }
+
+    [Theory]
+    [InlineData("xref-missing")]
+    [InlineData("truncated")]
+    public async Task A_pdf_without_cross_reference_table_or_trailer_is_repaired_into_a_copy_that_opens(string fixture)
+    {
+        // qpdf 12.4.2 repairs these but writes no /Root when it packs them into object streams (PdfRepair): Compress
+        // writes them again without object streams, still compressing their streams.
+        var damaged = MaliciousPdf.Write(fixture, _dir.Combine("hỏng.pdf"));
+        var pages = await Qpdf.NextToApp.CountPagesAsync(damaged, CancellationToken.None);
+        using var logs = new TempDir();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op(), [damaged], null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal(PdfRepair.RepairedNote, result.Note);
+        Assert.Equal(pages, await Qpdf.NextToApp.CountPagesAsync(result.Output!, CancellationToken.None));
+        // Its trailer still has no /Root (qpdf --check calls it damaged), which readers repair as qpdf and pdfium do.
+        using var pdf = PdfDocument.Open(result.Output!);
+        Assert.Equal(pages, pdf.PageCount);
+        for (var page = 0; page < pages; page++)
+            pdf.Render(page, 72);
     }
 
     [Fact]
@@ -180,6 +224,50 @@ public sealed class PdfCompressTests : IDisposable
     }
 
     [Fact]
+    public async Task A_pdf_that_takes_too_long_to_decode_is_compressed_without_decoding_and_says_so()
+    {
+        // 20 000 small objects that object streams pack, and 10 KB of Flate inside Flate that inflates to 4 GB (15 to 20 s
+        // to decode and compress again, T18): the full run stops after 10 s, and the second copies every stream as it is.
+        var input = _dir.Combine("bomb.pdf");
+        MaliciousPdf.WriteManyObjectsAndBomb(input, 20_000);
+        using var logs = new TempDir();
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op(), [input], null, CancellationToken.None);
+
+        Assert.True(timer.Elapsed < PdfCompress.FullRunTimeoutFor(new FileInfo(input).Length) + TimeSpan.FromSeconds(10), $"took {timer.Elapsed}");
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal("Flevert compressed this PDF only in part: it packed its objects but left its streams as they were, since compressing them took too long.",
+            result.Note);
+        Assert.True(new FileInfo(result.Output!).Length < new FileInfo(input).Length * 3 / 4,
+            $"{new FileInfo(input).Length} → {new FileInfo(result.Output!).Length} bytes");
+        // The bomb is copied as it was: still Flate inside Flate. A stream's dictionary is never in an object stream, so
+        // it is in the file as text.
+        var text = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result.Output!));
+        Assert.Matches(@"/Filter\s*\[\s*/FlateDecode\s*/FlateDecode\s*\]", text);
+    }
+
+    [Fact]
+    public void The_full_run_gets_ten_seconds_plus_one_per_megabyte()
+    {
+        // Four of these run at once (MaxParallel) on what may be a busy two-core laptop: ordinary PDFs must not fall back.
+        Assert.Equal(TimeSpan.FromSeconds(10), PdfCompress.FullRunTimeoutFor(0));
+        Assert.Equal(TimeSpan.FromSeconds(110), PdfCompress.FullRunTimeoutFor(100L << 20));
+    }
+
+    [Fact]
+    public async Task A_pdf_of_more_than_2000_pages_is_refused_before_anything_is_written()
+    {
+        var input = MaliciousPdf.Write("count-lie-low", _dir.Combine("many.pdf"));
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.TooManyPages, ex.Error);
+        Assert.Equal(["many.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
     public async Task Cancelling_stops_qpdf_and_leaves_no_partial_file()
     {
         var input = _dir.Combine("big.pdf");
@@ -191,6 +279,14 @@ public sealed class PdfCompressTests : IDisposable
 
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(3), $"took {timer.Elapsed}");
         Assert.Equal(["big.pdf"], FileNames(_dir.Path));
+    }
+
+    // The PDF with its startxref pointing at byte 12, where no cross-reference is: qpdf rebuilds the table by scanning.
+    private static byte[] WithStartxrefBroken(byte[] pdf)
+    {
+        var at = Encoding.Latin1.GetString(pdf).LastIndexOf("startxref", StringComparison.Ordinal);
+        Assert.True(at > 0);
+        return [.. pdf.AsSpan(0, at), .. "startxref\n12\n%%EOF\n"u8];
     }
 
     private static void AssertLooksTheSame(string input, string output)

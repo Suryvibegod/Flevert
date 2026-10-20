@@ -6,13 +6,13 @@ The short version is in the [README](../README.md#install). This page has the de
 
 Flevert is not code-signed yet: a signing certificate costs money and this project is free (free signing for open-source projects is planned). Until then Windows shows **Windows protected your PC** for a new download, with **More info** and then **Run anyway**.
 
-**Before** you click **Run anyway**, make sure the file came from this repository's [Releases page](https://github.com/Suryvibegod/Flevert/releases) and is intact. The notes of each release list the exact commands for that version; they look like this for 0.2.0:
+**Before** you click **Run anyway**, make sure the file came from this repository's [Releases page](https://github.com/Suryvibegod/Flevert/releases) and is intact. The notes of each release list the exact commands for that version; they look like this for 0.2.1:
 
-1. In PowerShell, in your Downloads folder: `Get-FileHash .\Flevert-Setup-0.2.0.exe`. The hash must match the line in `SHA256SUMS.txt` on the release page (upper or lower case does not matter). This shows the download is complete and unchanged.
+1. In PowerShell, in your Downloads folder: `Get-FileHash .\Flevert-Setup-0.2.1.exe`. The hash must match the line in `SHA256SUMS.txt` on the release page (upper or lower case does not matter). This shows the download is complete and unchanged.
 2. To check that GitHub built it from this repository's source code, verify its build provenance with the [GitHub CLI](https://cli.github.com/) (it needs a free GitHub account: run `gh auth login` once first). The command in the release notes also pins the exact commit.
 
    ```
-   gh attestation verify Flevert-Setup-0.2.0.exe --repo Suryvibegod/Flevert --signer-workflow Suryvibegod/Flevert/.github/workflows/release.yml --source-ref refs/tags/v0.2.0 --deny-self-hosted-runners
+   gh attestation verify Flevert-Setup-0.2.1.exe --repo Suryvibegod/Flevert --signer-workflow Suryvibegod/Flevert/.github/workflows/release.yml --source-ref refs/tags/v0.2.1 --deny-self-hosted-runners
    ```
 
 A matching hash alone does not prove where the file came from: anyone who replaced the file could replace the hash beside it. The provenance check shows that this repository's release workflow built the file from the version's tag on GitHub's own machines.

@@ -248,6 +248,21 @@ internal static class MaliciousPdf
     /// </summary>
     public static void WriteManyObjects(string path, int count) => File.WriteAllBytes(path, ManyObjects(count));
 
+    /// <summary>
+    /// <paramref name="count"/> small objects, as <see cref="WriteManyObjects"/>, and the double Flate bomb of
+    /// <c>bomb-double-flate</c> among them: a PDF that object streams make much smaller, and that takes seconds to decode.
+    /// </summary>
+    public static void WriteManyObjectsAndBomb(string path, int count)
+    {
+        var references = new StringBuilder(count * 11).Append('[');
+        for (var i = 0; i <= count; i++)
+            references.Append(CultureInfo.InvariantCulture, $"{i + 5} 0 R ");
+        references.Append(']');
+        var zero = Ascii("0");
+        File.WriteAllBytes(path, Document([CatalogWithExtra, OnePageTree, BlankPage, Ascii(references.ToString()), .. Enumerable.Repeat(zero, count),
+            Stream("/Filter [/FlateDecode /FlateDecode]", DoubleBomb.Value)]));
+    }
+
     private static byte[] ManyObjects(int count)
     {
         var references = new StringBuilder(count * 11).Append('[');

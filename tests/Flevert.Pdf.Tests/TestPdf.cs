@@ -274,6 +274,20 @@ internal static class TestPdf
         ]);
     }
 
+    /// <summary><paramref name="pages"/> square white pages of <paramref name="points"/> points a side.</summary>
+    public static void WriteSquarePages(string path, int pages, int points)
+    {
+        var kids = string.Join(' ', Enumerable.Range(3, pages).Select(n => n.ToString(CultureInfo.InvariantCulture) + " 0 R"));
+        var page = Encoding.ASCII.GetBytes(string.Create(CultureInfo.InvariantCulture,
+            $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {points} {points}] /Resources << >> >>"));
+        WriteObjects(path,
+        [
+            Encoding.ASCII.GetBytes("<< /Type /Catalog /Pages 2 0 R >>"),
+            Encoding.ASCII.GetBytes(string.Create(CultureInfo.InvariantCulture, $"<< /Type /Pages /Count {pages} /Kids [{kids}] >>")),
+            .. Enumerable.Repeat(page, pages),
+        ]);
+    }
+
     private static void WriteObjects(string path, IReadOnlyList<byte[]> objects)
     {
         using var file = File.Create(path);

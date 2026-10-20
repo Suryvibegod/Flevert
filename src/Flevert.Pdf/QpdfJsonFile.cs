@@ -6,8 +6,9 @@ namespace Flevert.Pdf;
 /// <summary>
 /// Reads the description of a PDF that <c>qpdf --json-output=2</c> writes: <c>{"qpdf": [header, objects]}</c>, the
 /// header holding <c>jsonversion</c>, <c>maxobjectid</c> and the like, the objects keyed <c>obj:N G R</c> and
-/// <c>trailer</c>. One entry at a time, so memory follows the largest object rather than the whole PDF (500 000 pages
-/// make a description of hundreds of megabytes).
+/// <c>trailer</c>; with <c>--json-key=pages</c> too, <c>"pages"</c> comes first, an array with an object for each page
+/// (its object, the images it draws). One entry at a time, so memory follows the largest object rather than the whole
+/// PDF (500 000 pages make a description of hundreds of megabytes).
 /// </summary>
 internal static class QpdfJsonFile
 {
@@ -16,6 +17,9 @@ internal static class QpdfJsonFile
 
     /// <summary>The objects and the trailer, the second element of the "qpdf" array.</summary>
     public const int Objects = 1;
+
+    /// <summary>A page of the "pages" array, keyed by its index from 0.</summary>
+    public const int Pages = 2;
 
     // qpdf 12.4.2 refuses objects nested more than 500 deep (checked: 490 is described, 510 is an error); the
     // description adds a few levels of its own.
@@ -29,8 +33,8 @@ internal static class QpdfJsonFile
     private static readonly JsonReaderOptions ReaderOptions = new() { MaxDepth = MaxDepth };
 
     /// <summary>
-    /// Calls <paramref name="visit"/> for each entry of the header and of the objects, in file order, with the element
-    /// (<see cref="Header"/> or <see cref="Objects"/>), the key and the value.
+    /// Calls <paramref name="visit"/> for each entry of the header and of the objects, and each page, in file order, with
+    /// the element (<see cref="Header"/>, <see cref="Objects"/> or <see cref="Pages"/>), the key and the value.
     /// </summary>
     /// <exception cref="InvalidDataException">The file is not a complete description in this form, or one entry is larger than <see cref="MaxEntryBytes"/>.</exception>
     public static void Read(string path, Action<int, string, JsonNode?> visit, CancellationToken ct) =>
@@ -87,6 +91,8 @@ internal static class QpdfJsonFile
     {
         public JsonReaderState State = state;
         public bool InQpdf;
+        public bool InPages;
+        public int Page;
         public int Element = -1;
         public bool Done;
     }
@@ -107,6 +113,19 @@ internal static class QpdfJsonFile
             {
                 case JsonTokenType.PropertyName when reader.CurrentDepth == 1:
                     position.InQpdf = reader.ValueTextEquals("qpdf"u8);
+                    position.InPages = reader.ValueTextEquals("pages"u8);
+                    break;
+                case JsonTokenType.StartObject when reader.CurrentDepth == 2 && position.InPages:
+                    var page = reader;
+                    if (!page.TrySkip())
+                    {
+                        reader = before;
+                        position.State = reader.CurrentState;
+                        return consumed;
+                    }
+
+                    ct.ThrowIfCancellationRequested();
+                    visit(Pages, position.Page++.ToString(System.Globalization.CultureInfo.InvariantCulture), JsonNode.Parse(ref reader));
                     break;
                 case JsonTokenType.StartObject when reader.CurrentDepth == 2 && position.InQpdf:
                     position.Element++;

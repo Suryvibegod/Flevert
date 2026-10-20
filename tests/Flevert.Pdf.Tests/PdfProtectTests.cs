@@ -179,6 +179,53 @@ public sealed class PdfProtectTests : IDisposable
     }
 
     [Fact]
+    public async Task Protect_refuses_a_pdf_of_more_than_2000_pages_before_anyone_is_asked()
+    {
+        var input = MaliciousPdf.Write("pages-2001", _dir.Combine("many.pdf"));
+        var prompt = new FakePrompt("pw");
+        using var protect = new PdfProtect(Qpdf.NextToApp, prompt);
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => protect.RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.TooManyPages, ex.Error);
+        Assert.Empty(prompt.Questions);
+        Assert.Equal(["many.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
+    public async Task Remove_password_refuses_a_pdf_of_more_than_2000_pages_once_it_opens_and_keeps_nothing()
+    {
+        // Its pages can only be counted with the password, so the unlocked copy is counted, and not kept.
+        var plain = MaliciousPdf.Write("pages-2001", _dir.Combine("plain.pdf"));
+        var input = _dir.Combine("many.pdf");
+        await EncryptAsync(plain, input, user: "pw", owner: "pw");
+        File.Delete(plain);
+        using var unlock = new PdfUnlock(Qpdf.NextToApp, new FakePrompt("pw"));
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => unlock.RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.TooManyPages, ex.Error);
+        Assert.Equal(["many.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
+    public async Task Remove_password_says_a_signed_pdfs_signature_is_not_valid_in_the_output()
+    {
+        var plain = MaliciousPdf.Write("signed", _dir.Combine("plain.pdf"));
+        var input = _dir.Combine("hợp đồng ký số.pdf");
+        await EncryptAsync(plain, input, user: "pw", owner: "pw");
+        File.Delete(plain);
+        using var logs = new TempDir();
+        using var unlock = new PdfUnlock(Qpdf.NextToApp, new FakePrompt("pw"));
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(unlock, [input], null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal(PdfSignature.NotValidNote, result.Note);
+    }
+
+    [Fact]
     public async Task Remove_password_skips_a_pdf_without_one_and_asks_nothing()
     {
         var plain = CopyFixture("three-colours.pdf", "plain.pdf");

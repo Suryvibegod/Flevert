@@ -201,7 +201,7 @@ docs/adr/0009-…                → bản dựng ffmpeg (GPL hay LGPL) và ngh�
 
 Trạng thái: **đã chốt** (2026-10-20). Người dùng giao maintainer tự quyết, nên các quyết định được ghi ngay trong spec, không qua bước hỏi.
 
-**Nhánh:** `feat/v0.3.1-media`, tạo từ `main` sau khi v0.3.0 được gộp. Dùng lại cửa sổ chọn công cụ của v0.2.2 (pdf.md, mục "Cửa sổ Flevert — PDF tools").
+**Nhánh:** `feat/v0.3.1-media`, tạo từ `main` sau khi v0.3.0 được gộp. Dùng lại cơ chế mũi tên thứ hai của v0.2.2 ("Flevert PDF tools ▸") và kiểu ô nhập của hộp thoại mật khẩu.
 
 **Thứ tự phát hành:** v0.2.1 → v0.2.2 → v0.3.0 → v0.3.1. Mọi quy tắc của v0.3.0 vẫn áp dụng: tiến trình riêng, whitelist giao thức và demuxer, chọn luồng, bỏ GPS, giới hạn, `.partial`.
 
@@ -247,35 +247,49 @@ Hệ quả cho v0.3.0:
 - User story 1 và mọi lời nhắc tới Gmail không hứa "Under 25 MB gửi được qua Gmail". Ví dụ đúng là Messenger hay Discord.
 - Gửi email là việc của mục "For email" ở v0.3.1.
 
-## Menu (≤ 16 mục) và cửa sổ "Flevert — Video tools"
+## Menu (≤ 16 mục mỗi mũi tên): thuần chuột phải
+
+Người dùng chốt ngày 2026-10-20: Flevert chỉ là menu chuột phải, **không có cửa sổ chọn công cụ**. Mỗi loại file được tối đa 16 mục trong một mũi tên (Explorer tính cả cây con). Hết chỗ thì thêm **mũi tên thứ hai** cho loại file đó, như "Flevert PDF tools ▸" của v0.2.2.
+
+Hộp thoại chỉ được dùng khi người dùng phải tự gõ chữ. Ở v0.3.1 chỉ có một: ô nhập thời điểm bắt đầu/kết thúc của Trim, cùng kiểu với ô nhập mật khẩu.
 
 Theo nguyên tắc menu của v0.2.2: việc hay làm đứng trên, tên là lời thường, có icon Fluent.
 
+**Video, mũi tên chính** (giữ như v0.3.0, ≤ 16):
+
 ```
-Video:
 [icon] Compress ▸        Light · Balanced · Strong · Under 10 MB · Under 25 MB · Under 100 MB   (7)
 [icon] Convert to ▸      MP4 · MOV · WEBM · GIF (bỏ đích trùng nguồn)                          (≤ 5)
-[icon] Trim…                         (mở cửa sổ ở công cụ Trim)                                  (1)
-[icon] Extract audio (MP3)           (thay submenu 3 mục; M4A chuyển vào cửa sổ)                (1)
+[icon] Extract audio ▸   MP3 · M4A                                                              (3)
 ──────
-[icon] Remove hidden info                                                                        (1)
-[icon] More video tools…                                                                         (1)   ≤ 16
-Audio:
-[icon] Convert to ▸      MP3 · M4A · WAV · FLAC · OGG · Opus (bỏ đích trùng nguồn)              (≤ 7)
-[icon] Make volume even                                                                          (1)
-[icon] Merge into one file           (cần ≥ 2 file; 1 file → lỗi rõ như Merge PDFs)            (1)
-[icon] More audio tools…                                                                         (1)   ≤ 10
+[icon] Remove hidden info                                                                        (1)   ≤ 16
 ```
 
-- op-id `video.extract-mp3` không đổi, chỉ đổi nhãn; `video.extract-m4a` vào cửa sổ.
+**Video, mũi tên thứ hai "Flevert video tools ▸"** (16):
 
-**Cửa sổ "Flevert — Video tools":** cùng thành phần với PDF tools (dùng chung code, chỉ khác danh sách công cụ). Các nhóm:
-- **Edit:** Trim · Rotate right / left / 180° · Flip · Merge selected videos (chỉ hiện khi chọn ≥ 2 file) · Speed 2× / 0.5×
-- **Sound:** Remove sound · Make volume even · Extract audio as M4A
-- **Share:** For email (18 MB) · For WhatsApp (16 MB) · For Messenger (25 MB)
-- **Pictures:** Save a frame as JPG · GIF from a part
+```
+[icon] Trim ▸            Keep the first 30 s · Keep the first 60 s · Choose start and end…     (4)
+[icon] Rotate ▸          Right 90° · Left 90° · 180°                                            (4)
+[icon] Remove sound                                                                              (1)
+[icon] Make volume even                                                                          (1)
+[icon] Save a frame as JPG                                                                       (1)
+[icon] Merge videos                  (cần ≥ 2 file; 1 file → lỗi rõ như Merge PDFs)            (1)
+[icon] Send by ▸         Email (18 MB) · WhatsApp (16 MB) · Messenger (25 MB)                   (4)   = 16
+```
 
-**Cửa sổ "Flevert — Audio tools":** Trim · Cut silence at start and end · Small file for voice.
+**Âm thanh, một mũi tên** (≤ 16):
+
+```
+[icon] Convert to ▸      MP3 · M4A · WAV · FLAC · OGG · Opus (bỏ đích trùng nguồn)              (≤ 7)
+[icon] Make volume even                                                                          (1)
+[icon] Merge into one file                                                                       (1)
+[icon] Trim ▸            Keep the first 30 s · Keep the first 60 s · Choose start and end…     (4)
+[icon] Cut silence at start and end                                                              (1)
+[icon] Small file for voice                                                                      (1)   ≤ 15
+```
+
+- Mũi tên thứ hai được ghi và gỡ như mũi tên chính: cùng cách ghi registry, cùng lưới an toàn khi gỡ, cùng test. Dùng lại cơ chế đã làm cho "Flevert PDF tools" ở v0.2.2.
+- Lật video (Flip), đổi tốc độ 2× / 0.5× và GIF từ một đoạn giữa video: **ra ngoài v0.3.1**, vì mũi tên video tools đã đủ 16 mục. Để lại cho bản sau.
 
 ## Yêu cầu
 
@@ -283,21 +297,19 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
 
 | op-id | Tên | Output | Cách làm |
 |---|---|---|---|
-| `video.trim` | Trim… | `<tên> (trimmed).mp4` | Xem mục "Trim" ngay dưới bảng. |
-| `video.rotate-right` / `-left` / `-180`, `video.flip` | Rotate / Flip | `<tên> (rotated).<đuôi>` | Mặc định **không mã hóa lại**: tùy chọn đầu vào `-display_rotation`/`-display_hflip` với `-c copy`, tính từ góc ffprobe đọc được. MKV/AVI/WEBM: mã hóa lại bằng `transpose`/`hflip,vflip`. Tùy chọn "Re-encode" cho ứng dụng cũ bỏ qua metadata xoay. |
+| `video.trim-30`, `video.trim-60`, `video.trim` | Trim > Keep the first 30 s / 60 s / Choose start and end… | `<tên> (trimmed).mp4` | Xem mục "Trim" ngay dưới bảng. |
+| `video.rotate-right` / `-left` / `-180` | Rotate | `<tên> (rotated).<đuôi>` | Mặc định **không mã hóa lại**: tùy chọn đầu vào `-display_rotation`/`-display_hflip` với `-c copy`, tính từ góc ffprobe đọc được. MKV/AVI/WEBM: mã hóa lại bằng `transpose`/`hflip,vflip`. Tùy chọn "Re-encode" cho ứng dụng cũ bỏ qua metadata xoay. |
 | `video.mute` | Remove sound | `<tên> (no sound).<đuôi>` | `-map 0:v:0 -an -c:v copy`, giữ quy tắc bỏ GPS. Video không có tiếng → skipped. |
 | `video.normalize`, `audio.normalize` | Make volume even | `<tên> (even volume).<đuôi>` | Xem mục "Make volume even" ngay dưới bảng. |
 | `video.frame-jpg` | Save a frame as JPG | `<tên> (frame).jpg` | Xem mục "Save a frame" ngay dưới bảng. |
 | `video.merge`, `audio.merge` | Merge into one | `<tên đầu> (merged).mp4` / `.m4a` | Xem mục "Merge into one" ngay dưới bảng. |
 | `video.share-email` / `-whatsapp` / `-messenger` | For email / WhatsApp / Messenger | `<tên> (for email).mp4` … | Dùng engine "Under N MB" với giới hạn 18 / 16 / 25 MB. Bậc độ phân giải theo thời lượng lấy từ tham số HandBrake Social. Mỗi preset ghi nguồn và ngày kiểm. Zalo chưa rõ giới hạn nên chưa có preset. |
-| `video.speed-2x`, `video.speed-half` | Speed 2× / 0.5× | `<tên> (2x).mp4` | `setpts=PTS/2,fps=30` + `atempo=2.0`; `setpts=2*PTS` + `atempo=0.5`. |
-| `video.gif-part` | GIF from a part | `<tên> (part).gif` | Bắt đầu tại thời điểm chọn, dài 3/5/10 s. `palettegen=stats_mode=diff`, `paletteuse=dither=sierra2_4a:diff_mode=rectangle`, thu bằng `lanczos`, tối đa 480 px. |
 | `audio.trim` | Trim | `<tên> (trimmed).<đuôi>` | Như `video.trim`. |
 | `audio.trim-silence` | Cut silence at start and end | `<tên> (trimmed).<đuôi>` | Lượt 1 `silencedetect=n=-50dB:d=0.5` để tìm thời điểm, lượt 2 cắt bằng `-ss/-to`. **Không** dùng `areverse` (giữ cả luồng trong bộ nhớ). |
 | `audio.voice-small` | Small file for voice | `<tên> (voice).mp3` | `-ac 1 -c:a libmp3lame -b:a 48k`, `highpass=f=80`. |
 
 **Trim** (`video.trim`):
-- Cửa sổ có ô "Start" và "End" (mm:ss), cùng các nút nhanh: 15/30/60 s đầu; bỏ 5 s đầu; bỏ 5 s cuối.
+- Hai mục cắt sẵn: giữ 30 s đầu, giữ 60 s đầu (không hỏi gì). Mục "Choose start and end…" mở ô nhập nhỏ kiểu hộp thoại mật khẩu: hai ô "Start" và "End" (mm:ss), một câu trả lời cho cả lô.
 - Mặc định **chính xác** (mã hóa lại theo chuỗi MP4 của v0.3.0, `-ss` đặt trước `-i`).
 - Tùy chọn "Fast" (`-c copy`): nói rõ là chỉ cắt được ở keyframe, có thể lệch một giây hoặc hơn.
 
@@ -323,7 +335,7 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
 
 - Tên file có `%` (image2, segment): luôn ghi ra tên tạm cố định rồi đổi tên. Test với file tên `50%off.mp4`.
 - Ghép nhiều file: filter concat với nhiều `-i`, không bao giờ dùng demuxer concat hay danh sách file. Giới hạn số file, tổng thời lượng và bộ nhớ (trần job 2 GB).
-- Thời gian gõ vào: chỉ chữ số, `:` và `.`. Phân tích thành số; ngoài khoảng [0, thời lượng] thì báo lỗi ngay trong cửa sổ.
+- Thời gian gõ vào: chỉ chữ số, `:` và `.`. Phân tích thành số; ngoài khoảng [0, thời lượng] thì báo lỗi ngay trong ô nhập.
 - Không dùng filter đọc file (`subtitles=`, `movie=`), nên **burn phụ đề** để sau. Cách an toàn duy nhất là Flevert tự đọc SRT rồi vẽ bằng `drawtext`.
 - `loudnorm`, `silencedetect`: đọc kết quả JSON và log của ffmpeg có giới hạn kích thước (1 MB như mọi output của `ExternalTool`).
 
@@ -356,12 +368,12 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
   - output ghép dài bằng tổng và đúng thứ tự;
   - cỡ < giới hạn của preset;
   - không còn GPS.
-- Cửa sổ Video/Audio tools: test logic không cần UI; UI Automation cho tên trợ năng; MenuProbe ≤ 16 mục.
+- Ô nhập thời điểm của Trim: test logic không cần UI; UI Automation cho tên trợ năng. MenuProbe: mỗi mũi tên ≤ 16 mục, mũi tên thứ hai gỡ sạch khi gỡ cài.
 - Đo tốc độ, ghi vào todo: xoay không mã hóa lại ≤ 2 s cho 400 MB; trim chính xác 30 s ≤ 2× thời gian thực.
 
 ## Success Criteria (v0.3.1)
 
-1. Menu video ≤ 16 và menu audio ≤ 10 đúng bố cục, có icon. Cửa sổ Video/Audio tools chạy được mọi công cụ cho 1 file và cho nhiều file.
+1. Hai mũi tên của video ("Flevert", "Flevert video tools") và mũi tên của âm thanh đúng bố cục, mỗi mũi tên ≤ 16 mục, có icon; mọi mục chạy thẳng từ menu cho 1 file và cho nhiều file; gỡ cài không để lại mũi tên nào.
 2. Trim chính xác: đoạn 00:10–00:40 ra dài 30,0 ± 0,1 s. Fast mode báo rõ có thể lệch.
 3. Xoay video quay dọc: không mã hóa lại (gói video trùng hash), trình xem Windows hiện đúng chiều.
 4. Make volume even: output đạt −16 ± 1 LUFS; video không bị mã hóa lại.

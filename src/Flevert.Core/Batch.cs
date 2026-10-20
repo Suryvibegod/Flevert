@@ -82,15 +82,31 @@ public static class Batch
                     case Arrival.AlreadyDelivered:
                         await server.DisposeAsync().ConfigureAwait(false);
                         return null;
+                    case Arrival.AccountedFor:
+                        await server.DisposeAsync().ConfigureAwait(false);
+                        return BatchLeader.ForAccountedFiles(files);
                     case Arrival.Late:
                         await server.DisposeAsync().ConfigureAwait(false);
                         return await LeaveOutAsync(operationId, files, idle, self, ct).ConfigureAwait(false);
                     case Arrival.OnTime:
                         var gate = new JoinGate(self, record?.LatestClose, () => census(operationId));
                         WriteRecord(operationId, new JoinRecord(Open: true, self, record?.LatestClose, []), self, onlyOverOwn: false);
+                        // The processes the batch reports missing are named in its record, so one that arrives after all
+                        // (it was too slow to start) is not reported a second time; so is a cancel, for the same reason.
+                        JoinRecord? closed = null;
                         return BatchLeader.Start(() => CreateServer(name), server, files, idle,
                             onClosed: () => TryRotateSecret(operationId, key), gate,
-                            beforeClose: () => WriteRecord(operationId, new JoinRecord(Open: false, self, DateTime.UtcNow, gate.Members), self, onlyOverOwn: true));
+                            beforeClose: cancelled =>
+                            {
+                                closed = new JoinRecord(Open: false, self, DateTime.UtcNow, gate.Members) { Reported = gate.Absentees(), Cancelled = cancelled };
+                                WriteRecord(operationId, closed, self, onlyOverOwn: true);
+                            },
+                            onCancelled: () =>
+                            {
+                                // Only over this batch's own record: a later batch may have closed since.
+                                if (closed is not null && ReadRecord(operationId) is { Open: false } current && current.Leader == self)
+                                    WriteRecord(operationId, closed with { Cancelled = true }, self, onlyOverOwn: true);
+                            });
                     default:
                         // LeaderCollecting: its leader is replacing its pipe instance and retries for a while. Give the
                         // name back and wait, as a client, for the new instance: taking the name again and again could
@@ -128,8 +144,11 @@ public static class Batch
     private static async Task<BatchLeader?> LeaveOutAsync(
         string operationId, IReadOnlyList<string> files, TimeSpan idle, ProcessStamp self, CancellationToken ct)
     {
-        if (ReadRecord(operationId)?.Members.Contains(self) == true)
+        var record = ReadRecord(operationId);
+        if (record?.Members.Contains(self) == true)
             return null; // delivered to the last batch; only its acknowledgement was lost
+        if (record?.AccountsFor(self, DateTime.UtcNow) == true)
+            return BatchLeader.ForAccountedFiles(files);
         var leader = await LeadOrJoinAsync(operationId + LeftOutSuffix, files, idle, OneOutputJoinDeadline, ct).ConfigureAwait(false);
         leader?.MarkLeavingOut();
         return leader;
@@ -484,16 +503,19 @@ public sealed class BatchLeader : IAsyncDisposable
     private readonly Task _listener;
     private readonly Func<uint, bool> _isTrusted;
     private readonly JoinGate? _gate;
+    private readonly Action? _onCancelled;
     private bool _busy;
+    private bool _cancelled;
     private int _running;
     private int _disposed;
 
     private BatchLeader(
         Func<NamedPipeServerStream>? createServer, NamedPipeServerStream? server, IReadOnlyList<string> files, TimeSpan idle,
-        Action? onClosed, Func<uint, bool>? isTrusted = null, JoinGate? gate = null, Action? beforeClose = null)
+        Action? onClosed, Func<uint, bool>? isTrusted = null, JoinGate? gate = null, Action<bool>? beforeClose = null, Action? onCancelled = null)
     {
         _isTrusted = isTrusted ?? PipePeer.IsTrusted;
         _gate = gate;
+        _onCancelled = onCancelled;
         foreach (var file in files)
             TryEnqueue(file);
 
@@ -519,11 +541,55 @@ public sealed class BatchLeader : IAsyncDisposable
 
     /// <summary>
     /// For a joining batch, once <see cref="ReadAllAsync"/> has ended: the files of processes of this selection that
-    /// ended without handing them over. The join must not go ahead without them.
+    /// did not hand them over, ended or still starting. The join must not go ahead without them.
     /// </summary>
-    public IReadOnlyList<string> Missing => _gate?.Missing() ?? [];
+    public IReadOnlyList<MissingFile> Missing => _gate?.Missing() ?? [];
+
+    /// <summary>
+    /// The files are late for a joining batch that has told the user about them already: it reported them as not reaching
+    /// it in time, or the user cancelled it. Log them; neither join them nor notify (<see cref="Runner.LogAccountedFor"/>).
+    /// </summary>
+    public bool AccountedFor { get; private init; }
 
     internal void MarkLeavingOut() => LeavesOut = true;
+
+    internal static BatchLeader ForAccountedFiles(IReadOnlyList<string> files)
+    {
+        var leader = new BatchLeader(null, null, files, TimeSpan.Zero, null) { AccountedFor = true };
+        return leader;
+    }
+
+    /// <summary>
+    /// For a joining batch the user cancelled: stops it taking files, and marks its record cancelled, so the files of its
+    /// selection that arrive later are dropped instead of reported left out (a notification for files the user gave up
+    /// on). Does nothing for other batches.
+    /// </summary>
+    public async Task MarkCancelledAsync()
+    {
+        if (_onCancelled is null)
+            return;
+        Volatile.Write(ref _cancelled, true);
+        await _stop.CancelAsync().ConfigureAwait(false);
+        try
+        {
+            await _listener.ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // The listener's own failure was the consumer's to see; the record is best effort.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
+
+        try
+        {
+            _onCancelled();
+        }
+#pragma warning disable CA1031 // Best effort, like the record written as the batch closed.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
+    }
 
     /// <summary>
     /// How many files the consumer is still converting. A consumer that runs several files at once asks for the next one
@@ -547,11 +613,13 @@ public sealed class BatchLeader : IAsyncDisposable
 
     /// <param name="gate">Decides which senders belong to this joining batch and holds it open for those still starting.</param>
     /// <param name="beforeClose">Runs as the batch closes, before <paramref name="onClosed"/> and also when the pipe name
-    /// was lost, while no one else can have taken the name after the close.</param>
+    /// was lost, while no one else can have taken the name after the close; told whether the consumer was cancelled by
+    /// then, so the record it writes says so from the start.</param>
+    /// <param name="onCancelled">Runs once the batch has closed, when the user cancelled it (<see cref="MarkCancelledAsync"/>).</param>
     internal static BatchLeader Start(
         Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle,
-        Action onClosed, JoinGate gate, Action beforeClose) =>
-        new(createServer, server, files, idle, onClosed, gate: gate, beforeClose: beforeClose);
+        Action onClosed, JoinGate gate, Action<bool> beforeClose, Action? onCancelled = null) =>
+        new(createServer, server, files, idle, onClosed, gate: gate, beforeClose: beforeClose, onCancelled: onCancelled);
 
     internal static BatchLeader Alone(IReadOnlyList<string> files) => new(null, null, files, TimeSpan.Zero, null);
 
@@ -581,6 +649,9 @@ public sealed class BatchLeader : IAsyncDisposable
         }
         finally
         {
+            // Before the listener can close: the record it writes as it closes then says the batch was cancelled.
+            if (ct.IsCancellationRequested)
+                Volatile.Write(ref _cancelled, true);
             await _stop.CancelAsync().ConfigureAwait(false);
         }
     }
@@ -623,7 +694,7 @@ public sealed class BatchLeader : IAsyncDisposable
     private bool IsIdle => _queue.Reader.Count == 0 && !Volatile.Read(ref _busy) && Volatile.Read(ref _running) == 0;
 
     private async Task ListenAsync(
-        Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed, Action? beforeClose)
+        Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed, Action<bool>? beforeClose)
     {
         var ct = _stop.Token;
         // Restarted only when a trusted sender delivered paths, measured from the end of that exchange: connections that
@@ -714,7 +785,7 @@ public sealed class BatchLeader : IAsyncDisposable
             // a newer batch using the same key: rotating would send its followers elsewhere.
             try
             {
-                beforeClose?.Invoke();
+                beforeClose?.Invoke(Volatile.Read(ref _cancelled));
             }
 #pragma warning disable CA1031 // Closing must always finish; the record is best effort.
             catch (Exception)

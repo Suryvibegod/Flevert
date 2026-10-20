@@ -109,6 +109,42 @@ public sealed class JoinRulesTests
         Assert.Equal(record.Members, back.Members);
     }
 
+    [Fact]
+    public void A_record_keeps_the_processes_it_reported_and_its_cancel_when_read_back()
+    {
+        var record = new JoinRecord(Open: false, P(9, 0), T0.AddSeconds(40), [P(1, 0.1)]) { Reported = [P(2, 0.2), P(3, 0.3)], Cancelled = true };
+
+        var back = JoinRecord.Parse(record.Format());
+
+        Assert.NotNull(back);
+        Assert.Equal(record.Reported, back.Reported);
+        Assert.True(back.Cancelled);
+        Assert.False(JoinRecord.Parse(new JoinRecord(Open: false, P(9, 0), T0, []).Format())!.Cancelled);
+    }
+
+    [Fact]
+    public void A_process_its_batch_reported_missing_is_accounted_for_when_it_arrives_after_all()
+    {
+        // Too slow to start: the batch closed after 30 s and named its file. A second notification would say it again.
+        var slow = P(2, 0.2);
+        var record = new JoinRecord(Open: false, P(9, 0), T0.AddSeconds(40), [P(1, 0.1)]) { Reported = [slow] };
+
+        Assert.Equal(Arrival.AccountedFor, JoinRecord.Classify(slow, record, T0.AddSeconds(45), Dead));
+        // Another process created before the close is late as before.
+        Assert.Equal(Arrival.Late, JoinRecord.Classify(P(3, 0.3), record, T0.AddSeconds(45), Dead));
+    }
+
+    [Fact]
+    public void A_process_of_a_cancelled_batch_is_accounted_for_and_one_of_an_older_selection_is_late()
+    {
+        var record = new JoinRecord(Open: false, P(9, 0), T0.AddSeconds(4), [P(1, 0.1)]) { Cancelled = true };
+
+        Assert.Equal(Arrival.AccountedFor, JoinRecord.Classify(P(2, 0.5), record, T0.AddSeconds(9), Dead));
+        Assert.Equal(Arrival.Late, JoinRecord.Classify(P(3, -31), record, T0.AddSeconds(9), Dead));
+        // Created after the close: a new selection, whatever happened to the last one.
+        Assert.Equal(Arrival.OnTime, JoinRecord.Classify(P(4, 5), record, T0.AddSeconds(9), Dead));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("flevert-join 2\nclosed\nleader 1 1\n")] // a later version
@@ -203,7 +239,20 @@ public sealed class JoinRulesTests
         census.RemoveAt(1); // process 2 died
 
         Assert.False(gate.ExpectsMore());
-        Assert.Equal([@"C:\ảnh 2.jpg"], gate.Missing());
+        Assert.Equal([new MissingFile(@"C:\ảnh 2.jpg", StillRunning: false)], gate.Missing());
+    }
+
+    [Fact]
+    public void A_gate_tells_a_process_still_starting_from_one_that_ended()
+    {
+        var census = new List<Sighting> { Seen(1, 0.1, @"C:\1.jpg"), Seen(2, 0.2, @"C:\2.jpg"), Seen(3, 0.3, @"C:\3.jpg") };
+        var gate = new JoinGate(P(9, 0), previousClose: null, () => census);
+        Assert.True(gate.ExpectsMore());
+        gate.Accept(P(1, 0.1));
+        census.RemoveAt(2); // process 3 died; process 2 is still starting
+
+        Assert.Equal([new MissingFile(@"C:\2.jpg", StillRunning: true), new MissingFile(@"C:\3.jpg", StillRunning: false)], gate.Missing());
+        Assert.Equal([P(2, 0.2), P(3, 0.3)], gate.Absentees());
     }
 
     private static Sighting Seen(uint id, double seconds, string? file = null) =>

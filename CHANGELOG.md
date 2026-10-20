@@ -17,6 +17,33 @@ Video and audio: convert, compress to a size you choose, take the sound out of a
 - Video and audio keep their title, artist and recording date, never the place they were recorded. A converted video keeps its first sound track, and the notification says when there were others. The progress window shows how far the current file is, as a percentage.
 - The installer includes ffmpeg, which is free software under the GNU GPL: each release has its complete source as `ffmpeg-source-<build>.tar` beside the setup.
 
+## [0.2.1] - 2026-10-20
+
+### Added
+
+- **Compress > For sharing** for PDFs: pictures above 150 DPI become 150 DPI JPEGs, so a scan often comes out at a quarter to a half of its size, depending on the scan, and still reads on a phone. Text, drawings and pictures already at 150 DPI or less stay exactly as they were.
+- **Convert > Text** for PDFs: `report.txt` with the text of every page, a page break between pages, in UTF-8 that Notepad reads. A scan has no text to extract: Flevert does not recognise text in pictures.
+
+### Changed
+
+- **Split into pages** writes to a folder named `report (split)` instead of `report (pages)`, which is the name of the pictures from **Convert** > JPG pages and PNG pages.
+- **Compress** for PDFs is now a submenu: **Lossless** (what **Compress** did) and **For sharing**.
+- Every action that writes a PDF says when Flevert had to repair the PDF to read it, and asks you to check that the pages look right. A repaired result that does not open, or has a different number of pages than Flevert counted, fails instead. Pages lost by the repair itself cannot be detected, because Flevert counts the pages through the same repair. **Compress** > Lossless writes the repaired copy even when it is not smaller.
+- **Remove metadata**, **Protect with password** and **Remove password** copy the PDF's streams as they are: content stored uncompressed is no longer compressed in the result.
+- **Compress** > Lossless stops decompressing a PDF's streams after 10 seconds plus 1 second per MB. It then packs the PDF's objects but leaves its streams as they were, and the notification says the PDF was compressed only in part.
+- **Convert** > JPG pages and PNG pages check, before the first page, that the pictures fit on the disk, and refuse PDFs whose pages together pass 5000 megapixels (2000 A4 pages at 150 DPI are 4350).
+- **Compress**, **Remove metadata**, **Protect with password** and **Remove password** refuse PDFs of more than 2000 pages, as the other PDF actions do, and say when a signed PDF's signature is not valid in the result.
+
+### Fixed
+
+- A file of a **Merge PDFs** or **Combine into PDF** selection that started too slowly is reported as "did not reach Flevert in time", no longer as if its process had ended, and brings no second notification when it arrives at last. Files of a join you cancelled no longer bring a "left out" notification.
+- A merge that would pass 2000 pages because a file changed while it ran says "Together these PDFs have more than 2000 pages".
+
+### Security
+
+- A tiny PDF that inflates to gigabytes no longer keeps **Remove metadata**, **Protect** or **Remove password** busy for seconds.
+- Released files no longer contain the folder names of the machine that built them.
+
 ## [0.2.0] - 2026-10-20
 
 PDFs: turn photos into one, and convert, merge, split, rotate, compress or password-protect PDF files.
@@ -80,5 +107,6 @@ The first release: pictures, and an installer.
 - A specially crafted TIFF file can make the bundled ImageMagick 7.1.2-33 overflow its stack ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity): Flevert then closes, and the rest of that batch is not converted. No code runs. It will be fixed by updating once a Magick.NET release includes ImageMagick 7.1.2-34.
 - Windows Smart App Control may block this unsigned release (see the README).
 
-[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.0

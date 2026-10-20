@@ -104,7 +104,8 @@ public sealed class Qpdf
 
     /// <summary>
     /// Runs <c>qpdf &lt;options&gt; &lt;input&gt; &lt;output&gt;</c> and returns once qpdf has exited. qpdf's warnings
-    /// (exit code 3) count as success: qpdf repaired something in the input and wrote a valid output.
+    /// (exit code 3) count as success: qpdf repaired something in the input and wrote a valid output. Like every method
+    /// here that writes a PDF, it returns whether qpdf had to: the operation says so (<see cref="PdfRepair"/>).
     /// </summary>
     /// <remarks>
     /// The two paths reach qpdf through standard input (<c>@-</c>, one argument per line), not its command line: qpdf's
@@ -121,11 +122,13 @@ public sealed class Qpdf
     /// </exception>
     /// <exception cref="IOException">qpdf could not write <paramref name="outputPath"/>.</exception>
     /// <exception cref="FileNotFoundException">qpdf.exe is missing.</exception>
-    public async Task TransformAsync(string inputPath, string outputPath, IEnumerable<string> options, CancellationToken ct)
+    /// <param name="timeout">How long qpdf may take, instead of <see cref="TimeoutFor"/>; past it, <see cref="PdfError.TooSlow"/>.</param>
+    public async Task<bool> TransformAsync(string inputPath, string outputPath, IEnumerable<string> options, CancellationToken ct, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var run = await RunCheckedAsync([.. options], [inputPath], [inputPath, outputPath], outputPath, ct).ConfigureAwait(false);
+        var run = await RunCheckedAsync([.. options], [inputPath], [inputPath, outputPath], outputPath, ct, timeout: timeout).ConfigureAwait(false);
         RequireOutput(run, outputPath);
+        return Repaired(run);
     }
 
     /// <summary>
@@ -148,13 +151,14 @@ public sealed class Qpdf
     /// or qpdf failed on an input without naming it.
     /// </exception>
     /// <exception cref="IOException">qpdf could not write <paramref name="outputPath"/>.</exception>
-    public async Task MergeAsync(IReadOnlyList<string> inputPaths, string outputPath, CancellationToken ct)
+    public async Task<bool> MergeAsync(IReadOnlyList<string> inputPaths, string outputPath, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(inputPaths);
         ArgumentOutOfRangeException.ThrowIfLessThan(inputPaths.Count, 2, nameof(inputPaths));
         var run = await RunCheckedAsync([KeepStreamsAsTheyAre, "--empty", "--pages"], inputPaths, [.. inputPaths, EndOfPages, outputPath], outputPath, ct)
             .ConfigureAwait(false);
         RequireOutput(run, outputPath);
+        return Repaired(run);
     }
 
     /// <summary>
@@ -188,8 +192,8 @@ public sealed class Qpdf
         $"This PDF has more than {PdfDocument.MaxPages} pages; Flevert works with at most {PdfDocument.MaxPages}."));
 
     /// <summary>
-    /// The option every qpdf operation that only moves pages around passes (rotate, merge, split): streams are copied as
-    /// they are, never decoded nor compressed. By default qpdf decodes a stream whose filters it would not keep as they are
+    /// The option every qpdf operation passes but Compress (rotate, merge, split, remove metadata, protect, remove password):
+    /// streams are copied as they are, never decoded nor compressed (encrypting or decrypting them still happens). By default qpdf decodes a stream whose filters it would not keep as they are
     /// (two Flate filters, say) and compresses it again, so a 10 KB stream that inflates to 4 GB took 15 to 20 s to rotate
     /// (T18); <c>--decode-level=none</c> alone still took 16 s, since compressing streams (<c>--compress-streams=y</c>,
     /// the default) decodes such a stream to compress it once. <c>preserve</c> turns off both, and the bomb rotates in
@@ -209,13 +213,15 @@ public sealed class Qpdf
     /// would write the pages into another folder.
     /// </exception>
     /// <exception cref="IOException">qpdf could not write a page.</exception>
-    public async Task SplitPagesAsync(string inputPath, string outputFolder, CancellationToken ct)
+    public async Task<bool> SplitPagesAsync(string inputPath, string outputFolder, CancellationToken ct)
     {
         RequireArgumentLine(outputFolder, nameof(outputFolder));
         if (ToExtendedPath(outputFolder).Contains(PageNumber, StringComparison.Ordinal))
             throw new PdfException(PdfError.UnsupportedFileName, PageNumberInPathMessage);
         var pattern = Path.Join(outputFolder, PageNumber + ".pdf");
-        await RunCheckedAsync([KeepStreamsAsTheyAre, "--split-pages"], [inputPath], [inputPath, pattern], outputFolder, ct).ConfigureAwait(false);
+        var run = await RunCheckedAsync([KeepStreamsAsTheyAre, "--split-pages"], [inputPath], [inputPath, pattern], outputFolder, ct)
+            .ConfigureAwait(false);
+        return Repaired(run);
     }
 
     /// <summary>
@@ -227,12 +233,34 @@ public sealed class Qpdf
     /// <param name="jsonPath">Fully qualified; in a folder nobody else can change, since qpdf reads it as it is.</param>
     /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
     /// <exception cref="IOException">qpdf could not write <paramref name="outputPath"/>.</exception>
-    public async Task UpdateFromJsonAsync(string inputPath, string jsonPath, string outputPath, CancellationToken ct)
+    public async Task<bool> UpdateFromJsonAsync(string inputPath, string jsonPath, string outputPath, CancellationToken ct)
     {
         RequireArgumentLine(jsonPath, nameof(jsonPath));
-        var run = await RunCheckedAsync([], [inputPath], [UpdateFromJson + jsonPath, inputPath, outputPath], outputPath, ct)
+        var run = await RunCheckedAsync([KeepStreamsAsTheyAre], [inputPath], [UpdateFromJson + jsonPath, inputPath, outputPath], outputPath, ct)
             .ConfigureAwait(false);
         RequireOutput(run, outputPath);
+        return Repaired(run);
+    }
+
+    /// <summary>
+    /// Runs <c>qpdf --json-output=2 --json-key=pages --json-key=qpdf --json-stream-data=file
+    /// --json-stream-prefix=&lt;prefix&gt; --decode-level=none</c>: the input described in <paramref name="jsonPath"/>,
+    /// its pages first (each page's object and the images it draws from its resources), then its objects, and the data
+    /// of every stream, as stored (no filter undone), in a file of its own, <c>&lt;prefix&gt;-&lt;object number&gt;</c>,
+    /// which the description names. The prefix goes through <c>@-</c> like the paths.
+    /// </summary>
+    /// <param name="streamPrefix">Fully qualified, in a folder nobody else can change: qpdf creates the files by name.</param>
+    /// <param name="jsonPath">Fully qualified, in the folder of <paramref name="streamPrefix"/>.</param>
+    /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
+    /// <exception cref="IOException">qpdf could not write the description or a stream's file (a full disk, say).</exception>
+    public async Task<bool> DescribeWithStreamDataAsync(string inputPath, string jsonPath, string streamPrefix, CancellationToken ct)
+    {
+        RequireArgumentLine(streamPrefix, nameof(streamPrefix));
+        // qpdf's error names the file it could not write: anything in the folder of both is an output.
+        var run = await RunCheckedAsync(["--json-output=2", "--json-key=pages", "--json-key=qpdf", "--json-stream-data=file", "--decode-level=none"], [inputPath],
+            [JsonStreamPrefix + streamPrefix, inputPath, jsonPath], Path.GetDirectoryName(streamPrefix), ct).ConfigureAwait(false);
+        RequireOutput(run, jsonPath);
+        return Repaired(run);
     }
 
     /// <summary>Whether the PDF is encrypted, and whether it opens without a password (<c>qpdf --requires-password</c>).</summary>
@@ -254,6 +282,8 @@ public sealed class Qpdf
             ExitPasswordRequired => PdfEncryption.NeedsPassword,
             ExitWarnings => PdfEncryption.OpensWithoutPassword,
             ExitError when !run.StandardError.TrimEnd().Split('\n')[^1].StartsWith("qpdf: ", StringComparison.Ordinal) => PdfEncryption.None,
+            ExitError when UnsupportedEncryption(run) => throw new PdfException(PdfError.UnsupportedEncryption,
+                PdfDocument.UnsupportedEncryptionMessage, new QpdfException(run.ExitCode, Detail(run))),
             _ => throw new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage, new QpdfException(run.ExitCode, Detail(run))),
         };
     }
@@ -265,14 +295,16 @@ public sealed class Qpdf
     /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
     /// <exception cref="ArgumentException">The password holds a line break, a null character or a lone surrogate
     /// (<see cref="PasswordRules"/> keeps them out).</exception>
-    public async Task EncryptAsync(string inputPath, string outputPath, PdfPassword password, CancellationToken ct)
+    public async Task<bool> EncryptAsync(string inputPath, string outputPath, PdfPassword password, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(password);
         // The passwords come before --bits: qpdf 12.4.2 reads --user-password after it as an unrecognized argument, and
         // repeats it in its error. "--" ends the encryption options.
         var secret = new Secret(password, EncryptOptionsBeforePasswords, ["--user-password=", "--owner-password="], ["--bits=256", EndOfPages]);
-        var run = await RunCheckedAsync(["--encrypt"], [inputPath], [inputPath, outputPath], outputPath, ct, secret).ConfigureAwait(false);
+        var run = await RunCheckedAsync([KeepStreamsAsTheyAre, "--encrypt"], [inputPath], [inputPath, outputPath], outputPath, ct, secret)
+            .ConfigureAwait(false);
         RequireOutput(run, outputPath);
+        return Repaired(run);
     }
 
     /// <summary>
@@ -282,29 +314,33 @@ public sealed class Qpdf
     /// <exception cref="PdfException"><see cref="PdfError.WrongPassword"/> when the password does not open it; otherwise as
     /// for <see cref="TransformAsync"/>.</exception>
     /// <exception cref="ArgumentException">As for <see cref="EncryptAsync"/>.</exception>
-    public async Task DecryptAsync(string inputPath, string outputPath, PdfPassword password, CancellationToken ct)
+    public async Task<bool> DecryptAsync(string inputPath, string outputPath, PdfPassword password, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(password);
         var secret = new Secret(password, [], ["--password="], []);
-        var run = await RunCheckedAsync(["--decrypt"], [inputPath], [inputPath, outputPath], outputPath, ct, secret, opening: password)
+        var run = await RunCheckedAsync([KeepStreamsAsTheyAre, "--decrypt"], [inputPath], [inputPath, outputPath], outputPath, ct, secret, opening: password)
             .ConfigureAwait(false);
         RequireOutput(run, outputPath);
+        return Repaired(run);
     }
 
-    // An option whose value is a path: given through @- like the paths, as "<option><\\?\ path>".
+    // Options whose value is a path: given through @- like the paths, as "<option><\\?\ path>".
     private const string UpdateFromJson = "--update-from-json=";
+    private const string JsonStreamPrefix = "--json-stream-prefix=";
 
     // The path in a line of @-: the line itself, or the value of a path option. A path is fully qualified, so it never
     // starts like the option.
     private static string PathIn(string line) =>
-        line.StartsWith(UpdateFromJson, StringComparison.Ordinal) ? line[UpdateFromJson.Length..] : line;
+        line.StartsWith(UpdateFromJson, StringComparison.Ordinal) ? line[UpdateFromJson.Length..]
+        : line.StartsWith(JsonStreamPrefix, StringComparison.Ordinal) ? line[JsonStreamPrefix.Length..]
+        : line;
 
     /// <summary>
     /// Lines of <c>@-</c> that carry the password, before the paths: <see cref="Before"/>, then each of
     /// <see cref="Prefixes"/> followed by the password (<c>--password=…</c>), then <see cref="After"/>. The password goes
     /// from its characters straight into the bytes qpdf reads, and those bytes are zeroed once qpdf has exited.
     /// </summary>
-    private sealed record Secret(PdfPassword Password, string[] Before, string[] Prefixes, string[] After);
+    internal sealed record Secret(PdfPassword Password, string[] Before, string[] Prefixes, string[] After);
 
     /// <summary>What stands in for qpdf's message when it holds the password (qpdf repeats an argument it does not
     /// recognize), so the message never reaches an exception, the log or a notification.</summary>
@@ -341,6 +377,10 @@ public sealed class Qpdf
     // Ends the list of files after --pages. Not a path: it goes through @- as it is.
     private const string EndOfPages = "--";
 
+    // qpdf's exit code 3: it wrote the output, and warned about the input, which it read by repairing what it could (a
+    // damaged cross-reference table, say).
+    private static bool Repaired(ExternalToolResult run) => run.ExitCode == ExitWarnings;
+
     private static void RequireOutput(ExternalToolResult run, string outputPath)
     {
         if (!File.Exists(outputPath))
@@ -359,7 +399,7 @@ public sealed class Qpdf
     /// a password that does not open the input is <see cref="PdfError.WrongPassword"/>.</param>
     private async Task<ExternalToolResult> RunCheckedAsync(
         string[] options, IReadOnlyList<string> inputs, string[] lines, string? output, CancellationToken ct,
-        Secret? secret = null, PdfPassword? opening = null, Action<string>? outputLine = null)
+        Secret? secret = null, PdfPassword? opening = null, Action<string>? outputLine = null, TimeSpan? timeout = null)
     {
         // The options stay on the command line, where qpdf's C runtime would expand them as wildcards.
         if (options.FirstOrDefault(option => option.AsSpan().ContainsAny('*', '?')) is { } wild)
@@ -388,7 +428,7 @@ public sealed class Qpdf
         }
 
         var maxMemory = MaxMemoryBytes ?? MaxMemoryFor(total);
-        var run = await RunWithLinesAsync(options, lines, Timeout ?? TimeoutFor(total), maxMemory, ct, secret, outputLine).ConfigureAwait(false);
+        var run = await RunWithLinesAsync(options, lines, Timeout ?? timeout ?? TimeoutFor(total), maxMemory, ct, secret, outputLine).ConfigureAwait(false);
         if (run.ExitCode is 0 or ExitWarnings)
             return run;
 
@@ -402,7 +442,18 @@ public sealed class Qpdf
         // If it names none, each input is asked about a password.
         foreach (var input in named is null ? inputs : [named])
         {
-            if (await RequiresPasswordAsync(input, maxMemory, ct, opening).ConfigureAwait(false))
+            bool needsPassword;
+            try
+            {
+                needsPassword = await RequiresPasswordAsync(input, maxMemory, ct, opening).ConfigureAwait(false);
+            }
+            catch (PdfException e)
+            {
+                // Too slow, or too much memory, for that input alone: among several, it is the one to name.
+                throw ForInput(inputs, input, e);
+            }
+
+            if (needsPassword)
             {
                 throw ForInput(inputs, input, opening is null
                     ? new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage)
@@ -424,6 +475,9 @@ public sealed class Qpdf
 
     /// <summary>A timeout instead of <see cref="TimeoutFor"/>, for tests.</summary>
     internal TimeSpan? Timeout { get; init; }
+
+    /// <summary>A timeout instead of the minute the password check after a failure gets, for tests.</summary>
+    internal TimeSpan? PasswordProbeTimeout { get; init; }
 
     internal const string ToolFailedMessage =
         "Flevert's PDF tool stopped on this PDF without finishing: the PDF may be damaged, or made to crash PDF tools.";
@@ -459,11 +513,12 @@ public sealed class Qpdf
     private async Task<bool> RequiresPasswordAsync(string inputPath, ulong maxMemory, CancellationToken ct, PdfPassword? password = null)
     {
         var secret = password is null ? null : new Secret(password, [], ["--password="], []);
-        var probe = await RunWithLinesAsync(["--requires-password"], [inputPath], ProbeTimeout, maxMemory, ct, secret).ConfigureAwait(false);
+        var probe = await RunWithLinesAsync(["--requires-password"], [inputPath], PasswordProbeTimeout ?? ProbeTimeout, maxMemory, ct, secret)
+            .ConfigureAwait(false);
         return probe.ExitCode == ExitPasswordRequired;
     }
 
-    private async Task<ExternalToolResult> RunWithLinesAsync(
+    internal async Task<ExternalToolResult> RunWithLinesAsync(
         string[] options, string[] paths, TimeSpan timeout, ulong maxMemory, CancellationToken ct, Secret? secret = null,
         Action<string>? outputLine = null)
     {

@@ -18,6 +18,8 @@ namespace Flevert.Pdf.Tests;
 public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
 {
     private const string Ok = "ok";
+    private const string Skipped = "skipped";
+    private const string Password = "Hardening test 42";
     private static readonly TimeSpan Limit = TimeSpan.FromSeconds(10);
 
     private readonly TempDir _dir = new();
@@ -32,40 +34,42 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         var memory = nameof(PdfError.NeedsTooMuchMemory);
         var encryption = nameof(PdfError.UnsupportedEncryption);
         var damaged = nameof(PdfError.DamagedPage);
-        // fixture: rotate, split, merge, to-png and to-jpg (the worker)
-        (string Fixture, string Rotate, string Split, string Merge, string Render)[] table =
+        // Compress: a small PDF gets no smaller, and is skipped unless qpdf repaired it (cycle-self-reference, and the two
+        // without a trailer, which it writes without object streams: PdfCompress).
+        // fixture: rotate, split, merge, to-png and to-jpg (the worker), compress, remove metadata, protect
+        (string Fixture, string Rotate, string Split, string Merge, string Render, string Compress, string Strip, string Protect)[] table =
         [
-            ("bomb-content", Ok, Ok, Ok, memory),
-            ("bomb-double-flate", Ok, Ok, Ok, Ok),
-            ("bomb-double-flate-content", Ok, Ok, Ok, memory),
-            ("bomb-image", Ok, Ok, Ok, Ok),
-            ("bomb-object-stream", memory, memory, memory, memory),
-            ("cycle-kids-self", notPdf, notPdf, notPdf, damaged),
-            ("cycle-kids-loop", notPdf, notPdf, notPdf, Ok),
-            ("cycle-parent", Ok, Ok, Ok, Ok),
-            ("cycle-self-reference", Ok, Ok, Ok, Ok),
-            ("pages-100000", tooMany, tooMany, tooMany, tooMany),
-            ("pages-2001", tooMany, tooMany, tooMany, tooMany),
-            ("count-lie-low", tooMany, tooMany, tooMany, Ok),
-            ("count-lie-high", Ok, Ok, Ok, Ok),
-            ("page-giant", Ok, Ok, Ok, Ok),
-            ("page-zero", Ok, Ok, Ok, Ok),
-            ("page-inverted", Ok, Ok, Ok, Ok),
-            ("xref-wrong-offsets", Ok, Ok, Ok, Ok),
-            ("xref-missing", Ok, Ok, Ok, notPdf),
-            ("truncated", Ok, Ok, Ok, notPdf),
-            ("startxref-past-end", Ok, Ok, Ok, Ok),
-            ("not-pdf-png", notPdf, notPdf, notPdf, notPdf),
-            ("not-pdf-zip", notPdf, notPdf, notPdf, notPdf),
-            ("not-pdf-empty", notPdf, notPdf, notPdf, notPdf),
-            ("header-only", notPdf, notPdf, notPdf, notPdf),
-            ("nested-arrays", Ok, Ok, Ok, Ok),
-            ("nested-dictionaries", Ok, Ok, Ok, Ok),
-            ("deep-page-tree", notPdf, notPdf, notPdf, damaged),
-            ("many-objects", Ok, Ok, Ok, Ok),
-            ("launch-action", Ok, Ok, Ok, Ok),
-            ("encrypt-unknown-handler", encryption, encryption, encryption, encryption),
-            ("signed", Ok, Ok, Ok, Ok),
+            ("bomb-content", Ok, Ok, Ok, memory, Skipped, Ok, Ok),
+            ("bomb-double-flate", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("bomb-double-flate-content", Ok, Ok, Ok, memory, Skipped, Ok, Ok),
+            ("bomb-image", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("bomb-object-stream", memory, memory, memory, memory, memory, memory, memory),
+            ("cycle-kids-self", notPdf, notPdf, notPdf, damaged, notPdf, notPdf, notPdf),
+            ("cycle-kids-loop", notPdf, notPdf, notPdf, Ok, notPdf, notPdf, notPdf),
+            ("cycle-parent", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("cycle-self-reference", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("pages-100000", tooMany, tooMany, tooMany, tooMany, tooMany, tooMany, tooMany),
+            ("pages-2001", tooMany, tooMany, tooMany, tooMany, tooMany, tooMany, tooMany),
+            ("count-lie-low", tooMany, tooMany, tooMany, Ok, tooMany, tooMany, tooMany),
+            ("count-lie-high", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("page-giant", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("page-zero", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("page-inverted", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("xref-wrong-offsets", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("xref-missing", Ok, Ok, Ok, notPdf, Ok, Ok, Ok),
+            ("truncated", Ok, Ok, Ok, notPdf, Ok, Ok, Ok),
+            ("startxref-past-end", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("not-pdf-png", notPdf, notPdf, notPdf, notPdf, notPdf, notPdf, notPdf),
+            ("not-pdf-zip", notPdf, notPdf, notPdf, notPdf, notPdf, notPdf, notPdf),
+            ("not-pdf-empty", notPdf, notPdf, notPdf, notPdf, notPdf, notPdf, notPdf),
+            ("header-only", notPdf, notPdf, notPdf, notPdf, notPdf, notPdf, notPdf),
+            ("nested-arrays", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("nested-dictionaries", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("deep-page-tree", notPdf, notPdf, notPdf, damaged, notPdf, notPdf, notPdf),
+            ("many-objects", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("launch-action", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("encrypt-unknown-handler", encryption, encryption, encryption, encryption, encryption, encryption, encryption),
+            ("signed", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
         ];
         var cases = new TheoryData<string, string, string>();
         foreach (var row in table)
@@ -75,10 +79,27 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
             cases.Add(row.Fixture, "pdf.merge", row.Merge);
             cases.Add(row.Fixture, "pdf.to-png", row.Render);
             cases.Add(row.Fixture, "pdf.to-jpg", row.Render);
+            cases.Add(row.Fixture, "pdf.compress", row.Compress);
+            cases.Add(row.Fixture, "pdf.strip-metadata", row.Strip);
+            cases.Add(row.Fixture, "pdf.protect", row.Protect);
+            // pdfium reads the text as it reads a page to draw it; none of these PDFs has any text.
+            cases.Add(row.Fixture, "pdf.extract-text", row.Render == Ok ? Skipped : row.Render);
+            // qpdf counts the pages first, then pdfium reads the images; none of these has one above 150 DPI.
+            cases.Add(row.Fixture, "pdf.compress-sharing", row.Rotate != Ok ? row.Rotate : row.Render == Ok ? Skipped : row.Render);
         }
 
         return cases;
     }
+
+    // Remove metadata reads every object of the PDF twice, as qpdf's JSON and back (MetadataRemoval): real work that grows
+    // with the file, like qpdf's own timeout. The 16 MB of many-objects (300 000 objects) took 13 s on CI, 5 s here.
+    // Compress may decode for its whole budget before it packs the objects without decoding (PdfCompress).
+    private static TimeSpan LimitFor(string operation, string input) => operation switch
+    {
+        "pdf.strip-metadata" => Limit + TimeSpan.FromSeconds(new FileInfo(input).Length / (1024 * 1024)),
+        "pdf.compress" => Limit + PdfCompress.FullRunTimeoutFor(new FileInfo(input).Length),
+        _ => Limit,
+    };
 
     [Fact]
     public void Every_fixture_is_in_the_table_once()
@@ -100,7 +121,7 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         var (outcome, result) = await RunAsync(operation, input, partner);
 
         output.WriteLine($"{fixture} {operation}: {outcome} in {timer.Elapsed.TotalSeconds:0.0} s ({result})");
-        Assert.True(timer.Elapsed < Limit, $"{fixture} {operation} took {timer.Elapsed}");
+        Assert.True(timer.Elapsed < LimitFor(operation, input), $"{fixture} {operation} took {timer.Elapsed}");
         Assert.Equal(expected, outcome);
         var expectedEntries = expected == Ok ? [.. before, Path.GetFileName(result)!] : before;
         Assert.Equal(expectedEntries.Order(StringComparer.Ordinal), Entries());
@@ -189,7 +210,7 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         Assert.Equal(["a photo.jpg", "empty.jpg"], Entries());
     }
 
-    public static TheoryData<string> Modifying() => ["pdf.rotate-right", "pdf.split", "pdf.merge"];
+    public static TheoryData<string> Modifying() => ["pdf.rotate-right", "pdf.split", "pdf.merge", "pdf.strip-metadata", "pdf.protect"];
 
     [Theory]
     [MemberData(nameof(Modifying))]
@@ -218,6 +239,19 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         Assert.Null(result.Note);
     }
 
+    [Theory]
+    [MemberData(nameof(Modifying))]
+    public async Task A_pdf_qpdf_had_to_repair_is_written_with_a_note_to_check_its_pages(string operation)
+    {
+        // No cross-reference table: qpdf finds the objects by scanning the file, and says so (exit code 3).
+        var damaged = MaliciousPdf.Write("xref-missing", _dir.Combine("hỏng.pdf"));
+
+        var result = await RunThroughRunnerAsync(operation, operation == "pdf.merge" ? [CopyGood(), damaged] : [damaged]);
+
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal("Flevert had to repair this PDF while reading it: check that the pages look right.", result.Note);
+    }
+
     [Fact]
     public async Task Pages_rendered_from_a_signed_pdf_get_no_note()
     {
@@ -239,6 +273,8 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
             "pdf.rotate-right" => await runner.RunAsync(new PdfRotate(90, Qpdf.NextToApp), files, null, CancellationToken.None),
             "pdf.split" => await runner.RunAsync(new PdfSplit(Qpdf.NextToApp), files, null, CancellationToken.None),
             "pdf.merge" => await runner.RunAsync(new PdfMerge(Qpdf.NextToApp), files, null, CancellationToken.None),
+            "pdf.strip-metadata" => await runner.RunAsync(new PdfStripMetadata(Qpdf.NextToApp), files, null, CancellationToken.None),
+            "pdf.protect" => await runner.RunAsync(new PdfProtect(Qpdf.NextToApp, new FakePrompt(Password)), files, null, CancellationToken.None),
             "pdf.to-png" => await runner.RunAsync(new PdfToImages(PdfPageImageFormat.Png, PdfToImages.Dpi, TestPdf.Worker), files, null, CancellationToken.None),
             _ => throw new ArgumentOutOfRangeException(nameof(operation)),
         };
@@ -257,9 +293,18 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
                 "pdf.merge" => await new PdfMerge(Qpdf.NextToApp).RunAsync([input, partner!], null, CancellationToken.None),
                 "pdf.to-png" => await new PdfToImages(PdfPageImageFormat.Png, PdfToImages.Dpi, TestPdf.Worker).RunAsync(input, CancellationToken.None),
                 "pdf.to-jpg" => await new PdfToImages(PdfPageImageFormat.Jpeg, PdfToImages.Dpi, TestPdf.Worker).RunAsync(input, CancellationToken.None),
+                "pdf.compress" => await new PdfCompress(Qpdf.NextToApp).RunAsync(input, CancellationToken.None),
+                "pdf.strip-metadata" => await new PdfStripMetadata(Qpdf.NextToApp).RunAsync(input, CancellationToken.None),
+                "pdf.protect" => await ProtectAsync(input),
+                "pdf.extract-text" => await new PdfExtractText(TestPdf.Worker).RunAsync(input, CancellationToken.None),
+                "pdf.compress-sharing" => await new PdfCompressSharing(Qpdf.NextToApp, TestPdf.Worker).RunAsync(input, CancellationToken.None),
                 _ => throw new ArgumentOutOfRangeException(nameof(operation)),
             };
             return (Ok, result);
+        }
+        catch (OperationSkippedException e)
+        {
+            return (Skipped, e.Message);
         }
         catch (PdfException e)
         {
@@ -271,6 +316,12 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
             Assert.Equal(inner.Message, e.Message);
             return (inner.Error.ToString(), e.Message);
         }
+    }
+
+    private static async Task<string> ProtectAsync(string input)
+    {
+        using var protect = new PdfProtect(Qpdf.NextToApp, new FakePrompt(Password));
+        return await protect.RunAsync(input, CancellationToken.None);
     }
 
     private string CopyGood()

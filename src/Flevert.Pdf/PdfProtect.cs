@@ -47,11 +47,20 @@ public sealed class PdfProtect : IPasswordOperation
                 throw new PdfException(PdfError.UnsupportedEncryption, AlreadyEncryptedMessage);
         }
 
+        // Like every operation that writes a PDF (T18), also before asking: at most 2 000 pages.
+        await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
+        var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);
+
         using var lease = await _passwords.GetAsync(inputPath, PasswordPurpose.Protect, ct).ConfigureAwait(false)
             ?? throw new OperationSkippedException(PasswordOperation.NoPasswordMessage);
         var desired = PasswordOperation.OutputBeside(inputPath, " (protected)");
-        return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _qpdf.EncryptAsync(inputPath, temp, lease.Password, token), ct)
+        // The output opens only with the password, so its pages are not counted again: the note alone.
+        var output = await OutputPath.WriteAtomicallyAsync(desired,
+            async (temp, token) => PdfRepair.Note(await _qpdf.EncryptAsync(inputPath, temp, lease.Password, token).ConfigureAwait(false)), ct)
             .ConfigureAwait(false);
+        if (signed)
+            OutputNote.Add(PdfSignature.NotValidNote);
+        return output;
     }
 
     public void Dispose() => _passwords.Dispose();
@@ -96,11 +105,22 @@ public sealed class PdfUnlock : IPasswordOperation
                 throw new OperationSkippedException("This PDF opens without a password.");
         }
 
+        // Names are not encrypted, so a signature's /ByteRange shows in the encrypted file.
+        var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);
         using var lease = await _passwords.GetAsync(inputPath, PasswordPurpose.Unlock, ct).ConfigureAwait(false)
             ?? throw new OperationSkippedException(PasswordOperation.NoPasswordMessage);
         var desired = PasswordOperation.OutputBeside(inputPath, " (unlocked)");
-        return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _qpdf.DecryptAsync(inputPath, temp, lease.Password, token), ct)
-            .ConfigureAwait(false);
+        var output = await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
+        {
+            var repaired = await _qpdf.DecryptAsync(inputPath, temp, lease.Password, token).ConfigureAwait(false);
+            // The pages can only be counted once the PDF opens, so it is the output that is counted: past 2 000 pages it
+            // is not kept (T18). There is no count of the input to hold it to: the note alone.
+            await _qpdf.CountPagesAsync(temp, token).ConfigureAwait(false);
+            PdfRepair.Note(repaired);
+        }, ct).ConfigureAwait(false);
+        if (signed)
+            OutputNote.Add(PdfSignature.NotValidNote);
+        return output;
     }
 
     public void Dispose() => _passwords.Dispose();

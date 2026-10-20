@@ -17,6 +17,8 @@ concurrency:
 env:
   # Passed through the environment, never pasted into scripts.
   TAG: ${{ github.ref_name }}
+  # MSBuild reads it as a property: the binaries name /_/ for the checkout, not the runner's folders (checked below).
+  ContinuousIntegrationBuild: true
 
 jobs:
   build:
@@ -98,6 +100,9 @@ jobs:
         shell: pwsh
         # The compiler just installed, not whatever else the runner image has on PATH.
         run: ./scripts/build-installer.ps1 -Iscc "$env:RUNNER_TEMP\inno\ISCC.exe"
+      - name: No build machine paths in what ships
+        shell: pwsh
+        run: ./scripts/test-build-paths.ps1 -Folder artifacts/publish
       - name: Write checksums
         shell: pwsh
         run: |

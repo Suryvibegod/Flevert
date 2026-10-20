@@ -38,13 +38,20 @@ public sealed class PdfStripMetadata : IOperation
     /// <summary>Where the operation's private folders go: the user's temporary folder, or a test's.</summary>
     internal string ScratchRoot { get; init; } = Path.GetTempPath();
 
-    public Task<string> RunAsync(string inputPath, CancellationToken ct)
+    public async Task<string> RunAsync(string inputPath, CancellationToken ct)
     {
+        // At most 2 000 pages, like every PDF operation (T18), and a note when a signature no longer matches.
+        var pages = await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
+        var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);
+
         var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + " (no metadata).pdf");
-        return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => WriteAsync(inputPath, temp, token), ct);
+        var output = await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => WriteAsync(inputPath, temp, pages, token), ct).ConfigureAwait(false);
+        if (signed)
+            OutputNote.Add(PdfSignature.NotValidNote);
+        return output;
     }
 
-    private async Task WriteAsync(string inputPath, string outputPath, CancellationToken ct)
+    private async Task WriteAsync(string inputPath, string outputPath, int pages, CancellationToken ct)
     {
         var scratch = Path.Combine(Path.GetFullPath(ScratchRoot), $"flevert-{Guid.NewGuid():N}");
         PrivateFolder.Create(scratch);
@@ -62,7 +69,8 @@ public sealed class PdfStripMetadata : IOperation
                 throw new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage, e);
             }
 
-            await _qpdf.UpdateFromJsonAsync(inputPath, update, outputPath, ct).ConfigureAwait(false);
+            var repaired = await _qpdf.UpdateFromJsonAsync(inputPath, update, outputPath, ct).ConfigureAwait(false);
+            await PdfRepair.CheckAsync(_qpdf, repaired, pages, outputPath, ct).ConfigureAwait(false);
         }
         finally
         {

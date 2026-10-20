@@ -88,6 +88,92 @@ internal static unsafe partial class PdfiumNative
     [LibraryImport(Library)]
     public static partial void FPDF_RenderPageBitmap(nint bitmap, nint page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
 
+    // Reading text: fpdf_text.h.
+
+    [LibraryImport(Library)]
+    public static partial nint FPDFText_LoadPage(nint page);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFText_ClosePage(nint textPage);
+
+    /// <summary>The number of characters on the page, or -1 on an error.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFText_CountChars(nint textPage);
+
+    /// <summary>Writes <paramref name="count"/> UTF-16 code units and a terminating NUL into <paramref name="result"/>,
+    /// which holds at least <paramref name="count"/> + 1; returns how many it wrote, the NUL included.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFText_GetText(nint textPage, int startIndex, int count, ushort* result);
+
+    // Reading a page's images: fpdf_edit.h.
+
+    public const int PageObjectImage = 3;
+    public const int PageObjectForm = 5;
+
+    public const int BitmapGray = 1;
+    public const int BitmapBgrx = 3;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ImageMetadata
+    {
+        public uint Width;
+        public uint Height;
+        public float HorizontalDpi;
+        public float VerticalDpi;
+        public uint BitsPerPixel;
+        public int Colorspace;
+        public int MarkedContentId;
+    }
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_CountObjects(nint page);
+
+    [LibraryImport(Library)]
+    public static partial nint FPDFPage_GetObject(nint page, int index);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPageObj_GetType(nint pageObject);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFFormObj_CountObjects(nint formObject);
+
+    [LibraryImport(Library)]
+    public static partial nint FPDFFormObj_GetObject(nint formObject, uint index);
+
+    /// <summary>The DPI is the image's pixels over the size its matrix draws it at; <paramref name="page"/> gives the bit depth and colorspace.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFImageObj_GetImageMetadata(nint imageObject, nint page, ImageMetadata* metadata);
+
+    /// <summary>The image's stream data as stored, filters not applied; returns its length (unsigned long: 32 bits on Windows).</summary>
+    [LibraryImport(Library)]
+    public static partial uint FPDFImageObj_GetImageDataRaw(nint imageObject, void* buffer, uint bufferLength);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFImageObj_GetImageFilterCount(nint imageObject);
+
+    /// <summary>The name of filter <paramref name="index"/>, NUL-terminated ASCII; returns its length with the NUL.</summary>
+    [LibraryImport(Library)]
+    public static partial uint FPDFImageObj_GetImageFilter(nint imageObject, int index, void* buffer, uint bufferLength);
+
+    /// <summary>The image's pixels, decoded and converted to gray or BGR by pdfium, without its mask or matrix; the caller destroys it.</summary>
+    [LibraryImport(Library)]
+    public static partial nint FPDFImageObj_GetBitmap(nint imageObject);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFBitmap_GetWidth(nint bitmap);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFBitmap_GetHeight(nint bitmap);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFBitmap_GetStride(nint bitmap);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFBitmap_GetFormat(nint bitmap);
+
+    [LibraryImport(Library)]
+    public static partial void* FPDFBitmap_GetBuffer(nint bitmap);
+
     // Creating documents: fpdf_edit.h, fpdf_save.h.
 
     public const int BitmapBgr = 2;

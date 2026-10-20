@@ -71,15 +71,33 @@ internal sealed class JoinGate(ProcessStamp leader, DateTime? previousClose, Fun
         }
     }
 
-    /// <summary>Files of processes seen on the chain that never handed them over.</summary>
-    public IReadOnlyList<string> Missing()
+    /// <summary>
+    /// Files of processes seen on the chain that never handed them over, and whether each process is still running (it
+    /// was too slow to start) or has ended.
+    /// </summary>
+    public IReadOnlyList<MissingFile> Missing()
     {
         lock (_gate)
         {
-            var (first, last) = Chain();
-            return [.. _seen.Where(s => !_members.Contains(s.Key) && s.Key.Created >= first && s.Key.Created <= last)
-                .OrderBy(s => s.Key.Created).SelectMany(s => s.Value)];
+            var absent = Absent();
+            if (absent.Count == 0)
+                return [];
+            var running = census().Select(s => s.Process).ToHashSet();
+            return [.. absent.SelectMany(s => s.Value.Select(file => new MissingFile(file, running.Contains(s.Key))))];
         }
+    }
+
+    /// <summary>The processes whose files <see cref="Missing"/> names.</summary>
+    public IReadOnlyList<ProcessStamp> Absentees()
+    {
+        lock (_gate)
+            return [.. Absent().Select(s => s.Key)];
+    }
+
+    private List<KeyValuePair<ProcessStamp, IReadOnlyList<string>>> Absent()
+    {
+        var (first, last) = Chain();
+        return [.. _seen.Where(s => !_members.Contains(s.Key) && s.Key.Created >= first && s.Key.Created <= last).OrderBy(s => s.Key.Created)];
     }
 
     // A close in the future means the clock went back since: it says nothing, or every sender would be turned away.
