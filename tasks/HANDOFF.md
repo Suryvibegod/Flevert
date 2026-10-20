@@ -45,7 +45,9 @@ Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile
 
 Đã quyết: T15–T17 (nén ảnh scan, đảo trang, sửa PDF, rút chữ/ảnh) chuyển sang v0.2.1. Chấp nhận license Visual Studio Community: Flevert giữ 3 DLL MSVC runtime qpdf dùng.
 
-**Việc tiếp theo:** v0.2.1: T15–T17, và các mục còn mở trong [pdf/todo.md](pdf/todo.md) (S3, S4, tên thư mục của Split, báo "đã sửa" khi qpdf sửa file hỏng, giới hạn tổng dung lượng ảnh khi đổi PDF sang ảnh).
+**Việc tiếp theo** (spec đã duyệt 2026-10-20), hai nhánh song song, mỗi nhánh mở pull request; maintainer review (code, security, doubt) rồi gộp, v0.2.1 trước:
+- `feat/v0.2.1-pdf`: [docs/specs/pdf.md](../docs/specs/pdf.md), mục "v0.2.1" (menu PDF 16 mục, Compress for sharing có spike, Extract text, báo "đã sửa", giới hạn T18 cho mọi thao tác ghi PDF, mục review còn mở, Dependabot). Tiến độ: `tasks/pdf/todo.md`.
+- `feat/v0.3-media`: [docs/specs/media.md](../docs/specs/media.md) (ffmpeg bản GPL, menu video 16 mục). Tiến độ: `tasks/media/plan.md`, `tasks/media/todo.md`. Rebase lên `main` sau khi v0.2.1 được gộp.
 
 **Ghi chú kỹ thuật:**
 - qpdf tự mở rộng ký tự đại diện trong đối số dòng lệnh (làm hỏng `\\?\` đường dẫn dài): đường dẫn đưa cho qpdf qua stdin `@-`; tùy chọn có `*`/`?`/`@` bị từ chối.

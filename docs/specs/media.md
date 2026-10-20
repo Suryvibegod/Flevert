@@ -1,6 +1,8 @@
 # Spec: media (v0.3)
 
-Module `media` trong [capability-map.md](capability-map.md). Phụ thuộc `core` (dùng lại `ExternalTool`, tiến độ trong file và output nhiều file làm ở v0.2). Phiên bản: **v0.3.0**. Trạng thái: **đã chốt phạm vi** (2026-10-20); bản dựng ffmpeg và preset được đo lại ở bước Plan.
+Module `media` trong [capability-map.md](capability-map.md). Phụ thuộc `core` (dùng lại `ExternalTool`, tiến độ trong file và output nhiều file làm ở v0.2). Phiên bản: **v0.3.0**. Trạng thái: **đã chốt phạm vi** (2026-10-20), **bản bổ sung đã duyệt** (2026-10-20: menu, giấy phép GPL, thứ tự làm, phạm vi nhánh); bản dựng ffmpeg và preset được đo lại ở bước Plan.
+
+Làm trên nhánh `feat/v0.3-media` từ `main` sau v0.2.0, song song với v0.2.1 (nhánh `feat/v0.2.1-pdf`). v0.2.1 phát hành trước; khi nó vào `main`, nhánh này rebase lên `main` rồi mới mở (hoặc cập nhật) pull request. Để ít đụng nhau: chỉ thêm file trong `src/Flevert.Media/`, `tests/Flevert.Media.Tests/`, `docs/adr/0009-…`, và sửa tối thiểu ở chỗ chung (đăng ký thao tác trong `Program.cs`, danh sách đuôi của menu, `scripts/deps.json`, `Flevert.sln`, CI, installer, notices).
 
 ## Objective
 
@@ -39,12 +41,29 @@ Quy tắc chung:
 - HDR (HLG/PQ từ iPhone) → SDR bằng tone-map khi ra H.264 8-bit, để màu không bị nhạt.
 - Tên output: `clip.mp4`, `clip (compressed).mp4`, `clip (under 25 MB).mp4`, `clip.mp3`.
 
+### Menu (bắt buộc ≤ 16 mục mỗi đuôi)
+
+Explorer chỉ hiện 16 mục đầu của cây menu dưới `Flevert` (tính cả mục mở submenu; core.md, mục Menu). Bố cục:
+
+```
+Video:  Convert ▸ MP4 · MOV · MKV · WEBM · GIF                 (6)
+        Compress ▸ Light · Balanced · Strong
+                   · Under 10 MB · Under 25 MB · Under 100 MB    (7)
+        Extract audio ▸ MP3 · M4A                                (3)   = 16
+Audio:  Convert ▸ MP3 · M4A · WAV · FLAC · OGG · Opus (trừ đích trùng nguồn) (≤ 7)
+```
+
+- Đích trùng nguồn không hiện (`.mp4` không có `Convert > MP4`, `.m4a` không có `Convert > M4A`), nên video `.mp4/.mov/.mkv/.webm` có 15 mục. Không thêm mục nào vào menu video mà không bỏ mục khác.
+- Test menu khẳng định mọi đuôi video/audio ≤ 16 mục (như ảnh và PDF), và MenuProbe kiểm trên Explorer thật.
+- `.gif` vẫn là **ảnh** (module image), không thêm vào nguồn video.
+
 ## Engine: ffmpeg
 
 | | Lựa chọn | Ghi chú |
 |---|---|---|
 | Nhị phân | `ffmpeg.exe` + `ffprobe.exe` bản dựng Windows của **BtbN/FFmpeg-Builds**, nhánh phát hành 8.x, **tag autobuild có ngày** (không dùng tag `latest`: file đổi mỗi ngày) + SHA256, tải bằng `scripts/fetch-deps.ps1` | Đã kiểm 2026-10-20: có bản `win64-gpl` và `win64-lgpl` cho n8.1 và n9.0 |
-| Bản GPL hay LGPL | **Mặc định GPL** (có libx264: chất lượng/dung lượng H.264 tốt nhất, CRF). LGPL không có x264; `h264_mf` (Media Foundation) không có CRF và kém rõ ở cùng dung lượng | Chạy như **tiến trình riêng**: Flevert vẫn MIT (aggregation). Nghĩa vụ GPL khi phân phối: kèm văn bản GPL và **mã nguồn tương ứng** của đúng bản dựng (ffmpeg + x264 + các thư viện GPL khác + script build của BtbN) như asset của release, hoặc lời đề nghị cung cấp bằng văn bản trong 3 năm. Quyết ở bước Plan (Open Question 1) |
+| Bản GPL hay LGPL | **GPL** (có libx264: chất lượng/dung lượng H.264 tốt nhất, CRF). LGPL không có x264; `h264_mf` (Media Foundation) không có CRF và kém rõ ở cùng dung lượng | Chạy như **tiến trình riêng**: Flevert vẫn MIT (aggregation). **Cả hai** bản đều buộc kèm mã nguồn khi phân phối binary: LGPL 2.1 (mục 4, 6) cho ffmpeg và thư viện LGPL; GPL thêm x264 và mọi thư viện GPL trong bản dựng. Cách đáp ứng: asset `ffmpeg-source-<tag>.zip` của mỗi release Flevert gồm mã nguồn đúng commit của ffmpeg và từng thư viện trong bản dựng, cùng script build của BtbN ở đúng tag, sinh tự động bởi `scripts/fetch-ffmpeg-source.ps1` (ghim hash); kèm văn bản giấy phép trong `THIRD-PARTY-NOTICES.txt`. **Đã chốt GPL** (người dùng duyệt 2026-10-20, Open Question 1); ghi quyết định và nghĩa vụ mã nguồn vào ADR-0009 |
+| Biến thể | Bản **shared** (`win64-gpl-shared`): `ffmpeg.exe` và `ffprobe.exe` dùng chung DLL, bộ cài nhỏ hơn hai exe static. Đo cỡ ở task đóng gói; bộ cài quá 150 MB → hỏi trước | DLL của ffmpeg nằm trong thư mục con `ffmpeg\` của thư mục cài, không lẫn với DLL của Flevert |
 | Gọi | Đường dẫn tuyệt đối trong thư mục cài; `ArgumentList`; `-nostdin -hide_banner -nostats -n`; input `file:<path>` với `-protocol_whitelist file`; `-progress pipe:1` | Video "độc" (playlist HLS, `concat`, `subfile`, URL) không được kéo mạng hay đọc file khác |
 | Song song | `MaxParallel = 1` cho video (x264 tự dùng mọi nhân); audio song song theo số nhân | |
 
@@ -64,14 +83,47 @@ Phần lớn đã làm ở v0.2 (`ExternalTool`, `IProgress<double>` trong file,
 - `ffprobe` trước để từ chối sớm: không có luồng video/audio, thời lượng 0 hoặc > 12 giờ, độ phân giải > 8K.
 - Bản dựng ghim hash; CI kiểm `ffmpeg -version` khớp bản mong đợi; Dependabot không theo dõi được nên lịch kiểm bản mới hằng tháng ghi trong RELEASING.
 
+## Thứ tự làm (gợi ý cho Plan)
+
+1. `fetch-deps` thêm ffmpeg/ffprobe (bản đã chọn, ghim tag + SHA256), project `Flevert.Media` + test project, `Ffprobe` (JSON, timeout, từ chối sớm).
+2. Lát dọc đầu: `audio.to-mp3` chạy thật qua `flevert.exe run` (ExternalTool, tiến độ, Cancel, `.partial`).
+3. Các chuyển đổi audio còn lại; `video.extract-mp3/m4a`.
+4. `video.to-mp4` (xoay, HDR → SDR, bỏ GPS), rồi MOV/MKV/WEBM.
+5. Compress Light/Balanced/Strong; Under 10/25/100 MB (2 lượt, chạy lại khi vượt).
+6. `video.to-gif`.
+7. Menu video/audio (≤ 16) + MenuProbe.
+8. Đóng gói: installer, notices, asset mã nguồn ffmpeg (bản GPL), ADR-0009, test-installer kiểm `ffmpeg\`.
+9. Bảng file độc (HLS, concat, subfile, 0 byte, hỏng, thời lượng giả 99 giờ) ≤ 10 s hoặc lỗi rõ.
+
 ## Commands
 
 ```
-powershell -File scripts/fetch-deps.ps1     # thêm ffmpeg, ffprobe (ghim tag + SHA256)
+powershell -ExecutionPolicy Bypass -File scripts/fetch-deps.ps1     # thêm ffmpeg, ffprobe (ghim tag + SHA256)
+dotnet build Flevert.sln
+dotnet test tests/Flevert.Core.Tests
+dotnet test tests/Flevert.Image.Tests
+dotnet test tests/Flevert.Pdf.Tests
 dotnet test tests/Flevert.Media.Tests
+dotnet format Flevert.sln --verify-no-changes
+powershell -ExecutionPolicy Bypass -File scripts/build-installer.ps1
+powershell -ExecutionPolicy Bypass -File scripts/test-installer.ps1
 ```
 
-(và các lệnh build/test/installer như v0.2)
+Chạy từng project test **lần lượt**, không chạy cả `Flevert.sln` một lần (mã hóa ảnh/video làm các test gom lô nhạy thời gian thiếu CPU). Thêm `tests/Flevert.Media.Tests` vào CI thành một bước riêng.
+
+## Code Style
+
+Như `src/Flevert.Pdf`: thao tác là class nhỏ, không trạng thái, nhận đường dẫn đã ghim, ghi qua `OutputPath`, gọi công cụ ngoài qua `ExternalTool` với `ArgumentList`; lỗi người dùng hiểu được là exception có message tiếng Anh ngắn.
+
+```csharp
+// Dáng mong đợi (không phải code có sẵn): tham số là hằng của Flevert, đường dẫn đi riêng, không bao giờ ghép chuỗi.
+public Task<string> RunAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
+{
+    var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + ".mp3");
+    return OutputPath.WriteAtomicallyAsync(desired, (temp, token) =>
+        _ffmpeg.RunAsync(inputPath, temp, ["-vn", "-c:a", "libmp3lame", "-q:a", "2"], _probe.Duration, progress, token), ct);
+}
+```
 
 ## Project Structure
 
@@ -91,9 +143,9 @@ docs/adr/0009-…                → bản dựng ffmpeg (GPL hay LGPL) và ngh�
 
 ## Boundaries
 
-- **Always:** tiến trình riêng, whitelist giao thức, timeout, giết cả cây khi Cancel; kết quả "Under N MB" thật sự dưới N; ghi qua `.partial`.
-- **Ask first:** chọn GPL hay LGPL (Open Question 1) nếu nghĩa vụ mã nguồn không làm tự động được; tăng bộ cài quá 150 MB; thêm mã hóa phần cứng.
-- **Never:** liên kết thư viện GPL vào tiến trình Flevert; tải ffmpeg lúc chạy; gửi file ra mạng; cho người dùng truyền tham số ffmpeg tự do.
+- **Always:** tiến trình riêng, whitelist giao thức, timeout, giết cả cây khi Cancel; kết quả "Under N MB" thật sự dưới N; ghi qua `.partial`; test viết trước và thấy đỏ; mỗi commit một thay đổi logic, build + format + mọi project test xanh trước commit; ghi tiến độ và quyết định vào `tasks/media/plan.md` + `tasks/media/todo.md`.
+- **Ask first:** tăng bộ cài quá 150 MB; thêm mã hóa phần cứng; thêm NuGet; thêm mục menu ngoài bố cục ở trên.
+- **Never:** liên kết thư viện GPL vào tiến trình Flevert; tải ffmpeg lúc chạy; gửi file ra mạng; cho người dùng truyền tham số ffmpeg tự do; đẩy thẳng vào `main`; sửa `Directory.Build.props` (version), `tasks/HANDOFF.md`, mục đã phát hành của CHANGELOG (chỉ thêm dòng vào `[Unreleased]`); dùng video/ảnh cá nhân của người dùng khi chưa hỏi.
 
 ## Success Criteria
 
@@ -104,11 +156,14 @@ docs/adr/0009-…                → bản dựng ffmpeg (GPL hay LGPL) và ngh�
 5. File `.mp4` là playlist HLS trỏ URL: bị từ chối, không có kết nối mạng nào.
 6. Cancel giữa chừng: ffmpeg dừng ≤ 2 s, không còn `.partial`.
 7. Cửa sổ tiến độ hiện % trong file và "2 of 20".
-8. Bộ cài có `ffmpeg.exe`, `ffprobe.exe`, giấy phép và (nếu GPL) mã nguồn tương ứng hoặc lời đề nghị; nâng cấp từ 0.2 giữ cài đặt; gỡ sạch.
-9. Ba review bối cảnh trống không còn Critical/High/Required.
+8. Bộ cài có `ffmpeg.exe`, `ffprobe.exe` (thư mục `ffmpeg\`), giấy phép trong `THIRD-PARTY-NOTICES.txt`; release có asset mã nguồn ffmpeg tương ứng; nâng cấp từ bản 0.2.x đã ghim giữ cài đặt; gỡ sạch; bộ cài ≤ 150 MB (hoặc người dùng đã đồng ý con số khác).
+9. Menu thật (MenuProbe) của `.mp4`, `.mov`, `.mkv`, `.mp3`, `.flac` đúng bố cục, ≤ 16 mục.
+10. Bảng file độc: mỗi file ≤ 10 s hoặc lỗi rõ, không kết nối mạng, không còn `.partial`.
+11. Khởi động lạnh `flevert.exe run` cho thao tác ảnh không chậm hơn v0.2 quá 10% (ffmpeg chỉ chạy khi cần).
+12. CI xanh 3 lần; ba review bối cảnh trống (maintainer chạy khi nhận PR) không còn Critical/High/Required.
 
 ## Open Questions
 
-1. **GPL hay LGPL**: GPL cho chất lượng tốt nhất nhưng mỗi release phải kèm mã nguồn tương ứng của ffmpeg và mọi thư viện GPL trong bản dựng. Bước Plan: thử tự động hóa (tải source theo commit trong bản dựng BtbN, đóng gói thành asset release); nếu không đáng tin cậy thì dùng LGPL và đo `h264_mf`/`libopenh264` so với x264 trên cùng fixture (mục tiêu: Under 25 MB không xấu rõ rệt).
+1. **GPL hay LGPL: đã chốt GPL** (người dùng duyệt 2026-10-20). Lý do: "Under N MB" cần mã hóa 2 lượt và CRF của x264 để vừa dung lượng mà vẫn đẹp; bản LGPL phải dùng `h264_mf`, không CRF, không 2 lượt, chất lượng tùy bộ mã hóa của từng máy (khó test, khó hứa). Cả hai bản đều phải kèm mã nguồn, nên GPL chỉ làm asset mã nguồn lớn hơn, và asset đó sinh tự động. ffmpeg chạy tiến trình riêng nên Flevert vẫn MIT.
 2. Kích thước: bản GPL static khoảng 80–130 MB giải nén; có cần tải ffmpeg lúc cài (bộ cài nhỏ) thay vì đóng gói? Mặc định: đóng gói (offline, không tải gì lúc chạy hay lúc cài).
 3. Mã hóa phần cứng (NVENC/QSV/AMF) cho máy yếu: để sau v0.3 trừ khi đo thấy preset `medium` quá chậm (> 3× thời gian thực ở 1080p trên máy 4 nhân).

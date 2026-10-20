@@ -185,3 +185,117 @@ public Task<string> RunAsync(string inputPath, CancellationToken ct)
 1. Compress for sharing: thay ảnh trong PDF gọn bằng pdfium + qpdf (qpdf có API thay luồng qua JSON `--json-input`/`--update-from-json` từ v11) hay bỏ khỏi v0.2? Quyết ở bước Plan sau khi thử.
 2. qpdf bản msvc64 kèm thư viện crypto nào (OpenSSL hay native)? Ảnh hưởng notices và kích thước. **Đã trả lời (F4):** OpenSSL 3.6.4 (libcrypto), cùng zlib 1.3.2 và libjpeg-turbo 3.2.0, liên kết tĩnh trong `qpdf30.dll` (phiên bản đọc trong binary và trong bản build v12.4.2 của qpdf); DLL runtime MSVC 14.51 là file riêng. Notices: ADR-0008.
 3. Kiểm hash `qpdf.exe`/`pdfium.dll` lúc chạy có đáng không, khi thư mục cài đã được setup kiểm quyền (chỉ chủ và admin ghi được)? Mặc định: không, vì cùng mức tin cậy với `flevert.exe`.
+
+---
+
+# v0.2.1: phần còn lại của module pdf
+
+Trạng thái: **đã duyệt** (2026-10-20). Làm trên nhánh `feat/v0.2.1-pdf` từ `main` sau v0.2.0; phát hành **trước** v0.3.0. Mọi quy tắc ở trên (giới hạn, qpdf qua `@-`, worker pdfium, mật khẩu, tên output, `OutputPath`) vẫn áp dụng; mục này chỉ nói phần thêm và phần đổi.
+
+## Objective (v0.2.1)
+
+Làm xong những gì v0.2.0 hoãn lại để người dùng gửi được PDF scan nặng mà không lên web, lấy được chữ trong PDF, và đóng các mục review còn mở của v0.2.0. Không thêm module mới, không đổi hành vi đã phát hành trừ những chỗ ghi ở "Thay đổi hành vi".
+
+## Bố cục menu `.pdf` (bắt buộc ≤ 16 mục)
+
+Explorer chỉ hiện **16 mục đầu** của cây menu dưới `Flevert` (tính cả mục mở submenu) và lặng lẽ bỏ phần còn lại (core.md, mục Menu). v0.2.0 đã dùng 13. Không thể thêm đủ 5 thao tác dự định (Compress for sharing, Reverse, Repair, Extract text, Extract images), nên v0.2.1 dùng bố cục sau (16 mục, người dùng duyệt 2026-10-20):
+
+```
+Convert ▸ JPG pages · PNG pages · Text          (4)
+Compress ▸ Lossless · For sharing               (3)
+Rotate ▸ 90° right · 90° left · 180°            (4)
+Merge PDFs · Split into pages · Remove metadata
+Protect with password · Remove password         (5)
+```
+
+- **Repair** không có mục riêng: mọi thao tác ghi PDF mới bằng qpdf đã dựng lại bảng xref; thay vào đó Flevert **báo** khi đã phải sửa file (yêu cầu P4), và README nói "Compress > Lossless cũng sửa PDF hỏng nhẹ".
+- **Reverse page order**: chỉ có nếu spike Compress for sharing thất bại (khi đó `Compress` vẫn là một mục, còn chỗ cho `Reverse page order` ngay sau `Split into pages`, tổng 15).
+- **Extract images**: ra ngoài v0.2.1 (không đủ chỗ; ít người dùng). Ghi lại để xét ở bản sau, có thể bằng một cây menu thứ hai.
+- Test menu (`MenuOperations`, test số mục) phải khẳng định menu `.pdf` ≤ 16 mục, như đã làm cho ảnh.
+
+## Yêu cầu
+
+### P1. Compress for sharing (`pdf.compress-sharing`, menu `Compress > For sharing`), có spike trước
+
+Người dùng: PDF scan 20 trang 25 MB, cần gửi qua Zalo/email.
+
+- Output `<tên> (small).pdf`. Ảnh nào có **độ phân giải hiệu dụng** (số pixel ÷ kích thước hiển thị trên trang, tính bằng inch) > 150 DPI được thu về 150 DPI và mã hóa lại JPEG q80 (màu hoặc xám giữ nguyên số kênh). Ảnh ≤ 150 DPI, ảnh 1-bit (CCITT, JBIG2, `/ImageMask`), chữ, hình vector: **không đổi**. Ảnh có `/SMask` (độ trong suốt) giữ mask; mask cũng thu theo cùng tỉ lệ nếu lớn hơn 150 DPI.
+- Một ảnh dùng ở nhiều chỗ với kích thước khác nhau: lấy kích thước hiển thị **lớn nhất** (không làm mờ chỗ hiển thị lớn).
+- Kết quả không nhỏ hơn input ít nhất 5% → `OperationSkippedException` "This PDF is already small: compressing it for sharing would not make it much smaller." (như ảnh), không để lại gì.
+- **Không thư viện AGPL/GPL** (Boundaries). Hướng làm cho spike: worker pdfium (đã có, `flevert.exe pdf-worker`) liệt kê object ảnh của từng trang và vị trí hiển thị (`FPDFPage_GetObject`, `FPDFPageObj_GetBounds`/ma trận, `FPDFImageObj_GetImagePixelSize`), giải mã ảnh **trong worker** (`FPDFImageObj_GetBitmap`; dữ liệu ảnh từ PDF lạ không được giải mã trong tiến trình chính), thu nhỏ và mã hóa JPEG trong worker, ghi file vào thư mục tạm riêng; tiến trình chính dựng bản cập nhật JSON cho qpdf (`--update-from-json`, như Remove metadata) thay luồng ảnh: `/Filter /DCTDecode`, `/Width`, `/Height`, `/BitsPerComponent 8`, `/ColorSpace` `DeviceRGB`/`DeviceGray`, bỏ `/DecodeParms` và `/Decode` cũ.
+- **Spike (task đầu tiên, tối đa một ngày làm):** chứng minh trên fixture "scan 20 trang, JPEG 300 DPI, A4" rằng: output ≤ 40% cỡ input; render trang 1 của input và output ở 150 DPI khác nhau trung bình ≤ 3/255 mỗi kênh; ≤ 2 s/trang trên máy dev; PDF có ảnh dùng lại, ảnh có SMask, ảnh Flate, ảnh CMYK render giống input. **Không đạt → bỏ P1**, ghi kết quả spike vào `tasks/pdf/todo.md` và spec, `Compress` giữ một mục, thêm P2.
+- Giới hạn như mọi thao tác: 2 000 trang, 2 GB, worker 2,5 GB, ngân sách thời gian cả file; PDF có mật khẩu mở → lỗi như hiện có; chữ ký số → ghi chú "not valid in the output".
+
+### P2. Reverse page order (`pdf.reverse`), chỉ khi P1 bị bỏ
+
+- qpdf `--empty --pages <input> z-1 -- <output>` qua `@-`; `--stream-data=preserve`; output `<tên> (reversed).pdf`; đếm trang trước (2 000); chữ ký số → ghi chú. PDF một trang → vẫn ghi output (cùng hình dạng kết quả).
+
+### P3. Extract text (`pdf.extract-text`, menu `Convert > Text`)
+
+- pdfium trong worker (`FPDFText_LoadPage`, `FPDFText_GetText`), output `<tên>.txt`, UTF-8 **có BOM** (Notepad cũ đọc đúng tiếng Việt), xuống dòng `\r\n`, giữa các trang một ký tự form feed (`\f`). Thứ tự chữ là thứ tự pdfium trả về.
+- PDF không có chữ nào (scan) → skipped "This PDF has no text to extract: it may be a scanned document (Flevert does not recognise text in pictures)." Không làm OCR.
+- Giới hạn: output tối đa 100 MB (quá → lỗi rõ, không ghi file dở); ngân sách thời gian của worker như render. Tiến độ "page N of M".
+
+### P4. Báo khi PDF đã phải sửa (thay cho Repair; review DD-M7)
+
+- Mọi thao tác ghi PDF bằng qpdf: mã thoát 3 (qpdf đã sửa gì đó khi đọc) → thao tác vẫn xong và thêm `OutputNote` "Flevert had to repair this PDF while reading it: check that every page is there." **Và** so số trang input (đếm trước) với output (đếm lại): khác nhau → **lỗi**, không giữ output ("This PDF is damaged: the result would miss pages.").
+- Không áp dụng cho Remove password và Protect (vẫn ghi chú, không so trang vì đã đếm qua mật khẩu).
+
+### P5. Áp giới hạn T18 cho mọi thao tác ghi PDF (mục còn mở của T18)
+
+- `pdf.compress`, `pdf.strip-metadata`, `pdf.protect`, `pdf.unlock` (sau khi có mật khẩu) đếm trang bằng `Qpdf.CountPagesAsync` (2 000) và thêm ghi chú chữ ký số (`PdfSignature`, `OutputNote`) như xoay/merge/split.
+- `pdf.compress` cố ý giải nén luồng: fixture bom nén đôi phải cho kết quả ≤ 10 s **hoặc** lỗi `TooSlow`/`NeedsTooMuchMemory` rõ; không treo tới timeout 2 phút.
+
+### P6. Sửa các mục review còn mở của v0.2.0 (`tasks/pdf/todo.md`)
+
+1. **S3:** tiến trình của lựa chọn còn chạy nhưng tới muộn → thông báo "did not reach Flevert in time", không nói "its process ended".
+2. **S4:** hủy một lần ghép (Combine/Merge) rồi file của lô đó tới muộn → không hiện thêm balloon "left out" (ghi dấu "cancelled" vào bản ghi đóng lô).
+3. **Split** ra thư mục `<tên> (split)\<tên> 001.pdf` thay cho `<tên> (pages)` (trùng tên với Convert > JPG/PNG pages). Ghi ở CHANGELOG mục **Changed**.
+4. **Merge**: lỗi quá 2 000 trang sau khi đếm lại output nói "Together these PDFs have more than 2000 pages…" (không phải lời của một file); probe mật khẩu hết giờ trong merge nêu file.
+5. **Test còn thiếu**: đếm lại trang của merge; guard `secret` + `outputLine` của `Qpdf.RunWithLinesAsync`; lỗi I/O của bước kiểm chữ ký trong merge nêu file.
+6. **SA-L1:** PDF → ảnh: trước khi render, ước lượng output (tổng pixel các trang ở DPI đã chọn × 0,5 byte cho JPG, × 3 byte cho PNG) và so với chỗ trống ổ đích; thiếu → lỗi "There is not enough free space…"; tổng pixel > 4 000 MP → lỗi "too large to convert".
+
+### P7. Bảo trì
+
+1. Hai PR Dependabot (`Microsoft.NET.Test.Sdk` 18, `xunit.runner.visualstudio` 4): thử trên nhánh; gộp nếu ba project test xanh trên CI, không thì đóng kèm lý do.
+2. Binary phát hành không chứa đường dẫn của máy build: bật `ContinuousIntegrationBuild` trên CI (đường dẫn thành `/_/…`); test hoặc bước CI kiểm `flevert.dll` không chứa `D:\a\`.
+
+## Thay đổi hành vi so với v0.2.0
+
+- Menu `.pdf` theo bố cục ở trên (`Compress` thành submenu nếu P1 đạt; thêm `Convert > Text`).
+- Split ghi vào `<tên> (split)`.
+- Thao tác ghi PDF có thể thêm ghi chú "had to repair" và từ chối kết quả thiếu trang.
+
+## Commands, Project Structure, Code Style
+
+Như phần v0.2 ở trên. Test chạy **lần lượt** từng project (`dotnet test tests/Flevert.Core.Tests`, rồi `Flevert.Image.Tests`, rồi `Flevert.Pdf.Tests`), không chạy `Flevert.sln` một lần. File mới: `src/Flevert.Pdf/PdfCompressSharing.cs`, `PdfExtractText.cs` (và `PdfReverse.cs` nếu P2); việc của worker thêm vào `PdfRenderWorker`/`PdfWorker` theo cùng giao thức dòng (thêm loại yêu cầu, không đổi dòng cũ).
+
+## Testing Strategy (v0.2.1)
+
+- Test viết trước, thấy đỏ rồi mới code (ghi lỗi đỏ vào todo).
+- Fixture mới sinh bằng script (Python thư viện chuẩn, như `make_pdf_fixtures.py`) và ghi nguồn gốc trong `fixtures/README.md`: scan 20 trang JPEG 300 DPI; ảnh dùng lại hai cỡ; ảnh có SMask; ảnh Flate; ảnh CMYK; PDF có chữ tiếng Việt (font nhúng); PDF chỉ ảnh (không chữ); PDF hỏng xref nhẹ (qpdf sửa được, mã 3).
+- Mọi thao tác mới chạy qua bảng PDF độc `MaliciousPdf` (31 fixture) như T18: ≤ 10 s hoặc lỗi rõ, không còn file tạm.
+- Kiểm nội dung: render so màu tại điểm mẫu; text đúng thứ tự trang, có `\f`; số trang; cỡ file.
+- Tiến trình thật: `flevert.exe run pdf.compress-sharing <file>` và `pdf.extract-text` headless; menu bằng MenuProbe (≤ 16 mục, đúng thứ tự).
+
+## Boundaries (v0.2.1)
+
+- **Always:** như v0.2; dữ liệu ảnh của PDF lạ chỉ giải mã trong worker; mọi thao tác ghi PDF đếm trang và ghi chú chữ ký; mỗi commit một thay đổi logic, build + format + ba project test xanh trước commit.
+- **Ask first:** thêm NuGet hoặc binary mới; đổi op-id đã phát hành; menu khác bố cục đã duyệt; bỏ P1 khi spike chưa chạy xong.
+- **Never:** đẩy thẳng vào `main`; sửa `Directory.Build.props` (version), `tasks/HANDOFF.md`, mục đã phát hành của CHANGELOG (chỉ thêm dòng vào `[Unreleased]`); thư viện AGPL/GPL; OCR hay gửi file ra mạng.
+
+## Success Criteria (v0.2.1)
+
+1. Menu `.pdf` thật (MenuProbe) đúng bố cục đã duyệt, ≤ 16 mục.
+2. P1 (nếu giữ): fixture scan 20 trang → output ≤ 40% cỡ, khác biệt render ≤ 3/255, ≤ 2 s/trang; PDF đã nhỏ → skipped. Nếu bỏ: kết quả spike ghi lại, P2 xong.
+3. P3: PDF có chữ tiếng Việt → `.txt` UTF-8 BOM đúng chữ, đúng thứ tự trang, `\f` giữa trang; PDF scan → skipped.
+4. P4: PDF hỏng nhẹ → output + ghi chú "had to repair"; PDF mà sửa làm mất trang → lỗi, không có output.
+5. P5, P6: mỗi mục có test đỏ trước rồi xanh; Split ra `(split)`.
+6. P7: Dependabot xử lý xong; `flevert.dll` của bản CI không chứa `D:\a\`.
+7. CI xanh 3 lần; `test-installer.ps1` đạt, kể cả kịch bản nâng cấp từ 0.2.0 (đã ghim).
+8. Ba review bối cảnh trống (do maintainer chạy khi nhận PR) không còn Critical/High/Required.
+
+## Đã quyết (v0.2.1, người dùng duyệt 2026-10-20)
+
+1. **Bố cục menu** 16 mục như trên: Extract images ra ngoài v0.2.1; Repair thành thông báo tự động (P4), không có mục riêng; Reverse chỉ khi P1 bị bỏ; không làm cây menu thứ hai. Lý do: Rotate 180° (scan lộn ngược) dùng nhiều hơn Reverse; người dùng không biết khi nào cần Repair; Convert > JPG pages đáp ứng phần lớn nhu cầu lấy ảnh.
+2. **For sharing một mức**: 150 DPI + JPEG q80 (mức "ebook" quen thuộc của công cụ nén PDF: chữ nhỏ vẫn đọc rõ trên điện thoại và khi in A4). Không thêm mức thấp hơn: chữ hóa đơn nhòe, và vượt 16 mục.
