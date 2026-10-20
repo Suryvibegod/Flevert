@@ -110,12 +110,15 @@ public static class OutputPath
         TimeSpan renameWait,
         CancellationToken ct)
     {
-        if (!Path.GetFileName(desiredDirectory).EndsWith(keepSuffix, StringComparison.Ordinal))
-            throw new ArgumentException($"The folder name does not end with \"{keepSuffix}\".", nameof(keepSuffix));
-
+        ArgumentNullException.ThrowIfNull(keepSuffix);
+        // Checked on the full path, the name that is actually used.
         desiredDirectory = Path.GetFullPath(desiredDirectory);
         var dir = Path.GetDirectoryName(desiredDirectory)!;
         var leafName = Path.GetFileName(desiredDirectory);
+        if (leafName.Length == 0)
+            throw new ArgumentException("The path names no folder.", nameof(desiredDirectory));
+        if (!leafName.EndsWith(keepSuffix, StringComparison.Ordinal))
+            throw new ArgumentException($"The folder name does not end with \"{keepSuffix}\".", nameof(keepSuffix));
         using var folder = PartialFolder.Create(Path.Combine(dir, $".flevert-{Guid.NewGuid():N}.partial"));
         var keep = false;
         try

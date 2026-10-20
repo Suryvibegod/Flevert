@@ -684,6 +684,25 @@ public sealed class OutputPathTests : IDisposable
         Assert.False(left.HasFlag(FileAttributes.NotContentIndexed), $"{left}");
     }
 
+    // A path ending in a separator names no folder: without the check the output was named " (1)".
+    [Fact]
+    public async Task WriteDirectoryAtomically_refuses_a_path_without_a_folder_name()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            OutputPath.WriteDirectoryAtomicallyAsync(_dir.Path + @"\", WritePages(1), CancellationToken.None));
+
+        Assert.Empty(EntryNames(_dir.Path));
+    }
+
+    [Fact]
+    public async Task WriteDirectoryAtomically_refuses_a_null_suffix_by_name()
+    {
+        var error = await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), null!, WritePages(1), CancellationToken.None));
+
+        Assert.Equal("keepSuffix", error.ParamName);
+    }
+
     // A folder where this account may create folders but not files: the temporary folder is made, its anchor is refused.
     // The failure must say so (access denied, where), not claim that someone replaced the folder.
     [Fact]
