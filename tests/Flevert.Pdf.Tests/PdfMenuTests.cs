@@ -14,18 +14,19 @@ public sealed class PdfMenuTests
         new MenuInstaller(_registry, Exe, iconExists: _ => true).Install(MenuOperations.All, MenuOperations.Looks);
 
     [Fact]
-    public void A_pdf_gets_the_flevert_menu_of_v0_2_2_most_used_first()
+    public void A_pdf_gets_one_flevert_menu_with_the_tools_people_use_most()
     {
         Assert.Equal("Flevert.Menu.pdf", _registry.GetValue(@"SystemFileAssociations\.pdf\shell\Flevert", "ExtendedSubCommandsKey"));
-        // docs/specs/pdf.md, v0.2.2, "Menu PDF".
+        // docs/specs/pdf.md, v1.2.3: one entry in the usual right-click menu, Add watermark… in it.
+        Assert.Null(_registry.GetValue(@"SystemFileAssociations\.pdf\shell\Flevert", "Extended"));
         Assert.Equal(
-            ["Compress", "Merge PDFs", "Split into pages", "Convert to", "Rotate", "Protect with password", "Remove password", "Remove hidden info"],
+            ["Compress", "Merge PDFs", "Split into pages", "Convert to", "Rotate", "Add watermark…", "Protect with password", "Remove password", "Remove hidden info"],
             Labels(@"Flevert.Menu.pdf\shell"));
-        Assert.Equal(["pdf.merge", "pdf.split", "pdf.protect", "pdf.unlock", "pdf.strip-metadata"], Commands(@"Flevert.Menu.pdf\shell"));
+        Assert.Equal(["pdf.merge", "pdf.split", "pdf.watermark", "pdf.protect", "pdf.unlock", "pdf.strip-metadata"], Commands(@"Flevert.Menu.pdf\shell"));
         Assert.Equal(["Smaller, same quality", "Smallest, for sharing"], Labels(@"Flevert.Menu.pdf\Compress\shell"));
         Assert.Equal(["pdf.compress", "pdf.compress-sharing"], Commands(@"Flevert.Menu.pdf\Compress\shell"));
-        Assert.Equal(["JPG images", "PNG images", "Text"], Labels(@"Flevert.Menu.pdf\Convert to\shell"));
-        Assert.Equal(["pdf.to-jpg", "pdf.to-png", "pdf.extract-text"], Commands(@"Flevert.Menu.pdf\Convert to\shell"));
+        Assert.Equal(["JPG images", "Text"], Labels(@"Flevert.Menu.pdf\Convert to\shell"));
+        Assert.Equal(["pdf.to-jpg", "pdf.extract-text"], Commands(@"Flevert.Menu.pdf\Convert to\shell"));
         Assert.Equal(["Right 90°", "Left 90°", "180°"], Labels(@"Flevert.Menu.pdf\Rotate\shell"));
         Assert.Equal(["pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180"], Commands(@"Flevert.Menu.pdf\Rotate\shell"));
         // All 16 entries Explorer shows of one cascade.
@@ -33,20 +34,23 @@ public sealed class PdfMenuTests
     }
 
     [Fact]
-    public void A_pdf_gets_a_second_menu_flevert_pdf_tools_with_its_own_entries()
+    public void A_pdf_gets_more_tools_in_a_second_menu_shown_only_with_shift()
     {
-        // Explorer's 16 entries are per cascade: the tools have a top-level entry of their own beside Flevert.
+        // Explorer shows at most 16 entries per top-level entry (measured: a submenu pointing at a key of its own does not
+        // get 16 more), so the less used tools keep an entry of their own, shown only with Shift + right-click
+        // ("Extended"): the usual right-click menu has one Flevert line.
         var entry = @"SystemFileAssociations\.pdf\shell\Flevert.Tools";
-        Assert.Equal("Flevert PDF tools", _registry.GetValue(entry, "MUIVerb"));
+        Assert.Equal("Flevert: more PDF tools", _registry.GetValue(entry, "MUIVerb"));
+        Assert.Equal("", _registry.GetValue(entry, "Extended"));
         Assert.Equal("Flevert.Menu.pdf.tools", _registry.GetValue(entry, "ExtendedSubCommandsKey"));
         Assert.Equal("Player", _registry.GetValue(entry, "MultiSelectModel"));
         Assert.Equal(@"""C:\Program Files\Flevert\icons\toolbox.ico"",0", _registry.GetValue(entry, "Icon"));
 
         Assert.Equal(
-            ["Remove blank pages", "Add page numbers", "Add watermark…", "Print layout", "Fit pages to A4", "Lock filled forms", "Split by size", "Extract images"],
+            ["Remove blank pages", "Add page numbers", "Print layout", "Fit pages to A4", "Lock filled forms", "Split by size", "Convert to PNG images", "Extract images"],
             Labels(@"Flevert.Menu.pdf.tools\shell"));
         Assert.Equal(
-            ["pdf.remove-blank-pages", "pdf.page-numbers", "pdf.watermark", "pdf.fit-a4", "pdf.flatten", "pdf.extract-images"],
+            ["pdf.remove-blank-pages", "pdf.page-numbers", "pdf.fit-a4", "pdf.flatten", "pdf.to-png", "pdf.extract-images"],
             Commands(@"Flevert.Menu.pdf.tools\shell"));
         Assert.Equal(["2 pages per sheet", "4 pages per sheet"], Labels(@"Flevert.Menu.pdf.tools\Print layout\shell"));
         Assert.Equal(["pdf.n-up-2", "pdf.n-up-4"], Commands(@"Flevert.Menu.pdf.tools\Print layout\shell"));
@@ -112,8 +116,8 @@ public sealed class PdfMenuTests
     public void Separators_group_the_entries_of_each_menu()
     {
         // ECF_SEPARATORBEFORE; separators do not count toward Explorer's 16 entries (measured with MenuProbe).
-        Assert.Equal(["Protect with password"], SeparatedBefore("Flevert.Menu.pdf"));
-        Assert.Equal(["Print layout", "Extract images"], SeparatedBefore("Flevert.Menu.pdf.tools"));
+        Assert.Equal(["Add watermark…"], SeparatedBefore("Flevert.Menu.pdf"));
+        Assert.Equal(["Print layout", "Convert to PNG images"], SeparatedBefore("Flevert.Menu.pdf.tools"));
         Assert.Equal(["Remove hidden info"], SeparatedBefore("Flevert.Menu.jpg"));
         Assert.Equal(["Remove hidden info"], SeparatedBefore("Flevert.Menu.heic"));
     }
@@ -132,7 +136,7 @@ public sealed class PdfMenuTests
     {
         // Seen on Windows 11 with MenuProbe: Explorer shows at most 16 entries of a static cascade, submenus and the
         // commands in them all counted, and silently drops the rest (Remove metadata vanished from HEIC when Combine into
-        // PDF made its 17th entry). Each top-level entry (Flevert, Flevert PDF tools) has its own 16.
+        // PDF made its 17th entry). Each top-level entry (Flevert, Flevert: more PDF tools) has its own 16.
         foreach (var menu in _registry.SubKeyNames("").Where(key => key.StartsWith("Flevert.Menu", StringComparison.Ordinal)))
         {
             var entries = CountEntries($@"{menu}\shell");

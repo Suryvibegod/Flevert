@@ -17,7 +17,7 @@ public sealed record PdfTool(string OperationId, IReadOnlyList<PdfToolOption> Op
 
 /// <summary>
 /// The PDF tools of v0.2.2 (docs/specs/pdf.md), and the operation each runs with the options given. The second PDF menu,
-/// Flevert PDF tools, places them (<see cref="PdfToolMenu"/>), and flevert.exe runs them by id from there
+/// Flevert: more PDF tools, places them (<see cref="PdfToolMenu"/>), and flevert.exe runs them by id from there
 /// (<c>flevert.exe run &lt;op-id&gt; &lt;file&gt;</c>); Extract text is Convert to &gt; Text of the Flevert menu.
 /// </summary>
 public static class PdfTools

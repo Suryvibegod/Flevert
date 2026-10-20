@@ -20,7 +20,7 @@ public sealed class InstallerScriptTests
         Assert.Contains("'{#AppName}.Menu'", Script, StringComparison.Ordinal);
         Assert.Contains($@"'\{MenuInstaller.Associations}\'", Script, StringComparison.Ordinal);
         Assert.Contains(@"'\shell\{#AppName}'", Script, StringComparison.Ordinal);
-        // The second top-level menu (Flevert PDF tools): its entries are under the Flevert.Menu prefix already.
+        // The second top-level menu (Flevert: more PDF tools): its entries are under the Flevert.Menu prefix already.
         Assert.Equal([MenuInstaller.Title, MenuInstaller.Title + ".Tools"], MenuCascade.All.Select(cascade => cascade.Verb));
         Assert.Contains(@"'\shell\{#AppName}.Tools'", Script, StringComparison.Ordinal);
     }

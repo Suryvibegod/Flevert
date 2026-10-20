@@ -97,5 +97,5 @@ public sealed class PdfToImages : IOperation
 public static class PdfRenderOperations
 {
     public static IReadOnlyList<IOperation> All { get; } =
-        [new PdfToImages(PdfPageImageFormat.Jpeg), new PdfToImages(PdfPageImageFormat.Png), new PdfExtractText()];
+        [new PdfToImages(PdfPageImageFormat.Jpeg), new PdfExtractText()];
 }

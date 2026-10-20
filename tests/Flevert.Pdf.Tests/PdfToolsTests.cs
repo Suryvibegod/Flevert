@@ -3,7 +3,7 @@ using Flevert.Core;
 namespace Flevert.Pdf.Tests;
 
 /// <summary>
-/// <see cref="PdfTools"/>: the PDF tools, the contract the menu Flevert PDF tools codes against (docs/specs/pdf.md,
+/// <see cref="PdfTools"/>: the PDF tools, the contract the menu Flevert: more PDF tools codes against (docs/specs/pdf.md,
 /// v0.2.2), and the operations each gives.
 /// </summary>
 public sealed class PdfToolsTests
@@ -83,12 +83,15 @@ public sealed class PdfToolsTests
         Assert.Throws<ArgumentException>(() => PdfTools.Create(operationId, options));
 
     [Fact]
-    public void Every_tool_but_extract_text_is_placed_once_in_flevert_pdf_tools_and_runs_by_its_id()
+    public void Every_tool_is_placed_once_and_runs_by_its_id()
     {
+        // v1.2.3: Add watermark… is in the Flevert menu, every other tool but extract text in the Shift-only menu, which
+        // also gets the PNG pictures of the pages.
         var placed = MenuOperations.All.Where(op => op is Core.Menu.IMenuPlacement { Cascade: var cascade } && cascade == Core.Menu.MenuCascade.PdfTools).ToList();
 
-        Assert.Equal(PdfTools.All.Select(tool => tool.OperationId).Where(id => id != "pdf.extract-text").Order(StringComparer.Ordinal),
+        Assert.Equal(PdfTools.All.Select(tool => tool.OperationId).Where(id => id is not "pdf.extract-text" and not "pdf.watermark").Append("pdf.to-png").Order(StringComparer.Ordinal),
             placed.Select(op => op.Id).Order(StringComparer.Ordinal));
+        Assert.Single(MenuOperations.All, op => op.Id == "pdf.watermark");
         // Extract text is Convert to > Text; flevert.exe's catalog (the menus' operations) has every id once.
         Assert.Contains(PdfRenderOperations.All, op => op.Id == "pdf.extract-text");
         _ = new OperationCatalog([.. MenuOperations.All]);

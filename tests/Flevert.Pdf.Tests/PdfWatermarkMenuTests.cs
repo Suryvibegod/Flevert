@@ -4,18 +4,20 @@ using Flevert.Core.Menu;
 namespace Flevert.Pdf.Tests;
 
 /// <summary>
-/// <c>Add watermark…</c> in Flevert PDF tools: the one entry of the PDF menus that asks something, the text, once for the
+/// <c>Add watermark…</c> in the Flevert menu: the one entry of the PDF menus that asks something, the text, once for the
 /// batch when the user agrees, like the password dialog (docs/specs/pdf.md, v0.2.2).
 /// </summary>
 public sealed class PdfWatermarkMenuTests
 {
     [Fact]
-    public void It_is_add_watermark_in_flevert_pdf_tools()
+    public void It_is_add_watermark_in_the_flevert_menu()
     {
-        var op = PdfToolMenu.All.OfType<PdfWatermarkMenu>().Single();
+        // v1.2.3: one of the tools people use most (stamping an ID card scan), so in the usual menu, not behind Shift.
+        var op = PdfOperations.All.OfType<PdfWatermarkMenu>().Single();
 
         Assert.Equal(("pdf.watermark", "Add watermark…"), (op.Id, op.MenuPath));
-        Assert.Equal(MenuCascade.PdfTools, op.Cascade);
+        Assert.Equal(MenuCascade.Main, op.Cascade);
+        Assert.Empty(PdfToolMenu.All.OfType<PdfWatermarkMenu>());
         Assert.Equal([".pdf"], op.Extensions);
     }
 
@@ -69,7 +71,7 @@ public sealed class PdfWatermarkMenuTests
     public async Task Without_a_window_it_fails_clearly_rather_than_wait()
     {
         // FLEVERT_HEADLESS: flevert.exe keeps the catalog's operation, which has no window to ask in.
-        var op = PdfToolMenu.All.OfType<PdfWatermarkMenu>().Single();
+        var op = PdfOperations.All.OfType<PdfWatermarkMenu>().Single();
 
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => op.RunAsync(@"C:\a.pdf", CancellationToken.None)).WaitAsync(TimeSpan.FromSeconds(10));
 

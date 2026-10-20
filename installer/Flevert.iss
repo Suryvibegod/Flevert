@@ -524,7 +524,7 @@ begin
     for I := 0 to GetArrayLength(Names) - 1 do
     begin
       Ext := Classes + '\SystemFileAssociations\' + Names[I];
-      // The Flevert menu, and the second one PDFs have (Flevert PDF tools).
+      // The Flevert menu, and the second one PDFs have (Flevert: more PDF tools).
       if RegKeyExists(HKCU, Ext + '\shell\{#AppName}') or RegKeyExists(HKCU, Ext + '\shell\{#AppName}.Tools') then
       begin
         RegDeleteKeyIncludingSubkeys(HKCU, Ext + '\shell\{#AppName}');

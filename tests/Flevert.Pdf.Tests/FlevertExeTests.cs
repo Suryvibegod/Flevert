@@ -329,7 +329,7 @@ public sealed class FlevertExeTests : IDisposable
         var exit = await RunToEndAsync("pdf.watermark", input);
 
         Assert.Equal(1, exit);
-        // Add watermark… in Flevert PDF tools asks for the text in a dialog, which a run without windows cannot show.
+        // Add watermark… in the Flevert menu asks for the text in a dialog, which a run without windows cannot show.
         Assert.Contains(WatermarkPrompts.NoWindowMessage, string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)),
             StringComparison.Ordinal);
         Assert.Equal([input], Directory.GetFileSystemEntries(_dir.Path));

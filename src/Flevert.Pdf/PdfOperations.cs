@@ -22,6 +22,7 @@ public static class PdfOperations
         new PdfRotate(90, Qpdf.NextToApp),
         new PdfRotate(270, Qpdf.NextToApp),
         new PdfRotate(180, Qpdf.NextToApp),
+        new PdfWatermarkMenu(),
         new PdfProtect(Qpdf.NextToApp),
         new PdfUnlock(Qpdf.NextToApp),
         new PdfStripMetadata(Qpdf.NextToApp),

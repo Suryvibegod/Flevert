@@ -24,7 +24,8 @@ public sealed class PdfExtractTextTests : IDisposable
         Assert.Equal(("pdf.extract-text", "Convert to/Text"), (op.Id, op.MenuPath));
         Assert.Equal([".pdf"], op.Extensions);
         Assert.Equal(1, op.MaxParallel);
-        Assert.Equal(["Convert to/JPG images", "Convert to/PNG images", "Convert to/Text"], PdfRenderOperations.All.Select(o => o.MenuPath));
+        // v1.2.3: PNG pictures moved to the Shift-only menu (Convert to PNG images).
+        Assert.Equal(["Convert to/JPG images", "Convert to/Text"], PdfRenderOperations.All.Select(o => o.MenuPath));
     }
 
     [Fact]

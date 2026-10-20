@@ -65,6 +65,8 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath, Fu
                 registry.SetValue(entry, "Icon", cascade.Icon is { } name && IconPath(name) is { } icon ? $"\"{icon}\",0" : $"\"{exePath}\",0");
                 registry.SetValue(entry, "ExtendedSubCommandsKey", menuKey);
                 registry.SetValue(entry, "MultiSelectModel", "Player");
+                if (cascade.ShiftOnly)
+                    registry.SetValue(entry, "Extended", "");
 
                 var nodes = MenuNode.Build(inCascade.Where(op => op.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase)));
                 WriteMenu(menuKey, nodes);
