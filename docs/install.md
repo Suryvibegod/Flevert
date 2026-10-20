@@ -4,7 +4,7 @@ The short version is in the [README](../README.md#install). This page has the de
 
 ## Check your download
 
-Flevert is not code-signed yet: a signing certificate costs money and this project is free (free signing for open-source projects has been requested). Until then Windows shows **Windows protected your PC** for a new download, with **More info** and then **Run anyway**.
+Flevert is not code-signed yet: a signing certificate costs money and this project is free (free signing for open-source projects is planned). Until then Windows shows **Windows protected your PC** for a new download, with **More info** and then **Run anyway**.
 
 **Before** you click **Run anyway**, make sure the file came from this repository's [Releases page](https://github.com/Suryvibegod/Flevert/releases) and is intact. The notes of each release list the exact commands for that version; they look like this for 0.2.0:
 

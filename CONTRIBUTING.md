@@ -59,7 +59,7 @@ How the project works:
 - Anything that touches files, paths, the registry or decoding untrusted input gets extra care; the specs list the inputs Flevert refuses and why.
 - After trying the right-click menu from a development build, remove it with `flevert.exe uninstall-menu`.
 
-`scripts/test-installer.ps1` installs the real installer on your machine and uninstalls it again; it refuses to run if Flevert is already installed. How releases are made, checked and, if needed, withdrawn: [docs/RELEASING.md](docs/RELEASING.md).
+`scripts/test-installer.ps1` installs the real installer on your machine and uninstalls it again; it refuses to run if Flevert or Flevert is already installed, and its upgrade scenario downloads Flevert 0.1.0 unless given `-PreviousSetup`. How releases are made, checked and, if needed, withdrawn: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Code of conduct
 

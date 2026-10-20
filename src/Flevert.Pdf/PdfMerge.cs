@@ -46,13 +46,12 @@ public sealed class PdfMerge : IBatchOperation
             try
             {
                 total += await _qpdf.CountPagesAsync(input, ct).ConfigureAwait(false);
+                signed |= await PdfSignature.IsSignedAsync(input, ct).ConfigureAwait(false);
             }
-            catch (PdfException e)
+            catch (Exception e) when (e is PdfException or IOException or UnauthorizedAccessException)
             {
                 throw BatchInputException.ForInput(input, e.Message, e);
             }
-
-            signed |= await PdfSignature.IsSignedAsync(input, ct).ConfigureAwait(false);
         }
 
         if (total > PdfDocument.MaxPages)
@@ -63,8 +62,13 @@ public sealed class PdfMerge : IBatchOperation
 
         var first = inputPaths[0];
         var desired = Path.Combine(Path.GetDirectoryName(first)!, Path.GetFileNameWithoutExtension(first) + " (merged).pdf");
-        var output = await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _qpdf.MergeAsync(inputPaths, temp, token), ct)
-            .ConfigureAwait(false);
+        var output = await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
+        {
+            await _qpdf.MergeAsync(inputPaths, temp, token).ConfigureAwait(false);
+            // An input read again for the merge may not be the one counted (a file changing on a share): the limit holds
+            // for what was written, which fails here rather than being kept.
+            await _qpdf.CountPagesAsync(temp, token).ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
         if (signed)
             OutputNote.Add(PdfSignature.NotValidNote);
         return output;

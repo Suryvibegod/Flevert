@@ -27,14 +27,14 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # the progress bar makes Invoke-WebRequest many times slower
 
 $version = '0.1.0'
-# 0.1.0 was released as Flevert (ADR-0009); GitHub redirects the old repository path to Flevert.
+# 0.1.0 was released as Flevert (ADR-0009), and its setup keeps that name.
 $url = "https://github.com/Suryvibegod/Flevert/releases/download/v$version/Flevert-Setup-$version.exe"
 if (-not $Sha256) { $Sha256 = 'aa85392b25b34aed58d6bc9f1e514d8feed38cb0f28b86c5901a91f396bf92e3' }
 if (-not $Destination) { $Destination = Join-Path ([IO.Path]::GetTempPath()) "flevert-previous-setup-$([guid]::NewGuid())" }
 # .NET resolves relative paths against its own current folder, not PowerShell's.
 $Destination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Destination)
 
-# The same as in fetch-deps.ps1: %TEMP% may let other accounts change what is created in it (on the maintainer's machine
+# The same as in fetch-deps.ps1: %TEMP% may let other accounts change what is created in it (on some machines
 # it grants a sandbox Modify), and they could swap the setup between the hash check and the test running it.
 function New-PrivateFolder([string]$Folder) {
     if (Test-Path -LiteralPath $Folder) { throw "$Folder exists already; give a folder that does not exist yet." }

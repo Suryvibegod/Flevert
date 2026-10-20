@@ -395,12 +395,14 @@ try {
     $getPrevious = @{ Destination = (Join-Path $work 'previous') }
     if ($PreviousSetup) { $getPrevious.Path = $PreviousSetup }
     $previous = & (Join-Path $PSScriptRoot 'get-previous-setup.ps1') @getPrevious
-    $run = Setup @('/CLASSICMENU=1', '/UPDATECHECK=0') -Exe $previous
+    # The check is on in setup and turned off afterwards, so only Flevert's state.json holds the choice (ADR-0009).
+    $run = Setup @('/CLASSICMENU=1', '/UPDATECHECK=1') -Exe $previous
     Assert ($run.ExitCode -eq 0) "the previous release installs (got $($run.ExitCode); log $($run.Log))"
     Write-Host "      installed $((Get-Item "$oldApp\flevert.exe").VersionInfo.ProductVersion) from $previous"
     Assert ((Get-ItemProperty $classicKey).Flevert -eq '1') 'the previous release switched the classic menu on'
+    $code = (Start-Process "$oldApp\flevert.exe" -ArgumentList 'update-check', 'off' -PassThru -WindowStyle Hidden -Wait).ExitCode
     $oldState = Get-Content "$oldAppData\update\state.json" -Raw | ConvertFrom-Json
-    Assert (-not $oldState.enabled) 'the previous release turned the check for new versions off'
+    Assert ($code -eq 0 -and -not $oldState.enabled) "flevert.exe update-check off turned the check off (exit $code)"
     Assert (@(MenuKeys 'Flevert').Count -gt 0) 'the previous release registered its menu'
     $previousFiles = @(Get-ChildItem -LiteralPath $oldApp -Recurse -File -Force)
     Copy-Item $heic "$work\before-upgrade.heic"

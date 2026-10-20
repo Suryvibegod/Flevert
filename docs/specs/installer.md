@@ -4,7 +4,7 @@ Module `installer` trong [docs/specs/capability-map.md](capability-map.md). Ph�
 
 ## Objective
 
-Người dùng phổ thông tải một file `Flevert-Setup-0.1.0.exe`, bấm đúp, Next vài lần là chuột phải vào ảnh thấy menu `Flevert`. Không cần quyền admin, không cần cài .NET, không tốn đồng nào. Gỡ ra từ Settings > Apps thì sạch: không còn file, khóa registry hay menu chết nào do Flevert ghi ra. (Dấu vết do chính Windows ghi, như MuiCache, UserAssist, biểu tượng khay, nằm ngoài phạm vi.)
+Người dùng phổ thông tải một file `Flevert-Setup-<version>.exe`, bấm đúp, Next vài lần là chuột phải vào ảnh thấy menu `Flevert`. Không cần quyền admin, không cần cài .NET, không tốn đồng nào. Gỡ ra từ Settings > Apps thì sạch: không còn file, khóa registry hay menu chết nào do Flevert ghi ra. (Dấu vết do chính Windows ghi, như MuiCache, UserAssist, biểu tượng khay, nằm ngoài phạm vi.)
 
 Ràng buộc của người dùng (2026-10-19): **mọi thứ miễn phí**: công cụ build, công cụ đóng gói, ký mã. Không mua chứng chỉ.
 

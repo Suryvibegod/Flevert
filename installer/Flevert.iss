@@ -492,14 +492,13 @@ begin
       Log('Could not delete ' + Dir);
 end;
 
-// Once Flevert is in place: Flevert's menu keys, the app-data subfolders it wrote (by name, as its uninstaller would),
-// and its program folder only when it holds Flevert's own program and uninstaller, never a folder of that name someone
-// else made.
+// Once Flevert is in place, and Flevert's menu is gone: the app-data subfolders Flevert wrote (by name, as its
+// uninstaller would), and its program folder only when it holds Flevert's own program and uninstaller, never a folder
+// of that name someone else made.
 procedure RemoveFlevert;
 var
   OldData, OldApp: String;
 begin
-  SweepMenu('{#OldName}');
   OldData := ExpandConstant('{localappdata}\{#OldName}');
   DeleteOldFolder(OldData + '\logs');
   DeleteOldFolder(OldData + '\pipes');
@@ -526,7 +525,11 @@ begin
   begin
     MenuFailed := True;
     ReportFailure('adding the right-click menu', Started, Code, Reason);
-  end;
+  end
+  else
+    // Right away, so no new Flevert conversion starts from its menu and holds files RemoveFlevert deletes. A Flevert
+    // whose menu works stays when Flevert's could not be added (Smart App Control, say): running setup again moves it.
+    SweepMenu('{#OldName}');
   // Applied both ways, so unticking it on an upgrade undoes it; off only ever removes the key flevert.exe created. Not
   // switched on without a menu to show: it would change every app's menu for nothing.
   if not ClassicMenuChosen then
@@ -543,7 +546,8 @@ begin
   else if not RunFlevert('update-check off', Started, Code, Reason) then
     ReportFailure('turning off the check for new versions (run "flevert.exe update-check off" in ' +
       ExpandConstant('{app}') + ' to try again)', Started, Code, Reason);
-  RemoveFlevert;
+  if MenuAdded then
+    RemoveFlevert;
 end;
 
 function GetCustomSetupExitCode: Integer;

@@ -35,7 +35,7 @@ Test đầu-cuối installer: `scripts/test-installer.ps1` (10 kịch bản, g�
 
 ## v0.1.0 đã phát hành (2026-10-20)
 
-https://github.com/Suryvibegod/Flevert/releases/tag/v0.1.0 (latest, immutable). Kết quả kiểm: [release/todo.md](release/todo.md).
+https://github.com/Suryvibegod/Flevert/releases/tag/v0.1.0 (immutable). Kết quả kiểm: [release/todo.md](release/todo.md).
 
 ## v0.2.0 (pdf): đã xong
 

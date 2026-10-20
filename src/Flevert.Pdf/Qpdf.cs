@@ -467,6 +467,9 @@ public sealed class Qpdf
         string[] options, string[] paths, TimeSpan timeout, ulong maxMemory, CancellationToken ct, Secret? secret = null,
         Action<string>? outputLine = null)
     {
+        // A line goes to the callback before WithoutPassword can replace it, so a password run never streams qpdf's output.
+        if (secret is not null && outputLine is not null)
+            throw new InvalidOperationException("A run with a password must not stream qpdf's output.");
         byte[] lines;
         try
         {
@@ -494,7 +497,6 @@ public sealed class Qpdf
                 // qpdf has been killed and has exited.
                 throw new PdfException(PdfError.TooSlow, TooSlowMessage, e);
             }
-
 
             if (secret is not null)
                 run = WithoutPassword(run, secret.Password);
