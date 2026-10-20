@@ -32,19 +32,23 @@ public sealed class PdfCompressSharingTests(ITestOutputHelper output) : IDisposa
     [Fact]
     public async Task A_twenty_page_scan_at_300_dpi_comes_out_at_most_40_percent_as_large_and_looks_the_same()
     {
-        // The spike's fixture (docs/specs/pdf.md, P1): 20 A4 pages scanned as JPEGs at 300 DPI.
-        var scans = Enumerable.Range(0, 4).Select(seed => Jpeg(ScanJpeg(seed), 2480, 3508)).ToList();
+        // The spike's fixture (docs/specs/pdf.md, P1): 20 A4 pages scanned as JPEGs at 300 DPI, each a different page,
+        // so the time and the size are those of 20 images decoded, shrunk and encoded.
+        var scans = Enumerable.Range(0, 20).Select(seed => Jpeg(ScanJpeg(seed), 2480, 3508)).ToList();
         var input = _dir.Combine("Hồ sơ scan.pdf");
-        Write(input, scans, [.. Enumerable.Range(0, 20).Select(p => new[] { (p % 4, FullPage) })]);
+        Write(input, scans, [.. Enumerable.Range(0, 20).Select(p => new[] { (p, FullPage) })]);
         var timer = Stopwatch.StartNew();
 
         var result = await Op().RunAsync(input, CancellationToken.None);
 
         var seconds = timer.Elapsed.TotalSeconds;
         var (before, after) = (new FileInfo(input).Length, new FileInfo(result).Length);
-        output.WriteLine($"{before} → {after} bytes ({100.0 * after / before:0}%) in {seconds:0.0} s");
+        var encoded = ImageSizes(result).Count(size => size == (1240, 1754));
+        output.WriteLine($"{before} → {after} bytes ({100.0 * after / before:0}%) in {seconds:0.0} s, {encoded} images encoded");
         Assert.Equal(_dir.Combine("Hồ sơ scan (small).pdf"), result);
         Assert.True(after <= before * 0.4, $"{before} → {after} bytes");
+        Assert.Equal(20, encoded);
+        Assert.True(seconds / encoded <= 2, $"{seconds / encoded:0.00} s per image encoded");
         Assert.True(seconds <= 20 * 2, $"{seconds:0.0} s for 20 pages");
         using (var pdf = PdfDocument.Open(result))
             Assert.Equal(20, pdf.PageCount);
