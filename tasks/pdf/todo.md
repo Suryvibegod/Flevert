@@ -95,14 +95,16 @@ Ba reviewer bối cảnh trống, chỉ đọc. Ký hiệu: CR = code-reviewer, 
 - File: `src/Flevert.Core/OutputPath.cs`, test Core. Cỡ: M
 
 ### F2: Đường dẫn và môi trường cho qpdf
-- [ ] Luôn `\\?\` (`\\?\UNC\`) cho đường dẫn đưa qpdf; UTF-8 nghiêm ngặt (surrogate lẻ → lỗi rõ); tùy chọn bắt đầu bằng `@` bị từ chối; `Detail()` không cắt đôi surrogate; bỏ `OPENSSL_*` khỏi môi trường qpdf
+- [x] Luôn `\\?\` (`\\?\UNC\`) cho đường dẫn đưa qpdf; UTF-8 nghiêm ngặt (surrogate lẻ → lỗi rõ); tùy chọn bắt đầu bằng `@` bị từ chối; `Detail()` không cắt đôi surrogate; bỏ `OPENSSL_*` khỏi môi trường qpdf
 - Kiểm: input ~250 ký tự qua `Shorten` → xoay được (đỏ trước); tên có `\uD800` → lỗi "file name" chứ không mở file khác
 - File: `src/Flevert.Pdf/Qpdf.cs`, `ExternalTool` (tham số môi trường). Cỡ: S
+- Đã làm (2026-10-20): `Qpdf.ToExtendedPath` (`GetFullPath` trước vì `\\?\` tắt chuẩn hóa; `\\.\` → `\\?\`; UNC → `\\?\UNC\`); test đi qua `Runner` thật với input 250 ký tự (thư mục dựng từ dạng dài của `%TEMP%`, CI có `RUNNER~1`): đỏ "qpdf could not write the output" rồi xanh. Surrogate lẻ: đỏ trước kiểu nguy hiểm thật (có file anh em `scan\uFFFD.pdf` → thao tác xoay **file kia** thành output, không lỗi), sau đó `PdfError.UnsupportedFileName`, qpdf không chạy. `@file` trong tùy chọn: đỏ (qpdf đọc tùy chọn từ file và xoay) rồi `ArgumentException`. `Detail` bỏ nửa sau cặp surrogate ở chỗ cắt. `ExternalTool.RunAsync(environment:)` (giá trị đặt biến, `null` xóa, không phân biệt hoa thường; tên có `=`/`\0` bị từ chối); qpdf chạy không có `OPENSSL_CONF/MODULES/ENGINES`. Probe: qpdf 12.4.2 mở file `OPENSSL_CONF` chỉ để xoay (nhà cung cấp crypto mặc định là openssl, băm cho `/ID`), và **treo tới timeout** nếu đó là pipe không trả lời; test dùng named pipe: qpdf chạy thẳng mở pipe (đối chứng), qua wrapper thì không. Không có biến, OpenSSL dùng thư mục dựng sẵn trong `qpdf30.dll` (`C:\Program Files\Common Files\SSL`, `C:\Program Files\OpenSSL\…`), chỉ admin ghi được. Còn mở: `openssl.cnf` do admin/phần mềm khác đặt ở đó vẫn áp cho qpdf (cùng mức tin cậy với máy); muốn cô lập hẳn thì đặt `OPENSSL_CONF=NUL` (chưa probe).
 
 ### F3: Giới hạn cho tiến trình con
-- [ ] `ExternalTool`: giới hạn bộ nhớ mỗi tiến trình và số tiến trình đang chạy (tùy chọn theo lần gọi); qpdf dùng cả hai; tool thoát trước khi gán job → trả kết quả; dispose reader
+- [x] `ExternalTool`: giới hạn bộ nhớ mỗi tiến trình và số tiến trình đang chạy (tùy chọn theo lần gọi); qpdf dùng cả hai; tool thoát trước khi gán job → trả kết quả; dispose reader
 - Kiểm: tiến trình con xin quá giới hạn bị dừng (đỏ trước); tool thoát ngay không còn "Access is denied"
 - File: `src/Flevert.Core/ExternalTool.cs`, `Qpdf.cs`. Cỡ: S
+- Đã làm (2026-10-20): `ExternalToolLimits { MaxMemoryBytes, SingleProcess }` và `ExternalToolResult.MemoryLimitExceeded`. Probe: vượt giới hạn thì **cấp phát thất bại**, tiến trình không bị giết; số đỉnh của job không thấy (PowerShell xin 500 MB dưới 200 MB: đỉnh 55 MB), `JobObjectLimitViolationInformation` rỗng; dấu hiệu duy nhất là `JOB_OBJECT_MSG_PROCESS_MEMORY_LIMIT` (9) gửi tới completion port gắn với job (tài liệu: "best effort"). qpdf dưới giới hạn: 100 MB → chết `0xC00000FD` (stack overflow); 30 MB → mã 2 "bad allocation"; mảng 2 triệu số không ai dùng dưới 32/64/128 MB → **mã 3 "succeeded with warnings"**, object thành null. Nên `Qpdf` báo `PdfError.TooComplex` ("This PDF is too complex: working on it needs more than 1 GB of memory, the most Flevert allows.") bất kể mã thoát; đột biến bỏ kiểm tra → test đỏ. Giới hạn 1 GB: 200 000 trang 330 MB, 500 000 trang 830 MB, luồng 400 MB → 403 MB; 4 song song ≤ 4 GB. `SingleProcess`: cmd không chạy được ping; conhost Windows tự đưa vào job vẫn được (qpdf 200/200 lần). Tool thoát trước khi gán job: probe `AssignProcessToJobObject` → lỗi 5; test qua seam `afterStart` (chờ thoát trước khi gán; không tái hiện tất định từ ngoài được), đỏ "Access is denied" rồi xanh. Reader: `Process.Close` không đóng stream đã đọc đồng bộ (mã nguồn dotnet/runtime); đỏ "stdout/stdin is still open" rồi xanh; stdin cũng đóng khi ghi lỗi.
 
 ### F4: Script: notices, `%TEMP%`, checkout
 - [ ] `build-installer.ps1` lỗi khi publish có binary native (pdfium, qpdf, runtime MSVC) chưa có notices; `fetch-deps.ps1` thư mục làm việc DACL riêng, xóa không theo link, "up to date" kiểm từng file; `setup-dev.ps1` cảnh báo checkout người khác ghi được và in lệnh sửa
@@ -120,8 +122,9 @@ Ba reviewer bối cảnh trống, chỉ đọc. Ký hiệu: CR = code-reviewer, 
 - Phụ thuộc: F1, F3. Cỡ: L
 
 ### F7: Test chứng minh đúng điều chúng nói (Pdf)
-- [ ] Tên dài chạm nhánh rút gọn (stem 251); kiểm quality 90 và 4:2:0; chứng minh qpdf thoát mã 3 trong test tương ứng; `PdfError.NoPages`
+- [x] Tên dài chạm nhánh rút gọn (stem 251); kiểm quality 90 và 4:2:0; chứng minh qpdf thoát mã 3 trong test tương ứng; `PdfError.NoPages`
 - File: `tests/Flevert.Pdf.Tests/*`, `PdfToImages.cs`. Cỡ: S
+- Đã làm (2026-10-20): đối chứng âm từng cái: bỏ rút gọn tên → test cũ (240) vẫn xanh, test mới (251, mọi tên trang đúng 255) đỏ; quality 85 → đỏ "Expected 90, Actual 85"; define 4:4:4 → đỏ "2x2,1x1,1x1" / "1x1,1x1,1x1"; coi mã 3 là lỗi → test cảnh báo đỏ; test chạy qpdf trực tiếp trên fixture và khẳng định mã 3. `NoPages`: đỏ (`NotPdf`) rồi xanh.
 
 ## Giai đoạn 2: thao tác nhiều file
 
