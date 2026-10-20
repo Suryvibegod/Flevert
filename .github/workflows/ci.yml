@@ -10,6 +10,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # MSBuild reads it as a property: the binaries name /_/ for the checkout, not the runner's folders (checked below), as
+  # the release's do.
+  ContinuousIntegrationBuild: true
+
 jobs:
   build-and-test:
     runs-on: windows-latest
@@ -29,6 +34,9 @@ jobs:
         run: ./scripts/fetch-deps.ps1
       - id: build
         run: dotnet build Flevert.sln -c Release
+      - name: No build machine paths in the binaries
+        shell: pwsh
+        run: ./scripts/test-build-paths.ps1 -Folder src
       - run: dotnet format Flevert.sln --verify-no-changes
       # One project at a time: run together, the image encodes starved the process-batching tests on the runner (a 1 s
       # copy took 15 s). Separate steps, and the second runs even if the first fails, so neither hides the other.
