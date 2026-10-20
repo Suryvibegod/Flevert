@@ -93,9 +93,13 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
 
     // Remove metadata reads every object of the PDF twice, as qpdf's JSON and back (MetadataRemoval): real work that grows
     // with the file, like qpdf's own timeout. The 16 MB of many-objects (300 000 objects) took 13 s on CI, 5 s here.
-    private static TimeSpan LimitFor(string operation, string input) => operation == "pdf.strip-metadata"
-        ? Limit + TimeSpan.FromSeconds(new FileInfo(input).Length / (1024 * 1024))
-        : Limit;
+    // Compress may decode for its whole budget before it packs the objects without decoding (PdfCompress).
+    private static TimeSpan LimitFor(string operation, string input) => operation switch
+    {
+        "pdf.strip-metadata" => Limit + TimeSpan.FromSeconds(new FileInfo(input).Length / (1024 * 1024)),
+        "pdf.compress" => Limit + PdfCompress.FullRunTimeoutFor(new FileInfo(input).Length),
+        _ => Limit,
+    };
 
     [Fact]
     public void Every_fixture_is_in_the_table_once()

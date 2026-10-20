@@ -14,6 +14,7 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 - **Split into pages** writes to a folder named `report (split)`, no longer `report (pages)`, the name **Convert** > JPG pages and PNG pages give their pictures of the same PDF.
 - **Compress** for PDFs is now a submenu: **Lossless** (what **Compress** did) and **For sharing**. The PDF menu has its 16 entries, all that Explorer shows.
+- **Compress** > Lossless stops decompressing a PDF's streams after 10 seconds plus 1 second per MB. It then packs the PDF's objects but leaves its streams as they were, and the notification says the PDF was compressed only in part.
 - **Compress**, **Remove metadata**, **Protect with password** and **Remove password** refuse PDFs of more than 2000 pages, as the other PDF actions do, and say when a signed PDF's signature is not valid in the result.
 
 ### Fixed
@@ -24,7 +25,7 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 ### Security
 
 - **Convert** > JPG pages and PNG pages check, before the first page, that the pictures fit on the disk, and refuse PDFs whose pages together pass 4000 megapixels.
-- A tiny PDF that inflates to gigabytes no longer keeps **Remove metadata**, **Protect** or **Remove password** busy for seconds; **Compress** gives up decompressing it after a few seconds and compresses the rest.
+- A tiny PDF that inflates to gigabytes no longer keeps **Remove metadata**, **Protect** or **Remove password** busy for seconds.
 - Released files no longer contain the folder names of the machine that built them.
 
 ## [0.2.0] - 2026-10-20

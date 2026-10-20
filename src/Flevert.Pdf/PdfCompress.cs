@@ -20,11 +20,12 @@ namespace Flevert.Pdf;
 /// </para>
 /// <para>
 /// Decoding is the one thing here whose cost does not follow the file's size: 10 KB of Flate inside Flate inflates to
-/// 4 GB, which took 15 to 20 s (T18), and a PDF can hold many. So the full run gets 3 s plus 1 s per megabyte of input
-/// (<see cref="FullRunTimeoutFor"/>), ample for real PDFs (qpdf rewrites tens of megabytes a second, and real streams
-/// inflate a few times over, rarely a hundred), and past it, or past qpdf's memory cap, the PDF is compressed again
-/// without decoding anything: object streams only, every stream copied as it is (<see cref="Qpdf.KeepStreamsAsTheyAre"/>),
-/// which takes the time of reading and writing the file. The result says it was compressed only in part.
+/// 4 GB, which took 15 to 20 s (T18), and a PDF can hold many. So the full run gets 10 s plus 1 s per megabyte of input
+/// (<see cref="FullRunTimeoutFor"/>), ample for real PDFs even with four running at once on a busy two-core laptop
+/// (qpdf rewrites tens of megabytes a second, and real streams inflate a few times over, rarely a hundred), and past it,
+/// or past qpdf's memory cap, the PDF is written again without decoding anything: its objects packed into object
+/// streams, every stream copied as it is (<see cref="Qpdf.KeepStreamsAsTheyAre"/>), which takes the time of reading and
+/// writing the file. The note says so (<see cref="PartlyNote"/>).
 /// </para>
 /// <para>
 /// A PDF qpdf had to repair is checked to open with the pages counted in the input (<see cref="PdfRepair"/>). qpdf 12.4.2
@@ -41,7 +42,8 @@ public sealed class PdfCompress : IOperation
     internal const string AlreadyCompactMessage = "This PDF is already compact: compressing it would not make it smaller.";
 
     /// <summary>The note on a PDF compressed without decoding its streams.</summary>
-    internal const string PartlyNote = "Flevert compressed this PDF only in part: compressing it fully took too long.";
+    internal const string PartlyNote =
+        "Flevert compressed this PDF only in part: it packed its objects but left its streams as they were, since compressing them took too long.";
 
     private const string ObjectStreams = "--object-streams=generate";
     private const string NoObjectStreams = "--object-streams=disable";
@@ -68,7 +70,7 @@ public sealed class PdfCompress : IOperation
     public int MaxParallel => 4;
 
     /// <summary>How long the run that decodes and compresses every stream again may take for an input of <paramref name="inputBytes"/>.</summary>
-    public static TimeSpan FullRunTimeoutFor(long inputBytes) => TimeSpan.FromSeconds(3 + inputBytes / (1024 * 1024));
+    public static TimeSpan FullRunTimeoutFor(long inputBytes) => TimeSpan.FromSeconds(10 + inputBytes / (1024 * 1024));
 
     public async Task<string> RunAsync(string inputPath, CancellationToken ct)
     {

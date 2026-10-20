@@ -227,7 +227,7 @@ public sealed class PdfCompressTests : IDisposable
     public async Task A_pdf_that_takes_too_long_to_decode_is_compressed_without_decoding_and_says_so()
     {
         // 20 000 small objects that object streams pack, and 10 KB of Flate inside Flate that inflates to 4 GB (15 to 20 s
-        // to decode and compress again, T18): the full run stops after 3 s, and the second copies every stream as it is.
+        // to decode and compress again, T18): the full run stops after 10 s, and the second copies every stream as it is.
         var input = _dir.Combine("bomb.pdf");
         MaliciousPdf.WriteManyObjectsAndBomb(input, 20_000);
         using var logs = new TempDir();
@@ -235,10 +235,11 @@ public sealed class PdfCompressTests : IDisposable
 
         var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op(), [input], null, CancellationToken.None);
 
-        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), $"took {timer.Elapsed}");
+        Assert.True(timer.Elapsed < PdfCompress.FullRunTimeoutFor(new FileInfo(input).Length) + TimeSpan.FromSeconds(10), $"took {timer.Elapsed}");
         var result = Assert.Single(outcome.Results);
         Assert.True(result.Succeeded, result.Error);
-        Assert.Equal("Flevert compressed this PDF only in part: compressing it fully took too long.", result.Note);
+        Assert.Equal("Flevert compressed this PDF only in part: it packed its objects but left its streams as they were, since compressing them took too long.",
+            result.Note);
         Assert.True(new FileInfo(result.Output!).Length < new FileInfo(input).Length * 3 / 4,
             $"{new FileInfo(input).Length} → {new FileInfo(result.Output!).Length} bytes");
         // The bomb is copied as it was: still Flate inside Flate. A stream's dictionary is never in an object stream, so
@@ -248,10 +249,11 @@ public sealed class PdfCompressTests : IDisposable
     }
 
     [Fact]
-    public void The_full_run_gets_three_seconds_plus_one_per_megabyte()
+    public void The_full_run_gets_ten_seconds_plus_one_per_megabyte()
     {
-        Assert.Equal(TimeSpan.FromSeconds(3), PdfCompress.FullRunTimeoutFor(0));
-        Assert.Equal(TimeSpan.FromSeconds(103), PdfCompress.FullRunTimeoutFor(100L << 20));
+        // Four of these run at once (MaxParallel) on what may be a busy two-core laptop: ordinary PDFs must not fall back.
+        Assert.Equal(TimeSpan.FromSeconds(10), PdfCompress.FullRunTimeoutFor(0));
+        Assert.Equal(TimeSpan.FromSeconds(110), PdfCompress.FullRunTimeoutFor(100L << 20));
     }
 
     [Fact]
