@@ -238,6 +238,49 @@ public class JpegSegmentsTests
         Assert.False(string.IsNullOrWhiteSpace(what));
     }
 
+    // Scan headers of a progressive frame: components (1: component 1, its DC and AC tables), then Ss, Se, Ah/Al.
+    // TestJpeg.Synthetic defines DC table 0 and AC table 0 only.
+    public static TheoryData<string, byte[], bool> ProgressiveScans() => new()
+    {
+        { "an AC scan whose AC table is undefined", Progressive([1, 1, 0x01, 1, 63, 0]), false },
+        { "a first DC scan whose DC table is undefined", Progressive([1, 1, 0x10, 0, 0, 0]), false },
+        { "a DC refinement scan naming an undefined DC table", Progressive([1, 1, 0x10, 0, 0, 0x10]), true },
+        { "an AC scan naming an undefined DC table", Progressive([1, 1, 0x10, 1, 63, 0]), true },
+    };
+
+    [Theory]
+    [MemberData(nameof(ProgressiveScans))]
+    public void Checks_only_the_huffman_table_a_progressive_scan_decodes_with(string what, byte[] jpeg, bool accepted)
+    {
+        // A DC scan decodes with its DC table, none when it refines; an AC scan with its AC table only.
+        if (accepted)
+            Assert.Equal(jpeg, JpegSegments.Strip(jpeg).Bytes);
+        else
+            Assert.Contains("Huffman", Assert.Throws<InvalidDataException>(() => JpegSegments.Strip(jpeg)).Message, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(what));
+    }
+
+    [Fact]
+    public void Refuses_a_jpeg_with_more_scans_than_the_limit()
+    {
+        // Each progressive scan makes a viewer go over the whole image again: thousands of tiny scans are a known way to
+        // make a small JPEG take minutes to show. libjpeg writes about ten.
+        Assert.Equal(1_000, JpegSegments.MaxScans);
+        static byte[] WithScans(int count)
+        {
+            var one = Progressive([1, 1, 0x00, 0, 0, 0]);
+            var sos = one.AsSpan().IndexOf([(byte)0xFF, (byte)0xDA]);
+            var scan = one[sos..^2]; // the scan header and its one byte of data
+            return [.. one[..sos], .. Enumerable.Repeat(scan, count).SelectMany(bytes => bytes), 0xFF, 0xD9];
+        }
+
+        Assert.Equal(16, JpegSegments.Strip(WithScans(1_000)).Width);
+        var error = Assert.Throws<InvalidDataException>(() => JpegSegments.Strip(WithScans(1_001)));
+        Assert.Contains("scans", error.Message, StringComparison.Ordinal);
+    }
+
+    private static byte[] Progressive(byte[] scanHeader) => TestJpeg.Synthetic([0x00], sof: 0xC2, scanHeader: scanHeader);
+
     [Fact]
     public void Accepts_tables_defined_after_the_frame_header()
     {

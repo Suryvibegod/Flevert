@@ -111,9 +111,10 @@ internal static class TestJpeg
     /// <summary>
     /// A structurally valid JPEG whose tables are placeholders: SOI, SOF for 16 x 8 pixels, then (after the frame
     /// header, which is legal) quantization table 0 and Huffman tables DC 0 and AC 0 of one code each, SOS for component
-    /// 1, <paramref name="entropy"/> and EOI. Enough for marker-level tests; the frame header starts at byte 2.
+    /// 1 (or <paramref name="scanHeader"/>, the SOS payload), <paramref name="entropy"/> and EOI. Enough for marker-level
+    /// tests; the frame header starts at byte 2.
     /// </summary>
-    public static byte[] Synthetic(ReadOnlySpan<byte> entropy, byte sof = 0xC0, byte precision = 8, int height = 8, byte components = 1)
+    public static byte[] Synthetic(ReadOnlySpan<byte> entropy, byte sof = 0xC0, byte precision = 8, int height = 8, byte components = 1, byte[]? scanHeader = null)
     {
         var sofPayload = new List<byte> { precision, (byte)(height >> 8), (byte)height, 0, 16, components };
         for (var c = 0; c < components; c++)
@@ -121,7 +122,7 @@ internal static class TestJpeg
         byte[] dqt = [0x00, .. Enumerable.Repeat((byte)1, 64)];
         byte[] oneCode = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         byte[] dht = [0x00, .. oneCode, 0x10, .. oneCode];
-        byte[] sos = [1, 1, 0x00, 0, 63, 0];
+        var sos = scanHeader ?? [1, 1, 0x00, 0, 63, 0];
         return
         [
             0xFF, 0xD8, .. Segment(sof, [.. sofPayload]), .. Segment(0xDB, dqt), .. Segment(0xC4, dht), .. Segment(0xDA, sos),

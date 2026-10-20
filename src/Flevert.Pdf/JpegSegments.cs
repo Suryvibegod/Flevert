@@ -43,8 +43,9 @@ internal sealed class JpegImage
 /// and everything after EOI (phones append further JPEGs there, each with its own EXIF). Any other marker fails.
 /// </para>
 /// <para>
-/// pdfium only reads a JPEG's header before embedding it, and libjpeg decodes a JPEG whose tables are missing with
-/// defaults (no quantization: black; no Huffman table: the standard ones, garbage for an optimized JPEG). So every
+/// pdfium only reads a JPEG's header before embedding it, so a missing table shows only when the page is drawn: without
+/// a quantization table libjpeg refuses to decode and pdfium draws the image black; without a Huffman table libjpeg
+/// uses the standard ones, garbage for an optimized JPEG, and decoders report a warning at most. So every
 /// table a scan uses must be defined before it, or the JPEG is refused as damaged (<see cref="InvalidDataException"/>):
 /// re-encoding would only turn the garbage into pixels.
 /// </para>
@@ -53,6 +54,13 @@ internal static class JpegSegments
 {
     /// <summary>The largest JPEG embedded: a 100 MP photo at quality 100 is about 60 MB.</summary>
     public const int MaxBytes = 256 * 1024 * 1024;
+
+    /// <summary>
+    /// The most scans a JPEG may have. A viewer goes over the whole image again for each progressive scan, so thousands
+    /// of tiny scans make a small file take minutes to show (libjpeg-turbo offers TJPARAM_SCANLIMIT against it, off by
+    /// default); libjpeg writes about ten.
+    /// </summary>
+    public const int MaxScans = 1_000;
 
     private const byte Soi = 0xD8;
     private const byte Eoi = 0xD9;
@@ -235,7 +243,12 @@ internal static class JpegSegments
                     }
 
                     tables.CheckScan(payload, frame);
-                    scans++;
+                    if (++scans > MaxScans)
+                    {
+                        throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture,
+                            $"The JPEG is damaged or hostile: it has more than {MaxScans} scans."));
+                    }
+
                     inScan = true;
                     Copy(jpeg[markerStart..end]);
                     break;
@@ -356,8 +369,10 @@ internal static class JpegSegments
             for (var i = 0; i < count; i++)
             {
                 var id = payload[1 + (2 * i)];
-                var index = Array.FindIndex(frame.Components, component => component.Id == id);
-                if (index < 0)
+                var index = 0;
+                while (index < frame.Components.Length && frame.Components[index].Id != id)
+                    index++;
+                if (index == frame.Components.Length)
                     throw new InvalidDataException("The JPEG is damaged: a scan names a colour component its frame does not have.");
                 if (!_quantization[frame.Components[index].Table])
                     throw new InvalidDataException("The JPEG is damaged: it uses a quantization table it never defines.");
