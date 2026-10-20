@@ -23,7 +23,7 @@ public static class PdfToolMenu
         Placed("pdf.n-up-2", "Print layout/2 pages per sheet"),
         Placed("pdf.n-up-4", "Print layout/4 pages per sheet"),
         Placed("pdf.fit-a4", "Fit pages to A4"),
-        Placed("pdf.flatten", "Flatten forms and comments"),
+        Placed("pdf.flatten", "Lock filled forms"),
         Placed("pdf.split-10mb", "Split by size/Under 10 MB"),
         Placed("pdf.split-25mb", "Split by size/Under 25 MB"),
         Placed("pdf.extract-images", "Extract images"),

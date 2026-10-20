@@ -414,7 +414,7 @@ Mục tiêu: một người lần đầu chuột phải vào file thấy ngay vi
 ──────
 [icon] Print layout ▸    2 pages per sheet · 4 pages per sheet              (3)
 [icon] Fit pages to A4                                                      (1)
-[icon] Flatten forms and comments                                           (1)
+[icon] Lock filled forms                                                    (1)
 [icon] Split by size ▸   Under 10 MB · Under 25 MB                          (3)
 ──────
 [icon] Extract images                                                       (1)   = 12
@@ -473,7 +473,7 @@ Mục tiêu: một người lần đầu chuột phải vào file thấy ngay vi
   | Add watermark… | `draw_text` (Fluent chỉ có `stamp` dạng nét mảnh 32 px, quá mờ ở cỡ menu) |
   | Print layout | `layout_column_two` |
   | Fit pages to A4 | `page_fit` |
-  | Flatten forms and comments | `layer` |
+  | Lock filled forms | `layer` |
   | Split by size | `cut` |
   | Extract images | `image_multiple` |
 
@@ -519,7 +519,7 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
 | `pdf.watermark` | Add watermark | `<tên> (watermarked).pdf` | Xem mục "Add watermark" ngay dưới bảng. |
 | `pdf.n-up-2` / `pdf.n-up-4` | 2 pages per sheet / 4 pages per sheet | `<tên> (2 per sheet).pdf` | A4 ngang cho 2 trang, A4 dọc cho 4 trang, giữ tỉ lệ, theo thứ tự đọc. pdfium `FPDF_ImportNPagesToOne` trong worker. |
 | `pdf.fit-a4` | Fit pages to A4 | `<tên> (A4).pdf` | Mỗi trang thu/phóng vừa A4 (dọc hoặc ngang theo trang gốc), giữ tỉ lệ, căn giữa. Trang đã đúng A4 (±1 pt) giữ nguyên; mọi trang đã là A4 → skipped. pdfium `FPDF_ImportNPagesToOne` 1×1 trong worker. |
-| `pdf.flatten` | Flatten forms and comments | `<tên> (flattened).pdf` | pdfium `FPDFPage_Flatten`: giữ vector và chữ chọn được, **không** render thành ảnh như Stirling. Không có form hay chú thích → skipped. |
+| `pdf.flatten` | Lock filled forms | `<tên> (flattened).pdf` | pdfium `FPDFPage_Flatten`: giữ vector và chữ chọn được, **không** render thành ảnh như Stirling. Không có form hay chú thích → skipped. |
 | `pdf.split-10mb` / `pdf.split-25mb` | Split into parts under 10 MB / 25 MB | thư mục `<tên> (parts)\<tên> part 1.pdf` … | Xem mục "Split into parts" ngay dưới bảng. |
 | `pdf.extract-images` | Extract images | thư mục `<tên> (images)\<tên> 001.jpg` … | Xem mục "Extract images" ngay dưới bảng. |
 | `pdf.extract-text` | Convert to > Text (menu Flevert) | như v0.2.1 | Không đổi. |

@@ -38,7 +38,7 @@ namespace Flevert.Pdf;
 /// </remarks>
 public sealed class PdfFlatten : IOperation
 {
-    internal const string NothingMessage = "This PDF has no forms or comments to flatten.";
+    internal const string NothingMessage = "This PDF has no filled forms or comments to lock.";
 
     internal const string CannotRedrawMessage =
         "This form has answers Flevert cannot redraw: they have letters its PDF tool cannot write (such as Vietnamese ones), " +

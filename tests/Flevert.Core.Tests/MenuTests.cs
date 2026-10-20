@@ -130,14 +130,14 @@ public sealed class MenuTests
     public void An_operation_placed_in_the_pdf_tools_menu_gets_a_second_top_level_entry_with_its_own_entries()
     {
         new MenuInstaller(_registry, Exe, iconExists: _ => true).Install(
-            [new FakeOp("pdf.merge", "Merge PDFs", ".pdf"), new PlacedOp("pdf.flatten", "Flatten forms and comments", ".pdf")]);
+            [new FakeOp("pdf.merge", "Merge PDFs", ".pdf"), new PlacedOp("pdf.flatten", "Lock filled forms", ".pdf")]);
 
         var tools = @"SystemFileAssociations\.pdf\shell\Flevert.Tools";
         Assert.Equal("Flevert PDF tools", _registry.GetValue(tools, "MUIVerb"));
         Assert.Equal("Flevert.Menu.pdf.tools", _registry.GetValue(tools, "ExtendedSubCommandsKey"));
         Assert.Equal("Player", _registry.GetValue(tools, "MultiSelectModel"));
         Assert.Equal(@"""C:\Program Files\Flevert\icons\toolbox.ico"",0", _registry.GetValue(tools, "Icon"));
-        Assert.Equal(["Flatten forms and comments"], _registry.KeysUnder(@"Flevert.Menu.pdf.tools\shell").Select(k => _registry.GetValue(k, "MUIVerb")));
+        Assert.Equal(["Lock filled forms"], _registry.KeysUnder(@"Flevert.Menu.pdf.tools\shell").Select(k => _registry.GetValue(k, "MUIVerb")));
         Assert.Equal(["Merge PDFs"], _registry.KeysUnder(@"Flevert.Menu.pdf\shell").Select(k => _registry.GetValue(k, "MUIVerb")));
         Assert.Equal($"\"{Exe}\" run pdf.flatten \"%1\"", _registry.GetValue($@"{_registry.KeysUnder(@"Flevert.Menu.pdf.tools\shell")[0]}\command", ""));
         // A type with no tool gets no second entry.
@@ -147,7 +147,7 @@ public sealed class MenuTests
     [Fact]
     public void The_second_menu_shows_flevert_s_own_icon_when_its_icon_is_missing()
     {
-        Install(new PlacedOp("pdf.flatten", "Flatten forms and comments", ".pdf"));
+        Install(new PlacedOp("pdf.flatten", "Lock filled forms", ".pdf"));
 
         Assert.Equal($"\"{Exe}\",0", _registry.GetValue(@"SystemFileAssociations\.pdf\shell\Flevert.Tools", "Icon"));
     }
@@ -156,7 +156,7 @@ public sealed class MenuTests
     public void Uninstall_removes_both_menus_and_nothing_else()
     {
         _registry.SetValue(@"SystemFileAssociations\.pdf\shell\SomeoneElse", "MUIVerb", "Keep me");
-        Install(new FakeOp("pdf.merge", "Merge PDFs", ".pdf"), new PlacedOp("pdf.flatten", "Flatten forms and comments", ".pdf"));
+        Install(new FakeOp("pdf.merge", "Merge PDFs", ".pdf"), new PlacedOp("pdf.flatten", "Lock filled forms", ".pdf"));
 
         new MenuInstaller(_registry, Exe).Uninstall();
 

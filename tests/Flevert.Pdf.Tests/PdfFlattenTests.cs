@@ -4,7 +4,7 @@ using static Flevert.Pdf.Tests.TestPdf;
 
 namespace Flevert.Pdf.Tests;
 
-/// <summary>docs/specs/pdf.md, v0.2.2: <c>Flatten forms and comments</c>, success criterion 5.</summary>
+/// <summary>docs/specs/pdf.md, v0.2.2: <c>Lock filled forms</c>, success criterion 5.</summary>
 public sealed class PdfFlattenTests : IDisposable
 {
     private readonly TempDir _dir = new();
@@ -106,7 +106,7 @@ public sealed class PdfFlattenTests : IDisposable
 
         var ex = await Assert.ThrowsAsync<OperationSkippedException>(() => Op().RunAsync(input, CancellationToken.None));
 
-        Assert.Equal("This PDF has no forms or comments to flatten.", ex.Message);
+        Assert.Equal("This PDF has no filled forms or comments to lock.", ex.Message);
         Assert.Equal(["plain.pdf"], FileNames(_dir.Path));
     }
 

@@ -43,7 +43,7 @@ public sealed class PdfMenuTests
         Assert.Equal(@"""C:\Program Files\Flevert\icons\toolbox.ico"",0", _registry.GetValue(entry, "Icon"));
 
         Assert.Equal(
-            ["Remove blank pages", "Add page numbers", "Add watermark…", "Print layout", "Fit pages to A4", "Flatten forms and comments", "Split by size", "Extract images"],
+            ["Remove blank pages", "Add page numbers", "Add watermark…", "Print layout", "Fit pages to A4", "Lock filled forms", "Split by size", "Extract images"],
             Labels(@"Flevert.Menu.pdf.tools\shell"));
         Assert.Equal(
             ["pdf.remove-blank-pages", "pdf.page-numbers", "pdf.watermark", "pdf.fit-a4", "pdf.flatten", "pdf.extract-images"],

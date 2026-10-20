@@ -35,7 +35,7 @@ public static class MenuOperations
         ["Add watermark…"] = new("draw_text", 4),
         ["Print layout"] = new("layout_column_two", 5),
         ["Fit pages to A4"] = new("page_fit", 5),
-        ["Flatten forms and comments"] = new("layer", 5),
+        ["Lock filled forms"] = new("layer", 5),
         ["Split by size"] = new("cut", 5),
         ["Extract images"] = new("image_multiple", 6),
     };
