@@ -23,6 +23,10 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 - The right-click menus are laid out for the jobs people do most, with plain names. Pictures: **Convert to**, **Compress**, **Remove hidden info**, **Combine into PDF**. PDFs: **Compress**, **Merge PDFs**, **Split into pages**, **Convert to**, **Rotate**, **Protect with password**, **Remove password**, **Remove hidden info**.
 - New names: **Remove metadata** is **Remove hidden info**; **Convert** is **Convert to**, with WebP spelled that way; picture **Compress** levels are **Light (best quality)**, **Balanced** and **Strong (smallest)**; PDF **Compress** > Lossless and For sharing are **Smaller, same quality** and **Smallest, for sharing**; PDF **Convert** > JPG pages and PNG pages are **JPG images** and **PNG images**; **Rotate** > 90° right and 90° left are **Right 90°** and **Left 90°**. What each one does is unchanged.
 
+### Known issues
+
+- Installing an older version over 0.2.2 is not supported: uninstall first. The older setup does not know the **Flevert PDF tools** entry and leaves it in the menu, pointing to a list that is gone.
+
 ## [0.2.1] - 2026-10-20
 
 ### Added
