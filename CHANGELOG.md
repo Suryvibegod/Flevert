@@ -25,7 +25,7 @@ PDFs: turn photos into one, and convert, merge, split, rotate, compress or passw
 
 ### Security
 
-- PDFs are read by pdfium in a separate process that has a memory cap and a time limit per page and cannot start other programs; qpdf runs as its own limited process too. A damaged or hostile PDF fails on its own, and the rest of the batch still finishes.
+- PDFs are read by pdfium in a separate process that has a memory cap and a time limit per page and cannot start other programs; qpdf runs as its own limited process too. A damaged or hostile PDF fails on its own, and the rest of the batch still finishes. That process limits crashes, time and memory, but it is not a sandbox: it can still reach your files like any program you run.
 
 ### Fixed
 
