@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Flevert.Core.Menu;
 
@@ -134,6 +135,9 @@ public sealed class InstallerScriptTests
         var source = Directory.CreateDirectory(dir.Combine("publish")).FullName;
         // Any program with a version resource stands in for flevert.exe, which the script reads its version from.
         File.Copy(Environment.ProcessPath!, Path.Combine(source, "flevert.exe"));
+        // [Files] names each of these, and ISCC fails when one is missing.
+        foreach (var file in ConversionOnlyFiles())
+            File.WriteAllText(Path.Combine(source, file), "stand-in");
 
         var without = Compile(iscc!, source, dir.Combine("out"));
         File.WriteAllText(Path.Combine(source, "THIRD-PARTY-NOTICES.txt"), "notices");
@@ -159,6 +163,132 @@ public sealed class InstallerScriptTests
         }
 
         return (process.ExitCode, stdout.Result + stderr.Result);
+    }
+
+    // What a conversion loads but flevert.exe check-location never does: pdfium, qpdf and its MSVC runtime (the files
+    // listed under "notices" in scripts/deps.json), qpdf's OpenSSL configuration, and ImageMagick's native library.
+    private static IEnumerable<string> ConversionOnlyFiles()
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "scripts", "deps.json")));
+        var listed = manifest.RootElement.GetProperty("notices").EnumerateArray()
+            .SelectMany(entry => entry.GetProperty("files").EnumerateArray().Select(file => file.GetString()!));
+        return [.. listed.Distinct(StringComparer.OrdinalIgnoreCase), "openssl.cnf", "Magick.Native-Q8-x64.dll"];
+    }
+
+    // Some of what any start of flevert.exe loads: the runtime, Flevert's assemblies and Magick.NET's managed ones.
+    private static readonly string[] StartUpFiles =
+    [
+        "flevert.exe", "flevert.dll", "flevert.deps.json", "flevert.runtimeconfig.json", "Flevert.Core.dll",
+        "Flevert.Pdf.dll", "coreclr.dll", "hostfxr.dll", "System.Private.CoreLib.dll", "Magick.NET.Core.dll",
+    ];
+
+    [Fact]
+    public void Setup_checks_the_install_folder_without_unpacking_what_only_a_conversion_loads()
+    {
+        // LocationProblem unpacks into setup's temporary folder the files flevert.exe check-location needs, and runs it
+        // there. The engines and their runtime (about 40 MB) are only loaded by a conversion: they must not be unpacked
+        // into %TEMP% and run from there, and each must still be installed once into the install folder.
+        Assert.NotEmpty(TemporaryExtractPatterns());
+        Assert.All(ConversionOnlyFiles(), file =>
+        {
+            Assert.True(InstalledByOneEntry(file), $"{file} is not installed by exactly one [Files] entry");
+            Assert.False(UnpackedForTheCheck(file), $"{file} is unpacked for check-location");
+        });
+        Assert.All(StartUpFiles, file =>
+        {
+            Assert.True(InstalledByOneEntry(file), $"{file} is not installed by exactly one [Files] entry");
+            Assert.True(UnpackedForTheCheck(file), $"{file} is not unpacked for check-location");
+        });
+        Assert.False(InstalledByOneEntry("flevert.pdb"), "symbol files are installed");
+    }
+
+    [Fact]
+    public async Task Flevert_exe_runs_check_location_from_only_the_files_setup_unpacks_for_it()
+    {
+        // The other half of the test above: what is left out must not be needed. flevert.exe builds its whole catalog at
+        // start, which loads Magick.NET's managed assemblies (seen failing without them) but none of the native engines.
+        var build = Path.GetDirectoryName(BuiltFlevertExe())!;
+        using var dir = new TempDir();
+        var folder = Directory.CreateDirectory(dir.Combine("unpacked")).FullName;
+        foreach (var file in Directory.EnumerateFiles(build, "*", SearchOption.AllDirectories))
+        {
+            var name = Path.GetFileName(file);
+            if (!InstalledByOneEntry(name) || !UnpackedForTheCheck(name))
+                continue;
+            var target = Path.Combine(folder, Path.GetRelativePath(build, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+
+        Assert.True(File.Exists(Path.Combine(build, "qpdf.exe")) && !File.Exists(Path.Combine(folder, "qpdf.exe")), "the copy should lack qpdf.exe");
+        var start = new ProcessStartInfo(Path.Combine(folder, "flevert.exe")) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
+        start.ArgumentList.Add("check-location");
+        start.ArgumentList.Add(dir.Combine("missing"));
+        start.Environment["FLEVERT_LOG_DIR"] = Directory.CreateDirectory(dir.Combine("logs")).FullName;
+        using var process = Process.Start(start)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+
+        // "does not exist" comes from the command itself, after the start-up that needs the assemblies.
+        Assert.True(process.ExitCode == ExitCodes.RefusedLocation, $"exit {process.ExitCode}: {stderr}{await stdout}");
+        Assert.Contains("does not exist", stderr, StringComparison.Ordinal);
+    }
+
+    private sealed record FilesEntry(string Source, string[] Excludes, string DestDir);
+
+    private static List<FilesEntry> FilesEntries()
+    {
+        var section = Regex.Match(Script, @"(?ms)^\[Files\]\r?$(.*?)^\[").Groups[1].Value;
+        var entries = new List<FilesEntry>();
+        foreach (var line in section.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0 && l[0] != ';'))
+        {
+            var values = Regex.Matches(line, @"(\w+): ""([^""]*)""").ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
+            Assert.StartsWith(@"{#SourceDir}\", values["Source"], StringComparison.Ordinal);
+            entries.Add(new FilesEntry(
+                values["Source"][@"{#SourceDir}\".Length..],
+                values.TryGetValue("Excludes", out var excludes) ? excludes.Split(',') : [],
+                values["DestDir"]));
+        }
+
+        return entries;
+    }
+
+    private static List<FilesEntry> EntriesInstalling(string fileName) =>
+        [.. FilesEntries().Where(e => Wildcard(e.Source, fileName) && !e.Excludes.Any(x => Wildcard(x, fileName)))];
+
+    // Into the install folder, by one entry only: {app}, or the function that returns it.
+    private static bool InstalledByOneEntry(string fileName)
+    {
+        var entries = EntriesInstalling(fileName);
+        if (entries.Count != 1)
+            return false;
+        var destination = entries[0].DestDir;
+        if (destination == "{app}")
+            return true;
+        var function = Regex.Match(destination, @"^\{code:(\w+)\}$");
+        return function.Success && Regex.IsMatch(Script,
+            $@"(?ms)^function {function.Groups[1].Value}\(Param: String\): String;\s*begin\s*Result := ExpandConstant\('\{{app\}}'\);\s*end;");
+    }
+
+    // ExtractTemporaryFiles matches its pattern against each entry's destination as written, constants unexpanded.
+    private static bool UnpackedForTheCheck(string fileName) =>
+        EntriesInstalling(fileName).Any(e => TemporaryExtractPatterns().Any(p => Wildcard(p, e.DestDir + @"\" + fileName)));
+
+    private static List<string> TemporaryExtractPatterns() =>
+        [.. Regex.Matches(Script, @"ExtractTemporaryFiles?\('([^']+)'\)").Select(m => m.Groups[1].Value)];
+
+    private static bool Wildcard(string pattern, string text) =>
+        Regex.IsMatch(text, "^" + Regex.Escape(pattern).Replace(@"\*", ".*", StringComparison.Ordinal).Replace(@"\?", ".", StringComparison.Ordinal) + "$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static string BuiltFlevertExe()
+    {
+        // tests/<project>/bin/<Configuration>/<tfm>/ → the Flevert.Cli build of the same configuration.
+        var output = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
+        var exe = Path.Combine(RepositoryRoot(), "src", "Flevert.Cli", "bin", output.Parent!.Name, output.Name, "flevert.exe");
+        Assert.True(File.Exists(exe), $"Build the solution first; missing {exe}");
+        return exe;
     }
 
     [Fact]

@@ -77,7 +77,20 @@ UninstallAppRunningError=Flevert is still running: a conversion, or its question
 ; The same goes for the update-check choice (/UPDATECHECK=1|0).
 
 [Files]
-Source: "{#SourceDir}\*"; Excludes: "*.pdb"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Before copying anything, setup runs flevert.exe check-location from its temporary folder (LocationProblem), and unpacks
+; for it the entries whose DestDir is written {app}. What only a conversion loads, the PDF engines with qpdf's MSVC runtime
+; and OpenSSL configuration, and ImageMagick's native library (about 40 MB), goes to {code:InstallFolder} instead: the
+; same folder, left out of that unpacking. A file in neither list is unpacked, so a new managed assembly flevert.exe
+; needs at start cannot be forgotten. InstallerScriptTests keeps this in step with scripts\deps.json.
+Source: "{#SourceDir}\*"; Excludes: "*.pdb,pdfium.dll,qpdf.exe,qpdf30.dll,msvcp140.dll,vcruntime140.dll,vcruntime140_1.dll,openssl.cnf,Magick.Native-*.dll"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceDir}\pdfium.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
+Source: "{#SourceDir}\qpdf.exe"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
+Source: "{#SourceDir}\qpdf30.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
+Source: "{#SourceDir}\msvcp140.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
+Source: "{#SourceDir}\vcruntime140.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
+Source: "{#SourceDir}\vcruntime140_1.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
+Source: "{#SourceDir}\openssl.cnf"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
+Source: "{#SourceDir}\Magick.Native-*.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
 
 [UninstallDelete]
 ; What flevert.exe writes under %LOCALAPPDATA%\Flevert: logs, batch keys and the ImageMagick policy. Named one by one,
@@ -113,6 +126,13 @@ var
 
 function GetFileAttributes(Path: String): Cardinal;
   external 'GetFileAttributesW@kernel32.dll stdcall';
+
+// The install folder, for the [Files] entries that LocationProblem must not unpack: it matches ExtractTemporaryFiles'
+// pattern against DestDir as written, so {code:InstallFolder} is left out where {app} is not.
+function InstallFolder(Param: String): String;
+begin
+  Result := ExpandConstant('{app}');
+end;
 
 function IsWindows11: Boolean;
 begin
@@ -356,10 +376,11 @@ begin
   end;
   Checker := AddBackslash(ExpandConstant('{tmp}')) + '{app}';
   try
-    // {app} stays unexpanded: this extracts the files meant for {app} into a folder literally named {tmp}\{app}.
+    // {app} stays unexpanded: this extracts the files whose DestDir is {app} into a folder literally named {tmp}\{app},
+    // which leaves out the ones installed through {code:InstallFolder} ([Files]).
     ExtractTemporaryFiles('{app}\*');
   except
-    // A second copy of the app (about 140 MB) goes here; a full drive is the likeliest cause.
+    // A second copy of the runtime and assemblies (about 110 MB) goes here; a full drive is the likeliest cause.
     Result := 'Setup could not unpack its files into ' + ExpandConstant('{tmp}') + ' to check the install folder (' +
       GetExceptionMessage + '). Make sure the drive has free space and that security software did not block setup, ' +
       'then run setup again.';
