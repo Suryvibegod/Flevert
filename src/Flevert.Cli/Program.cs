@@ -177,6 +177,17 @@ internal static class Program
         if (leader is null)
             return Ok;
 
+        var headless = Environment.GetEnvironmentVariable("FLEVERT_HEADLESS") == "1";
+        // Protect and unlock ask for the password in a dialog, once for the batch when the user agrees. Without windows
+        // they keep the catalog's prompt, which fails each file at once rather than wait for an answer (docs/specs/pdf.md).
+        DialogPasswordPrompt? passwords = null;
+        IPasswordOperation? asking = null;
+        if (!headless && operation is IPasswordOperation needsPassword)
+        {
+            passwords = new DialogPasswordPrompt();
+            operation = asking = needsPassword.WithPrompt(passwords);
+        }
+
         try
         {
             // Logs hold every path processed; keep the whole app-data folder private to this user, like the batch keys.
@@ -197,13 +208,14 @@ internal static class Program
                     }),
                 _ => throw new InvalidOperationException($"{operation.Id} is neither kind of operation."), // the catalog refuses it
             };
-            if (Environment.GetEnvironmentVariable("FLEVERT_HEADLESS") == "1")
+            if (headless)
                 return batch(null, CancellationToken.None).GetAwaiter().GetResult().NoFailures ? Ok : SomeFilesFailed;
             // Alongside the batch, so it costs no time; asked about after the batch, if a newer version is out.
-            return BatchUi.Run(operation, leader.Pending, log, batch, UpdateOffer.Start()) ? Ok : SomeFilesFailed;
+            return BatchUi.Run(operation, leader.Pending, log, batch, UpdateOffer.Start(), passwords) ? Ok : SomeFilesFailed;
         }
         finally
         {
+            asking?.Dispose(); // wipes the passwords it still holds
             leader.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }
