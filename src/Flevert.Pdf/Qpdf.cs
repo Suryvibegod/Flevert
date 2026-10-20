@@ -23,6 +23,13 @@ public sealed class Qpdf
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromMinutes(1);
     private const int MaxDetailChars = 2_000;
 
+    // qpdf reads @- as UTF-8. NTFS names may hold a lone UTF-16 surrogate, which UTF-8 cannot carry: the default
+    // encoder would put U+FFFD in its place, and qpdf would open another file of that name (one that may exist).
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    internal const string UnsupportedFileNameMessage =
+        "The name of this PDF or of a folder it is in has a character Flevert cannot pass to its PDF tool: rename it and try again.";
+
     /// <param name="exePath">Absolute path of qpdf.exe; checked when qpdf is run, not here.</param>
     public Qpdf(string exePath) => ExePath = exePath;
 
@@ -55,7 +62,10 @@ public sealed class Qpdf
     /// </remarks>
     /// <param name="inputPath">Fully qualified, so qpdf can never read it as an option (<c>-…</c>) or an option file (<c>@…</c>).</param>
     /// <param name="outputPath">Fully qualified, like <paramref name="inputPath"/>; usually the temporary path from <see cref="OutputPath.WriteAtomicallyAsync"/>.</param>
-    /// <exception cref="PdfException">The input needs a password, is not a PDF or is damaged beyond repair, or is too large.</exception>
+    /// <exception cref="PdfException">
+    /// The input needs a password, is not a PDF or is damaged beyond repair, or is too large; or a path has a character
+    /// qpdf cannot be given (<see cref="PdfError.UnsupportedFileName"/>).
+    /// </exception>
     /// <exception cref="IOException">qpdf could not write <paramref name="outputPath"/>.</exception>
     /// <exception cref="FileNotFoundException">qpdf.exe is missing.</exception>
     public async Task TransformAsync(string inputPath, string outputPath, IEnumerable<string> options, CancellationToken ct)
@@ -103,7 +113,16 @@ public sealed class Qpdf
 
     private Task<ExternalToolResult> RunWithPathsAsync(string[] options, string[] paths, TimeSpan timeout, CancellationToken ct)
     {
-        var lines = Encoding.UTF8.GetBytes(string.Concat(paths.Select(path => ToExtendedPath(path) + "\n")));
+        byte[] lines;
+        try
+        {
+            lines = StrictUtf8.GetBytes(string.Concat(paths.Select(path => ToExtendedPath(path) + "\n")));
+        }
+        catch (EncoderFallbackException e)
+        {
+            throw new PdfException(PdfError.UnsupportedFileName, UnsupportedFileNameMessage, e);
+        }
+
         return ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, cancellationToken: ct);
     }
 

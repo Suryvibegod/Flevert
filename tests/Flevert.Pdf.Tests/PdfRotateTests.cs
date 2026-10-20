@@ -160,6 +160,21 @@ public sealed class PdfRotateTests : IDisposable
     }
 
     [Fact]
+    public async Task A_name_with_a_lone_surrogate_is_refused_rather_than_opening_another_file()
+    {
+        // NTFS names are UTF-16 and may hold a lone surrogate, which UTF-8 cannot carry. Replaced by U+FFFD, the path
+        // qpdf reads would name another file: here a sibling that exists.
+        var input = CopyFixture("rotations.pdf", "scan\uD800.pdf");
+        CopyFixture("three-colours.pdf", "scan�.pdf");
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => Op("pdf.rotate-right").RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.UnsupportedFileName, ex.Error);
+        Assert.Contains("rename", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(["scan\uD800.pdf", "scan�.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
     public async Task Works_on_a_pdf_at_a_long_path_given_with_the_extended_prefix()
     {
         var folder = @"\\?\" + _dir.Path;

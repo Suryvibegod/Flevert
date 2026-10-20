@@ -43,6 +43,9 @@ public enum PdfError
     TooManyPages,
     TooLarge,
     DamagedPage,
+
+    /// <summary>The path holds a character qpdf cannot be given (a lone UTF-16 surrogate, legal in NTFS names).</summary>
+    UnsupportedFileName,
 }
 
 /// <summary>A PDF Flevert cannot use, with a message for the user.</summary>
