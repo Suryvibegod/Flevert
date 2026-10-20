@@ -684,6 +684,35 @@ public sealed class OutputPathTests : IDisposable
         Assert.False(left.HasFlag(FileAttributes.NotContentIndexed), $"{left}");
     }
 
+    // A folder where this account may create folders but not files: the temporary folder is made, its anchor is refused.
+    // The failure must say so (access denied, where), not claim that someone replaced the folder.
+    [Fact]
+    public async Task WriteDirectoryAtomically_reports_a_refused_anchor_as_the_access_error_it_is()
+    {
+        var beside = Directory.CreateDirectory(_dir.Combine("no files here"));
+        var me = System.Security.Principal.WindowsIdentity.GetCurrent().User!;
+        var deny = new System.Security.AccessControl.FileSystemAccessRule(me, System.Security.AccessControl.FileSystemRights.CreateFiles,
+            System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+            System.Security.AccessControl.PropagationFlags.None, System.Security.AccessControl.AccessControlType.Deny);
+        var acl = beside.GetAccessControl();
+        acl.AddAccessRule(deny);
+        beside.SetAccessControl(acl);
+        try
+        {
+            var error = await Assert.ThrowsAnyAsync<IOException>(() => OutputPath.WriteDirectoryAtomicallyAsync(
+                Path.Combine(beside.FullName, "a (pages)"), WritePages(1), CancellationToken.None));
+
+            Assert.Contains(new System.ComponentModel.Win32Exception(5).Message, error.Message, StringComparison.Ordinal);
+            Assert.Contains("no files here", error.Message, StringComparison.Ordinal);
+            Assert.Empty(EntryNames(beside.FullName));
+        }
+        finally
+        {
+            acl.RemoveAccessRule(deny);
+            beside.SetAccessControl(acl);
+        }
+    }
+
     // The returned folder is shown in the log and the notification. A volume mounted only into a folder has no drive
     // letter, and its \\?\Volume{guid}\ form has no shorter spelling: cutting the prefix would name nothing.
     [Theory]

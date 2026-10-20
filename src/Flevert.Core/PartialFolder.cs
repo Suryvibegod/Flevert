@@ -122,14 +122,17 @@ internal sealed partial class PartialFolder : IDisposable
             // Resolve the real path from the handle. A junction higher in the caller's spelling resolves away, so it can be
             // re-pointed afterwards without reaching anything used here; the resolved parents are real and locked while held.
             // Shortened like an input's real path, so an ordinary path stays ordinary in names and logs (long paths keep \\?\).
-            folder.Path = InputPin.Shorten(Resolve(handle) ?? throw Replaced());
+            folder.Path = InputPin.Shorten(Resolve(handle) ?? throw new IOException(
+                $"Windows could not tell where the folder for the output is, so it cannot be written there ({System.IO.Path.GetDirectoryName(path)})."));
 
             if (EntriesExceptAnchor(folder.Path).Count != 0)
                 throw Replaced();
 
             folder.Hide();
-            if (!folder.TryAnchor())
-                throw Replaced();
+            // Refused by the file system (a folder where this account may make folders but not files): say so. Created
+            // somewhere else than inside the folder held: replaced.
+            if (!folder.TryAnchor(out var anchorError))
+                throw anchorError == 0 ? Replaced() : Failure(anchorError, path);
             return folder;
         }
         catch
@@ -215,7 +218,7 @@ internal sealed partial class PartialFolder : IDisposable
             {
                 // Only with the anchor held is looking inside by path safe: an empty folder could become a junction to
                 // someone else's files between the check above and the listing.
-                if (TryAnchor())
+                if (TryAnchor(out _))
                 {
                     foreach (var entry in EntriesExceptAnchor(Path))
                         DeleteEntry(entry);
@@ -265,9 +268,11 @@ internal sealed partial class PartialFolder : IDisposable
     }
 
     // The anchor is created by path, so the folder could be swapped between the check and the create: it is accepted only
-    // when its final path is inside the folder this handle holds.
-    private bool TryAnchor()
+    // when its final path is inside the folder this handle holds. error: the Win32 error when the create itself failed,
+    // 0 when the anchor landed somewhere else.
+    private bool TryAnchor(out int error)
     {
+        error = 0;
         if (_anchor is not null)
             return true;
 
@@ -275,6 +280,7 @@ internal sealed partial class PartialFolder : IDisposable
             0, 0, CreateNew, FileAttributeHidden | FileFlagDeleteOnClose | FileFlagOpenReparsePoint, 0);
         if (anchor.IsInvalid)
         {
+            error = Marshal.GetLastPInvokeError();
             anchor.Dispose();
             return false;
         }
@@ -375,8 +381,9 @@ internal sealed partial class PartialFolder : IDisposable
     private static IOException Replaced() =>
         new("The temporary folder for the output was replaced while it was being created.");
 
+    // Names the folder the user knows (beside the input), not the temporary name inside it.
     private static IOException Failure(int error, string path) =>
-        new($"{new Win32Exception(error).Message} ({System.IO.Path.GetFileName(path)})", unchecked((int)0x80070000) | error);
+        new($"{new Win32Exception(error).Message} ({System.IO.Path.GetDirectoryName(path)})", unchecked((int)0x80070000) | error);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct FileAttributeTagInfo

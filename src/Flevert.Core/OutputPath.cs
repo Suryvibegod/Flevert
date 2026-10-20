@@ -134,7 +134,7 @@ public static class OutputPath
             // Still refused after the wait: the pages are complete, only the name is missing. Deleting them would throw a
             // long render away for a scanner's sake, so the folder stays, visible, under its temporary name.
             return final ?? throw new IOException(
-                $"Could not name the folder \"{leafName}\": another program (an antivirus scan, the search indexer or a sync app) kept a file in it open. The pages are kept in \"{Path.GetFileName(folder.Path)}\".");
+                $"Could not name the folder \"{leafName}\": Windows kept refusing, most likely because another program (an antivirus scan, the search indexer or a sync app) has a file in it open. The pages are kept in \"{Path.GetFileName(folder.Path)}\".");
         }
         finally
         {
