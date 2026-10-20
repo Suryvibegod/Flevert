@@ -42,7 +42,7 @@ Người dùng cần tự làm: bật 2FA cho tài khoản GitHub; tạo API key
 ## Sau v0.1.0
 
 - Nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview, viết bài giới thiệu.
-- v0.2 (pdf): theo quy trình, bắt đầu bằng `planning-and-task-breakdown` từ [docs/specs/pdf.md](../docs/specs/pdf.md) ra `tasks/pdf/plan.md` + `todo.md`; trả lời Open Questions của spec ở bước Plan; thay đổi core (N→1, 1→N, ExternalTool) làm trước, có ADR. Giữ file setup 0.1.0 (tải từ Releases theo hash) làm fixture test nâng cấp.
+- **v0.2 (pdf): đang làm.** Plan: [pdf/plan.md](pdf/plan.md) (Open Questions đã trả lời, đã kiểm qpdf/pdfium bản chính thức); việc tiếp theo là task chưa xong đầu tiên trong [pdf/todo.md](pdf/todo.md), bắt đầu T1 (fetch-deps).
 - v0.3 (media): sau v0.2; quyết GPL hay LGPL ffmpeg (spec, Open Question 1) ở bước Plan.
 
 ## Dựng máy mới
