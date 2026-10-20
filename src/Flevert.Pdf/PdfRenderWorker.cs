@@ -325,8 +325,10 @@ public static class PdfRenderWorker
             var scale = request.Dpi / seen.Dpi;
             var width = Math.Max(1, (int)Math.Round(pixels.Width * scale));
             var height = Math.Max(1, (int)Math.Round(pixels.Height * scale));
-            EncodeShrunk(pixels, width, height, Path.Combine(request.Folder, hash + ".jpg"));
-            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"image {hash} {width} {height} {(pixels.Gray ? "gray" : "rgb")}"));
+            // The dictionary says what the JPEG holds, from its frame header: ImageMagick writes one component for an RGB
+            // image whose every pixel is gray (probed), which is smaller and draws the same.
+            var gray = EncodeShrunk(pixels, width, height, Path.Combine(request.Folder, hash + ".jpg")) == 1;
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"image {hash} {width} {height} {(gray ? "gray" : "rgb")}"));
         }
 
         lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"done {total}"));
@@ -334,7 +336,8 @@ public static class PdfRenderWorker
 
     private sealed record ImageSeen(int PageIndex, int ObjectIndex, int Width, int Height, double Dpi, bool Keep);
 
-    private static void EncodeShrunk(PdfImagePixels pixels, int width, int height, string path)
+    // Returns the number of components of the JPEG written: 1 or 3.
+    private static int EncodeShrunk(PdfImagePixels pixels, int width, int height, string path)
     {
         using var image = new MagickImage();
         // Raw pixels in memory, as for pages: no coder parses anything.
@@ -347,16 +350,42 @@ public static class PdfRenderWorker
         image.Resize((uint)width, (uint)height);
         image.Quality = SharingJpegQuality;
         image.Settings.SetDefine(MagickFormat.Jpeg, "sampling-factor", "4:2:0");
+        var jpeg = image.ToByteArray(MagickFormat.Jpeg);
+        var components = JpegComponents(jpeg);
+        if (components is not (1 or 3))
+            throw new InvalidOperationException($"ImageMagick wrote a JPEG of {components} components.");
         try
         {
             // CreateNew in the parent's private folder: nothing there is ever replaced.
             using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            image.Write(stream, MagickFormat.Jpeg);
+            stream.Write(jpeg);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             throw new PageWriteException($"Could not write a smaller image: {e.Message}", e);
         }
+
+        return components;
+    }
+
+    /// <summary>The number of components in the frame header (SOF0 to SOF2) of a JPEG ImageMagick wrote; 0 when there is none.</summary>
+    internal static int JpegComponents(ReadOnlySpan<byte> jpeg)
+    {
+        if (jpeg.Length < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8)
+            return 0;
+        var at = 2;
+        while (at + 4 <= jpeg.Length && jpeg[at] == 0xFF)
+        {
+            var marker = jpeg[at + 1];
+            var length = (jpeg[at + 2] << 8) | jpeg[at + 3];
+            if (length < 2)
+                return 0;
+            if (marker is 0xC0 or 0xC1 or 0xC2)
+                return at + 9 < jpeg.Length && length >= 8 ? jpeg[at + 9] : 0;
+            at += 2 + length;
+        }
+
+        return 0;
     }
 
     /// <summary>

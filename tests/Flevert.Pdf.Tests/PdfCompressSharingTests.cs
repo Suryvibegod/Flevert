@@ -179,6 +179,32 @@ public sealed class PdfCompressSharingTests(ITestOutputHelper output) : IDisposa
         Assert.Equal([1, 2, 3], reports.Select(r => r.Position));
     }
 
+    [Fact]
+    public async Task An_rgb_image_whose_every_pixel_is_gray_becomes_a_gray_jpeg_and_looks_the_same()
+    {
+        // A black-and-white scan stored as RGB: ImageMagick writes a one-component JPEG, so the dictionary must say DeviceGray.
+        using var scan = ScanPage(8);
+        scan.Grayscale();
+        scan.ColorType = ColorType.TrueColor;
+        var input = _dir.Combine("bw.pdf");
+        Write(input, [new("/Type /XObject /Subtype /Image /Width 2480 /Height 3508 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode", Flate(scan))], [(0, FullPage)]);
+
+        var result = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.True(MeanDifference(input, result, 0) <= 3);
+        Assert.Matches(@"/ColorSpace\s*/DeviceGray", System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result)));
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00 }, 1)]
+    [InlineData(new byte[] { 0xFF, 0xD8, 0xFF, 0xC2, 0x00, 0x11, 0x08, 0x00, 0x01, 0x00, 0x01, 0x03, 0x01, 0x22, 0x00 }, 3)]
+    [InlineData(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, 0)]
+    [InlineData(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x01 }, 0)]
+    public void The_components_of_a_jpeg_are_read_from_its_frame_header(byte[] jpeg, int components)
+    {
+        Assert.Equal(components, PdfRenderWorker.JpegComponents(jpeg));
+    }
+
     // The pixel size of every image in the PDF, from its dictionary, which is never in an object stream: a stream's.
     private static List<(int Width, int Height)> ImageSizes(string path)
     {
