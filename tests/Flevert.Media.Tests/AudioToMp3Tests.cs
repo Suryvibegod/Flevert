@@ -117,13 +117,14 @@ public sealed class AudioToMp3Tests : IDisposable
     [Fact]
     public async Task Cancelling_stops_ffmpeg_at_once_and_leaves_no_partial_file()
     {
-        // Three hours of 8 kHz mono: written in seconds, and encoded whole in 20 s or more (2.5 s for 20 minutes with
-        // ffmpeg 6.1, 8 s with 8.1), so a run that ignored the cancel could neither return in time nor stop early. The
-        // time allowed is generous for a busy CI runner; how far ffmpeg got (it is cancelled at 1 %) does not depend on
-        // its speed.
-        const int Seconds = 3 * 60 * 60;
-        var input = _dir.Combine("long.wav");
-        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", $"sine=frequency=300:sample_rate=8000:duration={Seconds}", "-c:a", "pcm_u8", "-f", "wav", input);
+        // Three hours of 8 kHz mono silence in FLAC: 2 MB, quick to write and to open even where a virus scanner reads
+        // new files (an 86 MB WAV made the probe time out on CI), yet 20 s or more to encode whole (2.5 s for 20 minutes
+        // of sound with ffmpeg 6.1, 8 s with 8.1). A run that ignored the cancel could neither return in time nor stop
+        // early. The time allowed is generous for a busy CI runner; how far ffmpeg got (it is cancelled at 1 %) does not
+        // depend on its speed.
+        var input = _dir.Combine("long.flac");
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "anullsrc=channel_layout=mono:sample_rate=8000:nb_samples=4096", "-t", "10800",
+            "-c:a", "flac", "-f", "flac", input);
         using var cancel = new CancellationTokenSource();
         var cancelledAt = new TaskCompletionSource<Stopwatch>(TaskCreationOptions.RunContinuationsAsynchronously);
         var furthest = 0;
@@ -142,7 +143,7 @@ public sealed class AudioToMp3Tests : IDisposable
         var sinceCancel = (await cancelledAt.Task).Elapsed;
         Assert.True(sinceCancel < TimeSpan.FromSeconds(10), $"returned {sinceCancel} after the cancel");
         Assert.True(furthest < 50, $"ffmpeg reached {furthest}% of the file");
-        Assert.Equal(["long.wav"], Directory.GetFiles(_dir.Path).Select(Path.GetFileName));
+        Assert.Equal(["long.flac"], Directory.GetFiles(_dir.Path).Select(Path.GetFileName));
     }
 
     [Fact]
