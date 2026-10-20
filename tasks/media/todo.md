@@ -120,3 +120,18 @@ Code-reviewer (CR), security-auditor (SEC), doubt-driven (DD) trên `git diff or
 
 Kết luận: không còn Critical/High/Required nào mở trừ các mục chỉ Windows/CI xác nhận được (DD-2, DD-11, DD-13, DD-16, DD-18, đo bộ nhớ RC-2 trên máy nhiều nhân, chạy `ffmpeg-source.yml` cho DD-6/DD-7 và RC-4).
 
+
+### Review lại lần 2 (một reviewer gộp, bối cảnh trống)
+
+| id | mức | việc | quyết định |
+|---|---|---|---|
+| RC2-1 | Medium, Required | Bỏ SEI theo đuôi file (`.mts/.m2ts`) sót clip AVCHD đã remux sang MP4/MKV, vẫn giữ MDPM (GPS); ADR nói sai "SEI khác chỉ chứa thông số encoder" | **Sửa**: bỏ SEI của H.264 khi là AVCHD hoặc 8 MB đầu file có byte `MDPM` (camcorder ghi MDPM mỗi GOP). Cách theo keyframe (reviewer đề xuất) đã thử và hỏng: intra refresh của x264 vẫn có cờ K trong MP4. Test: clip MP4 có SEI MDPM → mất MDPM, hình giống hệt; luồng intra refresh → giữ SEI, gói video giống hệt. Đối chứng âm: không bao giờ bỏ → test MDPM và `.m2ts` đỏ; luôn bỏ với H.264 → test intra refresh đỏ |
+| RC2-2 | Low | VP9 không giới hạn `-threads`, có thể vượt 4 GB trên máy nhiều nhân | **Sửa**: VP9 dùng `EncoderThreads` như x264. Đo trên Windows nhiều nhân vẫn mở (cùng RC-2) |
+| RC2-3 | Low | `-fs` của Remove hidden info (input × 1,05 + 10 MB) không kẹp theo chỗ trống, trái ADR | **Sửa**: `MediaJob.WithinFreeSpace` dùng chung với `MaxOutputBytes`; ADR nói rõ áp dụng cả chép luồng |
+| RC2-4 | Low | Âm thanh: ffprobe ước lượng thiếu > 2 lần thì `-fs` theo ước lượng có thể chặn file thật | **Sửa**: thời lượng ước lượng = max(ffprobe, byte × 8 / 32 kbit/s) |
+| RC2-5 | Low | Doc và ADR nói `-t` giới hạn thống kê x264; với sàn 8 kbit/s, file độc vẫn khai được byte ÷ 1000 s, giới hạn thật là timeout | **Sửa doc**: XML doc `MaxTime` và ADR nêu timeout là giới hạn thật. Kiểm chỗ trống cho thư mục passlog: **chấp nhận** (không phải hồi quy; timeout và Cancel chặn) |
+| RC2-6 | Low | Lề 0,5 s khi so `LastTime` với `-t` giả định khung dày; video thưa (≤ 1 fps) dừng sớm hơn lề, file cụt được commit | **Chấp nhận**: chỉ file độc tự cắt chính nó, không ảnh hưởng tài nguyên; fps trong header cũng do file khai nên lề theo fps không chắc hơn |
+| RC2-7 | Low | Không test nào kiểm tra thao tác thật sự truyền `boundTime`, `DecoderThreads`, `EncoderThreads`; test TS ghép không khẳng định ffprobe đọc thiếu | **Sửa**: theory ghi lại đối số của từng thao tác (MP4, WEBM, compress, GIF, Remove hidden info, Extract audio); test TS ghép khẳng định ffprobe đọc < 30 s |
+| RC2-8 | Nit | (a) assert `TimeoutFor` lặp ở mỗi dòng theory; (b) `FileInfo.Length` đọc cả khi không `boundTime`; (c) regex `LICENSES/` lấy mọi file không phải mã nguồn trong thư mục đó | **Sửa** (a) tách thành test riêng, (b) chỉ đọc khi `boundTime`. (c) **Chấp nhận**: thừa file giấy phép vô hại |
+
+Kết luận lần 2: không còn Critical/High/Required nào mở trừ các mục chỉ Windows/CI xác nhận được (như trên, thêm hành vi của ffmpeg 8.1 với `-threads` trước `-i` và hai `-t` của GIF).
