@@ -391,11 +391,11 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 | `bomb-content` | ok 0.0 | ok 0.1 | ok 0.2 | NeedsTooMuchMemory 1.2 | NeedsTooMuchMemory 1.2 |
 | `bomb-double-flate` | ok 0.2 | ok 0.2 | ok 0.1 | ok 0.2 | ok 0.2 |
 | `bomb-double-flate-content` | ok 0.2 | ok 0.1 | ok 0.1 | NeedsTooMuchMemory 0.9 | NeedsTooMuchMemory 0.9 |
-| `bomb-image` | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.3 | ok 0.2 |
+| `bomb-image` | ok 0.1 | ok 0.1 | ok 0.2 | ok 1.3 | ok 0.2 |
 | `bomb-object-stream` | NeedsTooMuchMemory 0.5 | NeedsTooMuchMemory 0.7 | NeedsTooMuchMemory 0.5 | NeedsTooMuchMemory 0.9 | NeedsTooMuchMemory 1.2 |
 | `count-lie-high` | ok 0.1 | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.2 |
-| `count-lie-low` | TooManyPages 2.7 | TooManyPages 2.7 | TooManyPages 3.2 | ok 0.3 (pdfium tin /Count: 1 trang) | ok 0.3 |
-| `cycle-kids-loop` | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.0 | ok 0.3 | ok 0.2 |
+| `count-lie-low` | TooManyPages 2.7 | TooManyPages 2.7 | TooManyPages 3.2 | ok 1.3 (pdfium tin /Count: 1 trang) | ok 1.3 |
+| `cycle-kids-loop` | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.0 | ok 1.3 | ok 0.2 |
 | `cycle-kids-self` | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.0 | DamagedPage 0.1 | DamagedPage 0.1 |
 | `cycle-parent` | ok 0.0 | ok 0.0 | ok 0.1 | ok 0.5 | ok 0.2 |
 | `cycle-self-reference` | ok 0.0 | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.2 |
@@ -403,9 +403,9 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 | `encrypt-unknown-handler` | UnsupportedEncryption 0.0 | UnsupportedEncryption 0.0 | UnsupportedEncryption 0.2 | UnsupportedEncryption 0.1 | UnsupportedEncryption 0.1 |
 | `header-only` | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.2 | NotPdf 0.1 | NotPdf 0.1 |
 | `launch-action` | ok 0.1 | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.2 |
-| `many-objects` (300 000) | ok 4.2 | ok 0.7 | ok 0.6 | ok 0.5 | ok 0.4 |
-| `nested-arrays` | ok 0.1 | ok 0.1 | ok 0.1 | ok 0.3 | ok 0.2 |
-| `nested-dictionaries` | ok 0.3 | ok 0.3 | ok 0.2 | ok 0.2 | ok 0.2 |
+| `many-objects` (300 000) | ok 4.2 | ok 0.7 | ok 0.6 | ok 0.5 | ok 1.4 |
+| `nested-arrays` | ok 0.1 | ok 0.1 | ok 0.1 | ok 1.3 | ok 0.2 |
+| `nested-dictionaries` | ok 1.3 | ok 1.3 | ok 0.2 | ok 0.2 | ok 0.2 |
 | `not-pdf-empty` | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.1 |
 | `not-pdf-png` | NotPdf 0.0 | NotPdf 0.2 | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.1 |
 | `not-pdf-zip` | NotPdf 0.1 | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.1 |
@@ -415,10 +415,10 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 | `pages-100000` | TooManyPages 2.8 | TooManyPages 2.7 | TooManyPages 2.7 | TooManyPages 0.1 | TooManyPages 0.2 |
 | `pages-2001` | TooManyPages 0.1 | TooManyPages 0.1 | TooManyPages 0.1 | TooManyPages 0.1 | TooManyPages 0.1 |
 | `signed` | ok + ghi chú 0.0 | ok + ghi chú 0.1 | ok + ghi chú 0.1 | ok 0.2 | ok 0.2 |
-| `startxref-past-end` | ok 0.3 | ok 0.1 | ok 0.1 | ok 0.4 | ok 0.3 |
+| `startxref-past-end` | ok 1.3 | ok 0.1 | ok 0.1 | ok 1.4 | ok 1.3 |
 | `truncated` | ok 0.0 (qpdf sửa) | ok 0.1 | ok 0.1 | NotPdf 0.1 | NotPdf 0.1 |
 | `xref-missing` | ok 0.0 (qpdf sửa) | ok 0.1 | ok 0.5 | NotPdf 0.1 | NotPdf 0.2 |
-| `xref-wrong-offsets` | ok 0.0 | ok 0.0 | ok 0.1 | ok 0.4 | ok 0.2 |
+| `xref-wrong-offsets` | ok 0.0 | ok 0.0 | ok 0.1 | ok 1.4 | ok 0.2 |
 
   - Ngoài 10 s (spec cho phép: việc thật tỉ lệ với cỡ, dưới timeout qpdf 2 phút + 1 s/MB): PDF một triệu object (53 MB) xoay ~13 s; không có trong bảng, dùng làm đầu vào chậm cho test hủy/giết.
   - **Còn mở**: (1) T12/T13/T14 (agent song song) phải gọi `Qpdf.CountPagesAsync` và `PdfSignature`/`OutputNote` cho thao tác ghi PDF mới, và `--stream-data=preserve` khi không cần nén (compress cố ý giải nén: bom hai lớp Flate sẽ tốn ~15 s, cần giới hạn riêng); unlock không đếm trang được khi chưa có mật khẩu. (2) DD-M7 (mã thoát 3 sau khi qpdf sửa file hỏng: không báo "repaired") chưa làm. (3) R13/R15/R9 (symlink treo, FAT/SMB, USN) vẫn hoãn: máy này không tạo được symlink (cần Developer Mode). (4) SA-L1 (giới hạn tổng byte ảnh khi PDF → ảnh) chưa làm. (5) Ghi chú chữ ký dựa vào khóa `/ByteRange` trong byte file (khóa viết bằng `#` thoát bị bỏ sót). (6) pdfium tin `/Count` thấp: `count-lie-low` ra 1 ảnh (giới hạn công việc vẫn đúng). (7) Chưa chạy qua menu thật (bước verify trước T20).
@@ -521,7 +521,7 @@ Ba review bối cảnh trống (code, security, doubt) trên nhánh trước ph�
 | 10. Lossless: PDF đã sửa nhưng không nhỏ hơn bị bỏ qua, mất ghi chú sửa | Should | Đúng | `7ee0629`: PDF đã sửa luôn được ghi kèm ghi chú; chỉ PDF lành không nhỏ hơn mới bỏ qua (bảng PDF độc: `cycle-self-reference` → Ok). Đỏ: "This PDF is already compact: compressing it would not make it smaller." |
 | 11. Lùi về của Compress (3 s + 1 s/MB, MaxParallel 4) mô tả sai ("compresses the rest") và có thể chạm PDF thường trên laptop 2 nhân bận | Should | Đúng | `b99ad4e`: 10 s + 1 s/MB; ghi chú "…it packed its objects but left its streams as they were, since compressing them took too long."; CHANGELOG mục Changed; bảng PDF độc cho Compress 10 s + ngân sách đó. Đỏ: `Strings differ (pos 42)`, `Expected: 00:00:10` |
 | 12. Ước lượng đĩa PDF → ảnh từ chối chuyển đổi vừa đĩa (PNG 3 B/px); trần 4 000 MP từ chối PDF A4 ~1 835–2 000 trang mà 0.2.0 chuyển được | Should | Đúng | `21a653d`: PNG 1 B/px, JPG 0,5 B/px, cộng 64 MB; trần 5 000 MP (2 000 trang A4 150 DPI = 4 350 MP); test ở biên; CHANGELOG Changed. Đỏ: 8 test (vd. 2 000 trang A4 bị `TooLarge`) |
-| 13. Thứ tự menu khác sơ đồ của spec | Should | Maintainer quyết giữ thứ tự 0.2.0 | `ff535f7`: spec nói sơ đồ là nhóm mục, thứ tự thật là của v0.2.0 cộng mục mới; thiết kế lại ở v0.2.2 |
+| 13. Thứ tự menu khác sơ đồ của spec | Should | Maintainer quyết giữ thứ tự 0.2.0 | `ff535f7`: spec nói sơ đồ là nhóm mục, thứ tự thật là của v0.2.0 cộng mục mới; thiết kế lại ở v1.2.2 |
 | 14. CHANGELOG "Changed" thiếu mục | Should | Đúng | `d6f1537`: Split viết lại dễ đọc; `--stream-data=preserve` cho Remove metadata/Protect/Remove password; ghi chú PDF đã sửa ở mọi thao tác ghi; lùi về của Compress; giới hạn đĩa/cỡ cho ảnh (`b99ad4e`, `21a653d`); bỏ câu "16 entries" |
 | 15. Magic giao thức worker vẫn `/1` dù trường đổi nghĩa | Nit | Đúng | `cbfe546`: `flevert-pdf-worker/2`. Đỏ: request `/1` vẫn đọc được (`No exception was thrown`) |
 | 16. Dòng `encode` không chặn width × height: worker hỏng gây `ArgumentOutOfRangeException` | Nit | Đúng | `2e2fc7a`: width × height ≤ 100 MP (cả dòng `image`) → `ProtocolException` → ReaderFailed; test không cần worker (`PdfWorkerProtocolTests`). Đỏ: `Actual: System.ArgumentOutOfRangeException` |
@@ -542,7 +542,7 @@ Ba review bối cảnh trống (code, security, doubt) trên nhánh trước ph�
 - **Nit:**
   - lời CHANGELOG "every PDF reader repairs the same way" → "Flevert counts the pages through the same repair";
   - placeholder phiên bản của mẫu báo lỗi → 0.2.1.
-- **Chuyển sang v0.2.2** (hiếm xảy ra, ghi lại):
+- **Chuyển sang v1.2.2** (hiếm xảy ra, ghi lại):
   - lần thử lại không object stream của Lossless chưa lùi về bản không giải mã khi gặp `TooSlow`/`NeedsTooMuchMemory`;
   - Compress for sharing đổi mọi `IOException` thành lỗi đĩa, kể cả khi file đầu vào biến mất giữa chừng. Đúng ra chỉ nên đổi khi đường dẫn lỗi nằm trong thư mục tạm.
 
@@ -552,9 +552,9 @@ Ba review bối cảnh trống (code, security, doubt) trên nhánh trước ph�
 
 ---
 
-# v0.2.2 (phần B: tám công cụ PDF mới; nhánh `feat/v0.2.2-tools`, 2026-10-20)
+# v1.2.2 (phần B: tám công cụ PDF mới; nhánh `feat/v0.2.2-tools`, 2026-10-20)
 
-Phần A (menu mới, icon, menu thứ hai `Flevert PDF tools`) làm song song ở nhánh khác. Phần B chỉ thêm thao tác và hợp đồng `PdfTools` cho phần A dùng; không sửa menu, installer, icon. (Lúc làm, phần A định có cửa sổ "PDF tools" và thao tác `pdf.tools`; người dùng bỏ cửa sổ đó, xem phần A. Kiểm cuối v0.2.2 bỏ luôn phần hợp đồng chỉ cửa sổ dùng: tên, mô tả, nhóm, icon của `PdfTool`, nhãn tùy chọn, `PdfTools.Operations`.)
+Phần A (menu mới, icon, menu thứ hai `Flevert PDF tools`) làm song song ở nhánh khác. Phần B chỉ thêm thao tác và hợp đồng `PdfTools` cho phần A dùng; không sửa menu, installer, icon. (Lúc làm, phần A định có cửa sổ "PDF tools" và thao tác `pdf.tools`; người dùng bỏ cửa sổ đó, xem phần A. Kiểm cuối v1.2.2 bỏ luôn phần hợp đồng chỉ cửa sổ dùng: tên, mô tả, nhóm, icon của `PdfTool`, nhãn tùy chọn, `PdfTools.Operations`.)
 
 ## Đã làm
 
@@ -589,7 +589,7 @@ Phần A (menu mới, icon, menu thứ hai `Flevert PDF tools`) làm song song �
 - Chưa đo thời gian thật trên PDF lớn (2 000 trang) cho watermark/n-up; ngân sách worker như render (60 s + 2 s/trang).
 - Review ba bối cảnh trống, MenuProbe, installer: bước Verify của bản phát hành.
 
-# v0.2.2 (phần A: menu mới, icon, menu thứ hai "Flevert PDF tools"; nhánh `feat/v0.2.2-ui`, 2026-10-20)
+# v1.2.2 (phần A: menu mới, icon, menu thứ hai "Flevert PDF tools"; nhánh `feat/v0.2.2-ui`, 2026-10-20)
 
 Làm song song với phần B (các công cụ PDF, `src/Flevert.Pdf/PdfTools.cs`, nhánh khác). Người dùng muốn nhanh, không bám spec quá chặt: làm đủ và tốt cho người dùng thật, review đầy đủ để sau.
 
@@ -628,7 +628,7 @@ Làm song song với phần B (các công cụ PDF, `src/Flevert.Pdf/PdfTools.cs
 - Tên file output trong README cho các công cụ (`(2 per sheet)`, `(parts)`…) lấy từ spec; phần B kiểm lại khi gộp.
 - Review đầy đủ (code, bảo mật, doubt) trước phát hành; kịch bản tìm việc ≤ 2 lần di chuột cho reviewer doubt.
 
-#### Kiểm cuối v0.2.2 (code, security, doubt): reconcile
+#### Kiểm cuối v1.2.2 (code, security, doubt): reconcile
 
 Nhánh `review-v0.2.2` (từ `8f86956`), 2026-10-20. Quyết định của maintainer cho từng phát hiện; test viết trước và thấy đỏ khi rẻ (thông báo đỏ ghi trong cột Xử lý).
 
@@ -646,8 +646,8 @@ Nhánh `review-v0.2.2` (từ `8f86956`), 2026-10-20. Quyết định của maint
 | 10. Hai quy tắc khác nhau cho chữ watermark | Should | Đúng: hộp thoại đếm UTF-16, công cụ đếm scalar; ô chữ có thể cắt đôi emoji | `6d94709`: `WatermarkPrompts.Problem` gọi `PdfEdit.Check`; từ chối ký tự Cf, U+2028/2029, surrogate lẻ, noncharacter; đếm text element; ô chữ chứa 4 × 100 đơn vị; ký tự Arial không có glyph bị từ chối, nêu tên (đọc `cmap` của Arial trong tiến trình hộp thoại, `FontGlyphs`) |
 | 11. Tên cho người dùng thật | Should | Đồng ý | `9c220bd`: "Lock filled forms" (op-id và tên output giữ nguyên); README: Under 10 MB cho email (Gmail ~18 MB file, Outlook 20 MB), Under 25 MB cho chat; ảnh cần Combine into PDF trước khi đóng watermark |
 | 12. Phần thừa của cửa sổ công cụ đã bỏ | Should | Đúng: bộ lọc trong `Program` loại hết, `PdfTools.Operations` dựng mọi công cụ lần hai | `1272b90`: `PdfTool` chỉ còn op-id và tùy chọn, bỏ `PdfToolGroup`, nhãn tùy chọn, `PdfTools.Operations`; catalog = các mục menu; sửa comment `IOperation`, `MenuTests`, csproj; gộp hai test "không có đường menu"; sửa đầu phần B |
-| 13. Dòng spec v0.2.2 lệch code | Should | Đúng | `112dfad` (và `a53715f`, `4c8cc5d` cho mục trang trắng, font): Print layout/Fit A4 theo cách làm hiện tại (sau mục 6, dùng `FPDF_ImportNPagesToOne`, không phải `FPDF_NewXObjectFromPage`), Flatten bằng qpdf với quy tắc mục 1, số trang từ menu "1 / N", chia theo dung lượng |
-| 14. Hạ từ 0.2.2 về bản cũ để lại "Flevert PDF tools" trỏ vào khóa đã xóa | Low | Đúng | `2c41bcb`: CHANGELOG, Known issues: "uninstall first" |
+| 13. Dòng spec v1.2.2 lệch code | Should | Đúng | `112dfad` (và `a53715f`, `4c8cc5d` cho mục trang trắng, font): Print layout/Fit A4 theo cách làm hiện tại (sau mục 6, dùng `FPDF_ImportNPagesToOne`, không phải `FPDF_NewXObjectFromPage`), Flatten bằng qpdf với quy tắc mục 1, số trang từ menu "1 / N", chia theo dung lượng |
+| 14. Hạ từ 1.2.2 về bản cũ để lại "Flevert PDF tools" trỏ vào khóa đã xóa | Low | Đúng | `2c41bcb`: CHANGELOG, Known issues: "uninstall first" |
 | 15. Trường thứ 7 của request phải rỗng cho việc không dùng; comment `Magic` sai | Low | Đúng | `9d74717`. Đỏ: hai request `blank`/`images` có tùy chọn không bị từ chối |
 | 16. Phụ thuộc dev của script icon không ghim hash | Low | Đúng | `8d69d19`: `scripts/make-menu-icons.requirements.txt` (mọi wheel Windows của resvg-py 0.5.0, Pillow 13.0.0, SHA256 từ PyPI), cài bằng `--require-hashes --only-binary=:all:` (đã thử `pip download` với Python 3.12) |
 | 17. Nit: icon "beside every entry", comment nhóm của `Looks`, tên output trong README | Low | Đúng | `d0f58cf`; tên output đã so với code cho mọi công cụ (`9c220bd` thêm tên phần) |

@@ -89,7 +89,7 @@ No account, no telemetry, no uploads. At most once a day, after a conversion, Fl
 
 ## Coming next
 
-**0.3**: video and audio. Ideas are welcome in [issues](https://github.com/Suryvibegod/Flevert/issues); changes are in the [CHANGELOG](CHANGELOG.md).
+**1.3**: video and audio. Ideas are welcome in [issues](https://github.com/Suryvibegod/Flevert/issues); changes are in the [CHANGELOG](CHANGELOG.md).
 
 ## Troubleshooting
 

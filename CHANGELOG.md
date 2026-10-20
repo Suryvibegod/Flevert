@@ -4,6 +4,10 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-10-20
+
+Version numbers now start at 1: this release follows 0.2.1, and the next feature release is 1.3.0.
+
 ### Added
 
 - New PDF tools in **Flevert PDF tools**, a second entry beside **Flevert** in the PDF menu with its own list. Each runs straight from the menu, on your computer, for each PDF you select:
@@ -117,6 +121,7 @@ The first release: pictures, and an installer.
 - A specially crafted TIFF file can make the bundled ImageMagick 7.1.2-33 overflow its stack ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity): Flevert then closes, and the rest of that batch is not converted. No code runs. It will be fixed by updating once a Magick.NET release includes ImageMagick 7.1.2-34.
 - Windows Smart App Control may block this unsigned release (see the README).
 
-[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/Suryvibegod/Flevert/compare/v0.2.1...v1.2.2
 [0.2.1]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.0

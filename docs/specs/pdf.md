@@ -188,7 +188,7 @@ public Task<string> RunAsync(string inputPath, CancellationToken ct)
 
 # v0.2.1: phần còn lại của module pdf
 
-Trạng thái: **đã duyệt** (2026-10-20); **đã làm** trên nhánh `feat/v0.2.1-pdf` (2026-10-20, tiến độ và kết quả trong `tasks/pdf/todo.md`, mục v0.2.1), chờ maintainer review rồi gộp. Làm trên nhánh `feat/v0.2.1-pdf` từ `main` sau v0.2.0; phát hành **trước** v0.3.0. Mọi quy tắc ở trên (giới hạn, qpdf qua `@-`, worker pdfium, mật khẩu, tên output, `OutputPath`) vẫn áp dụng; mục này chỉ nói phần thêm và phần đổi.
+Trạng thái: **đã duyệt** (2026-10-20); **đã làm** trên nhánh `feat/v0.2.1-pdf` (2026-10-20, tiến độ và kết quả trong `tasks/pdf/todo.md`, mục v0.2.1), chờ maintainer review rồi gộp. Làm trên nhánh `feat/v0.2.1-pdf` từ `main` sau v0.2.0; phát hành **trước** v1.3.0. Mọi quy tắc ở trên (giới hạn, qpdf qua `@-`, worker pdfium, mật khẩu, tên output, `OutputPath`) vẫn áp dụng; mục này chỉ nói phần thêm và phần đổi.
 
 ## Objective (v0.2.1)
 
@@ -206,7 +206,7 @@ Merge PDFs · Split into pages · Remove metadata
 Protect with password · Remove password         (5)
 ```
 
-Sơ đồ trên cho biết **các mục theo nhóm**, không phải thứ tự. Thứ tự thật là thứ tự của v0.2.0, mục mới thêm vào nhóm của nó: `Convert ▸` (JPG pages, PNG pages, Text), `Merge PDFs`, `Split into pages`, `Rotate ▸`, `Compress ▸` (Lossless, For sharing), `Remove metadata`, `Protect with password`, `Remove password`. Maintainer quyết 2026-10-20 (review trước phát hành): v0.2.1 giữ thứ tự đã phát hành; menu được thiết kế lại ở v0.2.2.
+Sơ đồ trên cho biết **các mục theo nhóm**, không phải thứ tự. Thứ tự thật là thứ tự của v0.2.0, mục mới thêm vào nhóm của nó: `Convert ▸` (JPG pages, PNG pages, Text), `Merge PDFs`, `Split into pages`, `Rotate ▸`, `Compress ▸` (Lossless, For sharing), `Remove metadata`, `Protect with password`, `Remove password`. Maintainer quyết 2026-10-20 (review trước phát hành): v0.2.1 giữ thứ tự đã phát hành; menu được thiết kế lại ở v1.2.2.
 
 - **Repair** không có mục riêng: mọi thao tác ghi PDF mới bằng qpdf đã dựng lại bảng xref; thay vào đó Flevert **báo** khi đã phải sửa file (yêu cầu P4), và README nói "Compress > Lossless cũng sửa PDF hỏng nhẹ".
 - **Reverse page order**: chỉ có nếu spike Compress for sharing thất bại (khi đó `Compress` vẫn là một mục, còn chỗ cho `Reverse page order` ngay sau `Split into pages`, tổng 15).
@@ -328,11 +328,11 @@ Bản C# (worker `flevert.exe pdf-worker`, ImageMagick thu nhỏ) chạy trên L
 
 ---
 
-# v0.2.2: thêm công cụ PDF (tham khảo Stirling-PDF)
+# v1.2.2: thêm công cụ PDF (tham khảo Stirling-PDF)
 
 Trạng thái: **đã duyệt** (2026-10-20); nhãn và icon cụ thể được duyệt bằng ảnh chụp trong pull request. Làm trên nhánh `feat/v0.2.2-pdf`, tạo từ `main` **sau khi v0.2.1 được gộp** (cùng đụng menu PDF, worker và `Qpdf`); phát hành sau v0.2.1. Mọi quy tắc của v0.2 và v0.2.1 vẫn áp dụng.
 
-## Objective (v0.2.2)
+## Objective (v1.2.2)
 
 Người dùng giấy tờ ở Việt Nam hay cần thêm vài việc trước khi nộp hoặc in:
 - bỏ trang trắng của bản scan hai mặt;
@@ -344,7 +344,7 @@ Người dùng giấy tờ ở Việt Nam hay cần thêm vài việc trước k
 - chia file cho vừa giới hạn email;
 - lấy ảnh ra khỏi PDF.
 
-Hôm nay họ làm các việc này trên web, tức là để lộ giấy tờ. v0.2.2 thêm các việc đó, chạy trên máy, và làm lại menu chuột phải (ảnh và PDF) cho người dùng thật: sắp theo việc hay làm, tên dễ hiểu, có icon.
+Hôm nay họ làm các việc này trên web, tức là để lộ giấy tờ. v1.2.2 thêm các việc đó, chạy trên máy, và làm lại menu chuột phải (ảnh và PDF) cho người dùng thật: sắp theo việc hay làm, tên dễ hiểu, có icon.
 
 ## Nguồn tham khảo: Stirling-PDF
 
@@ -354,19 +354,19 @@ Giấy phép: phần lõi là **MIT**. Các thư mục `app/proprietary`, `app/s
 
 Khảo sát 2026-10-20 trên `app/core` (khoảng 60 controller), đối chiếu với Flevert v0.2.1:
 
-| Nhóm của Stirling | Flevert đã có (v0.2.1) | Chọn cho v0.2.2 | Không làm, lý do |
+| Nhóm của Stirling | Flevert đã có (v0.2.1) | Chọn cho v1.2.2 | Không làm, lý do |
 |---|---|---|---|
 | Trang | Merge, Split, Rotate | Bỏ trang trắng, Nhiều trang trên một tờ, Đưa về A4, Chia theo dung lượng | Sắp xếp/xóa trang tùy ý, booklet, poster, cắt lề, gộp thành một trang dài: cần giao diện chọn trang hoặc ít người dùng |
 | Chuyển đổi | Ảnh ↔ PDF, PDF → chữ | Lấy ảnh ra (Extract images) | Office ↔ PDF: cần LibreOffice (~300 MB). PDF → Word/Excel/EPUB/video: ngoài phạm vi |
 | Chỉnh nội dung | — | Đánh số trang, Watermark chữ, Làm phẳng form và chú thích | Sửa chữ, chú thích, mục lục. Đổi/đảo màu: đổi màu đúng nghĩa phải render trang thành ảnh, mất chữ chọn được |
 | Bảo mật | Mật khẩu, Remove metadata | — | Che thông tin: redact thật cần xóa nội dung dưới vùng che, mà pdfium không có API. Ký số, kiểm chữ ký: ngoài phạm vi. Gỡ hạn chế không có mật khẩu: là phá khóa |
-| Khác | Nén, sửa tự động | — | **OCR** (Tesseract, Apache-2.0): làm ở **v0.4.0** (người dùng chốt 2026-10-20). Tự xoay theo chữ: cần OCR, xét cùng v0.4.0. So sánh, pipeline: ngoài phạm vi |
+| Khác | Nén, sửa tự động | — | **OCR** (Tesseract, Apache-2.0): làm ở **v1.4.0** (người dùng chốt 2026-10-20). Tự xoay theo chữ: cần OCR, xét cùng v1.4.0. So sánh, pipeline: ngoài phạm vi |
 
 **Không chép code Java.** Flevert là C# với pdfium + qpdf. Chỉ lấy **ý tưởng và tham số mặc định** đã được kiểm chứng (ví dụ ngưỡng trang trắng), và ghi nguồn trong spec và commit message (quy tắc "Reuse before writing" của CLAUDE.md).
 
 ## Menu: sắp lại theo người dùng thật, có icon, thêm menu thứ hai "Flevert PDF tools" (bắt buộc ≤ 16 mục mỗi menu)
 
-Người dùng duyệt (2026-10-20): v0.2.2 làm lại menu ảnh lẫn menu PDF.
+Người dùng duyệt (2026-10-20): v1.2.2 làm lại menu ảnh lẫn menu PDF.
 
 **Đổi thiết kế (người dùng 2026-10-20, sau khi đã duyệt bản có cửa sổ):** giữ Flevert **thuần chuột phải**, **không** có cửa sổ công cụ và không có mục `More PDF tools…`; các công cụ mới nằm trong **menu thứ hai `Flevert PDF tools`** của PDF, mỗi công cụ chạy thẳng từ menu với tùy chọn mặc định. Hộp thoại duy nhất là chữ của watermark. Bản cửa sổ (đã làm rồi bỏ) không còn trong code.
 
@@ -528,7 +528,7 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
 - Worker render từng trang ở 150 DPI xám.
 - Trang có ký tự (`FPDFText_CountChars` > 0) hoặc có chú thích (`FPDFPage_GetAnnotCount` > 0: ghi chú, con dấu, trường form) luôn được giữ.
 - Trang còn lại là trắng khi, bỏ dải lề 5 mm quanh mép (bóng máy scan), chia phần còn lại thành ô khoảng 1 cm (≈ 59 × 59 px ở 150 DPI), **không ô nào** có quá 1,5% điểm ảnh tối (độ sáng < 245, ngưỡng 10 trên 255 lấy từ `BlankPageController` của Stirling-PDF, MIT). Bụi rải rác nên ô nào cũng ít; chữ ký tắt, con dấu, ghi chú bút chì tập trung nên vượt ngưỡng ở ít nhất một ô.
-- Khác Stirling-PDF: Stirling đếm trên cả trang (trắng khi ≥ 99,9% điểm sáng), nên bỏ nhầm trang chỉ có chữ ký tắt hay con dấu nhỏ (dưới 0,1% trang A4). Đổi sau kiểm cuối v0.2.2.
+- Khác Stirling-PDF: Stirling đếm trên cả trang (trắng khi ≥ 99,9% điểm sáng), nên bỏ nhầm trang chỉ có chữ ký tắt hay con dấu nhỏ (dưới 0,1% trang A4). Đổi sau kiểm cuối v1.2.2.
 - Giữ các trang còn lại bằng qpdf `--pages`: chép nguyên, không mã hóa lại.
 - Thông báo nêu số trang đã bỏ: "Removed 3 blank pages: 2, 8, 9."
 - Không trang nào trắng → skipped "This PDF has no blank pages."
@@ -558,7 +558,7 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
 - Không có ảnh → skipped.
 - Giới hạn tổng pixel và kiểm chỗ trống như P6.6.
 
-## Testing Strategy (v0.2.2)
+## Testing Strategy (v1.2.2)
 
 - Test viết trước và thấy đỏ.
 - Fixture sinh bằng script, ghi nguồn gốc:
@@ -581,7 +581,7 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
   - UI Automation kiểm tên trợ năng của hộp thoại watermark (chỉ khi `FLEVERT_UI_TESTS=1`; báo người dùng trước);
   - MenuProbe: menu `Flevert` của `.pdf` đúng 16 mục, `Flevert PDF tools` 12 mục.
 
-## Boundaries (v0.2.2)
+## Boundaries (v1.2.2)
 
 - **Always:** như v0.2.1; mọi việc pdfium với PDF lạ chạy trong worker; nêu nguồn Stirling-PDF khi lấy tham số hay thuật toán.
 - **Ask first:** thêm công cụ ngoài bảng trên; đóng gói font hay binary mới; đổi bố cục menu.
@@ -591,7 +591,7 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
   - đẩy thẳng vào `main`;
   - sửa version, `tasks/HANDOFF.md`, hay mục đã phát hành của CHANGELOG.
 
-## Success Criteria (v0.2.2)
+## Success Criteria (v1.2.2)
 
 1. Hai menu `.pdf` (`Flevert`, `Flevert PDF tools`) và menu ảnh thật đúng bố cục ở trên (≤ 16 mục mỗi menu, đúng thứ tự, đúng tên, có icon, rõ trên nền sáng và tối). Mỗi công cụ chạy thẳng từ menu cho 1 file và cho 5 file; `Add watermark…` hỏi một lần cho cả lô. Người dùng đã duyệt ảnh chụp menu và hộp thoại watermark; các kịch bản tìm việc đạt (≤ 2 lần di chuột).
 2. Bỏ trang trắng: fixture 6 trang → 4 trang; trang chỉ có một dòng chữ được giữ; thông báo nêu số trang đã bỏ.
@@ -602,9 +602,9 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
 7. Lấy ảnh: JPEG trùng byte; ảnh dùng lại chỉ ra một lần.
 8. Mọi công cụ đạt bảng PDF độc. CI xanh 3 lần. `test-installer.ps1` đạt (gồm nâng cấp từ bản đã ghim). Ba review bối cảnh trống không còn Critical/High/Required.
 
-## Đã quyết (v0.2.2, người dùng 2026-10-20)
+## Đã quyết (v1.2.2, người dùng 2026-10-20)
 
 1. **Menu**: làm lại menu ảnh và PDF theo người dùng thật, có icon Fluent (MIT). ~~Thêm `More PDF tools…` mở cửa sổ chọn công cụ; `Convert > Text` vào cửa sổ~~: thay bằng quyết định 4.
 2. **Phạm vi**: cả 8 công cụ trong bảng Yêu cầu.
-3. **OCR**: v0.4.0, sau media (v0.3.0); spec riêng viết khi bắt đầu v0.4.0 (Tesseract Apache-2.0 + dữ liệu `vie`, bộ cài nặng thêm khoảng 30–60 MB).
+3. **OCR**: v1.4.0, sau media (v1.3.0); spec riêng viết khi bắt đầu v1.4.0 (Tesseract Apache-2.0 + dữ liệu `vie`, bộ cài nặng thêm khoảng 30–60 MB).
 4. **Giữ thuần chuột phải, không cửa sổ công cụ; thêm menu thứ hai `Flevert PDF tools`** (người dùng 2026-10-20, sau quyết định 1): mọi công cụ chạy thẳng từ menu với tùy chọn mặc định (Add page numbers: dưới giữa, `1 / N`); chỉ watermark hỏi chữ, trong hộp thoại kiểu hộp thoại mật khẩu; `Text` ở lại `Convert to` của menu `Flevert`. Xem mục "Menu" ở trên.
