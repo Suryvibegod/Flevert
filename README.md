@@ -59,7 +59,7 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 | **Merge PDFs** | `report (merged).pdf`, in name order |
 | **Split into pages** | a folder `report (split)` with one PDF per page |
 | **Rotate** > 90° right, 90° left, 180° | `report (rotated).pdf` |
-| **Compress** > Lossless | `report (compressed).pdf`, smaller with the same quality; also repairs a slightly damaged PDF |
+| **Compress** > Lossless | `report (compressed).pdf`, smaller with the same quality; also rewrites a slightly damaged PDF so that it opens |
 | **Compress** > For sharing | `report (small).pdf`: pictures above 150 DPI brought down to 150 DPI, often a quarter to a half of the size, depending on the scan |
 | **Remove metadata** | `report (no metadata).pdf`, without author, dates, XMP, attachments or scripts |
 | **Protect with password**, **Remove password** | `report (protected).pdf` (AES-256), `report (unlocked).pdf` |
