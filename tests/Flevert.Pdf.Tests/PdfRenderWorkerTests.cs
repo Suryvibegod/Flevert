@@ -29,17 +29,27 @@ public sealed class PdfRenderWorkerTests : IDisposable
 
     [Theory]
     [InlineData("not a request")]
-    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0")]
-    [InlineData("flevert-pdf-worker/1\0C:\\a.pdf\01:2\0C:\\out\0png\0")]
-    [InlineData("flevert-pdf-worker/1\0C:\\a.pdf\01:2\0C:\\out\0gif\0150\0")]
-    [InlineData("flevert-pdf-worker/1\0C:\\a.pdf\01:2\0C:\\out\0png\0-1\0")]
-    [InlineData("flevert-pdf-worker/1\0C:\\a.pdf\01:2\0C:\\out\0png\0NaN\0")]
-    [InlineData("flevert-pdf-worker/1\0C:\\a.pdf\0xyz\0C:\\out\0png\0150\0")]
-    [InlineData("flevert-pdf-worker/1\0relative.pdf\01:2\0C:\\out\0png\0150\0")]
-    [InlineData("flevert-pdf-worker/1\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0extra\0")]
+    // 0.2.0's version: fields have changed meaning since (the text and shrink tasks and their lines).
+    [InlineData("flevert-pdf-worker/1\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0")]
+    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0")]
+    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0gif\0150\0")]
+    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0-1\0")]
+    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0NaN\0")]
+    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\0xyz\0C:\\out\0png\0150\0")]
+    [InlineData("flevert-pdf-worker/2\0relative.pdf\01:2\0C:\\out\0png\0150\0")]
+    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0extra\0")]
     public void A_damaged_request_is_refused(string text)
     {
         Assert.Throws<FormatException>(() => PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(text)));
+    }
+
+    [Fact]
+    public void A_request_of_this_version_is_read_and_written()
+    {
+        var request = PdfRenderRequest.Decode(Encoding.Unicode.GetBytes("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0shrink\0150\0"));
+
+        Assert.Equal(PdfWorkerTask.ShrinkImages, request.Task);
+        Assert.StartsWith("flevert-pdf-worker/2\0", Encoding.Unicode.GetString(request.Encode()), StringComparison.Ordinal);
     }
 
     [Fact]

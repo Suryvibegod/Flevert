@@ -36,7 +36,7 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
     public PdfWorkerTask Task { get; init; }
 
     /// <summary>Changes whenever the fields change, so a worker of another version refuses the request rather than misreading it.</summary>
-    internal const string Magic = "flevert-pdf-worker/1";
+    internal const string Magic = "flevert-pdf-worker/2";
 
     /// <summary>Two paths of at most 32 767 characters and a few short fields fit with room to spare.</summary>
     internal const int MaxBytes = 256 * 1024;
