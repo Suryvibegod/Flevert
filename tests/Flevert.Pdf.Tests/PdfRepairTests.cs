@@ -18,7 +18,7 @@ public sealed class PdfRepairTests : IDisposable
         var ex = await Assert.ThrowsAsync<PdfException>(() => PdfRepair.CheckAsync(Qpdf.NextToApp, repaired: true, pages: 5, output, CancellationToken.None));
 
         Assert.Equal(PdfError.RepairFailed, ex.Error);
-        Assert.Equal("This PDF is damaged: the result would miss pages.", ex.Message);
+        Assert.Equal("This PDF is damaged: the result would be missing pages.", ex.Message);
     }
 
     [Fact]

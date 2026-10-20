@@ -94,7 +94,7 @@ public sealed class Runner(RunLog log)
             // was too slow to start: it did not end, and its file, if it comes, is dropped without a second notification.
             var verb = lost.All(f => f.StillRunning) ? "did not reach Flevert in time" : "never reached Flevert";
             return Failed(operation, [.. lost.Select(f => (f.Path, f.StillRunning
-                    ? "did not reach Flevert in time: its process had not handed it over when the batch closed"
+                    ? "did not reach Flevert in time: it arrived too late to be included"
                     : "never reached Flevert: its process ended before handing it over"))],
                 timer, (name, others) => others == 0
                     ? $"{name} {verb}, so nothing was joined. Select the files again."

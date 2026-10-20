@@ -111,7 +111,8 @@ public sealed class RunnerBatchOperationTests : IDisposable
         var result = Assert.Single(outcome.Results);
         Assert.Equal("2.txt did not reach Flevert in time, so nothing was joined. Select the files again.", result.Error);
         Assert.Contains(File.ReadAllLines(Assert.Single(Directory.GetFiles(_logs.Path))), line =>
-            line.Contains("\t" + two + "\tfailed\t", StringComparison.Ordinal) && line.Contains("\tdid not reach Flevert in time", StringComparison.Ordinal));
+            line.Contains("\t" + two + "\tfailed\t", StringComparison.Ordinal)
+            && line.Contains("\tdid not reach Flevert in time: it arrived too late to be included", StringComparison.Ordinal));
     }
 
     [Fact]

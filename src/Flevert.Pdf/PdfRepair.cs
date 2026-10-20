@@ -16,7 +16,7 @@ internal static class PdfRepair
 {
     public const string RepairedNote = "Flevert had to repair this PDF while reading it: check that the pages look right.";
 
-    public const string MissingPagesMessage = "This PDF is damaged: the result would miss pages.";
+    public const string MissingPagesMessage = "This PDF is damaged: the result would be missing pages.";
 
     public const string UnreadableMessage = "This PDF is too damaged: Flevert could not write a copy of it that opens.";
 
