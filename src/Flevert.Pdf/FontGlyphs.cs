@@ -63,8 +63,9 @@ internal sealed class FontGlyphs
 
             return null;
         }
-        catch (ArgumentOutOfRangeException)
+        catch (Exception e) when (e is ArgumentOutOfRangeException or OverflowException)
         {
+            // An offset past the file, or one the checked conversions of Format12 cannot hold.
             return null;
         }
     }
