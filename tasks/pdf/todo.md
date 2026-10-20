@@ -74,10 +74,11 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 ## Giai đoạn 3: pdfium
 
 ### T9: `Pdfium` (P/Invoke) và render an toàn
-- [ ] `LibraryImport` tới `pdfium.dll` cạnh exe; `SafeHandle` cho document/page/bitmap; khóa toàn tiến trình; `FPDF_InitLibrary` một lần
-- [ ] Giới hạn: ≤ 2 000 trang, trang render ≤ 10 000 px mỗi cạnh **sau khi nhân DPI** (vượt thì giảm DPI trang đó), file ≤ 2 GB; PDF có mật khẩu → lỗi như T3
-- [ ] ADR-0008 cập nhật (P/Invoke tự viết, lý do không dùng wrapper NuGet)
+- [x] `LibraryImport` tới `pdfium.dll` cạnh exe; `SafeHandle` cho document/page/bitmap; khóa toàn tiến trình; `FPDF_InitLibrary` một lần
+- [x] Giới hạn: ≤ 2 000 trang, trang render ≤ 10 000 px mỗi cạnh **sau khi nhân DPI** (vượt thì giảm DPI trang đó), file ≤ 2 GB; PDF có mật khẩu → lỗi như T3
+- [x] ADR-0008 cập nhật (P/Invoke tự viết, lý do không dùng wrapper NuGet)
 - Kiểm: fixture 3 trang render đúng màu tại điểm mẫu; fixture trang khổng lồ bị giảm DPI; test chạy song song 8 luồng không crash
+- Đã làm (2026-10-20): project `Flevert.Pdf` + `Flevert.Pdf.Tests` tạo sớm ở T9 (sln, CI, release, setup-dev, tài liệu lệnh test); T3 chỉ còn `Qpdf` và thao tác xoay. Đọc PDF bằng `FPDF_LoadCustomDocument` qua handle .NET (lý do trong ADR-0008). 20 test đỏ trước (stub), rồi xanh; bỏ khóa trong `Render` → test 8 luồng làm sập test host (đối chứng âm). Chưa nối `MemoryBudget`: `GetRenderSize(...).Bytes` cho thao tác T10 xin trước khi render. Bộ nhớ riêng của pdfium (ảnh lớn trong trang) chưa giới hạn: để T18.
 - Phụ thuộc: T1. Cỡ: M
 
 ### T10: `pdf.to-jpg`, `pdf.to-png`

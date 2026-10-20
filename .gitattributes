@@ -9,3 +9,5 @@
 *.tif binary
 *.avif binary
 *.gif binary
+# A PDF's cross-reference table holds byte offsets: converting line endings would break it.
+*.pdf binary

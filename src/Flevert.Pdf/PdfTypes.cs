@@ -1,0 +1,63 @@
+namespace Flevert.Pdf;
+
+/// <summary>A page's size in points (1/72 inch), as displayed: the page's own rotation is applied.</summary>
+public readonly record struct PdfPageSize(double Width, double Height);
+
+/// <summary>
+/// The pixel size a page renders at, and the DPI that gives it: lower than the DPI asked for when that would pass
+/// <see cref="PdfDocument.MaxRenderPixels"/> on a side.
+/// </summary>
+public readonly record struct PdfRenderSize(int Width, int Height, double Dpi)
+{
+    /// <summary>The memory the rendered BGRA pixels take.</summary>
+    public long Bytes => (long)Width * Height * 4;
+}
+
+/// <summary>A rendered page: 4 bytes per pixel in the order blue, green, red, alpha, rows top to bottom, no padding.</summary>
+public sealed class PdfBitmap(int width, int height, double dpi, byte[] bgra)
+{
+    public int Width { get; } = width;
+
+    public int Height { get; } = height;
+
+    public int Stride => Width * 4;
+
+    public double Dpi { get; } = dpi;
+
+    public ReadOnlyMemory<byte> Bgra { get; } = bgra;
+}
+
+/// <summary>The limits that keep an untrusted PDF from taking the machine's memory (docs/specs/pdf.md).</summary>
+internal readonly record struct PdfLimits(int MaxPages, long MaxFileBytes, int MaxRenderPixels)
+{
+    public static PdfLimits Default { get; } = new(PdfDocument.MaxPages, PdfDocument.MaxFileBytes, PdfDocument.MaxRenderPixels);
+}
+
+/// <summary>Why a PDF cannot be used.</summary>
+public enum PdfError
+{
+    NotPdf,
+    PasswordRequired,
+    UnsupportedEncryption,
+    Unreadable,
+    TooManyPages,
+    TooLarge,
+    DamagedPage,
+}
+
+/// <summary>A PDF Flevert cannot use, with a message for the user.</summary>
+public sealed class PdfException : Exception
+{
+    public PdfException() { }
+
+    public PdfException(string message) : base(message) { }
+
+    public PdfException(string message, Exception innerException) : base(message, innerException) { }
+
+    public PdfException(PdfError error, string message) : base(message) => Error = error;
+
+    public PdfError Error { get; }
+
+    /// <summary>The same words for every PDF operation, qpdf or pdfium (docs/specs/pdf.md).</summary>
+    public const string NeedsPasswordMessage = "This PDF needs a password: use Remove password first";
+}
