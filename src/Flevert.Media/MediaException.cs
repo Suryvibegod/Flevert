@@ -20,6 +20,8 @@ public sealed class MediaException : Exception
 
     internal const string NoSoundMessage = "This file has no sound.";
 
+    internal const string NoSoundToExtractMessage = "This video has no sound to extract.";
+
     internal const string UnknownDurationMessage = "Flevert cannot tell how long this file is: it may be damaged.";
 
     internal const string TooLongMessage = "This file is longer than 12 hours, more than Flevert converts.";

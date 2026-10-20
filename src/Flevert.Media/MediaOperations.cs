@@ -1,0 +1,17 @@
+using Flevert.Core;
+
+namespace Flevert.Media;
+
+/// <summary>
+/// The video and audio operations offered in the menu, in menu order (docs/specs/media.md, "Menu"). Nothing here starts
+/// ffmpeg: an operation probes its file when it runs.
+/// </summary>
+public static class MediaOperations
+{
+    public static IReadOnlyList<IMenuOperation> All { get; } = Create(Ffmpeg.NextToApp);
+
+    internal static IReadOnlyList<IMenuOperation> Create(Ffmpeg ffmpeg) =>
+    [
+        new AudioConvert(AudioFormat.Mp3, ffmpeg),
+    ];
+}

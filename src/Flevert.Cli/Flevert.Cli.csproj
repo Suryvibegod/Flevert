@@ -20,6 +20,7 @@
     <ProjectReference Include="..\Flevert.Core\Flevert.Core.csproj" />
     <ProjectReference Include="..\Flevert.Image\Flevert.Image.csproj" />
     <ProjectReference Include="..\Flevert.Pdf\Flevert.Pdf.csproj" />
+    <ProjectReference Include="..\Flevert.Media\Flevert.Media.csproj" />
   </ItemGroup>
 
 </Project>

@@ -14,10 +14,11 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 - Đã làm (2026-10-20, Linux, ffmpeg 6.1 của hệ thống): `Ffmpeg.ProbeAsync` + `MediaInfo.Parse`; 36 test xanh. Fixture không lưu trong repo: `Fixtures.cs` sinh bằng lavfi lần đầu được dùng (1080p, MOV điện thoại xoay 90° có GPS, HEVC HDR10, MKV hai audio, WAV, M4A). Đối chứng âm: bỏ `-format_whitelist` thì test danh sách concat (file nó trỏ là video thật) đỏ; HLS và concat trỏ file không có vẫn bị từ chối nhờ whitelist giao thức. Core (2 commit riêng): `ExternalToolLimits.BelowNormalPriority` (đặt trên tiến trình, không qua giới hạn của job vì cần đặc quyền; **cần kiểm trên Windows**: test PowerShell in lớp ưu tiên của nó và của tiến trình con) và `FileProgress.Percent` ("37%", thanh tiến độ theo %). Tên `VideoTrack`/`AudioTrack` (CA1711 cấm hậu tố Stream).
 
 ## T2: lát dọc `audio.to-mp3`
-- [ ] `Ffmpeg.RunAsync`: `-nostdin -hide_banner -nostats -n -progress pipe:1`, input `file:`, output `file:` + `-f`; tiến độ `out_time_us`; timeout thời lượng × 6 + 60 s; lỗi → `MediaException` tiếng Anh ngắn, chi tiết stderr vào log
-- [ ] Core: `FileProgress.Percent`, `ExternalToolLimits.BelowNormalPriority` (cần kiểm trên Windows)
-- [ ] `audio.to-mp3` (MP3 V2), metadata theo danh sách cho phép; đăng ký `MediaOperations.All` trong `Program.cs`
+- [x] `Ffmpeg.EncodeAsync`: `-nostdin -hide_banner -nostats -n -progress pipe:1`, input `file:`, output `file:` + `-f`; tiến độ `out_time_us`; timeout thời lượng × 6 + 60 s; lỗi → `MediaException` tiếng Anh ngắn, chi tiết stderr vào log
+- [x] Core: `FileProgress.Percent`, `ExternalToolLimits.BelowNormalPriority` (làm ở T1)
+- [x] `audio.to-mp3` (MP3 V2), metadata theo danh sách cho phép; đăng ký `MediaOperations.All` trong `Program.cs`
 - Kiểm: thời lượng ±0,1 s, codec mp3; Cancel giữa chừng → không còn `.partial`, ffmpeg dừng ≤ 2 s; tiến độ tăng dần tới 100
+- Đã làm: `AudioConvert` (chung cho Convert audio và Extract audio, theo `AudioFormat`), `MediaJob` (tên output, metadata cho phép, `-fs`, đĩa trống, %). 10 test (`AudioToMp3Tests`); đối chứng âm: bỏ `MetadataOptions` thì test GPS đỏ (muxer MP3 ghi `location` thành ID3 TXXX). Giới hạn output: spec ghi ≤ 4 × input + 100 MB, nhưng MP3 ngắn → WAV hợp lệ lớn gấp ~10 lần, nên lấy max với 2 × cỡ ước lượng theo thời lượng; output chạm `-fs` (ffmpeg dừng và vẫn thoát 0) là lỗi, không phải file cụt. Bỏ chapter (`-map_chapters -1`). `FlevertExeTests` (chạy `flevert.exe run audio.to-mp3` thật; ffmpeg `BelowNormal`; giết `flevert.exe` → ffmpeg chết ≤ 3 s): **cần kiểm trên Windows**, bỏ qua trên Linux.
 
 ## T3: audio còn lại + extract
 - [ ] `audio.to-m4a/-wav/-flac/-ogg/-opus`, không đề xuất đích trùng nguồn; M4A từ AAC chép luồng

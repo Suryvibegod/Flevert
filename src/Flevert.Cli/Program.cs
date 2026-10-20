@@ -3,6 +3,7 @@ using Flevert.Core.Menu;
 using Flevert.Core.Operations;
 using Flevert.Core.Updates;
 using Flevert.Image;
+using Flevert.Media;
 using Flevert.Pdf;
 
 namespace Flevert.Cli;
@@ -42,7 +43,7 @@ internal static class Program
         if (command is PdfWorkerCommand)
             return PdfRenderWorker.Run(Console.OpenStandardInput(), Console.OpenStandardOutput());
 
-        var catalog = new OperationCatalog([.. MenuOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
+        var catalog = new OperationCatalog([.. MenuOperations.All, .. MediaOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);

@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Flevert.Media\Flevert.Media.csproj" />
+    <!-- Build order only: FlevertExeTests launches the real flevert.exe. -->
+    <ProjectReference Include="..\..\src\Flevert.Cli\Flevert.Cli.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
