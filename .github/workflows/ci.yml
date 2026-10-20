@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Started by hand for the release check: three runs of one commit at once (docs/RELEASING.md).
+  workflow_dispatch:
 
 permissions:
   contents: read
