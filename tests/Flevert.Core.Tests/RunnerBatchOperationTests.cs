@@ -178,6 +178,29 @@ public sealed class RunnerBatchOperationTests : IDisposable
     }
 
     [Fact]
+    public async Task Progress_says_the_join_is_waiting_for_its_files_before_any_arrives()
+    {
+        // Followers can take seconds to hand over their files; a blank window looks like a hang.
+        var file = _dir.File("1.txt");
+        var seen = new List<BatchProgress>();
+        var arrive = new TaskCompletionSource();
+
+        async IAsyncEnumerable<string> Source()
+        {
+            await arrive.Task;
+            yield return file;
+        }
+
+        var run = NewRunner().RunAsync(new DevJoin(), Source(), new SyncProgress<BatchProgress>(seen.Add), CancellationToken.None);
+        var beforeAnyFile = seen.ToList();
+        arrive.SetResult();
+        await run;
+
+        Assert.Equal([new BatchProgress(0, 1, null, Status: "Waiting for the selected files…")], beforeAnyFile);
+        Assert.Equal(new BatchProgress(0, 1, file), seen[1]);
+    }
+
+    [Fact]
     public async Task Progress_names_the_first_file_and_carries_the_operation_steps_in_order()
     {
         var files = new[] { _dir.File("c 3.txt"), _dir.File("a 1.txt"), _dir.File("b 2.txt") };
@@ -185,9 +208,10 @@ public sealed class RunnerBatchOperationTests : IDisposable
 
         await NewRunner().RunAsync(new DevJoin(), files, new SyncProgress<BatchProgress>(seen.Add), CancellationToken.None);
 
-        Assert.Equal(new BatchProgress(0, 1, files[1]), seen[0]);
-        Assert.Equal([1, 2, 3], seen.Skip(1).SkipLast(1).Select(p => p.Within!.Position));
-        Assert.All(seen.Skip(1).SkipLast(1), p =>
+        Assert.Equal(new BatchProgress(0, 1, null, Status: "Waiting for the selected files…"), seen[0]);
+        Assert.Equal(new BatchProgress(0, 1, files[1]), seen[1]);
+        Assert.Equal([1, 2, 3], seen.Skip(2).SkipLast(1).Select(p => p.Within!.Position));
+        Assert.All(seen.Skip(2).SkipLast(1), p =>
         {
             Assert.Equal(new FileProgress("file", p.Within!.Position, 3), p.Within);
             Assert.Equal(files[1], p.Current);

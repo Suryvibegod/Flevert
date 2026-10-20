@@ -22,6 +22,16 @@ public sealed class BatchProgressTextTests
     }
 
     [Fact]
+    public void Shows_what_the_batch_is_waiting_for_instead_of_a_count()
+    {
+        var waiting = new BatchProgress(0, 1, null, Status: "Waiting for the selected files…");
+
+        Assert.Equal("Waiting for the selected files…", BatchProgressText.Describe(waiting, lastStarted: null));
+        Assert.Null(BatchProgressText.DescribeWithin(waiting));
+        Assert.Equal((0, 1_000), BatchProgressText.Bar(waiting));
+    }
+
+    [Fact]
     public void Describes_the_progress_inside_the_current_file_on_its_own_line()
     {
         var progress = new BatchProgress(0, 1, @"C:\x\report.pdf", new FileProgress("page", 37, 200));

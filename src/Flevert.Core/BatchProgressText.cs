@@ -8,6 +8,8 @@ public static class BatchProgressText
     /// <param name="lastStarted">The file named before this report, kept while files finish.</param>
     public static string Describe(BatchProgress progress, string? lastStarted)
     {
+        if (progress.Status is { } status)
+            return status;
         var count = $"{progress.Completed} of {progress.Total} done";
         return (progress.Current ?? lastStarted) is { } file ? $"{count}: {Path.GetFileName(file)}" : count;
     }

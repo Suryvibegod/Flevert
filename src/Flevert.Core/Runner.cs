@@ -14,7 +14,9 @@ public sealed record FileResult(string Input, string? Output, string? Error, boo
 
 /// <param name="Current">The file just started, or the file <paramref name="Within"/> is about; <c>null</c> when a file finished.</param>
 /// <param name="Within">How far <paramref name="Current"/> is inside, when its operation reports it ("page 37 of 200").</param>
-public sealed record BatchProgress(int Completed, int Total, string? Current, FileProgress? Within = null);
+/// <param name="Status">What the batch is doing before any file runs, shown instead of the count ("Waiting for the
+/// selected files…" while a join collects them).</param>
+public sealed record BatchProgress(int Completed, int Total, string? Current, FileProgress? Within = null, string? Status = null);
 
 /// <param name="Results">Finished files, in the order they finished (files may run in parallel). A file interrupted by
 /// cancellation is not included; one that was already writing its output when cancelled may still have produced it.</param>
@@ -60,6 +62,8 @@ public sealed class Runner(RunLog log)
         var timer = Stopwatch.StartNew();
         var received = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        // Followers can take seconds to hand over their files: say so instead of an empty window.
+        progress?.Report(new BatchProgress(0, 1, null, Status: CollectingStatus));
         try
         {
             // A batch leader ends this only once no more files will come (ADR-0002): the whole batch is known before
@@ -156,6 +160,9 @@ public sealed class Runner(RunLog log)
                 ? $"{name} was left out: it arrived while Flevert was joining other files. Select the files again."
                 : $"{name} and {others} more {Files(others)} were left out: they arrived while Flevert was joining other files. Select the files again.");
     }
+
+    /// <summary>The progress window's line while a join collects its files.</summary>
+    internal const string CollectingStatus = "Waiting for the selected files…";
 
     private static string Files(int n) => n == 1 ? "file" : "files";
 
