@@ -144,12 +144,21 @@ public sealed class FetchDepsScriptTests : IDisposable
         Assert.Equal([@"bin\tool.exe"], Files(Path.Combine(deps, "tool")));
     }
 
-    [Fact]
-    public async Task Downloads_are_checked_and_unpacked_in_a_folder_only_this_user_and_administrators_can_change()
+    [SkippableTheory]
+    [InlineData("powershell.exe")]
+    [InlineData("pwsh.exe")]
+    public async Task Downloads_are_checked_and_unpacked_in_a_folder_only_this_user_and_administrators_can_change(string shell)
     {
         // On the maintainer's machine %TEMP% grants a sandbox account Modify, inherited by everything created there: it
         // could swap a download after its hash check, or a staged file before the copy into deps\. BUILTIN\Users plays
         // that account here. The download comes from a loopback server, which looks at the work folder mid-download.
+        // The script creates the folder differently under Windows PowerShell (setup-dev.ps1) and PowerShell 7 (CI).
+        if (shell == "pwsh.exe")
+        {
+            Skip.If(PowerShellScript.Pwsh is null, "PowerShell 7 (pwsh.exe) is not on PATH.");
+            shell = PowerShellScript.Pwsh!;
+        }
+
         var temp = Directory.CreateDirectory(_dir.Combine("temp"));
         var tempAcl = temp.GetAccessControl();
         tempAcl.AddAccessRule(new FileSystemAccessRule(
@@ -173,7 +182,7 @@ public sealed class FetchDepsScriptTests : IDisposable
             await stream.WriteAsync(archive);
         });
 
-        var run = Fetch(manifest, _dir.Combine("deps"), temp.FullName);
+        var run = Fetch(manifest, _dir.Combine("deps"), temp.FullName, shell);
         listener.Stop();
         await server.WaitAsync(TimeSpan.FromSeconds(10));
 
@@ -246,10 +255,10 @@ public sealed class FetchDepsScriptTests : IDisposable
     private static string[] Files(string dir) =>
         [.. Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(dir, f)).Order(StringComparer.Ordinal)];
 
-    private static (int ExitCode, string Output) Fetch(string manifest, string deps, string? temp = null) =>
+    private static (int ExitCode, string Output) Fetch(string manifest, string deps, string? temp = null, string shell = "powershell.exe") =>
         PowerShellScript.Run(
             "fetch-deps.ps1", ["-Manifest", manifest, "-Destination", deps],
-            temp is null ? null : new Dictionary<string, string> { ["TEMP"] = temp, ["TMP"] = temp });
+            temp is null ? null : new Dictionary<string, string> { ["TEMP"] = temp, ["TMP"] = temp }, shell);
 
     // Each work folder fetch-deps.ps1 has in this temporary folder: whether it ignores the entries %TEMP% passes down, and
     // who other than this user, SYSTEM and Administrators it grants anything.
