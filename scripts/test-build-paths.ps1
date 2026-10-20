@@ -21,7 +21,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$files = @(Get-ChildItem -LiteralPath $Folder -Recurse -File -Include 'Flevert*.dll', 'flevert.dll')
+# Not -Include: with -LiteralPath it filters nothing, and every library would be read.
+$files = @(Get-ChildItem -LiteralPath $Folder -Recurse -File | Where-Object { $_.Name -like 'Flevert*.dll' })
 if ($files.Count -eq 0) { throw "No Flevert assemblies in $Folder." }
 
 # Bytes compared as Latin-1 text, one character a byte: the path in UTF-8 and in UTF-16, in any case.
