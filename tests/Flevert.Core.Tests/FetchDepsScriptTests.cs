@@ -1,7 +1,5 @@
-using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 namespace Flevert.Core.Tests;
@@ -133,30 +131,6 @@ public sealed class FetchDepsScriptTests : IDisposable
     private static string[] Files(string dir) =>
         [.. Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(dir, f)).Order(StringComparer.Ordinal)];
 
-    private static (int ExitCode, string Output) Fetch(string manifest, string deps)
-    {
-        var script = Path.Combine(InstallerScriptTests.RepositoryRoot(), "scripts", "fetch-deps.ps1");
-        var start = new ProcessStartInfo("powershell.exe")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = Encoding.UTF8,
-        };
-        foreach (var argument in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-Manifest", manifest, "-Destination", deps })
-            start.ArgumentList.Add(argument);
-        // Under PowerShell 7 (the CI runner's shell) PSModulePath lists its own modules, which Windows PowerShell cannot
-        // load: Get-FileHash and the like would be "not found". Let powershell.exe use its own default.
-        start.Environment.Remove("PSModulePath");
-        using var process = Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(120_000))
-        {
-            process.Kill(entireProcessTree: true);
-            throw new TimeoutException("fetch-deps.ps1 did not finish in 2 minutes");
-        }
-
-        return (process.ExitCode, output.Result + error.Result);
-    }
+    private static (int ExitCode, string Output) Fetch(string manifest, string deps) =>
+        PowerShellScript.Run("fetch-deps.ps1", ["-Manifest", manifest, "-Destination", deps]);
 }

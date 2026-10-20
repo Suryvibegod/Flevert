@@ -8,18 +8,30 @@ The folder dotnet publish wrote, which the installer packs as it is.
 
 .PARAMETER Packages
 The NuGet global-packages folder (dotnet nuget locals global-packages --list).
+
+.PARAMETER Manifest
+Lists, under "notices", the files that come from elsewhere than NuGet and their licences; defaults to scripts\deps.json.
+
+.PARAMETER Root
+The folder the licence paths in the manifest are relative to; defaults to the repository root.
 #>
 param(
     [Parameter(Mandatory)][string]$Publish,
-    [Parameter(Mandatory)][string]$Packages
+    [Parameter(Mandatory)][string]$Packages,
+    [string]$Manifest,
+    [string]$Root
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# Not as parameter defaults: Windows PowerShell leaves $PSScriptRoot empty there when this script runs with -File.
+if (-not $Manifest) { $Manifest = Join-Path $PSScriptRoot 'deps.json' }
+if (-not $Root) { $Root = Split-Path -Parent $PSScriptRoot }
 
 # Redistributing the .NET runtime and Magick.NET (ImageMagick and the libraries it bundles) requires shipping their
 # notices. Every package and runtime pack in flevert.deps.json is what the publish folder contains, so collect from each one
 # and fail rather than ship a package without its licence.
+$publishRoot = (Resolve-Path -LiteralPath $Publish).Path.TrimEnd('\')
 $deps = Get-Content (Join-Path $Publish 'flevert.deps.json') -Raw | ConvertFrom-Json
 $licenceNames = 'Notice.txt', 'Copyright.txt', 'LICENSE.TXT', 'LICENSE', 'THIRD-PARTY-NOTICES.TXT'
 $notices = [Text.StringBuilder]::new()
@@ -33,5 +45,62 @@ foreach ($library in $deps.libraries.PSObject.Properties | Where-Object { $_.Val
         [void]$notices.AppendLine().AppendLine(('=' * 78)).AppendLine("$id $version - $($file.Name)").AppendLine(('=' * 78))
         [void]$notices.AppendLine((Get-Content $file.FullName -Raw))
     }
+}
+
+# What may ship: the assets of the libraries in flevert.deps.json (the packages and runtime packs above, and Flevert's
+# own projects), flevert's host and settings files, and the files of each "notices" entry in the manifest. The
+# installer packs the whole folder but symbol files (Flevert.iss), so anything else would ship without its licence.
+$covered = @{} # case-insensitive, as file names are
+foreach ($own in 'flevert.exe', 'flevert.deps.json', 'flevert.runtimeconfig.json', 'THIRD-PARTY-NOTICES.txt', 'LICENSE.txt') {
+    $covered[$own] = $true
+}
+$target = $deps.targets.PSObject.Properties[$deps.runtimeTarget.name]
+if (-not $target) { throw "flevert.deps.json has no target named $($deps.runtimeTarget.name)." }
+foreach ($library in $target.Value.PSObject.Properties) {
+    foreach ($kind in 'runtime', 'native', 'resources') {
+        $assets = $library.Value.PSObject.Properties[$kind]
+        if (-not $assets) { continue }
+        foreach ($asset in $assets.Value.PSObject.Properties) {
+            # dotnet publish puts assets in the folder itself, and satellite assemblies in a folder named after their culture.
+            $name = Split-Path $asset.Name -Leaf
+            $locale = $asset.Value.PSObject.Properties['locale']
+            if ($locale) { $name = Join-Path $locale.Value $name }
+            $covered[$name] = $true
+        }
+    }
+}
+
+$listed = (Get-Content -LiteralPath $Manifest -Raw | ConvertFrom-Json).PSObject.Properties['notices']
+foreach ($entry in @(if ($listed) { $listed.Value })) {
+    foreach ($file in $entry.files) {
+        # An entry left behind by an update would otherwise cover a renamed binary by its old name.
+        if (-not (Test-Path -LiteralPath (Join-Path $publishRoot $file) -PathType Leaf)) {
+            throw "$Manifest lists $file under ""$($entry.title)"", but the publish folder has no such file: make the notices match what the build ships."
+        }
+        $covered[$file] = $true
+    }
+    $preface = @("Shipped as: $($entry.files -join ', ')")
+    if ($entry.PSObject.Properties['note']) { $preface += $entry.note }
+    foreach ($pattern in $entry.licences) {
+        $matched = @(Get-ChildItem -Path (Join-Path $Root $pattern) -File -ErrorAction SilentlyContinue | Sort-Object Name)
+        if ($matched.Count -eq 0) {
+            throw "Nothing matches $pattern, a licence of ""$($entry.title)"" listed in $Manifest. Run scripts\fetch-deps.ps1, or fix the notices."
+        }
+        foreach ($licence in $matched) {
+            [void]$notices.AppendLine().AppendLine(('=' * 78)).AppendLine("$($entry.title) - $($licence.Name)").AppendLine(('=' * 78))
+            foreach ($line in $preface) { [void]$notices.AppendLine($line) }
+            if ($preface) { [void]$notices.AppendLine() }
+            $preface = @()
+            # ReadAllText: UTF-8 unless the file says otherwise, under Windows PowerShell too.
+            [void]$notices.AppendLine([IO.File]::ReadAllText($licence.FullName))
+        }
+    }
+}
+
+$unlicensed = @(Get-ChildItem -LiteralPath $publishRoot -Recurse -File | Where-Object { $_.Extension -ne '.pdb' } |
+    ForEach-Object { $_.FullName.Substring($publishRoot.Length + 1) } | Where-Object { -not $covered.ContainsKey($_) })
+if ($unlicensed.Count -gt 0) {
+    throw ("No licence notice for {0} in {1}. The installer would ship them without their licences: add them to ""notices"" " +
+        "in scripts\deps.json with their licence files, or keep them out of the build.") -f ($unlicensed -join ', '), $publishRoot
 }
 [IO.File]::WriteAllText((Join-Path $Publish 'THIRD-PARTY-NOTICES.txt'), $notices.ToString(), [Text.UTF8Encoding]::new($false))
