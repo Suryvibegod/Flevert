@@ -4,6 +4,8 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-20
+
 ### Added
 
 - **Compress > For sharing** for PDFs: pictures above 150 DPI become 150 DPI JPEGs, so a scan often comes out at a quarter to a half of its size, depending on the scan, and still reads on a phone. Text, drawings and pictures already at 150 DPI or less stay exactly as they were.
@@ -92,5 +94,6 @@ The first release: pictures, and an installer.
 - A specially crafted TIFF file can make the bundled ImageMagick 7.1.2-33 overflow its stack ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity): Flevert then closes, and the rest of that batch is not converted. No code runs. It will be fixed by updating once a Magick.NET release includes ImageMagick 7.1.2-34.
 - Windows Smart App Control may block this unsigned release (see the README).
 
-[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.0
