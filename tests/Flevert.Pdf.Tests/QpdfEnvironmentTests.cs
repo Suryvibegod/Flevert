@@ -28,13 +28,12 @@ public sealed class QpdfEnvironmentTests : IDisposable
         Environment.SetEnvironmentVariable(OpenSslConf, @"\\.\pipe\" + pipe);
         try
         {
-            var lines = Encoding.UTF8.GetBytes($"{input}\n{_dir.Combine("direct.pdf")}\n");
-            var openedByQpdfItself = await OpensPipe(pipe, () => ExternalTool.RunAsync(
-                Qpdf.NextToApp.ExePath, ["--rotate=+90:1-z", "@-"], TimeSpan.FromSeconds(30), lines));
+            var openedByQpdfItself = await OpensPipe(pipe, () => RunDirectly(input, _dir.Combine("direct.pdf")));
             var openedThroughWrapper = await OpensPipe(pipe, () => Qpdf.NextToApp.TransformAsync(
                 input, _dir.Combine("wrapped.pdf"), ["--rotate=+90:1-z"], CancellationToken.None));
 
-            // Control: qpdf started with the inherited environment opens the file, so the pipe would see it.
+            // Control: qpdf started with the inherited environment, under the same limits, opens the file, so the pipe
+            // would see it.
             Assert.True(openedByQpdfItself, "qpdf run directly did not open OPENSSL_CONF: the test proves nothing");
             Assert.False(openedThroughWrapper, "qpdf opened the file OPENSSL_CONF names");
             Assert.True(File.Exists(_dir.Combine("wrapped.pdf")));
@@ -74,10 +73,10 @@ public sealed class QpdfEnvironmentTests : IDisposable
         Environment.SetEnvironmentVariable(name, "flevert-test-no-such-provider");
         try
         {
-            var lines = Encoding.UTF8.GetBytes($"{input}\n{_dir.Combine("direct.pdf")}\n");
-            var direct = await ExternalTool.RunAsync(Qpdf.NextToApp.ExePath, ["--rotate=+90:1-z", "@-"], TimeSpan.FromSeconds(30), lines);
-            // Control: qpdf started with the inherited environment fails.
-            Assert.NotEqual(0, direct.ExitCode);
+            var direct = await RunDirectly(input, _dir.Combine("direct.pdf"));
+            // Control: qpdf started with the inherited environment, under the same limits, fails on that variable.
+            Assert.Equal(2, direct.ExitCode);
+            Assert.Contains("flevert-test-no-such-provider", direct.StandardError, StringComparison.Ordinal);
 
             await Qpdf.NextToApp.TransformAsync(input, _dir.Combine("wrapped.pdf"), ["--rotate=+90:1-z"], CancellationToken.None);
 
@@ -102,6 +101,15 @@ public sealed class QpdfEnvironmentTests : IDisposable
 
         var show = await ExternalTool.RunAsync(Qpdf.NextToApp.ExePath, ["--password=user", "--show-encryption", output], TimeSpan.FromSeconds(30));
         Assert.Contains("stream encryption method: AESv3", show.StandardOutput, StringComparison.Ordinal);
+    }
+
+    // qpdf as the wrapper runs it (same paths, limits and timeout) but with the test process's environment as it is, so
+    // a control differs from the wrapped run in the environment alone.
+    private static Task<ExternalToolResult> RunDirectly(string input, string output)
+    {
+        var lines = Encoding.UTF8.GetBytes($"{Qpdf.ToExtendedPath(input)}\n{Qpdf.ToExtendedPath(output)}\n");
+        var limits = new ExternalToolLimits { MaxMemoryBytes = Qpdf.MaxMemoryFor(new FileInfo(input).Length), SingleProcess = true };
+        return ExternalTool.RunAsync(Qpdf.NextToApp.ExePath, ["--rotate=+90:1-z", "@-"], Qpdf.TimeoutFor(new FileInfo(input).Length), lines, limits: limits);
     }
 
     // The server closes as soon as a client connects, so OpenSSL reads an empty file instead of waiting on the pipe. qpdf
