@@ -19,6 +19,11 @@ internal static class Fixtures
         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ac", "2",
         "-metadata", "title=Holiday", "-metadata", "creation_time=2026-07-14T09:30:00Z", "-f", "mp4", path));
 
+    /// <summary>4 s, 640 × 360 at 30 fps, H.264 + AAC stereo in MP4, with a title: quick to encode again.</summary>
+    public static Task<string> SmallClipAsync() => Make("small.mp4", path => RunRawAsync(
+        "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30:duration=4", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=4",
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", "-metadata", "title=Small", "-f", "mp4", path));
+
     /// <summary>
     /// As a phone records it upright: 4 s of 640 × 360 pixels stored sideways, turned 90° by the display matrix, in MOV,
     /// with the place it was filmed (Apple's key and the plain one) and a creation date.

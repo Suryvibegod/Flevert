@@ -121,10 +121,11 @@ public sealed class Ffmpeg
     /// </summary>
     /// <param name="options">Output options, constants of Flevert's and numbers it computed: never anything a file or user chose.</param>
     /// <param name="maxOutputBytes">ffmpeg stops writing past this (<c>-fs</c>); an output that reached it is an error.</param>
+    /// <param name="slowness">How many times the duration the pass may take, beyond its minute (<see cref="TimeoutFor"/>).</param>
     /// <exception cref="MediaException">ffmpeg failed, took longer than <see cref="TimeoutFor"/>, or the output reached <paramref name="maxOutputBytes"/>.</exception>
     internal async Task EncodeAsync(
         string inputPath, IEnumerable<string> options, string? outputPath, string format, TimeSpan duration, long maxOutputBytes,
-        IProgress<double>? progress, CancellationToken ct)
+        IProgress<double>? progress, CancellationToken ct, double slowness = DefaultSlowness)
     {
         RequireTool(FfmpegPath);
         // -n: never overwrite (the temporary output does not exist yet); -progress: key=value lines on stdout.
@@ -138,7 +139,7 @@ public sealed class Ffmpeg
         ExternalToolResult run;
         try
         {
-            run = await Run(FfmpegPath, arguments, TimeoutFor(duration), reader.OnLine, ct).ConfigureAwait(false);
+            run = await Run(FfmpegPath, arguments, TimeoutFor(duration, slowness), reader.OnLine, ct).ConfigureAwait(false);
         }
         catch (TimeoutException e)
         {
@@ -155,10 +156,12 @@ public sealed class Ffmpeg
     }
 
     /// <summary>
-    /// The longest one pass may take: six times the duration, plus a minute (docs/specs/media.md: a slow machine encodes
-    /// 1080p with preset medium at 1–2 times real time).
+    /// The longest one pass may take: <paramref name="slowness"/> times the duration, plus a minute. Six by default
+    /// (docs/specs/media.md: a slow machine encodes 1080p with preset medium at 1–2 times real time); VP9 is slower.
     /// </summary>
-    public static TimeSpan TimeoutFor(TimeSpan duration) => duration * 6 + TimeSpan.FromMinutes(1);
+    public static TimeSpan TimeoutFor(TimeSpan duration, double slowness = DefaultSlowness) => duration * slowness + TimeSpan.FromMinutes(1);
+
+    internal const double DefaultSlowness = 6;
 
     private static void RequireTool(string path)
     {

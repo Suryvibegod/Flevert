@@ -185,10 +185,4 @@ public sealed class AudioToMp3Tests : IDisposable
             [.. json.RootElement.GetProperty("streams").EnumerateArray().Select(s => s.GetProperty("codec_name").GetString()!)],
             double.Parse(format.GetProperty("duration").GetString()!, System.Globalization.CultureInfo.InvariantCulture), tags);
     }
-
-    /// <summary>Reports on the reporting thread, unlike <see cref="Progress{T}"/>, so the test sees each report as it is made.</summary>
-    private sealed class SyncProgress(Action<FileProgress> report) : IProgress<FileProgress>
-    {
-        public void Report(FileProgress value) => report(value);
-    }
 }

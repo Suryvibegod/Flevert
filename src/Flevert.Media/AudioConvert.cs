@@ -97,7 +97,7 @@ public sealed class AudioConvert : IOperation
         var estimate = MediaJob.Bytes(info.Duration, _format.BitsPerSecond(audio));
         var desired = MediaJob.Beside(inputPath, _format.Extension);
         MediaJob.RequireSpace(desired, estimate);
-        string[] options = ["-map", $"0:{audio.Index}", .. MediaJob.MetadataOptions(info, audio), .. _format.Codec(audio)];
+        string[] options = ["-map", $"0:{audio.Index}", .. MediaJob.MetadataOptions(info, [audio]), .. _format.Codec(audio)];
         return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _ffmpeg.EncodeAsync(
             inputPath, options, temp, _format.Muxer, info.Duration, MediaJob.MaxOutputBytes(inputPath, estimate), MediaJob.Percent(progress), token),
             ct).ConfigureAwait(false);

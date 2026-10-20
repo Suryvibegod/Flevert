@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Flevert.Core;
 
@@ -28,11 +29,13 @@ internal static partial class MediaJob
 
     /// <summary>
     /// The options that replace the input's metadata by the tags Flevert keeps: no GPS, no chapters, the main audio's
-    /// language when the file names one. A tag the file does not have is taken from <paramref name="audio"/>, as Ogg and
-    /// Opus files keep theirs on the stream; written as the file's tags, every muxer puts them where its players look.
+    /// language of each sound stream written (<paramref name="audio"/>, in output order) when the file names one. A tag
+    /// the file does not have is taken from the first of them, as Ogg and Opus files keep theirs on the stream; written as
+    /// the file's tags, every muxer puts them where its players look.
     /// </summary>
-    public static IEnumerable<string> MetadataOptions(MediaInfo info, AudioTrack? audio)
+    public static IEnumerable<string> MetadataOptions(MediaInfo info, IReadOnlyList<AudioTrack> audio)
     {
+        var first = audio.Count > 0 ? audio[0] : null;
         yield return "-map_metadata";
         yield return "-1";
         yield return "-map_chapters";
@@ -40,7 +43,7 @@ internal static partial class MediaJob
         foreach (var name in KeptTags)
         {
             // A value is one argument, never parsed by a shell; a null character would end it early, so it is left out.
-            if (!info.Tags.TryGetValue(name, out var value) && audio?.Tags.TryGetValue(name, out value) != true)
+            if (!info.Tags.TryGetValue(name, out var value) && first?.Tags.TryGetValue(name, out value) != true)
                 continue;
             if (value is not { Length: > 0 } || value.Contains('\0', StringComparison.Ordinal))
                 continue;
@@ -48,10 +51,13 @@ internal static partial class MediaJob
             yield return $"{name}={Cut(value)}";
         }
 
-        if (audio?.Language is { } language && Language().IsMatch(language) && language != "und")
+        for (var i = 0; i < audio.Count; i++)
         {
-            yield return "-metadata:s:a:0";
-            yield return $"language={language}";
+            if (audio[i].Language is { } language && Language().IsMatch(language) && language != "und")
+            {
+                yield return string.Create(CultureInfo.InvariantCulture, $"-metadata:s:a:{i}");
+                yield return $"language={language}";
+            }
         }
     }
 

@@ -26,8 +26,9 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 - Đã làm: 23 test (`AudioConvertTests`): mỗi đích từ WAV (codec, thời lượng ±0,1 s, title), mọi đuôi nguồn đọc được qua whitelist demuxer (mp3, aac ADTS, m4a, flac, ogg, opus, wma/asf, aiff, aif), AAC → M4A và Extract M4A không mã hóa lại (MD5 của âm thanh giải mã trùng; MD5 gói khác nhau giữa ADTS và MP4 nên không dùng được), 5.1 → MP3 stereo, MKV hai audio lấy luồng default. Phát hiện: Ogg/Opus giữ tag trên luồng chứ không trên file, nên `AudioTrack.Tags` được đọc và dùng khi file không có tag đó (vẫn qua danh sách cho phép: GPS trên luồng cũng bị bỏ, có test). WAV > 4 GB: `-rf64 auto`.
 
 ## T4: video.to-mp4/mov/mkv/webm
-- [ ] H.264 CRF 20 `medium` `yuv420p` + AAC 192k, `+faststart`; xoay; HDR → SDR; bỏ GPS; MOV/MKV như MP4; WEBM VP9 + Opus
-- [ ] Ước lượng output so với đĩa trống; `-fs` ≤ 4 × input + 100 MB
+- [x] H.264 CRF 20 `medium` `yuv420p` + AAC 192k, `+faststart`; xoay; HDR → SDR; bỏ GPS; MOV/MKV như MP4; WEBM VP9 + Opus
+- [x] Ước lượng output so với đĩa trống; `-fs` ≤ 4 × input + 100 MB
+- Đã làm: `VideoConvert` + `VideoEncoding` (kích thước theo hình hiển thị, cạnh chẵn làm tròn xuống để không phóng to; lọc `scale` chỉ khi đổi cỡ; tone map chỉ khi HDR; `format=yuv420p` cuối). 19 test; đối chứng âm: bỏ tone map thì test HDR đỏ (x264 chép nguyên nhãn PQ/BT.2020). Video điện thoại: ra 360 × 640 thật trong điểm ảnh, không còn display matrix, không còn tag `location*` (cả file và luồng), giữ `creation_time`. Convert giữ mọi luồng audio cùng ngôn ngữ. Đo 2026-10-20 (4 nhân, 1080p 10 s): x264 `medium` 8,6 s; VP9 `-cpu-used 2` 25 s, `4` 18 s (file lớn hơn 3 %) → chọn 4, và timeout của WEBM gấp đôi (thời lượng × 12 + 60 s) vì VP9 chậm gấp ~2 lần x264. Ước lượng cỡ: 0,15 bit/điểm ảnh/khung + audio.
 
 ## T5: compress
 - [ ] Light/Balanced/Strong (CRF 23/28/32, Strong ≤ 720p, AAC 128/96/64k); không nhỏ hơn gốc → skipped
