@@ -499,6 +499,43 @@ public sealed class OutputPathTests : IDisposable
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(1.5), $"{timer.Elapsed}");
     }
 
+    // Out of sight while it is written, so Explorer does not open its pages for a folder thumbnail, and out of the search
+    // index; both would hold pages open and delay the rename.
+    [Fact]
+    public async Task WriteDirectoryAtomically_hides_the_temporary_folder_from_view_and_indexing_but_not_the_result()
+    {
+        File.SetAttributes(_dir.Path, File.GetAttributes(_dir.Path) & ~FileAttributes.NotContentIndexed);
+        FileAttributes during = 0;
+
+        var final = await OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
+        {
+            during = File.GetAttributes(temp);
+            await WritePages(2)(temp, ct);
+        }, CancellationToken.None);
+
+        Assert.True(during.HasFlag(FileAttributes.Hidden), $"{during}");
+        Assert.True(during.HasFlag(FileAttributes.NotContentIndexed), $"{during}");
+        var after = File.GetAttributes(final);
+        Assert.False(after.HasFlag(FileAttributes.Hidden), $"{after}");
+        Assert.False(after.HasFlag(FileAttributes.NotContentIndexed), $"{after}");
+        // A file created in a folder marked NotContentIndexed inherits the mark: the pages must be indexed like any file.
+        Assert.All(Directory.GetFiles(final), page =>
+            Assert.False(File.GetAttributes(page).HasFlag(FileAttributes.NotContentIndexed), page));
+    }
+
+    // Guard for the test above: a folder the user excluded from indexing keeps its children excluded.
+    [Fact]
+    public async Task WriteDirectoryAtomically_keeps_the_result_out_of_indexing_when_the_folder_beside_it_is()
+    {
+        File.SetAttributes(_dir.Path, File.GetAttributes(_dir.Path) | FileAttributes.NotContentIndexed);
+
+        var final = await OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), WritePages(2), CancellationToken.None);
+
+        Assert.True(File.GetAttributes(final).HasFlag(FileAttributes.NotContentIndexed));
+        Assert.All(Directory.GetFiles(final), page =>
+            Assert.True(File.GetAttributes(page).HasFlag(FileAttributes.NotContentIndexed), page));
+    }
+
     // Writers never make folders (PdfToImages, DevSplit), so a folder with something in it was put there by someone else,
     // and going into it by path could be redirected the same way as the temporary folder itself.
     [Fact]

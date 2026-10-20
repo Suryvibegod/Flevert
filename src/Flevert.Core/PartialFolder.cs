@@ -55,6 +55,9 @@ internal sealed partial class PartialFolder : IDisposable
     private const uint DispositionIgnoreReadOnly = 0x10;
     private const uint FileAttributeReadOnly = 0x1;
     private const uint FileAttributeNormal = 0x80;
+    private const uint FileAttributeNotContentIndexed = 0x2000;
+    // FILE_ATTRIBUTE_VALID_SET_FLAGS: read-only, hidden, system, archive, normal, temporary, offline, not content indexed.
+    private const uint ValidSetAttributes = 0x31A7;
 
     private const int ErrorInvalidFunction = 1;
     private const int ErrorNotSupported = 50;
@@ -62,6 +65,7 @@ internal sealed partial class PartialFolder : IDisposable
 
     private readonly SafeFileHandle _folder;
     private SafeFileHandle? _anchor;
+    private bool _notIndexedBeside;
 
     private PartialFolder(string path, SafeFileHandle folder)
     {
@@ -97,6 +101,7 @@ internal sealed partial class PartialFolder : IDisposable
             // Between creating and opening, the name could have been taken over (renamed away, a link put in its place).
             if (IsLink(handle))
                 throw Replaced();
+            folder.Hide();
             if (!folder.TryAnchor())
                 throw Replaced();
             return folder;
@@ -108,6 +113,35 @@ internal sealed partial class PartialFolder : IDisposable
             throw;
         }
     }
+
+    /// <summary>
+    /// Readies the written folder for its rename: the pages lose the NotContentIndexed mark they inherited from it (unless
+    /// the folder beside it had the mark too), and the anchor goes, since a folder with an open file in it cannot be renamed.
+    /// </summary>
+    public void PrepareForRename()
+    {
+        // Looking inside by path only while the anchor is held (see DeleteQuietly); attributes change through a handle on
+        // each entry itself, so a link someone added is never followed.
+        if (!_notIndexedBeside && _anchor is not null && !IsLink(_folder))
+        {
+            foreach (var entry in EntriesExceptAnchor())
+            {
+                using var handle = CreateFileW(InputPin.ToExtendedPath(entry), FileReadAttributes | FileWriteAttributes | Synchronize,
+                    FileShareRead | FileShareWrite | FileShareDelete, 0, OpenExisting, FileFlagBackupSemantics | FileFlagOpenReparsePoint, 0);
+                if (!handle.IsInvalid)
+                    ChangeAttributes(handle, a => (a & FileAttributeReparsePoint) != 0 ? a : a & ~FileAttributeNotContentIndexed);
+            }
+        }
+
+        CloseAnchor();
+    }
+
+    /// <summary>
+    /// After the rename: the folder is shown, and indexed again unless the folder beside it is not. Best effort: the
+    /// output exists by now, and a failure here cannot undo that.
+    /// </summary>
+    public void Unhide() =>
+        ChangeAttributes(_folder, a => a & ~FileAttributeHidden & (_notIndexedBeside ? ~0u : ~FileAttributeNotContentIndexed));
 
     /// <summary>
     /// Renames the folder through its handle to <paramref name="destination"/> (beside it), never replacing anything there.
@@ -175,6 +209,32 @@ internal sealed partial class PartialFolder : IDisposable
         _folder.Dispose();
     }
 
+    // Out of sight, so Explorer does not open pages for a folder thumbnail, and out of the search index, while it is
+    // written: either would hold a page open and delay the rename. A folder created inside one the user keeps out of the
+    // index has the mark already; it is then kept on the result. Best effort: the folder works without it.
+    private void Hide()
+    {
+        if (GetFileInformationByHandleEx(_folder, FileBasicInfoClass, out FileBasicInfo basic, (uint)Marshal.SizeOf<FileBasicInfo>()))
+            _notIndexedBeside = (basic.FileAttributes & FileAttributeNotContentIndexed) != 0;
+        ChangeAttributes(_folder, a => a | FileAttributeHidden | FileAttributeNotContentIndexed);
+    }
+
+    // FileBasicInfo replaces the attributes that can be set, through the handle, so on the entry itself and never on what a
+    // link points to; the times are left as they are (0).
+    private static bool ChangeAttributes(SafeFileHandle handle, Func<uint, uint> change)
+    {
+        if (!GetFileInformationByHandleEx(handle, FileBasicInfoClass, out FileBasicInfo basic, (uint)Marshal.SizeOf<FileBasicInfo>()))
+            return false;
+        var before = basic.FileAttributes & ValidSetAttributes;
+        var after = change(basic.FileAttributes) & ValidSetAttributes;
+        if (after == before)
+            return true;
+
+        // 0 would mean "no change".
+        var info = new FileBasicInfo { FileAttributes = after == 0 ? FileAttributeNormal : after };
+        return SetFileInformationByHandle(handle, FileBasicInfoClass, ref info, (uint)Marshal.SizeOf<FileBasicInfo>());
+    }
+
     // The anchor is created by path, so the folder could be swapped between the check and the create: it is accepted only
     // when its final path is inside the folder this handle holds.
     private bool TryAnchor()
@@ -234,17 +294,8 @@ internal sealed partial class PartialFolder : IDisposable
         if (Marshal.GetLastPInvokeError() is not (ErrorInvalidParameter or ErrorNotSupported or ErrorInvalidFunction))
             return false;
 
-        // FAT, exFAT and some network shares only have the classic delete, which refuses a read-only file. The attribute
-        // is changed through the handle, on the entry itself, never on what a link points to.
-        if (GetFileInformationByHandleEx(handle, FileBasicInfoClass, out FileBasicInfo basic, (uint)Marshal.SizeOf<FileBasicInfo>())
-            && (basic.FileAttributes & FileAttributeReadOnly) != 0)
-        {
-            var attributes = basic.FileAttributes & ~FileAttributeReadOnly;
-            basic = default;
-            basic.FileAttributes = attributes == 0 ? FileAttributeNormal : attributes;
-            SetFileInformationByHandle(handle, FileBasicInfoClass, ref basic, (uint)Marshal.SizeOf<FileBasicInfo>());
-        }
-
+        // FAT, exFAT and some network shares only have the classic delete, which refuses a read-only file.
+        ChangeAttributes(handle, a => a & ~FileAttributeReadOnly);
         byte deleteFile = 1;
         return SetFileInformationByHandle(handle, FileDispositionInfoClass, ref deleteFile, sizeof(byte));
     }

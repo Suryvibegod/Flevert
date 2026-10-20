@@ -112,6 +112,7 @@ public static class OutputPath
         {
             await write(folder.Path, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
+            folder.PrepareForRename();
             var final = await RenameToFreeNameAsync(folder, desiredDirectory, keepSuffix, ct).ConfigureAwait(false);
             renamed = true;
             // Emptied by someone else and turned into a junction after the anchor went: the junction is what was renamed.
@@ -122,6 +123,7 @@ public static class OutputPath
                 throw new IOException("The folder for the output was replaced by a link before it got its name.");
             }
 
+            folder.Unhide();
             return final;
         }
         finally
