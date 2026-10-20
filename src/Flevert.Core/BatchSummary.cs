@@ -4,6 +4,37 @@ namespace Flevert.Core;
 /// <param name="ShowsLog">The text points to the log, so clicking the notification should open it.</param>
 public sealed record BatchSummary(string Text, bool HasFailures, bool ShowsLog)
 {
+    // A notification holds about 255 characters; the reason must leave room for the log folder.
+    private const int MaxReasonLength = 120;
+
+    public static BatchSummary Describe(BatchOutcome outcome, string logDirectory)
+    {
+        if (!outcome.OneOutput)
+            return Describe(outcome.Results, outcome.Total, logDirectory);
+
+        // One output from every file: no count of files, but what stopped it, naming the file when one did.
+        if (outcome.Results.Count < outcome.Total)
+            return new("Cancelled.", false, false);
+        if (outcome.Results is [{ Failed: true, Error: { } error }])
+            return new($"Failed: {Reason(error)} Details: {logDirectory}", true, true);
+        return Describe(outcome.Results, outcome.Total, logDirectory);
+    }
+
+    // The first line: the runner puts the short reason there and the stack trace for the log after it.
+    private static string Reason(string error)
+    {
+        var line = error.AsSpan()[..(error.IndexOfAny(['\r', '\n']) is var end and >= 0 ? end : error.Length)].Trim().ToString();
+        if (line.Length > MaxReasonLength)
+        {
+            line = line[..(MaxReasonLength - 1)];
+            if (char.IsHighSurrogate(line[^1]))
+                line = line[..^1];
+            return line + "…";
+        }
+
+        return line.EndsWith('.') || line.EndsWith('!') || line.EndsWith('?') ? line : line + ".";
+    }
+
     public static BatchSummary Describe(IReadOnlyList<FileResult> results, int total, string logDirectory)
     {
         var failed = results.Count(r => r.Failed);

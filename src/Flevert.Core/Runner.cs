@@ -23,6 +23,12 @@ public sealed record BatchOutcome(IReadOnlyList<FileResult> Results, int Total)
 {
     /// <summary>Every file was processed and none failed (skipped files are fine). Decides the exit code.</summary>
     public bool NoFailures => Results.Count == Total && Results.All(r => !r.Failed);
+
+    /// <summary>
+    /// The batch was joined into one output (<see cref="IBatchOperation"/>): <see cref="Total"/> is 1 and
+    /// <see cref="Results"/> holds that output's one result, or nothing when cancelled.
+    /// </summary>
+    public bool OneOutput { get; init; }
 }
 
 public sealed class Runner(RunLog log)
@@ -33,6 +39,170 @@ public sealed class Runner(RunLog log)
         var taken = 0;
         var source = files.Select(file => { taken++; return file; }).ToAsyncEnumerable();
         return RunAsync(operation, source, () => files.Count - taken, progress, ct, maxParallel);
+    }
+
+    /// <summary>Joins <paramref name="files"/> into one output; see the overload over a stream of files.</summary>
+    public Task<BatchOutcome> RunAsync(
+        IBatchOperation operation, IReadOnlyList<string> files, IProgress<BatchProgress>? progress, CancellationToken ct) =>
+        RunAsync(operation, files.ToAsyncEnumerable(), progress, ct);
+
+    /// <summary>
+    /// Waits until <paramref name="files"/> ends (the batch is complete), then pins every file, sorts them in natural order
+    /// and runs <paramref name="operation"/> once, holding every pin until it finishes. One file that cannot be used fails
+    /// the whole output, and the result names it. ADR-0007, part 2.
+    /// </summary>
+    public async Task<BatchOutcome> RunAsync(
+        IBatchOperation operation, IAsyncEnumerable<string> files, IProgress<BatchProgress>? progress, CancellationToken ct)
+    {
+        var timer = Stopwatch.StartNew();
+        var received = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        try
+        {
+            // A batch leader ends this only once no more files will come (ADR-0002): the whole batch is known before
+            // anything runs.
+            await foreach (var file in files.WithCancellation(ct).ConfigureAwait(false))
+            {
+                if (seen.Add(file))
+                    received.Add(file);
+            }
+
+            ct.ThrowIfCancellationRequested();
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return Cancelled(operation, received.FirstOrDefault() ?? "(batch)", timer);
+        }
+
+        if (received.Count == 0)
+            return new BatchOutcome([], 0) { OneOutput = true };
+
+        var pins = new List<SafeFileHandle>();
+        try
+        {
+            var inputs = new List<(string Given, string Real)>();
+            var rejected = new List<(string File, string Reason)>();
+            foreach (var file in received)
+            {
+                SafeFileHandle? pin = null;
+                var realPath = file;
+                var reason = Reject(operation, file) ?? Pin(file, out pin, out realPath) ?? Unsupported(operation, realPath);
+                if (pin is not null)
+                    pins.Add(pin);
+                if (reason is null)
+                    inputs.Add((file, realPath));
+                else
+                    rejected.Add((file, reason));
+            }
+
+            if (rejected.Count > 0)
+                return Rejected(operation, rejected, timer);
+
+            // Two spellings of one file (a short 8.3 name and the long one) pin the same real path: join it once.
+            var ordered = inputs.DistinctBy(i => i.Real, StringComparer.Ordinal).OrderBy(i => i.Real, NaturalOrder.PathComparer).ToList();
+            return await JoinAsync(operation, ordered, progress, timer, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Held until the operation has finished (or been abandoned): no input can be renamed, replaced or deleted while
+            // it is being joined.
+            foreach (var pin in pins)
+                pin.Dispose();
+        }
+    }
+
+    // How long a cancelled join may take to stop and delete its temporary output before it is abandoned (and its inputs
+    // unpinned): a well-behaved operation stops at its next token check, well within this.
+    private static readonly TimeSpan JoinStopGrace = TimeSpan.FromSeconds(2);
+
+    private async Task<BatchOutcome> JoinAsync(
+        IBatchOperation operation, List<(string Given, string Real)> inputs, IProgress<BatchProgress>? progress, Stopwatch timer,
+        CancellationToken ct)
+    {
+        var first = inputs[0].Given;
+        var finished = false;
+        var gate = new Lock();
+        progress?.Report(new BatchProgress(0, 1, first));
+        var within = progress is null ? null : new FileProgressRelay(p =>
+        {
+            lock (gate)
+            {
+                if (!finished)
+                    progress.Report(new BatchProgress(0, 1, first, p));
+            }
+        });
+
+        FileResult result;
+        Task<string>? running = null;
+        try
+        {
+            running = operation.RunAsync([.. inputs.Select(i => i.Real)], within, ct);
+            result = new FileResult(first, await running.WaitAsync(ct).ConfigureAwait(false), null);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            if (running is not null)
+                await Task.WhenAny(running, Task.Delay(JoinStopGrace, CancellationToken.None)).ConfigureAwait(false);
+            lock (gate)
+                finished = true;
+            return Cancelled(operation, first, timer);
+        }
+        catch (OperationSkippedException ex)
+        {
+            var reason = string.IsNullOrWhiteSpace(ex.Message) ? new OperationSkippedException().Message : ex.Message;
+            result = new FileResult(first, null, reason, Skipped: true);
+        }
+        catch (BatchInputException ex)
+        {
+            // The operation names the real path it was given; report the file as the batch received it.
+            var culprit = inputs.Where(i => i.Real == ex.InputPath).Select(i => i.Given).FirstOrDefault() ?? ex.InputPath ?? first;
+            result = new FileResult(culprit, null, $"{Path.GetFileName(culprit)}: {ex.Message}{Environment.NewLine}{ex}");
+        }
+#pragma warning disable CA1031 // Whatever the operation throws, the batch ends with a result and a notification.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            result = new FileResult(first, null, $"{ex.Message}{Environment.NewLine}{ex}");
+        }
+
+        lock (gate)
+            finished = true;
+
+        if (result.Succeeded)
+        {
+            foreach (var (given, _) in inputs)
+                log.Write(operation.Id, result with { Input = given }, timer.Elapsed);
+        }
+        else
+        {
+            log.Write(operation.Id, result, timer.Elapsed);
+        }
+
+        progress?.Report(new BatchProgress(1, 1, null));
+        return new BatchOutcome([result], 1) { OneOutput = true };
+    }
+
+    private BatchOutcome Rejected(IMenuOperation operation, List<(string File, string Reason)> rejected, Stopwatch timer)
+    {
+        foreach (var (file, reason) in rejected)
+            log.Write(operation.Id, new FileResult(file, null, reason), timer.Elapsed);
+
+        // Named in the order the user sees the files, so the same selection always names the same file.
+        var (named, why) = rejected.OrderBy(r => r.File, NaturalOrder.PathComparer).First();
+        var others = rejected.Count - 1;
+        var error = $"{Path.GetFileName(named)}: {why}" + others switch
+        {
+            0 => "",
+            1 => " 1 more file could not be used either.",
+            _ => $" {others} more files could not be used either.",
+        };
+        return new BatchOutcome([new FileResult(named, null, error)], 1) { OneOutput = true };
+    }
+
+    private BatchOutcome Cancelled(IMenuOperation operation, string file, Stopwatch timer)
+    {
+        log.Write(operation.Id, new FileResult(file, null, "cancelled"), timer.Elapsed);
+        return new BatchOutcome([], 1) { OneOutput = true };
     }
 
     /// <param name="pending">How many received files are still queued; lets progress grow as late files join the batch.</param>
@@ -169,7 +339,7 @@ public sealed class Runner(RunLog log)
 
     // Nothing here opens or probes the path: the pin is the first and only open of the file, with SQOS and without
     // following links.
-    private static string? Reject(IOperation operation, string file)
+    private static string? Reject(IMenuOperation operation, string file)
     {
         // Paths also arrive over the batch pipe; accept only plain absolute file paths, not device namespaces. flevert.exe
         // keeps a relative path with a dotted name unresolved, so say what is actually wrong with it.
@@ -190,7 +360,7 @@ public sealed class Runner(RunLog log)
 
     // Checked again on the real path after pinning: a short 8.3 name that could not be expanded ends in a truncated
     // extension (X~1.TXT for x.txtq).
-    private static string? Unsupported(IOperation operation, string path)
+    private static string? Unsupported(IMenuOperation operation, string path)
     {
         var extension = Path.GetExtension(path);
         return operation.Extensions.Contains(extension, StringComparer.OrdinalIgnoreCase)

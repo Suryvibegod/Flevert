@@ -17,6 +17,8 @@ internal static class Program
     // FLEVERT_BATCH_IDLE_MS is for integration tests on a loaded machine, like FLEVERT_LOG_DIR.
     private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(
         int.TryParse(Environment.GetEnvironmentVariable("FLEVERT_BATCH_IDLE_MS"), out var ms) ? Math.Clamp(ms, 100, 10_000) : 400);
+    // At least this for an operation that joins the batch into one output (still widened by FLEVERT_BATCH_IDLE_MS).
+    private static readonly TimeSpan JoinIdleWindow = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan LogRetention = TimeSpan.FromDays(7);
     // Up to what the operation allows, leaving one core for the machine and the progress window; beyond 8 the gain is
     // small and memory grows. docs/specs/core.md, "Xử lý song song trong một lô".
@@ -33,7 +35,7 @@ internal static class Program
         var invocationDirectory = Environment.CurrentDirectory;
         _running = AppMutex.TryHold();
         SafeStartup.Apply();
-        var catalog = new OperationCatalog([.. ImageOperations.All, .. PdfOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit()]);
+        var catalog = new OperationCatalog([.. ImageOperations.All, .. PdfOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);
@@ -160,8 +162,10 @@ internal static class Program
         // which touches the path before any check; accepted, see ADR-0001), and outputs are named from the
         // pinned file's real, long path in any case.
         var inputs = run.Files.ToList();
+        // A late file splits a joined batch into two outputs, not just two notifications: wait a little longer. ADR-0007.
+        var idle = operation is IBatchOperation && BatchIdleWindow < JoinIdleWindow ? JoinIdleWindow : BatchIdleWindow;
         // No synchronization context exists yet, so blocking here cannot deadlock. Followers exit without loading WinForms.
-        var leader = Batch.LeadOrJoinAsync(run.OperationId, inputs, BatchIdleWindow, CancellationToken.None).GetAwaiter().GetResult();
+        var leader = Batch.LeadOrJoinAsync(run.OperationId, inputs, idle, CancellationToken.None).GetAwaiter().GetResult();
         if (leader is null)
             return Ok;
 
@@ -170,16 +174,23 @@ internal static class Program
             // Logs hold every path processed; keep the whole app-data folder private to this user, like the batch keys.
             SecureDirectory.TrySecure(AppData.Root);
             log.Prune(LogRetention, DateOnly.FromDateTime(DateTime.Now));
-            var maxParallel = MaxParallelFor(operation);
-            Action<int> running = count =>
+            var runner = new Runner(log);
+            Func<IProgress<BatchProgress>?, CancellationToken, Task<BatchOutcome>> batch = operation switch
             {
-                leader.ReportRunning(count);
-                FollowRunningCount(count);
+                // Collects the whole batch first, so the leader closes once no file has arrived for the idle window.
+                IBatchOperation join => (progress, ct) => runner.RunAsync(join, leader.ReadAllAsync(ct), progress, ct),
+                IOperation each => (progress, ct) => runner.RunAsync(
+                    each, leader.ReadAllAsync(ct), () => leader.Pending, progress, ct, MaxParallelFor(each), count =>
+                    {
+                        leader.ReportRunning(count);
+                        FollowRunningCount(count);
+                    }),
+                _ => throw new InvalidOperationException($"{operation.Id} is neither kind of operation."), // the catalog refuses it
             };
             if (Environment.GetEnvironmentVariable("FLEVERT_HEADLESS") == "1")
-                return RunHeadless(operation, leader, log, maxParallel, running);
+                return batch(null, CancellationToken.None).GetAwaiter().GetResult().NoFailures ? Ok : SomeFilesFailed;
             // Alongside the batch, so it costs no time; asked about after the batch, if a newer version is out.
-            return BatchUi.Run(operation, leader, log, maxParallel, running, UpdateOffer.Start()) ? Ok : SomeFilesFailed;
+            return BatchUi.Run(operation, leader.Pending, log, batch, UpdateOffer.Start()) ? Ok : SomeFilesFailed;
         }
         finally
         {
@@ -213,15 +224,5 @@ internal static class Program
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
         }
-    }
-
-    /// <summary>Same batch without progress window or notification, for scripts and integration tests.</summary>
-    private static int RunHeadless(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running)
-    {
-        var outcome = new Runner(log)
-            .RunAsync(operation, leader.ReadAllAsync(CancellationToken.None), () => leader.Pending, progress: null, CancellationToken.None,
-                maxParallel, running)
-            .GetAwaiter().GetResult();
-        return outcome.NoFailures ? Ok : SomeFilesFailed;
     }
 }

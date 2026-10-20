@@ -34,6 +34,18 @@ public sealed class MenuTests
     }
 
     [Fact]
+    public void An_operation_that_joins_the_batch_gets_the_same_one_file_command_beside_the_others()
+    {
+        // Explorer still starts one process per selected file; the batch leader collects them (ADR-0007, part 2).
+        Install(new DevCopy(), new DevJoin());
+
+        var leaves = _registry.KeysUnder(@"Flevert.Menu.txt\Dev\shell");
+        Assert.Equal(["Copy", "Join"], leaves.Select(k => _registry.GetValue(k, "MUIVerb")));
+        Assert.Equal("Player", _registry.GetValue(leaves[1], "MultiSelectModel"));
+        Assert.Equal($"\"{Exe}\" run dev.join \"%1\"", _registry.GetValue($@"{leaves[1]}\command", ""));
+    }
+
+    [Fact]
     public void Operations_sharing_a_submenu_appear_under_one_entry_in_declared_order()
     {
         Install(
@@ -392,7 +404,7 @@ public sealed class MenuTests
         Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(dir.Path));
     }
 
-    private void Install(params IOperation[] ops) => new MenuInstaller(_registry, Exe).Install(ops);
+    private void Install(params IMenuOperation[] ops) => new MenuInstaller(_registry, Exe).Install(ops);
 
     private sealed class FakeOp(string id, string menuPath, params string[] extensions) : IOperation
     {

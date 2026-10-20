@@ -418,6 +418,48 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task Twelve_processes_of_a_joining_operation_give_one_file_in_natural_order()
+    {
+        _idleWindowMs = "3000"; // one batch even when the test machine is busy (see _idleWindowMs)
+        var files = Enumerable.Range(1, 12).Select(i => _dir.File($"ảnh {i}.txt", $"ảnh {i}\r\n")).ToList();
+        int[] startOrder = [7, 12, 1, 10, 3, 2, 11, 5, 9, 4, 8, 6]; // Explorer's order is not the names' order
+
+        var processes = startOrder.Select(i => StartFlevert("dev.join", files[i - 1])).ToList();
+        await ExitAllOk(processes);
+
+        var output = _dir.Combine("ảnh 1 (+11).txt");
+        // Exactly one output: the inputs plus the joined file, nothing else (no second batch, no .partial file).
+        Assert.Equal(
+            files.Select(Path.GetFileName).Append("ảnh 1 (+11).txt").Order(StringComparer.Ordinal),
+            Directory.GetFileSystemEntries(_dir.Path).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Assert.Equal(string.Concat(Enumerable.Range(1, 12).Select(i => $"ảnh {i}\r\n")), await File.ReadAllTextAsync(output));
+        Assert.Single(LoggedProcessIds());
+    }
+
+    [Fact]
+    public async Task A_joining_batch_with_a_file_it_cannot_use_writes_nothing_and_only_its_leader_exits_with_failure()
+    {
+        // Exit codes as docs/specs/core.md has them: the leader reports the batch, the others exit 0 once delivered.
+        _idleWindowMs = "3000";
+        var files = new[] { _dir.File("1.txt"), _dir.File("2.md"), _dir.File("3.txt") };
+
+        var processes = files.Select(f => StartFlevert("dev.join", f)).ToList();
+        try
+        {
+            await Task.WhenAll(processes.Select(p => p.WaitForExitAsync())).WaitAsync(TimeSpan.FromSeconds(30));
+        }
+        finally
+        {
+            foreach (var p in processes.Where(p => !p.HasExited))
+                p.Kill(entireProcessTree: true);
+        }
+
+        var leader = Assert.Single(LoggedProcessIds());
+        Assert.All(processes, p => Assert.Equal(p.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) == leader ? 1 : 0, p.ExitCode));
+        Assert.Equal(["1.txt", "2.md", "3.txt"], _dir.FileNames());
+    }
+
+    [Fact]
     public async Task Relative_paths_resolve_against_the_directory_flevert_was_started_in()
     {
         _dir.File("relative.txt");

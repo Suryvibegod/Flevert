@@ -1,6 +1,10 @@
 namespace Flevert.Core;
 
-public interface IOperation
+/// <summary>
+/// What the menu, the catalog and <c>list-ops</c> need to know about an operation of either kind: one file in, one output
+/// (<see cref="IOperation"/>), or every file of the batch in, one output (<see cref="IBatchOperation"/>).
+/// </summary>
+public interface IMenuOperation
 {
     /// <summary>Stable id used in registry commands, e.g. <c>image.to-png</c>. Never rename once released.</summary>
     string Id { get; }
@@ -10,7 +14,11 @@ public interface IOperation
 
     /// <summary>Lower-case file extensions with leading dot this operation accepts.</summary>
     IReadOnlyCollection<string> Extensions { get; }
+}
 
+/// <summary>Converts each file of a batch on its own: one output per input.</summary>
+public interface IOperation : IMenuOperation
+{
     /// <summary>
     /// How many files of a batch this operation may convert at once (flevert.exe also caps it by the cores it has). One unless
     /// the operation says otherwise: work that already uses every core, such as ffmpeg, gains nothing from more.
@@ -67,9 +75,72 @@ public sealed class OperationSkippedException : Exception
     }
 }
 
-public sealed class OperationCatalog(IEnumerable<IOperation> operations)
+/// <summary>
+/// Joins every file of a batch into one output, such as merging PDFs (ADR-0007, part 2). The runner waits until the batch
+/// is complete, pins every file for the whole run and calls the operation once.
+/// </summary>
+public interface IBatchOperation : IMenuOperation
 {
-    public IReadOnlyList<IOperation> All { get; } = [.. operations];
+    /// <summary>Joins <paramref name="inputPaths"/> into one file, or folder, and returns its path.</summary>
+    /// <param name="inputPaths">At least one: the real paths of the pinned inputs, distinct, in Explorer's natural order of
+    /// their names (<see cref="NaturalOrder"/>). The operation decides whether one file is enough; if not, it throws
+    /// with a message the user can act on ("Select at least two PDFs").</param>
+    /// <param name="progress">May be <c>null</c>; report how far the operation is, such as "file 3 of 12".</param>
+    /// <remarks>
+    /// The contract of <see cref="IOperation.RunAsync(string, CancellationToken)"/> applies, and also:
+    /// <list type="bullet">
+    /// <item>Write the output beside the first input (the folder of <c>inputPaths[0]</c>).</item>
+    /// <item>Nothing is written unless every input could be used: when one cannot, throw <see cref="BatchInputException"/>
+    /// naming it, so the notification can say which file stopped the batch.</item>
+    /// </list>
+    /// </remarks>
+    Task<string> RunAsync(IReadOnlyList<string> inputPaths, IProgress<FileProgress>? progress, CancellationToken ct);
+}
 
-    public IOperation? Find(string id) => All.FirstOrDefault(op => op.Id == id);
+/// <summary>
+/// Thrown by an <see cref="IBatchOperation"/> when one input cannot be used (a corrupt image, a damaged PDF), so the whole
+/// output fails and the notification names that file. The message says what is wrong with it, without its name.
+/// </summary>
+public sealed class BatchInputException : Exception
+{
+    public BatchInputException()
+    {
+    }
+
+    public BatchInputException(string message)
+        : base(message)
+    {
+    }
+
+    public BatchInputException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+
+    public BatchInputException(string inputPath, string message, Exception? innerException = null)
+        : base(message, innerException)
+    {
+        InputPath = inputPath;
+    }
+
+    /// <summary>The input that could not be used, as the operation received it.</summary>
+    public string? InputPath { get; }
+}
+
+public sealed class OperationCatalog
+{
+    public OperationCatalog(IEnumerable<IMenuOperation> operations)
+    {
+        All = [.. operations];
+        // flevert.exe runs an operation by its kind: it must be exactly one of them.
+        foreach (var op in All)
+        {
+            if (op is IOperation == op is IBatchOperation)
+                throw new ArgumentException($"'{op.Id}' must be either an {nameof(IOperation)} or an {nameof(IBatchOperation)}.", nameof(operations));
+        }
+    }
+
+    public IReadOnlyList<IMenuOperation> All { get; }
+
+    public IMenuOperation? Find(string id) => All.FirstOrDefault(op => op.Id == id);
 }

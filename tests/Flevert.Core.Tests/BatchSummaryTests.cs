@@ -111,6 +111,42 @@ public sealed class BatchSummaryTests
         Assert.Equal("Cancelled after 2 of 5 files.", summary.Text);
     }
 
+    [Fact]
+    public void A_joined_output_that_failed_shows_the_first_line_of_the_reason_and_points_to_the_log()
+    {
+        var outcome = new BatchOutcome([new FileResult(@"C:\x\2.md", null, "2.md: File type .md is not supported by dev.join.\r\n   at Runner")], 1)
+        {
+            OneOutput = true,
+        };
+
+        var summary = BatchSummary.Describe(outcome, LogDir);
+
+        Assert.Equal(@"Failed: 2.md: File type .md is not supported by dev.join. Details: D:\logs", summary.Text);
+        Assert.True(summary.HasFailures);
+        Assert.True(summary.ShowsLog);
+    }
+
+    [Fact]
+    public void A_long_reason_for_a_joined_output_is_cut_so_the_notification_keeps_the_log_folder()
+    {
+        // A notification holds about 255 characters; the reason must not push the log folder out of it.
+        var outcome = new BatchOutcome([new FileResult(@"C:\x\a.txt", null, new string('x', 500))], 1) { OneOutput = true };
+
+        var summary = BatchSummary.Describe(outcome, LogDir);
+
+        Assert.True(summary.Text.Length < 200, summary.Text);
+        Assert.EndsWith(@"… Details: D:\logs", summary.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_cancelled_joined_output_says_cancelled()
+    {
+        var summary = BatchSummary.Describe(new BatchOutcome([], 1) { OneOutput = true }, LogDir);
+
+        Assert.Equal("Cancelled.", summary.Text);
+        Assert.False(summary.ShowsLog);
+    }
+
     private static FileResult Ok(string input, string? output = null) => new(input, output ?? input + ".out", null);
 
     private static FileResult Failed(string input) => new(input, null, "boom");

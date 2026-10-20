@@ -12,7 +12,7 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath)
     internal const string MenuKeyPrefix = Title + ".Menu";
     internal const string Associations = "SystemFileAssociations";
 
-    public void Install(IEnumerable<IOperation> operations)
+    public void Install(IEnumerable<IMenuOperation> operations)
     {
         var ops = operations.ToList();
         foreach (var op in ops)
@@ -73,7 +73,7 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath)
         }
     }
 
-    private static void Validate(IOperation op)
+    private static void Validate(IMenuOperation op)
     {
         // The id is placed unquoted in the registry command line.
         if (!OperationId().IsMatch(op.Id))
@@ -105,11 +105,11 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath)
 
         public string Label { get; } = label;
 
-        public IOperation? Operation { get; private set; }
+        public IMenuOperation? Operation { get; private set; }
 
         public IReadOnlyList<MenuNode> Children => _children;
 
-        public static IReadOnlyList<MenuNode> Build(IEnumerable<IOperation> operations)
+        public static IReadOnlyList<MenuNode> Build(IEnumerable<IMenuOperation> operations)
         {
             var root = new MenuNode("");
             foreach (var op in operations)

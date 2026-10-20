@@ -22,12 +22,12 @@ internal sealed class BatchUi : ApplicationContext
     private bool _exitWhenChecked;
     private bool _checkAnswered; // set by the continuation itself: the task completes a moment before it runs
 
-    private BatchUi(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running,
-        Task<UpdateFound?> update)
+    private BatchUi(IMenuOperation operation, int pending, RunLog log,
+        Func<IProgress<BatchProgress>, CancellationToken, Task<BatchOutcome>> batch, Task<UpdateFound?> update)
     {
         _update = update;
         _logFile = log.CurrentFile;
-        _form = new ProgressForm(operation.MenuPath.Replace('/', ' '), leader.Pending, _cancellation);
+        _form = new ProgressForm(operation.MenuPath.Replace('/', ' '), pending, _cancellation);
         _ = _form.Handle; // installs the WinForms synchronization context so Progress<T> reports on this thread
 
         var progress = new Progress<BatchProgress>(_form.Report);
@@ -35,9 +35,7 @@ internal sealed class BatchUi : ApplicationContext
         {
             try
             {
-                return await new Runner(log).RunAsync(
-                    operation, leader.ReadAllAsync(_cancellation.Token), () => leader.Pending, progress, _cancellation.Token,
-                    maxParallel, running);
+                return await batch(progress, _cancellation.Token);
             }
 #pragma warning disable CA1031 // Whatever happens, the batch must end with a notification and the process must exit.
             catch (Exception ex)
@@ -62,14 +60,16 @@ internal sealed class BatchUi : ApplicationContext
 
     public bool NoFailures { get; private set; }
 
-    /// <param name="running">Passed to the runner: tells the leader, and the process priority, how many files run.</param>
+    /// <param name="pending">How many files are queued at the start, for the progress bar.</param>
+    /// <param name="batch">Runs the batch with the window's progress and Cancel: the runner over the leader's files, for
+    /// either kind of operation.</param>
     /// <param name="update">The check for a new version started with the batch; asked about after it if it finds one in time.</param>
-    public static bool Run(IOperation operation, BatchLeader leader, RunLog log, int maxParallel, Action<int> running,
-        Task<UpdateFound?> update)
+    public static bool Run(IMenuOperation operation, int pending, RunLog log,
+        Func<IProgress<BatchProgress>, CancellationToken, Task<BatchOutcome>> batch, Task<UpdateFound?> update)
     {
         Application.EnableVisualStyles();
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        using var ui = new BatchUi(operation, leader, log, maxParallel, running, update);
+        using var ui = new BatchUi(operation, pending, log, batch, update);
         Application.Run(ui);
         return ui.NoFailures;
     }
@@ -102,7 +102,7 @@ internal sealed class BatchUi : ApplicationContext
             _form.Finishing = true;
             _form.Close();
 
-            var summary = BatchSummary.Describe(outcome.Results, outcome.Total, Path.GetDirectoryName(_logFile)!);
+            var summary = BatchSummary.Describe(outcome, Path.GetDirectoryName(_logFile)!);
             _tray = new NotifyIcon { Icon = _form.Icon, Text = "Flevert", Visible = true };
             if (summary.ShowsLog)
                 _tray.BalloonTipClicked += (_, _) => OpenLog();
