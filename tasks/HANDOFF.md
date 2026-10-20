@@ -57,7 +57,7 @@ Review ba góc cho T1–T10 đã chạy (bảng "Review vòng 1" trong [pdf/todo
 **Đã xong thêm (2026-10-21):** T11 `pdf.from-images` (menu ảnh Combine into PDF; HEIC/HEIF bỏ Convert > GIF vì Explorer chỉ hiện 16 mục), T6 `pdf.merge`, T8 `pdf.split`, T17b (lỗi `policy.xml` của v0.1 khi nhiều thao tác ảnh cùng chạy).
 
 **Việc tiếp theo, theo thứ tự:**
-1. Đang làm (agent): T9b (pdfium trong tiến trình worker), T12 strip-metadata + T13 compress, T14 protect/unlock + hộp thoại mật khẩu.
+1. Đang làm (agent): T12 strip-metadata + T13 compress, T14 protect/unlock + hộp thoại mật khẩu. T9b (pdfium trong tiến trình `flevert.exe pdf-worker`, ADR-0008 mục "Reading untrusted PDFs in a worker") đã xong.
 2. T4 (phần còn lại sau F4: check-location, `test-installer.ps1`), T17b còn: kiểm tay chọn lẫn JPG + HEIC trong Explorer thật, README bảng menu; T15–T17 tùy chọn; T18 hardening; T19 nâng cấp từ 0.1.0.
 3. Trước T20: verify một lần (chạy thật + ba review + reconcile + quét thông tin cá nhân), rồi phát hành theo đúng từng bước của RELEASING (dọn repo, xóa dấu vết bàn giao).
 
@@ -69,6 +69,7 @@ Review ba góc cho T1–T10 đã chạy (bảng "Review vòng 1" trong [pdf/todo
 - qpdf tự mở rộng ký tự đại diện trong đối số dòng lệnh (làm hỏng `\\?\` đường dẫn dài): đường dẫn đưa cho qpdf qua stdin `@-`; tùy chọn có `*`/`?`/`@` bị từ chối.
 - Test nào đếm tiến trình phải nhận diện đúng tiến trình của nó (PID, tiến trình cha), không đếm theo tên trên toàn máy: agent và CI chạy test song song.
 - Test lô nhiều tiến trình nhạy thời gian khi máy bận (đã gặp `Process_started_while_the_leader_is_busy_joins_its_batch`, `Processes_started_through_a_junction_still_form_one_batch`, `FramesTests…area_limit…`): đỏ thì chạy lại riêng trước; đỏ cả khi chạy riêng thì điều tra.
+- Test Pdf khởi động `flevert.exe pdf-worker` (PdfToImages, PdfWorker, PdfWorkerBatch) nằm chung collection xUnit `WorkerProcesses`; lớp test mới nào khởi động worker cũng phải vào collection đó (test tìm worker là con của testhost theo dòng lệnh).
 - Smart App Control chặn ngẫu nhiên DLL vừa build (test tiến trình thoát `0xE0434352`, hoặc `0x800711C7`): build lại với `-p:SourceRevisionId=<chuỗi mới>`, không đổi mã nguồn.
 - Sau khi `scripts/deps.json` đổi: chạy lại `scripts/fetch-deps.ps1` trên mọi máy.
 - Các agent chạy thử UI có thể bật cửa sổ Flevert trên màn hình: báo người dùng trước.
