@@ -384,7 +384,11 @@ public static class Batch
             {
                 return SendResult.Refused;
             }
-            catch (Exception ex) when (ex is IOException or TimeoutException or OperationCanceledException && !ct.IsCancellationRequested)
+            // InvalidOperationException: right after connecting, the client checks who owns the pipe (CurrentUserOnly);
+            // a leader that has let go of the connection by then makes that check throw it ("The pipe has been
+            // disconnected"). Seen with 100 processes under load: it crashed the process, and its file was lost.
+            catch (Exception ex) when (ex is IOException or TimeoutException or InvalidOperationException or OperationCanceledException
+                && !ct.IsCancellationRequested)
             {
                 return SendResult.Retry;
             }
