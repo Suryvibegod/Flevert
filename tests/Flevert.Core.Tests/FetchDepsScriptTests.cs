@@ -92,6 +92,53 @@ public sealed class FetchDepsScriptTests : IDisposable
     }
 
     [Fact]
+    public void A_kept_file_deleted_from_a_folder_that_remains_is_fetched_again()
+    {
+        // The build fails with "run fetch-deps" when pdfium.dll alone is gone; fetch-deps must not answer "up to date".
+        var archive = Zip(("bin/tool.exe", "exe"), ("bin/tool.dll", "dll"));
+        var manifest = Manifest(Item("tool", archive, Sha256(archive), kind: "zip", keep: ["bin/tool.exe", "bin/tool.dll"]));
+        var deps = _dir.Combine("deps");
+        Assert.Equal(0, Fetch(manifest, deps).ExitCode);
+
+        File.Delete(Path.Combine(deps, @"tool\bin\tool.dll"));
+        var again = Fetch(manifest, deps);
+
+        Assert.True(again.ExitCode == 0, again.Output);
+        Assert.Equal("dll", File.ReadAllText(Path.Combine(deps, @"tool\bin\tool.dll")));
+    }
+
+    [Fact]
+    public void A_kept_file_changed_after_the_fetch_is_fetched_again()
+    {
+        var archive = Zip(("bin/tool.exe", "exe"));
+        var manifest = Manifest(Item("tool", archive, Sha256(archive), kind: "zip", keep: ["bin/tool.exe"]));
+        var deps = _dir.Combine("deps");
+        Assert.Equal(0, Fetch(manifest, deps).ExitCode);
+
+        File.WriteAllText(Path.Combine(deps, @"tool\bin\tool.exe"), "replaced");
+        var again = Fetch(manifest, deps);
+
+        Assert.True(again.ExitCode == 0, again.Output);
+        Assert.Equal("exe", File.ReadAllText(Path.Combine(deps, @"tool\bin\tool.exe")));
+    }
+
+    [Fact]
+    public void A_file_added_beside_the_kept_files_is_removed_by_fetching_again()
+    {
+        // Flevert.Pdf copies every DLL in deps\qpdf\bin next to flevert.exe, where qpdf.exe would load one planted there.
+        var archive = Zip(("bin/tool.exe", "exe"));
+        var manifest = Manifest(Item("tool", archive, Sha256(archive), kind: "zip", keep: ["bin/tool.exe"]));
+        var deps = _dir.Combine("deps");
+        Assert.Equal(0, Fetch(manifest, deps).ExitCode);
+
+        File.WriteAllText(Path.Combine(deps, @"tool\bin\version.dll"), "planted");
+        var again = Fetch(manifest, deps);
+
+        Assert.True(again.ExitCode == 0, again.Output);
+        Assert.Equal([@"bin\tool.exe"], Files(Path.Combine(deps, "tool")));
+    }
+
+    [Fact]
     public void A_listed_file_missing_from_the_archive_fails()
     {
         var archive = Zip(("bin/tool.exe", "exe"));
