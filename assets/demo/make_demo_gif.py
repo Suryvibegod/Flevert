@@ -1,8 +1,13 @@
-"""Draws assets/demo/convert.gif: four phone photos selected in Explorer, right-click, Flevert > Convert > JPG, and the
-JPG copies appearing beside them with Flevert's notification. An illustration in the style of Windows 11, drawn
-from scratch: the photos are generated gradients, and the menu labels and notification text are the app's own.
+"""Draws the README's demo animations, in the style of Windows 11, from scratch: the photos are generated gradients, and
+the menu labels, file names and notification texts are the app's own.
 
-Usage (Windows, for the Segoe UI font): python make_demo_gif.py convert.gif
+  convert  assets/demo/convert.gif: four phone photos (HEIC) selected in Explorer, right-click, Flevert > Convert > JPG,
+           and the JPG copies appearing beside them with Flevert's notification.
+  combine  assets/demo/combine.gif: four JPG photos, one of them a portrait shot, selected, right-click,
+           Flevert > Combine into PDF, and one PDF appearing beside them with Flevert's notification.
+
+Usage (Windows, for the Segoe UI font): python make_demo_gif.py convert convert.gif
+                                         python make_demo_gif.py combine combine.gif
 """
 import math
 import os
@@ -43,7 +48,8 @@ def photo(seed, size):
         t = y / h
         px.line([(0, y), (w, y)], fill=tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3)))
     sun_x = [0.7, 0.25, 0.5, 0.8][seed % 4] * w
-    px.ellipse([sun_x - h * 0.12, h * 0.22, sun_x + h * 0.12, h * 0.46], fill=(255, 245, 210))
+    sun_r = min(w, h) * 0.12
+    px.ellipse([sun_x - sun_r, h * 0.34 - sun_r, sun_x + sun_r, h * 0.34 + sun_r], fill=(255, 245, 210))
     hill = [(0, h * 0.62)] + [(x, h * (0.58 + 0.06 * math.sin(x / w * 6 + seed))) for x in range(0, w + 1, 4)] + [(w, h), (0, h)]
     px.polygon(hill, fill=[(70, 110, 80), (50, 95, 120), (90, 70, 110), (40, 110, 100)][seed % 4])
     px.rectangle([0, h * 0.8, w, h], fill=[(60, 120, 170), (40, 90, 150), (80, 80, 150), (30, 120, 140)][seed % 4])
@@ -53,10 +59,32 @@ def photo(seed, size):
     return img
 
 
-NAMES = ["IMG_2041", "IMG_2042", "IMG_2043", "IMG_2044"]
-TILE = (148, 112)  # thumbnail size
+def pdf_icon(size):
+    """A generic document icon with a folded corner and a red PDF band, on a transparent tile."""
+    w, h = size
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    pw, ph = int(h * 0.68), h - 4 * S
+    x0, y0 = (w - pw) // 2, 2 * S
+    fold = pw // 4
+    page = [(x0, y0), (x0 + pw - fold, y0), (x0 + pw, y0 + fold), (x0 + pw, y0 + ph), (x0, y0 + ph)]
+    d.polygon(page, fill=(255, 255, 255), outline=(170, 170, 170), width=S)
+    d.polygon([(x0 + pw - fold, y0), (x0 + pw - fold, y0 + fold), (x0 + pw, y0 + fold)], fill=(225, 225, 225), outline=(170, 170, 170), width=S)
+    for i in range(4):
+        y = y0 + fold + 10 * S + i * 9 * S
+        d.line([(x0 + 10 * S, y), (x0 + pw - 10 * S, y)], fill=(205, 205, 205), width=2 * S)
+    band = (x0 - 6 * S, y0 + ph - 34 * S, x0 + pw * 0.62, y0 + ph - 14 * S)
+    d.rounded_rectangle(band, radius=2 * S, fill=(200, 38, 38))
+    label = font(10, bold=True)
+    tw = d.textlength("PDF", font=label)
+    d.text(((band[0] + band[2] - tw) / 2, band[1] + 2.5 * S), "PDF", font=label, fill=(255, 255, 255))
+    return img
+
+
+TILE = (148, 112)  # thumbnail box
 GRID_X, GRID_Y = 52, 150
 STEP_X, STEP_Y = 182, 160
+NAMES = ["IMG_2041", "IMG_2042", "IMG_2043", "IMG_2044"]
 THUMBS = [photo(i, (TILE[0] * S, TILE[1] * S)) for i in range(4)]
 
 
@@ -108,7 +136,12 @@ def draw_window(canvas, files, selected):
         x, y = tile_origin(index)
         if index in selected:
             rounded(d, (x - 8, y - 8, x + TILE[0] + 8, y + TILE[1] + 34), 6, fill=SELECT_FILL, outline=SELECT_LINE, width=S)
-        canvas.paste(thumb, (x * S, y * S))
+        # Centred in the thumbnail box, as Explorer shows a portrait photo or a file icon.
+        at = (x * S + (TILE[0] * S - thumb.width) // 2, y * S + (TILE[1] * S - thumb.height) // 2)
+        if thumb.mode == "RGBA":
+            canvas.alpha_composite(thumb, at)
+        else:
+            canvas.paste(thumb, at)
         d = ImageDraw.Draw(canvas)
         label = font(12)
         width = d.textlength(name, font=label) / S
@@ -116,8 +149,11 @@ def draw_window(canvas, files, selected):
 
 
 MENU_ITEMS = ["Open", "Edit", "Print", "Rotate right", None, "Flevert", None, "Share", "Copy as path", "Properties"]
-SUB_ITEMS = ["Compress", "Convert", "Remove metadata"]
-FORMATS = ["JPG", "PNG", "WEBP", "AVIF", "GIF", "BMP", "TIFF"]
+# A picture's Flevert menu, in the order MenuOperations.All gives (tests/Flevert.Pdf.Tests/PdfMenuTests.cs).
+SUB_ITEMS = ["Convert", "Compress", "Combine into PDF", "Remove metadata"]
+SUB_ARROWS = ("Convert", "Compress")
+# Convert for a HEIC photo: no GIF (ImageConvert.cs), and not to its own format.
+HEIC_FORMATS = ["JPG", "PNG", "WEBP", "AVIF", "BMP", "TIFF"]
 ROW = 30
 
 
@@ -153,6 +189,10 @@ def draw_menu(canvas, origin, items, width, highlight=None, arrows=(), icons=())
     return rows
 
 
+def menu_rows(origin, items, width):
+    return draw_menu(Image.new("RGBA", (W * S, H * S)), origin, items, width)
+
+
 def draw_cursor(canvas, pos, pressed=False):
     x, y = pos
     arrow = [(0, 0), (0, 17), (4.5, 13), (7.5, 20), (10, 19), (7, 12.5), (12.5, 12.5)]
@@ -160,7 +200,7 @@ def draw_cursor(canvas, pos, pressed=False):
     d.polygon([((x + px) * S, (y + py) * S) for px, py in arrow], fill=(255, 255, 255) if not pressed else (225, 225, 225), outline=(0, 0, 0), width=S)
 
 
-def draw_toast(canvas, progress):
+def draw_toast(canvas, progress, message):
     if progress <= 0:
         return
     w, h = 300, 84
@@ -174,7 +214,7 @@ def draw_toast(canvas, progress):
     icon.putalpha(icon.getchannel("A").point(lambda a: int(a * progress)))
     layer.alpha_composite(icon, ((x + 16) * S, (y + 14) * S))
     d.text(((x + 44) * S, (y + 14) * S), "Flevert", font=font(12), fill=(*MUTED, int(255 * progress)))
-    d.text(((x + 16) * S, (y + 44) * S), "Done: 4 files", font=font(14, bold=True), fill=(*TEXT, int(255 * progress)))
+    d.text(((x + 16) * S, (y + 44) * S), message, font=font(14, bold=True), fill=(*TEXT, int(255 * progress)))
     canvas.alpha_composite(layer)
 
 
@@ -195,80 +235,131 @@ def ease(t):
     return t * t * (3 - 2 * t)
 
 
-def frames():
-    originals = [(f"{name}.HEIC", thumb) for name, thumb in zip(NAMES, THUMBS)]
-    jpgs = [(f"{name}.jpg", thumb) for name, thumb in zip(NAMES, THUMBS)]
-    rest = (660, 430)
+REST = (660, 430)
+MAIN = ((300, 150), MENU_ITEMS, 220)
+MAIN_STYLE = dict(arrows=("Flevert",), icons=("Flevert",))
 
-    def scene(files, selected=(), cursor=rest, pressed=False, menus=(), toast=0.0, band=None):
-        canvas = background()
-        draw_window(canvas, files, set(selected))
-        if band:
-            layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-            ImageDraw.Draw(layer).rectangle(scaled(band), fill=(0, 103, 192, 40), outline=(0, 103, 192, 160), width=S)
-            canvas.alpha_composite(layer)
-        for menu in menus:
-            draw_menu(canvas, *menu)
-        draw_toast(canvas, toast)
-        draw_cursor(canvas, cursor, pressed)
-        return canvas.convert("RGB").resize((W, H), Image.LANCZOS)
 
-    yield scene(originals), 900
-    # Drag a selection rectangle over the four photos.
+def scene(files, selected=(), cursor=REST, pressed=False, menus=(), toast=0.0, message="", band=None):
+    canvas = background()
+    draw_window(canvas, files, set(selected))
+    if band:
+        layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        ImageDraw.Draw(layer).rectangle(scaled(band), fill=(0, 103, 192, 40), outline=(0, 103, 192, 160), width=S)
+        canvas.alpha_composite(layer)
+    for origin, items, width, highlight, style in menus:
+        draw_menu(canvas, origin, items, width, highlight, **style)
+    draw_toast(canvas, toast, message)
+    draw_cursor(canvas, cursor, pressed)
+    return canvas.convert("RGB").resize((W, H), Image.LANCZOS)
+
+
+def menu(spec, highlight=None, **style):
+    return (*spec, highlight, style)
+
+
+def select_and_open_flevert(files):
+    """Drags a selection rectangle over the four photos, right-clicks, and opens the Flevert submenu.
+    Yields (frame, ms) and finally returns the submenu's rows and the menus drawn with it open."""
+    yield scene(files), 900
     start, end = (34, 136), (770, 300)
     for i in range(1, 9):
-        t = ease(i / 8)
-        corner = lerp(start, end, t)
+        corner = lerp(start, end, ease(i / 8))
         covered = [k for k in range(4) if tile_origin(k)[0] < corner[0] - 20]
-        yield scene(originals, covered, corner, band=(start[0], start[1], corner[0], corner[1])), 60
+        yield scene(files, covered, corner, band=(start[0], start[1], corner[0], corner[1])), 60
     selected = range(4)
     for i in range(1, 7):
-        yield scene(originals, selected, lerp(end, (300, 150), ease(i / 6))), 50
-    yield scene(originals, selected, (300, 150), pressed=True), 150
+        yield scene(files, selected, lerp(end, (300, 150), ease(i / 6))), 50
+    yield scene(files, selected, (300, 150), pressed=True), 150
 
-    main = ((300, 150), MENU_ITEMS, 220)
-    rows = draw_menu(Image.new("RGBA", (W * S, H * S)), *main)
-    snap_top = rows["Flevert"][0]
-    main_args = dict(arrows=("Flevert",), icons=("Flevert",))
-    yield scene(originals, selected, (306, 156), menus=[(*main, None, *main_args.values())]), 450
+    snap_top = menu_rows(*MAIN)["Flevert"][0]
+    yield scene(files, selected, (306, 156), menus=[menu(MAIN, **MAIN_STYLE)]), 450
     for i in range(1, 6):
-        yield scene(originals, selected, lerp((306, 156), (380, snap_top + 15), ease(i / 5)), menus=[(*main, None, *main_args.values())]), 45
+        yield scene(files, selected, lerp((306, 156), (380, snap_top + 15), ease(i / 5)), menus=[menu(MAIN, **MAIN_STYLE)]), 45
     sub = ((516, snap_top - 4), SUB_ITEMS, 190)
-    sub_rows = draw_menu(Image.new("RGBA", (W * S, H * S)), *sub)
-    with_main = (*main, "Flevert", *main_args.values())
-    yield scene(originals, selected, (380, snap_top + 15), menus=[with_main, (*sub, None, ("Compress", "Convert"), ())]), 400
+    with_main = menu(MAIN, "Flevert", **MAIN_STYLE)
+    yield scene(files, selected, (380, snap_top + 15), menus=[with_main, menu(sub, arrows=SUB_ARROWS)]), 400
+    return sub, menu_rows(*sub), with_main
+
+
+def convert_frames():
+    originals = [(f"{name}.HEIC", thumb) for name, thumb in zip(NAMES, THUMBS)]
+    jpgs = [(f"{name}.jpg", thumb) for name, thumb in zip(NAMES, THUMBS)]
+    selected = range(4)
+
+    sub, sub_rows, with_main = yield from select_and_open_flevert(originals)
+    start = (380, sub_rows["Convert"][0] + 15)
     convert_mid = sub_rows["Convert"][0] + 15
     for i in range(1, 6):
-        yield scene(originals, selected, lerp((380, snap_top + 15), (580, convert_mid), ease(i / 5)),
-                    menus=[with_main, (*sub, "Compress" if i < 3 else "Convert", ("Compress", "Convert"), ())]), 45
+        yield scene(originals, selected, lerp(start, (650, convert_mid), ease(i / 5)),
+                    menus=[with_main, menu(sub, "Convert" if i > 2 else None, arrows=SUB_ARROWS)]), 45
     # Opens upwards where there is no room below, as Windows does.
-    formats_height = menu_size(FORMATS, 112)[1]
-    formats = ((702, min(sub_rows["Convert"][0] - 4, 474 - formats_height)), FORMATS, 112)
-    format_rows = draw_menu(Image.new("RGBA", (W * S, H * S)), *formats)
-    with_sub = (*sub, "Convert", ("Compress", "Convert"), ())
-    yield scene(originals, selected, (580, convert_mid), menus=[with_main, with_sub, (*formats, None, (), ())]), 350
+    formats_height = menu_size(HEIC_FORMATS, 112)[1]
+    formats = ((702, min(sub_rows["Convert"][0] - 4, 474 - formats_height)), HEIC_FORMATS, 112)
+    format_rows = menu_rows(*formats)
+    with_sub = menu(sub, "Convert", arrows=SUB_ARROWS)
+    yield scene(originals, selected, (650, convert_mid), menus=[with_main, with_sub, menu(formats)]), 350
     jpg_mid = format_rows["JPG"][0] + 15
     for i in range(1, 5):
-        yield scene(originals, selected, lerp((580, convert_mid), (730, jpg_mid), ease(i / 4)),
-                    menus=[with_main, with_sub, (*formats, "JPG" if i > 2 else None, (), ())]), 50
-    yield scene(originals, selected, (730, jpg_mid), menus=[with_main, with_sub, (*formats, "JPG", (), ())]), 600
-    yield scene(originals, selected, (730, jpg_mid), pressed=True, menus=[with_main, with_sub, (*formats, "JPG", (), ())]), 120
+        yield scene(originals, selected, lerp((650, convert_mid), (730, jpg_mid), ease(i / 4)),
+                    menus=[with_main, with_sub, menu(formats, "JPG" if i > 2 else None)]), 50
+    yield scene(originals, selected, (730, jpg_mid), menus=[with_main, with_sub, menu(formats, "JPG")]), 600
+    yield scene(originals, selected, (730, jpg_mid), pressed=True, menus=[with_main, with_sub, menu(formats, "JPG")]), 120
 
-    # The JPG copies appear beside the originals, then the notification.
+    # The JPG copies appear beside the originals (name order: IMG_2041.HEIC, IMG_2041.jpg, ...), then the notification.
+    def in_name_order(files):
+        return sorted(files, key=lambda f: (f[0][:8], f[0][9:] != "HEIC"))
+
     for n in range(1, 5):
-        files = sorted(originals + jpgs[:n], key=lambda f: (f[0][:8], f[0][9:] != "HEIC"))
-        yield scene(files, selected=[i for i, f in enumerate(files) if f[0].endswith("HEIC")], cursor=(730, jpg_mid)), 140
-    files = sorted(originals + jpgs, key=lambda f: (f[0][:8], f[0][9:] != "HEIC"))
+        files = in_name_order(originals + jpgs[:n])
+        yield scene(files, [i for i, f in enumerate(files) if f[0].endswith("HEIC")], (730, jpg_mid)), 140
+    files = in_name_order(originals + jpgs)
     heic = [i for i, f in enumerate(files) if f[0].endswith("HEIC")]
+    message = "Done: 4 files"
     for i in range(1, 7):
-        yield scene(files, heic, (730, jpg_mid), toast=ease(i / 6)), 50
-    yield scene(files, heic, (730, jpg_mid), toast=1.0), 2600
+        yield scene(files, heic, (730, jpg_mid), toast=ease(i / 6), message=message), 50
+    yield scene(files, heic, (730, jpg_mid), toast=1.0, message=message), 2600
 
 
-def main(out):
-    images, durations = zip(*frames())
+def combine_frames():
+    # IMG_2043 is a portrait phone photo, stored sideways with an EXIF rotation: Explorer and the PDF both show it upright.
+    portrait = photo(2, (84 * S, TILE[1] * S))
+    thumbs = [THUMBS[0], THUMBS[1], portrait, THUMBS[3]]
+    photos = [(f"{name}.jpg", thumb) for name, thumb in zip(NAMES, thumbs)]
+    selected = range(4)
+
+    sub, sub_rows, with_main = yield from select_and_open_flevert(photos)
+    # Down the submenu, past Convert and Compress, to Combine into PDF.
+    path = [(380, sub_rows["Convert"][0] + 15), (676, sub_rows["Convert"][0] + 15), (676, sub_rows["Compress"][0] + 15),
+            (676, sub_rows["Combine into PDF"][0] + 15)]
+    for i in range(1, 4):
+        yield scene(photos, selected, lerp(path[0], path[1], ease(i / 3)), menus=[with_main, menu(sub, "Convert" if i > 1 else None, arrows=SUB_ARROWS)]), 50
+    yield scene(photos, selected, path[2], menus=[with_main, menu(sub, "Compress", arrows=SUB_ARROWS)]), 90
+    target = path[3]
+    for i in range(1, 4):
+        yield scene(photos, selected, lerp(path[2], target, ease(i / 3)), menus=[with_main, menu(sub, "Combine into PDF", arrows=SUB_ARROWS)]), 50
+    yield scene(photos, selected, target, menus=[with_main, menu(sub, "Combine into PDF", arrows=SUB_ARROWS)]), 700
+    yield scene(photos, selected, target, pressed=True, menus=[with_main, menu(sub, "Combine into PDF", arrows=SUB_ARROWS)]), 120
+
+    # Explorer adds a new file at the end of the view; then the notification names the one result.
+    yield scene(photos, selected, target), 300
+    files = photos + [("IMG_2041 (+3).pdf", pdf_icon((TILE[0] * S, TILE[1] * S)))]
+    message = "Done: IMG_2041 (+3).pdf"
+    yield scene(files, selected, target), 250
+    for i in range(1, 7):
+        yield scene(files, selected, target, toast=ease(i / 6), message=message), 50
+    yield scene(files, selected, target, toast=1.0, message=message), 2800
+
+
+SCENES = {"convert": convert_frames, "combine": combine_frames}
+
+
+def main(name, out):
+    images, durations = zip(*SCENES[name]())
     images[0].save(out, save_all=True, append_images=list(images[1:]), duration=list(durations), loop=0, optimize=True, disposal=1)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    if len(sys.argv) != 3 or sys.argv[1] not in SCENES:
+        sys.exit(__doc__)
+    main(sys.argv[1], sys.argv[2])
