@@ -139,6 +139,9 @@ public sealed class PdfExtractTextTests : IDisposable
     [InlineData("a\0b\fc￾d￿", "abcd")]
     [InlineData(" \r\n\t ", "")]
     [InlineData("Xin\u00A0chào\u2009Việt\u202FNam", "Xin chào Việt Nam")]
+    [InlineData("a\u2000b\u200Ac\u205Fd\u3000e", "a b c d e")]
+    // The Ogham space mark is a visible stroke, not white space: kept.
+    [InlineData("a\u1680b", "a\u1680b")]
     public void A_pages_text_is_written_with_crlf_and_without_what_cannot_be_read(string pdfium, string written)
     {
         Assert.Equal(written, PdfRenderWorker.PageText(pdfium));

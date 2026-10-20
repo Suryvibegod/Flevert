@@ -390,19 +390,20 @@ public static class PdfRenderWorker
 
     /// <summary>
     /// A page's text as written: every line ended by <c>\r\n</c>, without NUL, form feeds of its own or the noncharacters
-    /// pdfium can give for a glyph without a meaning, every kind of space as a plain one, and without the blank lines and
+    /// pdfium can give for a glyph without a meaning, every blank space as a plain one, and without the blank lines and
     /// spaces it ends with; empty for a page with nothing but white space.
     /// </summary>
     /// <remarks>
     /// A font that draws the space and the no-break space with one glyph (Arial does) maps that glyph back to only one of
-    /// them, so a PDF can give U+00A0 between every word; searched or pasted, it does not match a space.
+    /// them, so a PDF can give U+00A0 between every word; searched or pasted, it does not match a space. Only the spaces
+    /// that are blank (<see cref="IsBlankSpace"/>) become one: U+1680, also a space separator, is a visible stroke.
     /// </remarks>
     internal static string PageText(string text)
     {
         var clean = new StringBuilder(text.Length);
         foreach (var c in text)
         {
-            if (char.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.SpaceSeparator)
+            if (IsBlankSpace(c))
                 clean.Append(' ');
             else if (c is not ('\0' or '\f' or '\uFFFE' or '\uFFFF'))
                 clean.Append(c);
@@ -410,6 +411,10 @@ public static class PdfRenderWorker
 
         return clean.ToString().ReplaceLineEndings("\r\n").TrimEnd();
     }
+
+    // The blank spaces of Unicode: no-break, the typographic widths (en quad to hair), narrow no-break, medium
+    // mathematical and ideographic.
+    private static bool IsBlankSpace(char c) => c is '\u00A0' or (>= '\u2000' and <= '\u200A') or '\u202F' or '\u205F' or '\u3000';
 
     private static void Render(PdfRenderRequest request, SafeFileHandle file, StreamWriter lines)
     {
