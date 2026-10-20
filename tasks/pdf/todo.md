@@ -356,13 +356,15 @@ Ba reviewer bối cảnh trống, chỉ đọc, trên nhánh `t11a` (JpegSegment
 Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; làm ở v0.2.1, dùng lại tính năng có sẵn của qpdf/pdfium và thư viện mở giấy phép hợp MIT (CLAUDE.md, "Reuse before writing").
 
 ### T15: Spike compress-sharing
-- [ ] Thử trên 3 PDF scan (sinh): thay ảnh bằng pdfium, lưu, qpdf nén → nhỏ hơn ≥ 40%, render vẫn đọc được; ghi kết quả; quyết làm hay bỏ
+- [x] Thử trên 3 PDF scan (sinh): thay ảnh bằng pdfium, lưu, qpdf nén → nhỏ hơn ≥ 40%, render vẫn đọc được; ghi kết quả; quyết làm hay bỏ (v0.2.1, P1: đạt, xem mục v0.2.1 bên dưới)
 - Phụ thuộc: T9. Cỡ: S
 
 ### T16: `pdf.compress-sharing` (nếu T15 đạt)
+- [x] Làm ở v0.2.1 (P1), mục bên dưới.
 - Phụ thuộc: T15. Cỡ: M
 
 ### T17: `pdf.reverse`, `pdf.repair`, `pdf.extract-text`, `pdf.extract-images` (theo thứ tự, mỗi cái một commit)
+- [x] v0.2.1 (spec "Bố cục menu", 16 mục): `pdf.extract-text` làm (P3); Repair thành ghi chú tự động (P4); Reverse bỏ vì P1 đạt; Extract images ra ngoài v0.2.1.
 - Phụ thuộc: T3/T7/T9. Cỡ: S mỗi cái
 
 ## Giai đoạn 6: hoàn thiện và phát hành
@@ -466,3 +468,33 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 | Nit tài liệu: tên setup trong spec installer, SignPath "has been requested", HANDOFF, khóa `/PieceInfo` của script fixture, dòng trống thừa | Nit/Should | Hợp lệ | Xong |
 
 Soát lại phần sửa (một reviewer gộp): không còn Critical/High/Required.
+
+---
+
+# v0.2.1 (nhánh `feat/v0.2.1-pdf`, 2026-10-20)
+
+Spec: [docs/specs/pdf.md](../../docs/specs/pdf.md), mục "v0.2.1" (cùng kết quả spike và "Đã quyết khi làm"). Làm trong một phiên cloud Linux: build và `dotnet format` chạy tại chỗ (SDK 10.0.113 của Ubuntu, `EnableWindowsTargeting`), còn ba project test chạy trên CI Windows (`workflow_dispatch` của `ci.yml` trên nhánh, ~10 phút/lần). Vì vậy bước "thấy đỏ" của mỗi test mới là lần CI đầu chạy nó (ghi dưới), không phải một lần chạy riêng trước khi code; vài kỳ vọng của bảng PDF độc được viết đoán rồi sửa theo đúng kết quả CI.
+
+| Mục | Trạng thái | Ghi chú, commit |
+|---|---|---|
+| P6.3 Split → `(split)` | Xong | `1959aa1`; CHANGELOG Changed |
+| P6.4/P6.5 Merge: thông báo và test thiếu | Xong | `a720eca`: đếm lại > 2000 trang → "Together these PDFs…"; probe mật khẩu hết giờ trong merge nêu file; test đếm lại (hook `AfterCounting`), guard `secret` + `outputLine`, lỗi I/O của kiểm chữ ký nêu file. CI 10 xanh |
+| Test Split giữ trang (flaky) | Xong | `8001a0c`: CI 9 (cùng commit với `main` đã xanh) đỏ vì qpdf viết xong 1500 trang trước lần poll tiến độ đầu; hook `AfterQpdf` |
+| P5 giới hạn T18 cho mọi thao tác ghi PDF | Xong | `5bcf5fb`, `e0e7792`: đếm trang + ghi chú chữ ký cho compress/strip/protect/unlock (unlock đếm bản đã mở); `--stream-data=preserve` cho strip/protect/unlock; compress: 3 s + 1 s/MB rồi lùi về nén không giải mã + ghi chú. Bảng PDF độc thêm 3 cột (CI 11/12 cho kết quả thật: compress "skipped" với 11 fixture nhỏ) |
+| P4 báo "đã sửa", từ chối thiếu trang | Xong | `d955ea7`, `620df8c`: phát hiện qpdf 12.4.2 ghi output không mở được khi PDF thiếu cả trailer (thử bằng bản Linux 12.4.2) → `RepairFailed` |
+| P6.1/P6.2 S3, S4 | Xong | `487bf4d`: bản ghi đóng lô ghi `reported` và `cancelled`; tiến trình còn chạy → "did not reach Flevert in time"; file muộn của lô đã báo/đã hủy → log `skipped`, thoát 0, không thông báo. Test tiến trình thật (treo > 30 s) xanh trên CI 13 |
+| P6.6 SA-L1 | Xong | `44333c8`: tổng pixel > 4000 MP → TooLarge; ước lượng 0,5 B/px JPG, 3 B/px PNG so với `GetDiskFreeSpaceEx` → lỗi chỗ trống. CI 14 xanh phần này |
+| P3 Convert > Text | Xong | `14a7d3e`, `1837cbe`: yêu cầu worker mới; PDF tiếng Việt tạo bằng pdfium + Arial của Windows lúc chạy test. CI 15: khoảng trắng khác (Arial: một glyph cho space và NBSP) → chuẩn hóa mọi khoảng trắng Zs |
+| P1 Compress > For sharing (spike + làm) | Xong, chờ CI | Spike đạt (bảng trong spec). `b24cf1b`. Bản C# của worker chạy được trên Linux bằng reflection (0,5 s/trang); phần qpdf + JSON chỉ kiểm được trên Windows (đường dẫn `\\?\`) |
+| P2 Reverse | Bỏ | P1 đạt (spec) |
+| P7 Dependabot | Xong | `87fe350`: Test.Sdk 18.10.1 + runner 4.0.1 (mỗi PR xanh riêng trên `main`); Dependabot tự đóng PR khi `main` có bản mới. Không gộp/đóng PR Dependabot từ phiên này |
+| P7 `ContinuousIntegrationBuild` | Xong, chờ CI | `5fac6fc`: biến môi trường ở `ci.yml` và `release.yml`; `scripts/test-build-paths.ps1` (+ test) kiểm `Flevert*.dll`/`flevert.dll` không chứa đường dẫn checkout (UTF-8, UTF-16) |
+| Docs | Xong | spec (kết quả spike, đã quyết), README, CHANGELOG `[Unreleased]`. HANDOFF không sửa trên nhánh này (spec, Boundaries) |
+
+**Còn lại cho maintainer (bước Verify/Review của bản phát hành, trên máy Windows thật):**
+- MenuProbe trên `.pdf`: 16 mục, `Convert > Text`, `Compress > Lossless / For sharing`; chạy thật `flevert.exe run pdf.compress-sharing` và `pdf.extract-text` headless; `uninstall-menu`.
+- Đo thời gian Compress for sharing trên máy dev (tiêu chí ≤ 2 s/trang; test CI đặt ≤ 40 s cho 20 trang).
+- `test-installer.ps1`, kể cả kịch bản nâng cấp từ 0.2.0 (đã ghim); CI ×3.
+- Ba review bối cảnh trống (code, security, doubt) trên cả nhánh; RECONCILE vào bảng dưới đây.
+- Mục mở từ v0.2.0 vẫn mở: R13/R15/R9 (symlink treo, FAT/SMB, USN), ghi chú chữ ký với khóa viết bằng `#`, pdfium tin `/Count` thấp, `*.xml.<guid>.tmp` của v0.1.0.
+

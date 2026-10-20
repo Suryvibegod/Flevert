@@ -31,15 +31,13 @@ Tên menu tiếng Anh, theo kiểu menu ảnh hiện có (`Flevert > <nhóm> > <
 | `pdf.merge` | Merge PDFs | `.pdf` (≥ 2 file) | N → 1 | `<tên đầu tiên> (merged).pdf` |
 | `pdf.split` | Split into pages | `.pdf` | 1 → N | thư mục `<tên> (split)\<tên> 001.pdf` … (tới 0.2.0: `(pages)`) |
 | `pdf.rotate-right` / `-left` / `-180` | Rotate > 90° right / 90° left / 180° | `.pdf` | 1 → 1 | `<tên> (rotated).pdf` |
-| `pdf.compress` | Compress (thành Compress > Lossless nếu có `pdf.compress-sharing`) | `.pdf` | 1 → 1 | `<tên> (compressed).pdf`; không nhỏ hơn thì bỏ qua (skipped) |
-| `pdf.compress-sharing` | Compress > For sharing | `.pdf` | 1 → 1 | `<tên> (small).pdf`: ảnh > 150 DPI giảm còn 150 DPI, JPEG q80 |
+| `pdf.compress` | Compress > Lossless (tới 0.2.0: Compress) | `.pdf` | 1 → 1 | `<tên> (compressed).pdf`; không nhỏ hơn thì bỏ qua (skipped) |
+| `pdf.compress-sharing` | Compress > For sharing (0.2.1) | `.pdf` | 1 → 1 | `<tên> (small).pdf`: ảnh > 150 DPI giảm còn 150 DPI, JPEG q80 |
 | `pdf.strip-metadata` | Remove metadata | `.pdf` | 1 → 1 | `<tên> (no metadata).pdf` |
 | `pdf.protect` | Protect with password | `.pdf` | 1 → 1 | `<tên> (protected).pdf`, AES-256 |
 | `pdf.unlock` | Remove password | `.pdf` có mật khẩu | 1 → 1 | `<tên> (unlocked).pdf` |
-| `pdf.extract-images` | Extract images *(nếu kịp)* | `.pdf` | 1 → N | thư mục `<tên> (images)\`; JPEG trong PDF ra `.jpg` nguyên byte, còn lại `.png` |
-| `pdf.extract-text` | Extract text *(nếu kịp)* | `.pdf` | 1 → 1 | `<tên>.txt` (UTF-8, ngăn trang bằng form feed) |
-| `pdf.reverse` | Reverse page order *(nếu kịp)* | `.pdf` | 1 → 1 | `<tên> (reversed).pdf` |
-| `pdf.repair` | Repair *(nếu kịp)* | `.pdf` | 1 → 1 | `<tên> (repaired).pdf` (qpdf dựng lại bảng xref) |
+| `pdf.extract-text` | Convert > Text (0.2.1) | `.pdf` | 1 → 1 | `<tên>.txt` (UTF-8 có BOM, CRLF, ngăn trang bằng form feed) |
+| ~~`pdf.extract-images`~~, ~~`pdf.reverse`~~, ~~`pdf.repair`~~ | không có (v0.2.1, "Bố cục menu") | | | Repair thành ghi chú tự động (P4) |
 
 Quy tắc chung:
 
@@ -190,7 +188,7 @@ public Task<string> RunAsync(string inputPath, CancellationToken ct)
 
 # v0.2.1: phần còn lại của module pdf
 
-Trạng thái: **đã duyệt** (2026-10-20). Làm trên nhánh `feat/v0.2.1-pdf` từ `main` sau v0.2.0; phát hành **trước** v0.3.0. Mọi quy tắc ở trên (giới hạn, qpdf qua `@-`, worker pdfium, mật khẩu, tên output, `OutputPath`) vẫn áp dụng; mục này chỉ nói phần thêm và phần đổi.
+Trạng thái: **đã duyệt** (2026-10-20); **đã làm** trên nhánh `feat/v0.2.1-pdf` (2026-10-20, tiến độ và kết quả trong `tasks/pdf/todo.md`, mục v0.2.1), chờ maintainer review rồi gộp. Làm trên nhánh `feat/v0.2.1-pdf` từ `main` sau v0.2.0; phát hành **trước** v0.3.0. Mọi quy tắc ở trên (giới hạn, qpdf qua `@-`, worker pdfium, mật khẩu, tên output, `OutputPath`) vẫn áp dụng; mục này chỉ nói phần thêm và phần đổi.
 
 ## Objective (v0.2.1)
 
@@ -299,6 +297,30 @@ Như phần v0.2 ở trên. Test chạy **lần lượt** từng project (`dotne
 
 1. **Bố cục menu** 16 mục như trên: Extract images ra ngoài v0.2.1; Repair thành thông báo tự động (P4), không có mục riêng; Reverse chỉ khi P1 bị bỏ; không làm cây menu thứ hai. Lý do: Rotate 180° (scan lộn ngược) dùng nhiều hơn Reverse; người dùng không biết khi nào cần Repair; Convert > JPG pages đáp ứng phần lớn nhu cầu lấy ảnh.
 2. **For sharing một mức**: 150 DPI + JPEG q80 (mức "ebook" quen thuộc của công cụ nén PDF: chữ nhỏ vẫn đọc rõ trên điện thoại và khi in A4). Không thêm mức thấp hơn: chữ hóa đơn nhòe, và vượt 16 mục.
+
+## Kết quả spike P1 (2026-10-20): đạt, giữ P1, không làm P2
+
+Đo bằng Python với bản Linux của pdfium chromium/8100 và qpdf 12.4.2 (cùng phiên bản bản Windows), đúng hướng làm ở P1:
+
+| Fixture | Cỡ vào → ra | Khác biệt render 150 DPI (trung bình /255) | Thời gian |
+|---|---|---|---|
+| scan 20 trang A4, JPEG 300 DPI (q85) | 23,82 → 8,68 MB (36%) | trang 1: 2,09; trang 2: 2,67 | 0,22 s/trang |
+| ảnh dùng lại hai cỡ (300 và 600 DPI) | 1,01 → 0,38 MB | 2,09; 0,32 | |
+| ảnh Flate có `/SMask` (333 DPI) trên scan | 1,57 → 0,50 MB | 2,02 | |
+| ảnh Flate RGB 300 DPI | 4,52 → 0,47 MB | 2,69 | |
+| JPEG CMYK có `/Decode [1 0 …]` | 3,77 → 0,42 MB | 2,73 | |
+
+Bản C# (worker `flevert.exe pdf-worker`, ImageMagick thu nhỏ) chạy trên Linux qua reflection: 20 ảnh 2480×3508 → 1240×1754, 0,5 s/trang. Test trên CI Windows dùng fixture sinh lúc chạy (`SharingPdf`), cùng các tiêu chí.
+
+## Đã quyết khi làm (v0.2.1)
+
+1. **Tìm lại ảnh giữa pdfium và qpdf**: pdfium không cho số object của ảnh, nên worker báo SHA-256 của dữ liệu ảnh *như lưu trong file* (`FPDFImageObj_GetImageDataRaw`, không giải mã), và tiến trình chính băm dữ liệu từng luồng do `qpdf --json-output --json-stream-data=file --decode-level=none` ghi ra thư mục riêng. Không có dữ liệu ảnh nào được giải mã trong tiến trình chính. Hai object cùng dữ liệu nhưng khác từ điển (ví dụ một cái có `/Decode`) → không thay cái nào.
+2. **Độ phân giải hiệu dụng** lấy từ `FPDFImageObj_GetImageMetadata` (pdfium tính từ ma trận vẽ), lấy giá trị nhỏ hơn giữa ngang và dọc, nhỏ nhất qua mọi chỗ vẽ. Ảnh trong form XObject: pdfium cho kích thước theo không gian của form, nên **không đổi** (an toàn: không bao giờ làm mờ hơn 150 DPI).
+3. **`/SMask` giữ nguyên cỡ của nó** (PDF cho phép mask khác cỡ ảnh); không thu mask theo (khác P1 ban đầu): mask nằm ngoài các object pdfium liệt kê, và render vẫn giống (2,02/255). Ảnh có `/Mask` (khóa màu hay stencil), `/ImageMask`, `/SMaskInData`, dữ liệu ngoài file (`/F`), JBIG2/CCITT, ≤ 1 bit, > 100 MP, hoặc JPEG mới không nhỏ hơn bản cũ: không đổi.
+4. **P5, Compress lossless**: lần chạy đầy đủ (giải nén và nén lại) có 3 s + 1 s/MB; quá thời gian hoặc quá trần bộ nhớ thì nén lại **không giải mã** (chỉ object streams, `--stream-data=preserve`) và ghi chú "Flevert compressed this PDF only in part: compressing it fully took too long." Mọi thao tác ghi PDF khác (Remove metadata, Protect, Remove password) giờ dùng `--stream-data=preserve`.
+5. **P4**: qpdf 12.4.2 sửa PDF không có cả bảng xref lẫn trailer nhưng ghi output thiếu `/Root` và `/Size`; ghi thường thì qpdf đọc lại được (tìm catalog), gói vào object streams (Compress) thì không. Kiểm lại output khi đã sửa: không mở được → lỗi `RepairFailed` "This PDF is too damaged: Flevert could not write a copy of it that opens."; khác số trang → "This PDF is damaged: the result would miss pages."
+6. **P3**: mọi loại khoảng trắng Unicode (U+00A0, U+2009…) ghi thành dấu cách thường: Arial dùng một glyph cho dấu cách và NBSP, ToUnicode do pdfium ghi chỉ trả về một trong hai.
+7. **Bảng PDF độc**: Remove metadata đọc mọi object hai lần qua JSON nên giới hạn của nó là 10 s + 1 s/MB (300 000 object, 16 MB: 13 s trên CI).
 
 ---
 

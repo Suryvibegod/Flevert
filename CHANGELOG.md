@@ -4,9 +4,28 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+
+- **Compress > For sharing** for PDFs: pictures above 150 DPI become 150 DPI JPEGs, so a 25 MB scan of 20 pages comes out at about a third of the size and still reads on a phone. Text, drawings and pictures already at 150 DPI or less stay exactly as they were.
+- **Convert > Text** for PDFs: `report.txt` with the text of every page, a page break between pages, in UTF-8 that Notepad reads. A scan has no text to extract: Flevert does not recognise text in pictures.
+- When Flevert had to repair a damaged PDF to read it, the notification says so and asks you to check that every page is there; a repair that would lose pages fails instead.
+
 ### Changed
 
 - **Split into pages** writes to a folder named `report (split)`, no longer `report (pages)`, the name **Convert** > JPG pages and PNG pages give their pictures of the same PDF.
+- **Compress** for PDFs is now a submenu: **Lossless** (what **Compress** did) and **For sharing**. The PDF menu has its 16 entries, all that Explorer shows.
+- **Compress**, **Remove metadata**, **Protect with password** and **Remove password** refuse PDFs of more than 2000 pages, as the other PDF actions do, and say when a signed PDF's signature is not valid in the result.
+
+### Fixed
+
+- A file of a **Merge PDFs** or **Combine into PDF** selection that started too slowly is reported as "did not reach Flevert in time", no longer as if its process had ended, and brings no second notification when it arrives at last. Files of a join you cancelled no longer bring a "left out" notification.
+- A merge that would pass 2000 pages because a file changed while it ran says "Together these PDFs have more than 2000 pages".
+
+### Security
+
+- **Convert** > JPG pages and PNG pages check, before the first page, that the pictures fit on the disk, and refuse PDFs whose pages together pass 4000 megapixels.
+- A tiny PDF that inflates to gigabytes no longer keeps **Remove metadata**, **Protect** or **Remove password** busy for seconds; **Compress** gives up decompressing it after a few seconds and compresses the rest.
+- Released files no longer contain the folder names of the machine that built them.
 
 ## [0.2.0] - 2026-10-20
 
