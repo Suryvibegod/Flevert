@@ -197,13 +197,10 @@ public sealed class PdfCompressTests : IDisposable
         Assert.Equal("Flevert compressed this PDF only in part: compressing it fully took too long.", result.Note);
         Assert.True(new FileInfo(result.Output!).Length < new FileInfo(input).Length * 3 / 4,
             $"{new FileInfo(input).Length} → {new FileInfo(result.Output!).Length} bytes");
-        // The bomb is copied as it was: still Flate inside Flate.
-        var filters = (await QpdfObjects(result.Output!)).EnumerateObject()
-            .Where(entry => entry.Value.TryGetProperty("stream", out _))
-            .Select(entry => entry.Value.GetProperty("stream").GetProperty("dict"))
-            .Where(dict => dict.TryGetProperty("/Filter", out _))
-            .Select(dict => dict.GetProperty("/Filter").ToString());
-        Assert.Contains(filters, filter => filter.Replace(" ", "", StringComparison.Ordinal) == """["/FlateDecode","/FlateDecode"]""");
+        // The bomb is copied as it was: still Flate inside Flate. A stream's dictionary is never in an object stream, so
+        // it is in the file as text.
+        var text = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result.Output!));
+        Assert.Matches(@"/Filter\s*\[\s*/FlateDecode\s*/FlateDecode\s*\]", text);
     }
 
     [Fact]
