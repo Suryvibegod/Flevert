@@ -223,6 +223,19 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         Assert.Null(result.Note);
     }
 
+    [Theory]
+    [MemberData(nameof(Modifying))]
+    public async Task A_pdf_qpdf_had_to_repair_is_written_with_a_note_to_check_its_pages(string operation)
+    {
+        // No cross-reference table: qpdf finds the objects by scanning the file, and says so (exit code 3).
+        var damaged = MaliciousPdf.Write("xref-missing", _dir.Combine("hỏng.pdf"));
+
+        var result = await RunThroughRunnerAsync(operation, operation == "pdf.merge" ? [CopyGood(), damaged] : [damaged]);
+
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal("Flevert had to repair this PDF while reading it: check that every page is there.", result.Note);
+    }
+
     [Fact]
     public async Task Pages_rendered_from_a_signed_pdf_get_no_note()
     {

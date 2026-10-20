@@ -82,7 +82,8 @@ public sealed class PdfSplit : IOperation
         {
             var split = _qpdf.SplitPagesAsync(inputPath, scratch, ct);
             await ReportWhileRunningAsync(split, scratch, total, progress).ConfigureAwait(false);
-            await split.ConfigureAwait(false);
+            // WrittenPages holds the pages to the count: the note alone.
+            PdfRepair.Note(await split.ConfigureAwait(false));
             AfterQpdf?.Invoke(scratch);
 
             var pages = WrittenPages(scratch, total);

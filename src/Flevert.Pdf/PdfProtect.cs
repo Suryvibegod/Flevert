@@ -54,7 +54,9 @@ public sealed class PdfProtect : IPasswordOperation
         using var lease = await _passwords.GetAsync(inputPath, PasswordPurpose.Protect, ct).ConfigureAwait(false)
             ?? throw new OperationSkippedException(PasswordOperation.NoPasswordMessage);
         var desired = PasswordOperation.OutputBeside(inputPath, " (protected)");
-        var output = await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _qpdf.EncryptAsync(inputPath, temp, lease.Password, token), ct)
+        // The output opens only with the password, so its pages are not counted again: the note alone.
+        var output = await OutputPath.WriteAtomicallyAsync(desired,
+            async (temp, token) => PdfRepair.Note(await _qpdf.EncryptAsync(inputPath, temp, lease.Password, token).ConfigureAwait(false)), ct)
             .ConfigureAwait(false);
         if (signed)
             OutputNote.Add(PdfSignature.NotValidNote);
@@ -110,10 +112,11 @@ public sealed class PdfUnlock : IPasswordOperation
         var desired = PasswordOperation.OutputBeside(inputPath, " (unlocked)");
         var output = await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
         {
-            await _qpdf.DecryptAsync(inputPath, temp, lease.Password, token).ConfigureAwait(false);
+            var repaired = await _qpdf.DecryptAsync(inputPath, temp, lease.Password, token).ConfigureAwait(false);
             // The pages can only be counted once the PDF opens, so it is the output that is counted: past 2 000 pages it
-            // is not kept (T18).
+            // is not kept (T18). There is no count of the input to hold it to: the note alone.
             await _qpdf.CountPagesAsync(temp, token).ConfigureAwait(false);
+            PdfRepair.Note(repaired);
         }, ct).ConfigureAwait(false);
         if (signed)
             OutputNote.Add(PdfSignature.NotValidNote);

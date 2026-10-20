@@ -64,7 +64,7 @@ public sealed class PdfCompress : IOperation
 
     public async Task<string> RunAsync(string inputPath, CancellationToken ct)
     {
-        await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
+        var pages = await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
         var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);
 
         var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + " (compressed).pdf");
@@ -72,16 +72,19 @@ public sealed class PdfCompress : IOperation
         var output = await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
         {
             var length = new FileInfo(inputPath).Length;
+            bool repaired;
             try
             {
-                await _qpdf.TransformAsync(inputPath, temp, Options, token, FullRunTimeoutFor(length)).ConfigureAwait(false);
+                repaired = await _qpdf.TransformAsync(inputPath, temp, Options, token, FullRunTimeoutFor(length)).ConfigureAwait(false);
             }
             catch (PdfException e) when (e.Error is PdfError.TooSlow or PdfError.NeedsTooMuchMemory)
             {
                 // qpdf has exited; it writes its output anew, over what the stopped run left.
-                await _qpdf.TransformAsync(inputPath, temp, WithoutDecoding, token).ConfigureAwait(false);
+                repaired = await _qpdf.TransformAsync(inputPath, temp, WithoutDecoding, token).ConfigureAwait(false);
                 partly = true;
             }
+
+            await PdfRepair.CheckAsync(_qpdf, repaired, pages, temp, token).ConfigureAwait(false);
 
             // Thrown before the output is committed: WriteAtomicallyAsync deletes the temporary file.
             if (new FileInfo(temp).Length >= length)

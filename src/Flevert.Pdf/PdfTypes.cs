@@ -74,6 +74,9 @@ public enum PdfError
 
     /// <summary>The password given does not open the PDF.</summary>
     WrongPassword,
+
+    /// <summary>qpdf repaired the PDF to read it, and what it wrote has other than the pages the PDF was counted with.</summary>
+    MissingPages,
 }
 
 /// <summary>A PDF Flevert cannot use, with a message for the user.</summary>

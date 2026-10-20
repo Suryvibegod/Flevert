@@ -73,17 +73,24 @@ public sealed class PdfMerge : IBatchOperation
         var desired = Path.Combine(Path.GetDirectoryName(first)!, Path.GetFileNameWithoutExtension(first) + " (merged).pdf");
         var output = await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
         {
-            await _qpdf.MergeAsync(inputPaths, temp, token).ConfigureAwait(false);
+            var repaired = await _qpdf.MergeAsync(inputPaths, temp, token).ConfigureAwait(false);
             // An input read again for the merge may not be the one counted (a file changing on a share): the limit holds
             // for what was written, which fails here rather than being kept, in the words of a merge.
+            int written;
             try
             {
-                await _qpdf.CountPagesAsync(temp, token).ConfigureAwait(false);
+                written = await _qpdf.CountPagesAsync(temp, token).ConfigureAwait(false);
             }
             catch (PdfException e) when (e.Error == PdfError.TooManyPages)
             {
                 throw new PdfException(PdfError.TooManyPages, TooManyPagesTogetherMessage, e);
             }
+
+            // Fewer pages than counted, from inputs qpdf had to repair: pages were lost on the way (P4). Which input lost
+            // them is not known.
+            if (repaired && written < total)
+                throw new PdfException(PdfError.MissingPages, PdfRepair.MissingPagesMessage);
+            PdfRepair.Note(repaired);
         }, ct).ConfigureAwait(false);
         if (signed)
             OutputNote.Add(PdfSignature.NotValidNote);
