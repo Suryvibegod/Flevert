@@ -51,7 +51,34 @@ internal static class TestPdf
     }
 
     // Objects 1..n in order, an xref table and a trailer whose root is object 1.
-    private static void WriteObjects(string path, List<string> objects)
+    /// <summary>
+    /// One blank page and a document information dictionary written inside the trailer rather than as an object of its
+    /// own: PDF requires an indirect one, but qpdf and viewers read both.
+    /// </summary>
+    public static void WriteWithInfoInTrailer(string path, string info)
+    {
+        WriteObjects(path,
+            ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Count 1 /Kids [3 0 R] >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>"],
+            $" /Info {info}");
+    }
+
+    /// <summary>
+    /// One blank page, and a catalog with XMP-like private data and an array nested <paramref name="depth"/> deep
+    /// (qpdf 12.4.2 reads up to 500): Remove metadata rewrites the catalog with the array in it.
+    /// </summary>
+    public static void WriteWithDeepCatalog(string path, int depth)
+    {
+        WriteObjects(path,
+            [
+                $"<< /Type /Catalog /Pages 2 0 R /PieceInfo << /App << /Private (deep piece) >> >> /Deep {new string('[', depth)}{new string(']', depth)} >>",
+                "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>",
+            ],
+            "");
+    }
+
+    // Objects 1..n in order, an xref table and a trailer whose root is object 1, with the extra entries given.
+    private static void WriteObjects(string path, List<string> objects, string trailer)
     {
         var body = new StringBuilder("%PDF-1.4\n");
         var offsets = new List<int>();
@@ -65,9 +92,11 @@ internal static class TestPdf
         body.Append(CultureInfo.InvariantCulture, $"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n");
         foreach (var offset in offsets)
             body.Append(CultureInfo.InvariantCulture, $"{offset:D10} 00000 n \n");
-        body.Append(CultureInfo.InvariantCulture, $"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+        body.Append(CultureInfo.InvariantCulture, $"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R{trailer} >>\nstartxref\n{xref}\n%%EOF\n");
         File.WriteAllBytes(path, Encoding.ASCII.GetBytes(body.ToString()));
     }
+
+    private static void WriteObjects(string path, List<string> objects) => WriteObjects(path, objects, "");
 
     /// <summary>
     /// One blank page, and an object no page uses: an array of <paramref name="numbers"/> zeros the catalog points at.
@@ -265,6 +294,43 @@ internal static class TestPdf
             .Select(page => page.TryGetProperty("/Rotate", out var rotate) ? rotate.GetInt32() : 0)
             .ToArray();
     }
+
+    /// <summary>
+    /// The whole PDF as text, every stream decoded and no object streams (<c>qpdf --qdf</c>): what is left of a value or
+    /// a script anywhere in the file shows here. Binary stream data comes through mangled, which does not matter for
+    /// finding ASCII text.
+    /// </summary>
+    public static async Task<string> QdfText(string path)
+    {
+        var run = await ExternalTool.RunAsync(QpdfExe, ["--qdf", "--object-streams=disable", path, "-"], TimeSpan.FromSeconds(30));
+        Assert.True(run.ExitCode == 0 && !run.StandardOutputTruncated, run.StandardError);
+        return run.StandardOutput;
+    }
+
+    /// <summary>
+    /// Every object of the PDF as qpdf reads it (<c>qpdf --json=2 --json-key=qpdf</c>): the second element of "qpdf",
+    /// keyed "obj:N G R" and "trailer".
+    /// </summary>
+    public static async Task<JsonElement> QpdfObjects(string path)
+    {
+        var run = await ExternalTool.RunAsync(QpdfExe, ["--json=2", "--json-key=qpdf", path], TimeSpan.FromSeconds(30));
+        Assert.True(run.ExitCode == 0 && !run.StandardOutputTruncated, run.StandardError);
+        using var json = JsonDocument.Parse(run.StandardOutput);
+        return json.RootElement.GetProperty("qpdf")[1].Clone();
+    }
+
+    /// <summary>The document information dictionary of the PDF (<c>/Info</c> in its trailer), or <c>null</c> when it has none.</summary>
+    public static async Task<Dictionary<string, string>?> ReadInfo(string path)
+    {
+        var objects = await QpdfObjects(path);
+        if (!objects.GetProperty("trailer").GetProperty("value").TryGetProperty("/Info", out var info))
+            return null;
+        if (info.ValueKind == JsonValueKind.String)
+            info = objects.GetProperty("obj:" + info.GetString()).GetProperty("value");
+        return info.EnumerateObject().ToDictionary(entry => entry.Name, entry => entry.Value.ToString());
+    }
+
+    private static string QpdfExe => Path.Combine(AppContext.BaseDirectory, "qpdf.exe");
 
     /// <summary>The files in <paramref name="folder"/>, by name, sorted.</summary>
     public static string[] FileNames(string folder) =>

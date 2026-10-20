@@ -187,6 +187,31 @@ public sealed class Qpdf
         await RunCheckedAsync(["--split-pages"], [inputPath], [inputPath, pattern], outputFolder, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Runs <c>qpdf --update-from-json=&lt;json&gt; &lt;input&gt; &lt;output&gt;</c>: the input with the objects that
+    /// <paramref name="jsonPath"/> (qpdf JSON version 2) gives replacing its own, written to the output. The option goes
+    /// through <c>@-</c> with the two paths, its path in the <c>\\?\</c> form like theirs; on the command line qpdf would
+    /// expand that path's <c>?</c> as a wildcard.
+    /// </summary>
+    /// <param name="jsonPath">Fully qualified; in a folder nobody else can change, since qpdf reads it as it is.</param>
+    /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
+    /// <exception cref="IOException">qpdf could not write <paramref name="outputPath"/>.</exception>
+    public async Task UpdateFromJsonAsync(string inputPath, string jsonPath, string outputPath, CancellationToken ct)
+    {
+        RequireArgumentLine(jsonPath, nameof(jsonPath));
+        var run = await RunCheckedAsync([], [inputPath], [UpdateFromJson + jsonPath, inputPath, outputPath], outputPath, ct)
+            .ConfigureAwait(false);
+        RequireOutput(run, outputPath);
+    }
+
+    // An option whose value is a path: given through @- like the paths, as "<option><\\?\ path>".
+    private const string UpdateFromJson = "--update-from-json=";
+
+    // The path in a line of @-: the line itself, or the value of a path option. A path is fully qualified, so it never
+    // starts like the option.
+    private static string PathIn(string line) =>
+        line.StartsWith(UpdateFromJson, StringComparison.Ordinal) ? line[UpdateFromJson.Length..] : line;
+
     // qpdf's placeholder for the page number in the output name of --split-pages.
     private const string PageNumber = "%d";
 
@@ -220,7 +245,7 @@ public sealed class Qpdf
             throw new ArgumentException($"qpdf would read the option {file} as a file of options.", nameof(options));
         // qpdf has no end-of-options marker ("--" is not one): a relative path such as "-x.pdf" would be an option.
         foreach (var line in lines.Where(line => line != EndOfPages))
-            RequireArgumentLine(line, nameof(lines));
+            RequireArgumentLine(PathIn(line), nameof(lines));
         RequireExe();
 
         long total = 0;
@@ -287,7 +312,7 @@ public sealed class Qpdf
         byte[] lines;
         try
         {
-            lines = StrictUtf8.GetBytes(string.Concat(paths.Select(path => (path == EndOfPages ? path : ToExtendedPath(path)) + "\n")));
+            lines = StrictUtf8.GetBytes(string.Concat(paths.Select(path => ToLine(path) + "\n")));
         }
         catch (EncoderFallbackException e)
         {
@@ -301,6 +326,15 @@ public sealed class Qpdf
         if (Untrustworthy(run, maxMemory) is { } error)
             throw error;
         return run;
+    }
+
+    // A line of @- as qpdf reads it: every path, alone or as an option's value, in the \\?\ form.
+    private static string ToLine(string line)
+    {
+        if (line == EndOfPages)
+            return line;
+        var path = PathIn(line);
+        return line[..^path.Length] + ToExtendedPath(path);
     }
 
     /// <summary>

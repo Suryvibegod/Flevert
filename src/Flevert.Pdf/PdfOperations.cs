@@ -4,7 +4,7 @@ namespace Flevert.Pdf;
 
 /// <summary>
 /// The PDF operations offered in the menu, in menu order (docs/specs/pdf.md, table of operations): Convert, Merge PDFs,
-/// Split into pages, Rotate. Nothing here loads pdfium or starts qpdf.
+/// Split into pages, Rotate, Remove metadata. Nothing here loads pdfium or starts qpdf.
 /// </summary>
 public static class PdfOperations
 {
@@ -16,5 +16,6 @@ public static class PdfOperations
         new PdfRotate(90, Qpdf.NextToApp),
         new PdfRotate(270, Qpdf.NextToApp),
         new PdfRotate(180, Qpdf.NextToApp),
+        new PdfStripMetadata(Qpdf.NextToApp),
     ];
 }

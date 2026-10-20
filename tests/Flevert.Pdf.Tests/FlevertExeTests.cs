@@ -169,6 +169,31 @@ public sealed class FlevertExeTests : IDisposable
         Assert.Equal([300], PageWidths(Path.Combine(folder, "Hóa đơn 003.pdf")));
     }
 
+    [Fact]
+    public async Task Flevert_exe_removes_the_metadata_of_a_pdf()
+    {
+        var input = CopyFixture("metadata.pdf", "Hóa đơn.pdf");
+
+        using var flevert = StartRun("pdf.strip-metadata", input);
+        try
+        {
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+        }
+        finally
+        {
+            if (!flevert.HasExited)
+                flevert.Kill(entireProcessTree: true);
+        }
+
+        Assert.True(flevert.ExitCode == 0, string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)));
+        var output = _dir.Combine("Hóa đơn (no metadata).pdf");
+        Assert.Equal(new Dictionary<string, string> { ["/Producer"] = "u:Flevert" }, await ReadInfo(output));
+        var text = await QdfText(output);
+        Assert.DoesNotContain("XMP Author", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("app.alert", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Attached secret text", text, StringComparison.Ordinal);
+    }
+
     private string CopyFixture(string fixture, string name)
     {
         var path = _dir.Combine(name);

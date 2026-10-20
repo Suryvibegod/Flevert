@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Security.AccessControl;
-using System.Security.Principal;
 using Flevert.Core;
 
 namespace Flevert.Pdf;
@@ -74,7 +72,7 @@ public sealed class PdfSplit : IOperation
     {
         progress?.Report(new FileProgress("page", 1, total));
         var scratch = Path.Combine(folder, $".qpdf-{Guid.NewGuid():N}");
-        CreatePrivateFolder(scratch);
+        PrivateFolder.Create(scratch);
         try
         {
             var split = _qpdf.SplitPagesAsync(inputPath, scratch, ct);
@@ -170,27 +168,6 @@ public sealed class PdfSplit : IOperation
             await using (to.ConfigureAwait(false))
                 await from.CopyToAsync(to, ct).ConfigureAwait(false);
         }
-    }
-
-    // Created with its permissions in place (this user, SYSTEM, administrators; nothing inherited), so there is no moment
-    // when another account could add to it. A random name nobody can create first.
-    private static void CreatePrivateFolder(string path)
-    {
-        using var me = WindowsIdentity.GetCurrent();
-        var security = new DirectorySecurity();
-        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
-        foreach (var sid in new[]
-                 {
-                     me.User!,
-                     new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
-                     new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
-                 })
-        {
-            security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
-        }
-
-        new DirectoryInfo(path).Create(security);
     }
 
     // "<name> 007.pdf", with the name shortened so a long input name still gives a valid page name.

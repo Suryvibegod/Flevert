@@ -14,13 +14,13 @@ public sealed class PdfMenuTests
         new MenuInstaller(_registry, Exe).Install(MenuOperations.All);
 
     [Fact]
-    public void A_pdf_gets_the_flevert_menu_with_its_page_conversions_merge_split_and_rotations()
+    public void A_pdf_gets_the_flevert_menu_with_its_page_conversions_merge_split_rotations_and_metadata_removal()
     {
         Assert.Equal("Flevert.Menu.pdf", _registry.GetValue(@"SystemFileAssociations\.pdf\shell\Flevert", "ExtendedSubCommandsKey"));
-        // docs/specs/pdf.md, table of operations: Convert, Merge PDFs, Split into pages, Rotate.
-        Assert.Equal(["Convert", "Merge PDFs", "Split into pages", "Rotate"], Labels(@"Flevert.Menu.pdf\shell"));
+        // docs/specs/pdf.md, table of operations: Convert, Merge PDFs, Split into pages, Rotate, Remove metadata.
+        Assert.Equal(["Convert", "Merge PDFs", "Split into pages", "Rotate", "Remove metadata"], Labels(@"Flevert.Menu.pdf\shell"));
         Assert.Equal(
-            [$"\"{Exe}\" run pdf.merge \"%1\"", $"\"{Exe}\" run pdf.split \"%1\""],
+            [$"\"{Exe}\" run pdf.merge \"%1\"", $"\"{Exe}\" run pdf.split \"%1\"", $"\"{Exe}\" run pdf.strip-metadata \"%1\""],
             _registry.Children(@"Flevert.Menu.pdf\shell")
                 .Select(verb => _registry.GetValue($@"{verb}\command", ""))
                 .OfType<string>());

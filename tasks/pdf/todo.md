@@ -326,8 +326,9 @@ Ba reviewer bối cảnh trống, chỉ đọc, trên nhánh `t11a` (JpegSegment
 ## Giai đoạn 4: qpdf còn lại
 
 ### T12: `pdf.strip-metadata`
-- [ ] Bỏ Info (giữ `Producer: Flevert`), XMP, tệp đính kèm, JavaScript/OpenAction; kiểm bằng `qpdf --json`
+- [x] Bỏ Info (giữ `Producer: Flevert`), XMP, tệp đính kèm, JavaScript/OpenAction; kiểm bằng `qpdf --json`
 - Phụ thuộc: T3. Cỡ: S
+- Đã làm (2026-10-20): `PdfStripMetadata` (menu `Remove metadata`, output `<tên> (no metadata).pdf`, `MaxParallel = 4`), `MetadataRemoval`, `QpdfJsonFile`, `PrivateFolder` (dùng chung với `PdfSplit`), `Qpdf.UpdateFromJsonAsync`. **Probe** (qpdf 12.4.2): không có tùy chọn đủ (`--remove-info` không giữ Producer, `--remove-metadata` chỉ XMP catalog, không gì bỏ script/đính kèm) → `--json-output=2 --json-stream-data=none` rồi `--update-from-json`; luồng chỉ có `dict` giữ dữ liệu; object null → tự rơi khỏi dict tham chiếu; thêm object mới (> `maxobjectid`) và thay trailer được; dòng `--update-from-json=\\?\…` trong `@-` được đọc; lồng sâu 490 mô tả được, 510 lỗi `parser-max-nesting`; PDF chỉ có mật khẩu owner giữ mã hóa (chạy thật qua `flevert.exe`). Fixture `metadata.pdf` (Python, README). Test viết trước: `PdfMenuTests` đỏ ("Collections differ") và 17 test `PdfStripMetadataTests` đỏ với stub (`NotImplementedException`), rồi xanh; thêm `QpdfJsonFileTests` (buffer đầu 1/7/64 byte, mục quá lớn, file cụt, hủy) bắt được lỗi thật: JSON hỏng ném `JsonReaderException` thay vì `InvalidDataException` (đã sửa). Đột biến: giữ `/JS` → test bí mật đỏ (Rendition); bỏ lùi khi mục chưa đủ → 4 test reader đỏ; `Directory.CreateDirectory` thay `CreateDirectoryW` → 2 test thư mục riêng đỏ; `MaxDepth = 64` → test lồng 490 đỏ; bỏ đăng ký → test `flevert.exe` đỏ. Đột biến không ghi null cho object bị bỏ **sống** (mọi tham chiếu đã gỡ, qpdf chỉ ghi object còn tới được): giữ làm lớp phòng thủ thứ hai, ghi rõ trong `MetadataRemoval`. Chưa bỏ: script trong XFA, `/Thumb`, `/ID`.
 
 ### T13: `pdf.compress` (lossless)
 - [ ] object streams, nén lại Flate mức 9; không nhỏ hơn → bỏ qua (skipped)
