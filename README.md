@@ -109,6 +109,10 @@ Setup installs only into `%LOCALAPPDATA%\Programs\Flevert`, and only if no other
 
 **Settings > Apps > Installed apps > Flevert > Uninstall** removes the program, its menu, logs and settings, and the classic menu if setup turned it on. Your converted files stay.
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/) (applied for; until the first signed release, check your download with its hash and attestation). What is signed, who approves it and what Flevert sends over the network: [code signing policy](docs/code-signing-policy.md).
+
 ## Contributing and license
 
 Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), or [SECURITY.md](SECURITY.md) for security problems. [MIT license](LICENSE); bundled components' licences are in `THIRD-PARTY-NOTICES.txt` in the install folder.
