@@ -10,8 +10,11 @@
 # revisions, submodules, vendored Rust crates). Nothing is taken from a moving tag.
 #
 # Writes into <output folder>, which must not exist:
-#   ffmpeg-source-<tag>.tar   FFmpeg at its commit, BtbN's build scripts and patches at theirs, one tar.xz per library
-#                             the build enables, and README.txt saying how they fit together
+#   ffmpeg-source-<tag>-<n>-of-<count>.tar
+#                             FFmpeg at its commit, BtbN's build scripts and patches at theirs, one tar.xz per library
+#                             the build enables, and README.txt saying how they fit together: in as many tars as keep
+#                             each under GitHub's 2 GiB per release asset, each whole on its own, all extracted into
+#                             one folder giving the same tree
 #   licences/<stage>-<file>   the licence files of FFmpeg and of each library, named after its stage in scripts.d, for
 #                             installer/notices/ffmpeg (copy them there and commit; scripts/write-notices.ps1 puts them
 #                             in THIRD-PARTY-NOTICES.txt under those names)
@@ -45,6 +48,7 @@ FFMPEG_VERSION="$(pin ffmpegVersion)"
 WORK="$(mktemp -d)"
 trap 'rm -rf -- "$WORK"' EXIT
 mkdir -p "$OUT/licences" "$WORK/source/libraries"
+OUT="$(cd "$OUT" && pwd)"
 
 # A shallow fetch of exactly one commit, which must be the one asked for: a server cannot hand over another.
 fetch_commit() { # <repository> <commit> <folder>
@@ -122,6 +126,32 @@ for STAGE in $STAGES; do
     done
 done
 
+if [[ ${#missing[@]} -gt 0 ]]; then
+    printf '%s\n' "${missing[@]}" > "$OUT/licences-missing.txt"
+    echo "No licence file at the top of: ${missing[*]} (listed in $OUT/licences-missing.txt): write out their terms by hand." >&2
+fi
+
+# GitHub refuses a release asset of 2 GiB or more: the archives are spread over as many tars as keep each below that,
+# with room for tar's own headers. The first holds FFmpeg and BtbN's scripts; libraries fill the parts in name order.
+LIMIT=$(( (2048 - 64) * 1024 * 1024 ))
+cd "$WORK/source"
+parts=("FFmpeg-Builds-$BUILDS_COMMIT.tar.xz ffmpeg-$FFMPEG_VERSION.tar.xz")
+used=$(stat -c %s FFmpeg-Builds-"$BUILDS_COMMIT".tar.xz ffmpeg-"$FFMPEG_VERSION".tar.xz | awk '{ s += $1 } END { print s }')
+for library in libraries/*.tar.xz; do
+    size=$(stat -c %s "$library")
+    if (( size > LIMIT )); then
+        echo "$library alone is too large for one GitHub release asset." >&2
+        exit 1
+    fi
+    if (( used + size > LIMIT )); then
+        parts+=("")
+        used=0
+    fi
+    parts[-1]+=" $library"
+    used=$((used + size))
+done
+part_name() { echo "ffmpeg-source-$TAG-$(($1 + 1))-of-${#parts[@]}.tar"; }
+
 cat > "$WORK/source/README.txt" <<EOF
 The complete corresponding source of the ffmpeg build in Flevert (ffmpeg\\ in its install folder):
 $(jq -r '.items[] | select(.name == "ffmpeg") | .url' "$ROOT/scripts/deps.json")
@@ -135,19 +165,20 @@ libraries/<stage>.tar.xz
     Each library the build enables, as BtbN's download.sh fetched it for that stage of scripts.d. build.sh reads them
     from .cache/downloads/<stage>.tar.xz.
 
+$(for i in "${!parts[@]}"; do
+    part_name "$i"
+    # shellcheck disable=SC2086 # one line per file of the part
+    printf '    %s\n' ${parts[i]}
+done)
+
+Each of those tars holds this README.txt too: extract them all into one folder to get the tree above.
+
 Written by scripts/fetch-ffmpeg-source.sh in Flevert's repository: https://github.com/Suryvibegod/Flevert
 EOF
 
-if [[ ${#missing[@]} -gt 0 ]]; then
-    printf '%s\n' "${missing[@]}" > "$OUT/licences-missing.txt"
-    echo "No licence file at the top of: ${missing[*]} (listed in $OUT/licences-missing.txt): write out their terms by hand." >&2
-fi
-
-tar -cf "$OUT/ffmpeg-source-$TAG.tar" -C "$WORK/source" .
-size=$(stat -c %s "$OUT/ffmpeg-source-$TAG.tar")
-echo "$OUT/ffmpeg-source-$TAG.tar: $((size / 1000000)) MB, $(wc -w <<< "$STAGES") libraries"
-# GitHub refuses a release asset of 2 GiB or more.
-if (( size >= 2 * 1024 * 1024 * 1024 )); then
-    echo "Too large for one GitHub release asset." >&2
-    exit 1
-fi
+for i in "${!parts[@]}"; do
+    # shellcheck disable=SC2086 # the part's file names, which hold no spaces (stage names)
+    tar -cf "$OUT/$(part_name "$i")" README.txt ${parts[i]}
+    echo "$OUT/$(part_name "$i"): $(( $(stat -c %s "$OUT/$(part_name "$i")") / 1000000 )) MB"
+done
+echo "$(wc -w <<< "$STAGES") libraries"

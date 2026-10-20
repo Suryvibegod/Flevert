@@ -25,7 +25,7 @@ Visitors judge a project by its branch list, its open pull requests and its root
 ## Tag and check the draft
 
 1. Push `main` first, then `git tag -a vX.Y.Z -m "Flevert X.Y.Z"` and `git push origin vX.Y.Z`. Only repository administrators can create `v*` tags (ruleset "Release tags"). The workflow refuses a tag that is not `vMAJOR.MINOR.PATCH`, does not match `<Version>`, or is not on `main`.
-2. The workflow tests, builds the installer, attests it and attaches it with `SHA256SUMS.txt` and `ffmpeg-source-<tag>.tar` (the complete source of the bundled ffmpeg, GPL v3) to a **draft** release. The release notes are the version's CHANGELOG section plus how to check the download; the workflow fails if the CHANGELOG has no section for the version.
+2. The workflow tests, builds the installer, attests it and attaches it with `SHA256SUMS.txt` and the `ffmpeg-source-<tag>-<n>-of-<count>.tar` parts (the complete source of the bundled ffmpeg, GPL v3, split to stay under GitHub's 2 GiB per asset) to a **draft** release. The release notes are the version's CHANGELOG section plus how to check the download; the workflow fails if the CHANGELOG has no section for the version.
 3. Download the setup from the draft and check it as a user would:
    - `Get-FileHash` matches `SHA256SUMS.txt`.
    - The `gh attestation verify ...` command in the release notes passes. It pins the tag and the commit (`--source-digest`).

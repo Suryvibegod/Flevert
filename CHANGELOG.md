@@ -15,7 +15,7 @@ Video and audio: convert, compress to a size you choose, take the sound out of a
   - **Remove hidden info**: a copy without where it was filmed, the camera or the software, made in seconds, with the picture and sound untouched.
 - Right-click an audio file (`.mp3`, `.wav`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.opus`, `.wma`, `.aiff`, `.aif`) and choose **Flevert > Convert to** MP3, M4A, WAV, FLAC, OGG or Opus.
 - Video and audio keep their title, artist and recording date, never the place they were recorded. A converted video keeps its first sound track, and the notification says when there were others. The progress window shows how far the current file is, as a percentage.
-- The installer includes ffmpeg, which is free software under the GNU GPL: each release has its complete source as `ffmpeg-source-<build>.tar` beside the setup.
+- The installer includes ffmpeg, which is free software under the GNU GPL: each release has its complete source beside the setup, as the files `ffmpeg-source-<build>-<n>-of-<count>.tar`.
 
 ## [0.2.1] - 2026-10-20
 

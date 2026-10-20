@@ -185,12 +185,12 @@ jobs:
 
           ## Source of the bundled ffmpeg
 
-          Flevert runs ffmpeg, which is free software under the GNU GPL version 3, as a separate program. \`$(ls installer/ffmpeg-source-*.tar | xargs -n1 basename)\` below is its complete corresponding source: FFmpeg, every library built into it, and the scripts that built it.
+          Flevert runs ffmpeg, which is free software under the GNU GPL version 3, as a separate program. The $(ls installer/ffmpeg-source-*.tar | wc -l) files \`ffmpeg-source-*.tar\` below are its complete corresponding source: FFmpeg, every library built into it, and the scripts that built it. Extract them all into one folder; the README.txt in each says what each holds.
           EOF
           cat notes.md
       - name: Add the source archive to the checksums
-        # Built by third-party scripts in the ffmpeg-source job: its hash beside the setup's lets anyone check the copy
-        # they downloaded is the one this run attached.
+        # Built by third-party scripts in the ffmpeg-source job: their hashes beside the setup's lets anyone check the copy
+        # they downloaded is one this run attached.
         run: (cd installer && sha256sum ffmpeg-source-*.tar) >> installer/SHA256SUMS.txt
       - name: Draft the release
         env:
