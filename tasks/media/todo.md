@@ -23,12 +23,12 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 ## T3: audio còn lại + extract
 - [x] `audio.to-m4a/-wav/-flac/-ogg/-opus`, không đề xuất đích trùng nguồn; M4A từ AAC chép luồng
 - [x] `video.extract-mp3/-m4a` (M4A chép luồng AAC, hash luồng trùng)
-- Đã làm: 23 test (`AudioConvertTests`): mỗi đích từ WAV (codec, thời lượng ±0,1 s, title), mọi đuôi nguồn đọc được qua whitelist demuxer (mp3, aac ADTS, m4a, flac, ogg, opus, wma/asf, aiff, aif), AAC → M4A và Extract M4A không mã hóa lại (MD5 của âm thanh giải mã trùng; MD5 gói khác nhau giữa ADTS và MP4 nên không dùng được), 5.1 → MP3 stereo, MKV hai audio lấy luồng default. Phát hiện: Ogg/Opus giữ tag trên luồng chứ không trên file, nên `AudioTrack.Tags` được đọc và dùng khi file không có tag đó (vẫn qua danh sách cho phép: GPS trên luồng cũng bị bỏ, có test). WAV > 4 GB: `-rf64 auto`.
+- Đã làm: 23 test (`AudioConvertTests`): mỗi đích từ WAV (codec, thời lượng ±0,1 s, title), mọi đuôi nguồn đọc được qua whitelist demuxer (mp3, aac ADTS, m4a, flac, ogg, opus, wma/asf, aiff, aif), AAC → M4A và Extract M4A không mã hóa lại (MD5 của âm thanh giải mã trùng; MD5 gói khác nhau giữa ADTS và MP4 nên không dùng được), 5.1 → MP3 stereo, MKV hai audio lấy luồng default (T10: nay lấy luồng **đầu**). Phát hiện: Ogg/Opus giữ tag trên luồng chứ không trên file, nên `AudioTrack.Tags` được đọc và dùng khi file không có tag đó (vẫn qua danh sách cho phép: GPS trên luồng cũng bị bỏ, có test). WAV > 4 GB: `-rf64 auto`.
 
 ## T4: video.to-mp4/mov/mkv/webm
 - [x] H.264 CRF 20 `medium` `yuv420p` + AAC 192k, `+faststart`; xoay; HDR → SDR; bỏ GPS; MOV/MKV như MP4; WEBM VP9 + Opus
 - [x] Ước lượng output so với đĩa trống; `-fs` ≤ 4 × input + 100 MB
-- Đã làm: `VideoConvert` + `VideoEncoding` (kích thước theo hình hiển thị, cạnh chẵn làm tròn xuống để không phóng to; lọc `scale` chỉ khi đổi cỡ; tone map chỉ khi HDR; `format=yuv420p` cuối). 19 test; đối chứng âm: bỏ tone map thì test HDR đỏ (x264 chép nguyên nhãn PQ/BT.2020). Video điện thoại: ra 360 × 640 thật trong điểm ảnh, không còn display matrix, không còn tag `location*` (cả file và luồng), giữ `creation_time`. Convert giữ mọi luồng audio cùng ngôn ngữ. Đo 2026-10-20 (4 nhân, 1080p 10 s): x264 `medium` 8,6 s; VP9 `-cpu-used 2` 25 s, `4` 18 s (file lớn hơn 3 %) → chọn 4, và timeout của WEBM gấp đôi (thời lượng × 12 + 60 s) vì VP9 chậm gấp ~2 lần x264. Ước lượng cỡ: 0,15 bit/điểm ảnh/khung + audio.
+- Đã làm: `VideoConvert` + `VideoEncoding` (kích thước theo hình hiển thị, cạnh chẵn làm tròn xuống để không phóng to; lọc `scale` chỉ khi đổi cỡ; tone map chỉ khi HDR; `format=yuv420p` cuối). 19 test; đối chứng âm: bỏ tone map thì test HDR đỏ (x264 chép nguyên nhãn PQ/BT.2020). Video điện thoại: ra 360 × 640 thật trong điểm ảnh, không còn display matrix, không còn tag `location*` (cả file và luồng), giữ `creation_time`. Convert giữ mọi luồng audio cùng ngôn ngữ (T10: nay chỉ luồng đầu; MKV không còn là đích). Đo 2026-10-20 (4 nhân, 1080p 10 s): x264 `medium` 8,6 s; VP9 `-cpu-used 2` 25 s, `4` 18 s (file lớn hơn 3 %) → chọn 4, và timeout của WEBM gấp đôi (thời lượng × 12 + 60 s) vì VP9 chậm gấp ~2 lần x264. Ước lượng cỡ: 0,15 bit/điểm ảnh/khung + audio.
 
 ## T5: compress
 - [x] Light/Balanced/Strong (CRF 23/28/32, Strong ≤ 720p, AAC 128/96/64k); không nhỏ hơn gốc → skipped
@@ -42,7 +42,7 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 ## T7: menu
 - [x] Video 16 mục (15 khi đích trùng nguồn), audio ≤ 7; test ≤ 16 cho mọi đuôi; `.gif` vẫn là ảnh
 - [ ] MenuProbe trên Explorer thật (cần kiểm trên Windows): `.mp4`, `.mov`, `.mkv`, `.mp3`, `.flac` (tiêu chí 9); rồi `uninstall-menu`
-- Đã làm: `MediaMenuTests` (17 test) cài `MediaOperations.All` vào registry giả: video `Convert ▸ MP4 · MOV · MKV · WEBM · GIF`, `Compress ▸ Light · Balanced · Strong · Under 10/25/100 MB`, `Extract audio ▸ MP3 · M4A` = 16 (15 cho `.mp4 .mov .mkv .webm`); audio `Convert ▸` 5 hoặc 6 đích; lệnh registry `run audio.to-<đích>`. Thứ tự menu đến từ thứ tự trong `MediaOperations.Create`.
+- Đã làm: `MediaMenuTests` (17 test) cài `MediaOperations.All` vào registry giả: bố cục cũ (T10 đã thay: `Compress ▸` · `Convert to ▸ MP4 · MOV · WEBM · GIF` · `Extract audio ▸` · `Remove hidden info` = 16, 15 cho `.mp4 .mov .webm`); audio `Convert ▸` 5 hoặc 6 đích; lệnh registry `run audio.to-<đích>`. Thứ tự menu đến từ thứ tự trong `MediaOperations.Create`.
 
 ## T8: đóng gói
 - [x] `build-installer.ps1`/Inno: `ffmpeg\` trong thư mục cài; `THIRD-PARTY-NOTICES.txt`; `test-installer.ps1` kiểm `ffmpeg\`; cỡ bộ cài ≤ 150 MB (đo)
@@ -67,3 +67,39 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 - [x] Đo tốc độ (máy dev 4 nhân, ffmpeg 6.1, video 60 s 1080p): Convert to MP4 (CRF 20) 36,3 s = 0,60× thời gian thực; Compress Balanced (CRF 28) 32,2 s = 0,53×; mục tiêu ≤ 2×: đạt.
 - [ ] Icon Fluent cho nhóm và việc đơn lẻ (`arrow_minimize`, `arrow_swap`, `music_note_2`, `shield`/`eye_off`) sau khi v0.2.2 vào `main`; ảnh chụp menu sáng/tối trong PR.
 
+
+## Review trước khi gộp (2026-10-20): ba review bối cảnh trống, chỉ đọc
+
+Code-reviewer (CR), security-auditor (SEC), doubt-driven (DD) trên `git diff origin/main...HEAD`. Không có Critical/High bảo mật; các mục Required của code và doubt đã sửa, trừ những mục chỉ Windows/CI xác nhận được. Mỗi sửa có đối chứng âm (bỏ sửa thì test đỏ) khi chạy được trên Linux.
+
+| id | mức | việc | quyết định |
+|---|---|---|---|
+| DD-1, CR-2, SEC-7 | Critical | ADR-0009 bị commit 3e2524f làm rỗng (script mở file để ghi trước khi đọc) | **Sửa**: khôi phục từ af2f710 + ba bổ sung định làm |
+| CR-1 | Critical | Notice FFmpeg làm đỏ hai test Core trên Windows (thiếu `ffmpeg\` trong publish giả; `installer/notices/ffmpeg/*` chưa có) | **Sửa**: test chép `deps\ffmpeg\bin\*` vào `publish\ffmpeg\`; notice chỉ liệt kê `LICENSE.txt` của BtbN đến khi giấy phép được commit; `ffmpeg-source.yml` đỏ đến khi có cả file lẫn mẫu `installer/notices/ffmpeg/*` (chặn phát hành, không chặn CI) |
+| CR-3 | High | Hai lượt Under N khác chế độ khung (`null` passthrough, MP4 CFR) | **Sửa**: `-fps_mode passthrough` cho mọi lần mã hóa video. Tái hiện trên 6.1: với video VFR, lượt 2 **treo** (0 % CPU) chứ không chỉ vượt cỡ. Test VFR (108 khung) cho Under và Convert; đối chứng âm: bỏ thì cả hai đỏ (Under treo đến hết chờ) |
+| SEC-1 | Medium, Required | Đầy đĩa: file chứa nhiều hơn header khai; `-fs` lớn hơn chỗ trống | **Sửa**: `-t` = thời lượng × 1,5 + 10 s cho mọi lần chạy (cả lượt 1); `-fs` không quá chỗ trống − 50 MB. Test FLAC khai 2 s chứa 60 s → output ≈ 13 s; đối chứng âm đỏ |
+| SEC-2 | Medium, Required | Remove hidden info giữ SEI của H.264 (chữ ký x264, MDPM của máy quay AVCHD có GPS) | **Sửa**: H.264 bỏ SEI (`filter_units=remove_types=6`): hình giải mã y hệt, gói không còn trùng byte (lệch tiêu chí 13, ghi ADR); HEVC giữ SEI (dữ liệu HDR). Test `.m2ts` có SEI x264 → hết; đối chứng âm đỏ |
+| DD-9 | Medium | "No hidden info" sai với XMP/hộp riêng của hãng/SEI mà ffprobe không thấy | **Sửa**: MP4/MOV/3GP/AVCHD và mọi H.264 luôn được ghi bản sao, không skip |
+| CR-4 | Medium | Remove hidden info bỏ track audio không báo; mất ngôn ngữ | **Sửa**: `FirstAudio` (note) + giữ `language` |
+| DD-8 | Medium, Required | `SizeText` làm tròn lên: 24 960 000 byte hiện "25 MB" | **Sửa**: luôn làm tròn xuống; test 24 960 000 → "24.9 MB" |
+| DD-10, CR-6 | Medium | Đường chạy lại của Under N chưa từng chạy | **Sửa**: hai test với runner giả làm output chạm giới hạn: 3 lượt 2, bitrate × 0,9 mỗi lần; luôn vượt → "could not make…", không ghi gì; đối chứng âm đỏ |
+| CR-11 | Low | Thanh tiến độ lùi từ 100 % về 50 % khi chạy lại | **Sửa**: một `PercentProgress` cho mọi lần |
+| CR-8 | Low | Thư mục lượt tạo ngoài `try` | **Sửa** |
+| CR-9 | Low | `-fs` của Remove hidden info + 10 MB cố định (TS 188 → 192 byte) | **Sửa**: input × 1,05 + 10 MB |
+| CR-5, DD-3 | High | Trần 2 GB và timeout chưa đo trên 1080p | **Đo** (Linux, 4 nhân, 3 s 4K60): SDR 2,2 GB, HLG 2,5 GB, 10,8× thời gian thực. **Sửa**: trần 4 GB (lệch spec 2 GB, ghi ADR); timeout × tốc độ điểm ảnh so với 1080p30, × 2 cho HDR. Còn mở: đo trên máy 8–16 nhân Windows, 8K |
+| DD-5 | High | Timeout 6× quá ngắn cho 4K60 HDR | **Sửa** (như trên: 4K60 HDR = 96× thời lượng + 60 s) |
+| DD-4 | High | Chỉ thử HDR10 (PQ), không HLG; không kiểm màu | **Sửa một phần**: fixture HLG + test. Còn mở: kiểm màu bằng mắt trên video iPhone thật (Windows Media Player) |
+| CR-7, DD-12 | Medium | CI 30 phút có thể hết giờ | **Sửa**: 45 phút; release build 60 phút |
+| CR-10, SEC-9 | Low | Job release 10 phút; tar không có hash | **Sửa**: 30 phút; hash tar thêm vào `SHA256SUMS.txt` |
+| DD-6 | High (release) | Bộ gom giấy phép chỉ lấy hai tầng đầu (bỏ sót crate vendored, `third_party/`) | **Sửa**: lấy ở mọi tầng trừ `.git` và thư mục test; ADR ghi runtime toolchain. Còn mở: chạy workflow, soát bộ giấy phép |
+| DD-7 | High (release) | Archive mã nguồn chưa từng được tạo thật | **Mở**: chạy `ffmpeg-source.yml` trên pull request |
+| DD-15 | Low | `test-installer.ps1` viết cứng phiên bản | **Sửa**: đọc `ffmpegSource.ffmpegVersion` từ `deps.json` |
+| DD-14, CR-12 | Low | Tài liệu cũ (MKV, luồng default, menu cũ, ưu tiên qua job, `.ps1`/`.zip`, "qua e-mail") | **Sửa** |
+| SEC-8 | Info | `^[a-z]{3}$` khớp "eng\n" | **Sửa**: `\z` |
+| CR-13 | Nit | so chuỗi message, kiểm tra thừa, "-t 30", 2 GB/GiB, `DriveInfo` với `\\?\` | **Sửa** "-t 30"; còn lại giữ (không đổi hành vi) |
+| SEC-3 | Medium, Recommended | Không có whitelist decoder | **Để bản sau**: danh sách phải đủ mọi codec nguồn + phụ đề/ảnh bìa/data, chỉ kiểm được trên bản 8.1 Windows; ghi ADR |
+| SEC-4 | Low | Video 12 h 8K giả rỗng → timeout nhiều ngày | **Chấp nhận**: Cancel, ưu tiên thấp |
+| SEC-5 | Low | 8 audio song song × trần riêng | **Chấp nhận**: audio dùng ít bộ nhớ |
+| SEC-6 | Low | `check-location` không kiểm thư mục con `ffmpeg\` có sẵn | **Để bản sau** (installer) |
+| DD-17 | Low | Chi tiết lỗi lấy từ 1 MB stderr đầu | **Chấp nhận** |
+| DD-2, DD-11, DD-13, DD-16, DD-18 | — | Mọi thứ chỉ Windows: CI, ffmpeg 8.1 qua `ExternalTool`, job/ưu tiên, `flevert.exe`, Cancel video, khởi động lạnh, bộ cài, MenuProbe, icon | **Mở**: chạy CI Windows (pull request) và kiểm tay trên máy Windows |

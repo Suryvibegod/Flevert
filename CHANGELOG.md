@@ -4,7 +4,7 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-Video and audio: convert, compress to a size that goes through e-mail, and take the sound out of a video, on your PC.
+Video and audio: convert, compress to a size you choose, take the sound out of a video, and remove where it was filmed, on your PC.
 
 ### Added
 
