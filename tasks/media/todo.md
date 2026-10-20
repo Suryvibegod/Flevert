@@ -36,7 +36,8 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 - Đã làm: `VideoCompress`, `VideoCompressUnder` (17 test, gồm tiêu chí 2: 60 s 1080p → < 25 000 000 byte, 60 s; 20 phút → "Too long to fit under 10 MB…", không tạo file). `Plan`: audio 128k (96k khi tổng < 1 000 kbit/s, 64k khi < 400), bitrate cần theo cạnh ngắn 2160: 8 000, 1440: 5 000, 1080: 2 500, 720: 1 200, 480: 500 kbit/s; không đủ cho cỡ nào thì 480p nếu video ≥ 100 kbit/s, không thì lỗi. Lượt 1 chỉ hình (`-f null`), lượt 2 có `-fs` bằng giới hạn; chạm `-fs` hoặc vẫn ≥ giới hạn → xóa file tạm (ffmpeg không ghi đè), bitrate × 0,9, tối đa 2 lần. Thư mục `media` (commit core riêng: `AppData.Subfolders`, gỡ cài, `docs/install.md`, `test-installer.ps1`); thư mục của lần chạy bị giết được xóa sau 1 ngày; kiểm đĩa trống cho file thống kê của x264 (mbtree 2 byte/khối 16 × 16/khung: 20 phút 1080p ≈ 590 MB). **Cần kiểm trên Windows**: x264 mở `-passlogfile` có ký tự Unicode trong `%LOCALAPPDATA%` (tên user tiếng Việt).
 
 ## T6: video.to-gif
-- [ ] ≤ 480 px cạnh dài, 12 fps, palette; > 30 s → 30 s đầu + note
+- [x] ≤ 480 px cạnh dài, 12 fps, palette; > 30 s → 30 s đầu + note
+- Đã làm: `VideoToGif`, một lần chạy `split` → `palettegen` (stats_mode=diff) → `paletteuse` (bayer 5, diff_mode=rectangle), lặp vô hạn, không metadata; HDR tone map trước. 5 test (480 × 270 từ 640 × 360, đứng 270 × 480, nhỏ giữ cỡ, 45 s → 30 s); test note qua `Runner` (`"Only the first 30 seconds were converted to GIF."`) **cần kiểm trên Windows** (runner chỉ nhận đường dẫn Windows).
 
 ## T7: menu
 - [ ] Video 16 mục (15 khi đích trùng nguồn), audio ≤ 7; test ≤ 16 cho mọi đuôi; `.gif` vẫn là ảnh

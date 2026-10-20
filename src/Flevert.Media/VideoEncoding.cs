@@ -12,8 +12,11 @@ internal static class VideoEncoding
     internal const string ToneMap =
         "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv";
 
-    /// <summary>The picture as shown (ffmpeg turns it upright first), at most <paramref name="maxShortSide"/> on its short side, sides even.</summary>
-    public static (int Width, int Height) OutputSize(VideoTrack video, int? maxShortSide = null)
+    /// <summary>
+    /// The picture as shown (ffmpeg turns it upright first), at most <paramref name="maxShortSide"/> on its short side and
+    /// <paramref name="maxLongSide"/> on its long one, sides even.
+    /// </summary>
+    public static (int Width, int Height) OutputSize(VideoTrack video, int? maxShortSide = null, int? maxLongSide = null)
     {
         double width = video.DisplayWidth, height = video.DisplayHeight;
         var shortSide = Math.Min(width, height);
@@ -21,6 +24,13 @@ internal static class VideoEncoding
         {
             width *= max / shortSide;
             height *= max / shortSide;
+        }
+
+        var longSide = Math.Max(width, height);
+        if (maxLongSide is { } maxLong && longSide > maxLong)
+        {
+            width *= maxLong / longSide;
+            height *= maxLong / longSide;
         }
 
         // 4:2:0 needs even sides: rounded down, so a picture is never enlarged; never 0.

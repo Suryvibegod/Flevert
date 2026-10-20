@@ -13,6 +13,7 @@ public static class MediaOperations
     internal static IReadOnlyList<IMenuOperation> Create(Ffmpeg ffmpeg) =>
     [
         .. VideoFormat.All.Select(format => new VideoConvert(format, ffmpeg)),
+        new VideoToGif(ffmpeg),
         .. CompressLevel.All.Select(level => new VideoCompress(level, ffmpeg)),
         new VideoCompressUnder(10, ffmpeg),
         new VideoCompressUnder(25, ffmpeg),
