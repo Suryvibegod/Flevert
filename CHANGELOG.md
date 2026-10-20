@@ -9,11 +9,12 @@ Video and audio: convert, compress to a size that goes through e-mail, and take 
 ### Added
 
 - Right-click a video (`.mp4`, `.mov`, `.m4v`, `.mkv`, `.webm`, `.avi`, `.wmv`, `.3gp`, `.mts`, `.m2ts`) and choose **Flevert**:
-  - **Convert** to MP4, MOV or MKV (H.264 and AAC, which play everywhere), WEBM (VP9 and Opus), or GIF (at most 480 pixels and the first 30 seconds). Phone videos come out upright, and iPhone HDR videos keep their colours.
-  - **Compress**: Light, Balanced or Strong, or **Under 10 MB**, **Under 25 MB** or **Under 100 MB**, which are always smaller than that size, or say the video is too long to fit.
+  - **Compress**: Light (best quality), Balanced or Strong (smallest), or **Under 10 MB**, **Under 25 MB** or **Under 100 MB**, which are always smaller than that size, or say the video is too long to fit. The notification says the new size and the old one.
+  - **Convert to** MP4 or MOV (H.264 and AAC, which play everywhere), WEBM (VP9 and Opus), or GIF (at most 480 pixels and the first 30 seconds). Phone videos come out upright, and iPhone HDR videos keep their colours.
   - **Extract audio** as MP3 or M4A (an AAC sound is copied as it is).
-- Right-click an audio file (`.mp3`, `.wav`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.opus`, `.wma`, `.aiff`, `.aif`) and choose **Flevert > Convert** to MP3, M4A, WAV, FLAC, OGG or Opus.
-- Video and audio keep their title, artist and recording date, never the place they were recorded. The progress window shows how far the current file is, as a percentage.
+  - **Remove hidden info**: a copy without where it was filmed, the camera or the software, made in seconds, with the picture and sound untouched.
+- Right-click an audio file (`.mp3`, `.wav`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.opus`, `.wma`, `.aiff`, `.aif`) and choose **Flevert > Convert to** MP3, M4A, WAV, FLAC, OGG or Opus.
+- Video and audio keep their title, artist and recording date, never the place they were recorded. A converted video keeps its first sound track, and the notification says when there were others. The progress window shows how far the current file is, as a percentage.
 - The installer includes ffmpeg, which is free software under the GNU GPL: each release has its complete source as `ffmpeg-source-<build>.tar` beside the setup.
 
 ## [0.2.0] - 2026-10-20
