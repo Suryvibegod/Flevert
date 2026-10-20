@@ -1,5 +1,5 @@
 {
-  "comment": "Third-party binaries fetched into deps/ by scripts/fetch-deps.ps1, never committed. Each download is pinned by SHA256 (GitHub publishes a digest for every release asset). Change a version here, then run the script and the tests. 'notices' names every file the installer ships from deps/ and its licences (paths from the repository root); scripts/write-notices.ps1 refuses a file that has none. docs/adr/0008-pdf-engines-pdfium-and-qpdf.md",
+  "comment": "Third-party binaries fetched into deps/ by scripts/fetch-deps.ps1, never committed. Each download is pinned by SHA256 (GitHub publishes a digest for every release asset). Change a version here, then run the script and the tests. 'notices' names every file the installer ships from deps/ and its licences (paths from the repository root); scripts/write-notices.ps1 refuses a file that has none. qpdf links zlib, libjpeg-turbo and OpenSSL into qpdf30.dll at whatever versions vcpkg had on the day of its build: after a qpdf update, pin their licences at the versions the binary holds (QpdfDepsTests checks). docs/adr/0008-pdf-engines-pdfium-and-qpdf.md",
   "items": [
     {
       "name": "pdfium",
@@ -33,10 +33,31 @@
     },
     {
       "name": "openssl-licence",
-      "url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.4/LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.6.4/LICENSE.txt",
       "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
       "kind": "file",
       "target": "qpdf/licenses/openssl-LICENSE.txt"
+    },
+    {
+      "name": "zlib-licence",
+      "url": "https://raw.githubusercontent.com/madler/zlib/v1.3.2/LICENSE",
+      "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
+      "kind": "file",
+      "target": "qpdf/licenses/zlib-LICENSE.txt"
+    },
+    {
+      "name": "libjpeg-turbo-licence",
+      "url": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/3.2.0/LICENSE.md",
+      "sha256": "ba6bceebcba0fdd35488477c2cca8c4632ce82c74dbfbc87d886ce6fc4433579",
+      "kind": "file",
+      "target": "qpdf/licenses/libjpeg-turbo-LICENSE.md"
+    },
+    {
+      "name": "libjpeg-turbo-ijg",
+      "url": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/3.2.0/README.ijg",
+      "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6",
+      "kind": "file",
+      "target": "qpdf/licenses/libjpeg-turbo-README.ijg"
     }
   ],
   "notices": [
@@ -52,21 +73,20 @@
       "licences": ["deps/qpdf/licenses/qpdf-LICENSE.txt", "deps/qpdf/licenses/qpdf-NOTICE.md"]
     },
     {
-      "title": "OpenSSL 3, linked into qpdf30.dll",
+      "title": "OpenSSL 3.6.4, linked into qpdf30.dll",
       "files": ["qpdf30.dll"],
       "licences": ["deps/qpdf/licenses/openssl-LICENSE.txt"]
     },
     {
       "title": "zlib 1.3.2, linked into qpdf30.dll",
       "files": ["qpdf30.dll"],
-      "note": "The licence text is the copy pdfium-binaries ships for its own zlib; zlib's licence is the same in every version.",
-      "licences": ["deps/pdfium/licenses/zlib.txt"]
+      "licences": ["deps/qpdf/licenses/zlib-LICENSE.txt"]
     },
     {
       "title": "libjpeg-turbo 3.2.0, linked into qpdf30.dll",
       "files": ["qpdf30.dll"],
-      "note": "This software is based in part on the work of the Independent JPEG Group. The licence texts are the copies pdfium-binaries ships for its own libjpeg-turbo, under the same licences.",
-      "licences": ["deps/pdfium/licenses/libjpeg_turbo.md", "deps/pdfium/licenses/libjpeg_turbo.ijg"]
+      "note": "This software is based in part on the work of the Independent JPEG Group.",
+      "licences": ["deps/qpdf/licenses/libjpeg-turbo-LICENSE.md", "deps/qpdf/licenses/libjpeg-turbo-README.ijg"]
     },
     {
       "title": "Microsoft Visual C++ runtime 14.51, shipped with qpdf 12.4.2",
