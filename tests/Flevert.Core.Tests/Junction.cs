@@ -67,6 +67,9 @@ internal static class Junction
 
     public static string Describe(int error) => error == 0 ? "converted" : new Win32Exception(error).Message;
 
+    /// <summary>A hard link at <paramref name="link"/> to the existing file <paramref name="target"/> (same volume, no admin).</summary>
+    public static bool TryCreateHardLink(string link, string target) => CreateHardLinkW(link, target, 0);
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern SafeFileHandle CreateFileW(
         string name, uint access, uint share, nint security, uint disposition, uint flags, nint template);
@@ -75,4 +78,8 @@ internal static class Junction
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DeviceIoControl(
         SafeFileHandle device, uint code, byte[] input, uint inputSize, nint output, uint outputSize, out uint returned, nint overlapped);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateHardLinkW(string link, string target, nint security);
 }

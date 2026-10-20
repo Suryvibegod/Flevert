@@ -19,20 +19,17 @@ public static class OutputPath
     /// directory, counts as taken, and the stem is shortened so the name always fits in 255 characters.
     /// </summary>
     public static string Reserve(string desiredPath) =>
-        ReserveName(desiredPath, Path.GetFileNameWithoutExtension(desiredPath), "", Path.GetExtension(desiredPath));
+        ReserveName(Path.GetDirectoryName(desiredPath)!, Path.GetFileNameWithoutExtension(desiredPath), "", Path.GetExtension(desiredPath));
 
     // A folder has no extension: "report.v2 (pages)" becomes "report.v2 (pages) (1)", not "report (1).v2 (pages)". The
-    // suffix stays whole like an extension, so a long name loses characters of the stem, never "(pages)".
-    private static string ReserveDirectory(string desiredDirectory, string keepSuffix)
-    {
-        var name = Path.GetFileName(desiredDirectory);
-        return ReserveName(desiredDirectory, name[..^keepSuffix.Length], keepSuffix, "", folder: true);
-    }
+    // suffix stays whole like an extension, so a long name loses characters of the stem, never "(pages)". The directory is
+    // the finished folder's real parent, not a spelling that could still hold a junction.
+    private static string ReserveDirectory(string parentDirectory, string leafName, string keepSuffix) =>
+        ReserveName(parentDirectory, leafName[..^keepSuffix.Length], keepSuffix, "", folder: true);
 
     // "<stem><beforeCounter> (n)<afterCounter>", with only the stem shortened.
-    private static string ReserveName(string desiredPath, string stem, string beforeCounter, string afterCounter, bool folder = false)
+    private static string ReserveName(string dir, string stem, string beforeCounter, string afterCounter, bool folder = false)
     {
-        var dir = Path.GetDirectoryName(desiredPath)!;
         for (var n = 0; n < MaxAttempts; n++)
         {
             var name = FitName(stem, beforeCounter + (n == 0 ? "" : $" ({n})") + afterCounter);
@@ -45,7 +42,7 @@ public static class OutputPath
                 return candidate;
         }
 
-        throw new IOException($"No free output name next to {desiredPath}.");
+        throw new IOException($"No free output name in {dir}.");
     }
 
     public static async Task<string> WriteAtomicallyAsync(
@@ -106,6 +103,7 @@ public static class OutputPath
 
         desiredDirectory = Path.GetFullPath(desiredDirectory);
         var dir = Path.GetDirectoryName(desiredDirectory)!;
+        var leafName = Path.GetFileName(desiredDirectory);
         using var folder = PartialFolder.Create(Path.Combine(dir, $".flevert-{Guid.NewGuid():N}.partial"));
         var renamed = false;
         try
@@ -113,7 +111,7 @@ public static class OutputPath
             await write(folder.Path, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             folder.PrepareForRename();
-            var final = await RenameToFreeNameAsync(folder, desiredDirectory, keepSuffix, ct).ConfigureAwait(false);
+            var final = await RenameToFreeNameAsync(folder, leafName, keepSuffix, ct).ConfigureAwait(false);
             renamed = true;
             // Emptied by someone else and turned into a junction after the anchor went: the junction is what was renamed.
             // Only the link is removed, and nothing is handed back.
@@ -140,13 +138,15 @@ public static class OutputPath
     // A folder cannot be renamed while another program has a file in it open, whatever sharing it asked for (access
     // denied): an antivirus scan, the search indexer, OneDrive or a thumbnailer, each for milliseconds to about a second.
     // With the name free, the rename is retried for up to RenameWait before giving up, rather than losing every page.
-    private static async Task<string> RenameToFreeNameAsync(PartialFolder folder, string desiredDirectory, string keepSuffix, CancellationToken ct)
+    private static async Task<string> RenameToFreeNameAsync(PartialFolder folder, string leafName, string keepSuffix, CancellationToken ct)
     {
+        // The real parent of the held folder, not a spelling the caller gave that a junction could still redirect.
+        var parent = Path.GetDirectoryName(folder.Path)!;
         var waited = TimeSpan.Zero;
         var pause = FirstRenamePause;
         for (var attempt = 0; ; attempt++)
         {
-            var final = ReserveDirectory(desiredDirectory, keepSuffix);
+            var final = ReserveDirectory(parent, leafName, keepSuffix);
             // The rename takes the name as it is, where Win32 would read some names as something else (a device such as
             // NUL on Windows 10): only a name that a path keeps unchanged is used.
             var plain = @"C:\" + Path.GetFileName(final);
@@ -154,7 +154,7 @@ public static class OutputPath
                 throw new IOException($"\"{Path.GetFileName(final)}\" cannot be used as a folder name.");
             var error = folder.TryRenameTo(final);
             if (error == 0)
-                return final;
+                return Display(final);
             if (IsTaken(final) && attempt < MaxAttempts)
                 continue;
 
@@ -175,6 +175,15 @@ public static class OutputPath
                 : $"The finished folder could not be named {Path.GetFileName(final)}: {new Win32Exception(error).Message}");
         }
     }
+
+    // The returned path is for names and logs, never reopened; drop the extended-length prefix so an ordinary or a long
+    // output reads the same way a single file's does. The real path the rename used is kept on the folder for any cleanup.
+    private static string Display(string path) => path switch
+    {
+        _ when path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) => @"\\" + path[8..],
+        _ when path.StartsWith(@"\\?\", StringComparison.Ordinal) => path[4..],
+        _ => path,
+    };
 
     private static string MoveToFreeName(string temp, string desiredPath)
     {

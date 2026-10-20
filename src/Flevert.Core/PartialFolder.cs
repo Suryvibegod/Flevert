@@ -12,10 +12,12 @@ namespace Flevert.Core;
 /// <remarks>
 /// <para>
 /// The folder sits beside the input, where other accounts may have write access (a second NTFS drive gives Authenticated
-/// Users Modify by default). Three things keep them from redirecting it: the handle denies delete sharing, so nobody can
-/// rename or delete the folder (or any folder above it) while it is held; a hidden anchor file held without any sharing
-/// keeps it from ever being empty, which is the only state in which a folder can be turned into a junction in place; and
-/// every check, rename and delete goes through handles opened without following links.
+/// Users Modify by default). Four things keep them from redirecting it: the handle denies delete sharing, so nobody can
+/// rename or delete the folder, or any of its <em>real</em> parents, while it is held; <see cref="Path"/> is the folder's
+/// real path, resolved from the handle, so a junction or symbolic link higher in the caller's spelling resolves away and
+/// re-pointing it afterwards reaches nothing used here; a hidden anchor file held without any sharing keeps the folder from
+/// ever being empty, which is the only state in which it could be turned into a junction in place; and every check, rename
+/// and delete goes through handles opened without following links.
 /// </para>
 /// <para>
 /// Others can still add, open or delete entries inside, as they could in any folder they can write to. Cleanup removes each
@@ -43,6 +45,9 @@ internal sealed partial class PartialFolder : IDisposable
     private const uint FileFlagOpenReparsePoint = 0x00200000;
     private const uint FileFlagDeleteOnClose = 0x04000000;
     private const uint NameSurrogateBit = 0x20000000; // junctions, symbolic links, mount points
+    private const uint FileAttributeDirectory = 0x10;
+    private const uint VolumeNameDos = 0x0; // GetFinalPathNameByHandleW: FILE_NAME_NORMALIZED | VOLUME_NAME_DOS
+    private const uint VolumeNameGuid = 0x1;
     private const uint VolumeNameNt = 0x2;
 
     private const int FileBasicInfoClass = 0;
@@ -73,12 +78,16 @@ internal sealed partial class PartialFolder : IDisposable
         _folder = folder;
     }
 
-    /// <summary>The folder's path, as given to <see cref="Create"/> and then as renamed.</summary>
+    /// <summary>
+    /// The folder's real, fully resolved path (extended-length form), with every junction and symbolic link in the
+    /// spelling the caller gave resolved away, so every component is a real directory locked by the handle while it is held.
+    /// Each path used afterwards (the writer's, the listing, the deletes, the rename destination) is built from this.
+    /// </summary>
     public string Path { get; private set; }
 
     /// <summary>
-    /// Creates <paramref name="path"/> (which must not exist), opens it, checks through the handle that it is the folder just
-    /// made and not a link put in its place, and anchors it.
+    /// Creates <paramref name="path"/> (which must not exist), opens it, checks through the handle that it is an ordinary
+    /// empty directory and not a link put in its place, replaces <see cref="Path"/> with its real resolved path, and anchors it.
     /// </summary>
     public static PartialFolder Create(string path)
     {
@@ -92,15 +101,29 @@ internal sealed partial class PartialFolder : IDisposable
         {
             var error = Marshal.GetLastPInvokeError();
             handle.Dispose();
+            // The directory was created, so remove it; best effort, by the same spelling (nothing is held yet).
+            RemoveDirectoryW(InputPin.ToExtendedPath(path));
             throw Failure(error, path);
         }
 
         var folder = new PartialFolder(path, handle);
         try
         {
-            // Between creating and opening, the name could have been taken over (renamed away, a link put in its place).
+            // Between creating and opening, the name could have been taken over (renamed away, a link or a file of the same
+            // name put in its place); reject anything that is not the empty directory this call just made.
             if (IsLink(handle))
                 throw Replaced();
+            if (!IsDirectory(handle))
+                throw Replaced();
+
+            // Resolve the real path from the handle. A junction higher in the caller's spelling resolves away, so it can be
+            // re-pointed afterwards without reaching anything used here; the resolved parents are real and locked while held.
+            // Shortened like an input's real path, so an ordinary path stays ordinary in names and logs (long paths keep \\?\).
+            folder.Path = InputPin.Shorten(Resolve(handle) ?? throw Replaced());
+
+            if (EntriesExceptAnchor(folder.Path).Count != 0)
+                throw Replaced();
+
             folder.Hide();
             if (!folder.TryAnchor())
                 throw Replaced();
@@ -124,11 +147,13 @@ internal sealed partial class PartialFolder : IDisposable
         // each entry itself, so a link someone added is never followed.
         if (!_notIndexedBeside && _anchor is not null && !IsLink(_folder))
         {
-            foreach (var entry in EntriesExceptAnchor())
+            foreach (var entry in EntriesExceptAnchor(Path))
             {
                 using var handle = CreateFileW(InputPin.ToExtendedPath(entry), FileReadAttributes | FileWriteAttributes | Synchronize,
                     FileShareRead | FileShareWrite | FileShareDelete, 0, OpenExisting, FileFlagBackupSemantics | FileFlagOpenReparsePoint, 0);
-                if (!handle.IsInvalid)
+                // A hard link someone planted points at a file outside the folder; changing its attributes would reach that
+                // file, so it is left alone. A reparse point is left alone too.
+                if (!handle.IsInvalid && !HasMultipleLinks(handle))
                     ChangeAttributes(handle, a => (a & FileAttributeReparsePoint) != 0 ? a : a & ~FileAttributeNotContentIndexed);
             }
         }
@@ -189,7 +214,7 @@ internal sealed partial class PartialFolder : IDisposable
                 // someone else's files between the check above and the listing.
                 if (TryAnchor())
                 {
-                    foreach (var entry in EntriesExceptAnchor())
+                    foreach (var entry in EntriesExceptAnchor(Path))
                         DeleteEntry(entry);
                 }
 
@@ -270,8 +295,8 @@ internal sealed partial class PartialFolder : IDisposable
         _anchor = null;
     }
 
-    private List<string> EntriesExceptAnchor() =>
-        [.. Directory.EnumerateFileSystemEntries(Path, "*", new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = true })
+    private static List<string> EntriesExceptAnchor(string folder) =>
+        [.. Directory.EnumerateFileSystemEntries(folder, "*", new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = true })
             .Where(entry => !string.Equals(System.IO.Path.GetFileName(entry), AnchorName, StringComparison.OrdinalIgnoreCase))];
 
     // Opened without following a link, so a link is removed itself; a folder is removed only when empty, since the delete
@@ -300,6 +325,19 @@ internal sealed partial class PartialFolder : IDisposable
         return SetFileInformationByHandle(handle, FileDispositionInfoClass, ref deleteFile, sizeof(byte));
     }
 
+    private static bool IsDirectory(SafeFileHandle handle) =>
+        GetFileInformationByHandleEx(handle, FileBasicInfoClass, out FileBasicInfo basic, (uint)Marshal.SizeOf<FileBasicInfo>())
+        && (basic.FileAttributes & FileAttributeDirectory) != 0;
+
+    // A file the writer made has one link; more than one means a hard link someone planted, sharing a file elsewhere.
+    private static bool HasMultipleLinks(SafeFileHandle handle) =>
+        GetFileInformationByHandle(handle, out var info) && info.NumberOfLinks > 1;
+
+    // The real DOS path (drive-letter form), with junctions and symbolic links in the spelling resolved away. A volume
+    // mounted only into a folder has no drive letter; its \\?\Volume{guid}\ form still identifies it uniquely.
+    private static string? Resolve(SafeFileHandle handle) =>
+        FinalPath(handle, VolumeNameDos) ?? FinalPath(handle, VolumeNameGuid);
+
     // Junctions, symbolic links and mount points are name surrogates; a cloud placeholder (OneDrive) is a reparse point too
     // but still the folder itself.
     private static bool IsLink(SafeFileHandle handle)
@@ -313,10 +351,19 @@ internal sealed partial class PartialFolder : IDisposable
         return (basic.FileAttributes & FileAttributeReparsePoint) != 0;
     }
 
-    private static string? FinalNtPath(SafeFileHandle handle)
+    private static string? FinalNtPath(SafeFileHandle handle) => FinalPath(handle, VolumeNameNt);
+
+    private static string? FinalPath(SafeFileHandle handle, uint flags)
     {
-        var buffer = new char[short.MaxValue];
-        var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, VolumeNameNt);
+        // A path fits in MAX_PATH*... but a resolved long path can be longer; grow once if the first buffer was too small.
+        var buffer = new char[1024];
+        var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, flags);
+        if (length >= buffer.Length)
+        {
+            buffer = new char[length + 1];
+            length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, flags);
+        }
+
         return length == 0 || length >= buffer.Length ? null : new string(buffer, 0, (int)length);
     }
 
@@ -333,6 +380,15 @@ internal sealed partial class PartialFolder : IDisposable
         public uint ReparseTag;
     }
 
+    // FILETIME is two DWORDs: 4-byte packing keeps the native layout (no padding before the times).
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    private struct ByHandleFileInformation
+    {
+        public uint FileAttributes;
+        public long CreationTime, LastAccessTime, LastWriteTime;
+        public uint VolumeSerialNumber, FileSizeHigh, FileSizeLow, NumberOfLinks, FileIndexHigh, FileIndexLow;
+    }
+
     // Times left at 0 are not changed by SetFileInformationByHandle; FileAttributes 0 means "no change" too.
     [StructLayout(LayoutKind.Sequential)]
     private struct FileBasicInfo
@@ -347,6 +403,14 @@ internal sealed partial class PartialFolder : IDisposable
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool CreateDirectoryW(string path, nint security);
+
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool RemoveDirectoryW(string path);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetFileInformationByHandle(SafeFileHandle file, out ByHandleFileInformation info);
 
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial SafeFileHandle CreateFileW(

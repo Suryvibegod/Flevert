@@ -380,6 +380,34 @@ public sealed class OutputPathTests : IDisposable
         Assert.Empty(EntryNames(_dir.Path));
     }
 
+    // Holding the folder locks the chain of real directories above it, but not a junction higher in the spelling the
+    // caller gave: that resolves away and can be re-pointed. If the output name were built from that spelling, the finished
+    // pages would be renamed into the attacker's tree. The folder is resolved to its real path when it is held, and every
+    // path after that (writer, listing, deletes, the rename destination) uses the real path, so the junction is out of play.
+    [SkippableFact]
+    public async Task WriteDirectoryAtomically_puts_the_output_in_the_real_folder_even_if_a_junction_above_is_repointed()
+    {
+        var real = Directory.CreateDirectory(_dir.Combine("real")).FullName;
+        Directory.CreateDirectory(Path.Combine(real, "sub"));
+        using var attacker = new TempDir();
+        Directory.CreateDirectory(Path.Combine(attacker.Path, "sub"));
+        var link = _dir.Combine("link");
+        Skip.IfNot(Junction.TryCreate(link, real), "could not create a junction");
+
+        var final = await OutputPath.WriteDirectoryAtomicallyAsync(Path.Combine(link, "sub", "out (pages)"), " (pages)", async (temp, ct) =>
+        {
+            await WritePages(2)(temp, ct);
+            Directory.Delete(link); // remove the junction (not its target) and re-point it at the attacker's tree
+            Junction.TryCreate(link, attacker.Path);
+        }, CancellationToken.None);
+
+        Assert.Equal(["out (pages)"], EntryNames(Path.Combine(real, "sub")));
+        Assert.Equal(["1.txt", "2.txt"], EntryNames(Path.Combine(real, "sub", "out (pages)")));
+        Assert.Equal(Path.Combine(real, "sub", "out (pages)"), final);
+        // Nothing of the user's output reached the attacker's tree.
+        Assert.Empty(EntryNames(Path.Combine(attacker.Path, "sub")));
+    }
+
     // The same account cannot rename the folder, but it can open it for FILE_WRITE_ATTRIBUTES (not subject to sharing) and
     // turn it into a junction in place, which only an empty folder allows: before the first page it is empty.
     [Fact]
@@ -534,6 +562,25 @@ public sealed class OutputPathTests : IDisposable
         Assert.True(File.GetAttributes(final).HasFlag(FileAttributes.NotContentIndexed));
         Assert.All(Directory.GetFiles(final), page =>
             Assert.True(File.GetAttributes(page).HasFlag(FileAttributes.NotContentIndexed), page));
+    }
+
+    // Readying pages for the rename clears their inherited NotContentIndexed mark. A hard link someone planted points at a
+    // file outside the folder; changing attributes through it would reach that file, so a multiply-linked entry is skipped.
+    [Fact]
+    public async Task WriteDirectoryAtomically_does_not_change_attributes_through_a_planted_hard_link()
+    {
+        using var outside = new TempDir();
+        var external = outside.File("external.txt", "theirs");
+        File.SetAttributes(external, File.GetAttributes(external) | FileAttributes.NotContentIndexed);
+
+        await OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
+        {
+            await WritePages(1)(temp, ct);
+            Junction.TryCreateHardLink(Path.Combine(temp, "planted.txt"), external);
+        }, CancellationToken.None);
+
+        // The external file keeps its mark: the hard link inside the output folder was left alone.
+        Assert.True(File.GetAttributes(external).HasFlag(FileAttributes.NotContentIndexed));
     }
 
     // Writers never make folders (PdfToImages, DevSplit), so a folder with something in it was put there by someone else,
