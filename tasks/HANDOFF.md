@@ -2,9 +2,9 @@
 
 File này thay cho trí nhớ của phiên làm việc trước: mọi bối cảnh cần để làm tiếp nằm ở đây và trong các file được trỏ tới. Cập nhật mỗi khi xong một việc.
 
-## Quy trình agent-skills của Addy Osmani: xây trước, verify một lần trước khi phát hành
+## Quy trình agent-skills của Addy Osmani
 
-Từ 2026-10-20 người dùng muốn bớt quy trình: **xây hết rồi mới verify ở bước cuối**. Mỗi task chỉ còn: viết code cùng test (TDD khi rẻ), build + format + ba project test xanh trước mỗi commit, ghi chú ngắn trong todo. **Không** chạy agent review sau từng task, không vòng re-review, không chạy thật từng task. Bước 4 (Verify) và 5 (Review) dưới đây làm **một lần cho cả bản phát hành**, trước T20; vòng soát lại phần sửa dùng một reviewer gộp. Chạy song song tối đa 2–3 agent. Các bước gốc, để tham chiếu:
+Mỗi task: viết code cùng test (TDD khi rẻ), build + format + ba project test xanh trước mỗi commit, ghi chú ngắn trong todo. Bước 4 (Verify) và 5 (Review) làm một lần cho cả bản phát hành, trước khi tag:
 
 1. **Define:** spec (`docs/specs/<module>.md`) đủ 6 mục, success criteria kiểm được; nếu thiếu thì `interview-me` / `idea-refine` trước.
 2. **Plan:** `planning-and-task-breakdown` ra `tasks/<module>/plan.md` + `todo.md`; không ghi đè plan còn việc dở.
@@ -28,63 +28,39 @@ Từ 2026-10-20 người dùng muốn bớt quy trình: **xây hết rồi mới
 | core | Xong, review nhiều vòng ([todo.md](todo.md)). Chạy song song nhiều file trong một lô ([perf/todo.md](perf/todo.md)). Báo bản mới từ GitHub Releases ([update/todo.md](update/todo.md), ADR-0006). |
 | image | Xong ([image/todo.md](image/todo.md), ADR-0004). Ngân sách bộ nhớ chung khi chạy song song. |
 | installer (v0.1) | Xong, review 5 vòng ([installer/todo.md](installer/todo.md)); menu cổ điển kiểm tay đạt (ADR-0005); trang "New versions" (`/UPDATECHECK`). |
-| pdf (v0.2) | Đang làm: T1–T3, T5–T11, T17b và nhóm sửa review vòng 1 (F1–F5) trên `main`. Plan/todo: [pdf/](pdf/). |
+| pdf (v0.2) | Xong, phát hành 0.2.0 ([pdf/todo.md](pdf/todo.md), ADR-0007, ADR-0008). Đổi tên Flevert → Flevert (ADR-0009). |
 | media (v0.3) | Spec đã chốt: [docs/specs/media.md](../docs/specs/media.md). Chưa có plan/code. |
 
-Test trên `main` (2026-10-20): Core 354 (+1 skip), Image 240, Pdf 78. Test đầu-cuối installer: `scripts/test-installer.ps1` (9 kịch bản, chạy tay trên máy thật, `%LOCALAPPDATA%\Flevert` phải không tồn tại). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` + [docs/RELEASING.md](../docs/RELEASING.md).
+Test đầu-cuối installer: `scripts/test-installer.ps1` (10 kịch bản, gồm nâng cấp từ Flevert 0.1.0; chạy tay trên máy thật, `%LOCALAPPDATA%\Flevert` phải không tồn tại). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` + [docs/RELEASING.md](../docs/RELEASING.md).
 
 ## v0.1.0 đã phát hành (2026-10-20)
 
 https://github.com/Suryvibegod/Flevert/releases/tag/v0.1.0 (latest, immutable). Kết quả kiểm: [release/todo.md](release/todo.md).
 
-Người dùng cần tự làm: bật 2FA cho tài khoản GitHub; tạo API key VirusTotal mới (key cũ đã nằm trong lịch sử chat); nếu muốn, báo dương tính giả cho DeepInstinct. Hai PR Dependabot (#1 Test SDK 18, #2 xunit runner 4) chờ xem xét theo RELEASING.
+## v0.2.0 (pdf): đã xong
 
-## Việc đang làm: v0.2 (pdf), cập nhật 2026-10-20
+Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile: [pdf/todo.md](pdf/todo.md). Spec: [docs/specs/pdf.md](../docs/specs/pdf.md). ADR: 0007 (tiến độ trong file, output thư mục, N→1), 0008 (pdfium + qpdf, deps ghim hash), 0009 (đổi tên Flevert, chuyển cài đặt Flevert 0.1.0).
 
-Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task: [pdf/todo.md](pdf/todo.md). Spec: [docs/specs/pdf.md](../docs/specs/pdf.md). ADR mới: 0007 (tiến độ trong file, output thư mục, N→1), 0008 (pdfium + qpdf, deps ghim hash).
+Đã quyết: T15–T17 (nén ảnh scan, đảo trang, sửa PDF, rút chữ/ảnh) chuyển sang v0.2.1. Chấp nhận license Visual Studio Community: Flevert giữ 3 DLL MSVC runtime qpdf dùng.
 
-**Đã xong và đã gộp vào `main`** (mỗi task có test viết trước, thấy đỏ rồi mới xanh; build, format, ba project test xanh):
-- T1 `scripts/fetch-deps.ps1` + `scripts/deps.json` (pdfium chromium/8100, qpdf 12.4.2, giấy phép; ghim SHA256; CI/release/setup-dev gọi).
-- T2 `ExternalTool` (tiến trình con an toàn, job object kill-on-close, stdin, giới hạn output, timeout/hủy).
-- T3 `Qpdf` + `pdf.rotate-right/left/180` + menu `.pdf`; Flevert.Cli tham chiếu Flevert.Pdf.
-- T5 `IBatchOperation` (N→1, thứ tự tự nhiên `StrCmpLogicalW`, ghim cả lô) + `dev.join`.
-- T7 `OutputPath.WriteDirectoryAtomicallyAsync` (1→N) + tiến độ trong file ("page 37 of 200") + `dev.split`.
-- T9 `PdfDocument` (pdfium P/Invoke, khóa toàn cục, giới hạn 2 000 trang / 2 GB / 10 000 px).
-- T10 `pdf.to-jpg`, `pdf.to-png` (đã có trong menu PDF: Convert > JPG pages / PNG pages).
-
-Review ba góc cho T1–T10 đã chạy (bảng "Review vòng 1" trong [pdf/todo.md](pdf/todo.md)); các nhóm sửa F1, F2/F3/F7, F4, F5 và phần nền ảnh → PDF (T11a: `JpegSegments`, `PdfBuilder`) **đã gộp vào `main`**, mỗi nhóm có bảng reconcile riêng trong todo. Quyết định F6 → T9b (pdfium đọc PDF trong tiến trình worker).
-
-**Đã xong thêm (2026-10-21):** T11 `pdf.from-images` (menu ảnh Combine into PDF; HEIC/HEIF bỏ Convert > GIF vì Explorer chỉ hiện 16 mục), T6 `pdf.merge`, T8 `pdf.split`, T17b (lỗi `policy.xml` của v0.1 khi nhiều thao tác ảnh cùng chạy).
-
-**Việc tiếp theo, theo thứ tự:**
-1. Đang làm (agent): T12 strip-metadata + T13 compress, T14 protect/unlock + hộp thoại mật khẩu. T9b (pdfium trong tiến trình `flevert.exe pdf-worker`, ADR-0008 mục "Reading untrusted PDFs in a worker") đã xong.
-2. T4 (phần còn lại sau F4: check-location, `test-installer.ps1`), T17b còn: kiểm tay chọn lẫn JPG + HEIC trong Explorer thật, README bảng menu; T18 hardening; T19 nâng cấp từ 0.1.0.
-3. Trước T20: verify một lần (chạy thật + ba review + reconcile + quét thông tin cá nhân), rồi phát hành theo đúng từng bước của RELEASING (dọn repo, xóa dấu vết bàn giao).
-
-**Đã quyết (2026-10-21):** v0.2 phát hành không kèm T15–T17 (nén ảnh scan, đảo trang, sửa PDF, rút chữ/ảnh): chuyển sang v0.2.1. Kiểm cuối trước phát hành chỉ xét thay đổi từ `v0.1.0` (RELEASING bước 4).
-
-**Đã quyết (2026-10-21):** chấp nhận license Visual Studio Community; Flevert giữ 3 DLL MSVC runtime qpdf dùng (ADR-0008 Consequences).
-
-**Cách làm agent:** việc độc lập giao cho agent `general-purpose` với `isolation: worktree`, **tối đa 2–3 agent cùng lúc** (nhiều hơn làm test lô N→1 lỗi ngẫu nhiên và Smart App Control chặn DLL mới build). Prompt: đọc CLAUDE.md, plan, todo; test cùng code; danh tính commit Suryvibegod (`git -c user.name=... -c user.email=... commit`), file message tên riêng; không push. Xong thì rebase lên `main`, gộp fast-forward, chạy lại ba project test, xóa worktree và nhánh. Nếu phải dừng giữa chừng: commit `wip:` phần dở, push lên `wip/*`, ghi vào đây.
+**Việc tiếp theo:** v0.2.1: T15–T17, và các mục còn mở trong [pdf/todo.md](pdf/todo.md) (S3, S4, tên thư mục của Split, báo "đã sửa" khi qpdf sửa file hỏng, giới hạn tổng dung lượng ảnh khi đổi PDF sang ảnh).
 
 **Ghi chú kỹ thuật:**
 - qpdf tự mở rộng ký tự đại diện trong đối số dòng lệnh (làm hỏng `\\?\` đường dẫn dài): đường dẫn đưa cho qpdf qua stdin `@-`; tùy chọn có `*`/`?`/`@` bị từ chối.
-- Test nào đếm tiến trình phải nhận diện đúng tiến trình của nó (PID, tiến trình cha), không đếm theo tên trên toàn máy: agent và CI chạy test song song.
-- Test lô nhiều tiến trình nhạy thời gian khi máy bận (đã gặp `Process_started_while_the_leader_is_busy_joins_its_batch`, `Processes_started_through_a_junction_still_form_one_batch`, `FramesTests…area_limit…`): đỏ thì chạy lại riêng trước; đỏ cả khi chạy riêng thì điều tra.
-- Test Pdf khởi động `flevert.exe pdf-worker` (PdfToImages, PdfWorker, PdfWorkerBatch) nằm chung collection xUnit `WorkerProcesses`; lớp test mới nào khởi động worker cũng phải vào collection đó (test tìm worker là con của testhost theo dòng lệnh).
+- Test nào đếm tiến trình phải nhận diện đúng tiến trình của nó (PID, tiến trình cha), không đếm theo tên trên toàn máy: CI và nhiều lần chạy test có thể song song.
+- Test lô nhiều tiến trình nhạy thời gian khi máy bận: đỏ thì chạy lại riêng trước; đỏ cả khi chạy riêng thì điều tra.
+- Test Pdf khởi động `flevert.exe pdf-worker` nằm chung collection xUnit `WorkerProcesses`; lớp test mới nào khởi động worker cũng phải vào collection đó.
 - Smart App Control chặn ngẫu nhiên DLL vừa build (test tiến trình thoát `0xE0434352`, hoặc `0x800711C7`): build lại với `-p:SourceRevisionId=<chuỗi mới>`, không đổi mã nguồn.
-- Sau khi `scripts/deps.json` đổi: chạy lại `scripts/fetch-deps.ps1` trên mọi máy.
-- Các agent chạy thử UI có thể bật cửa sổ Flevert trên màn hình: báo người dùng trước.
-- Repo và tài khoản GitHub đã đổi tên và lịch sử đã viết lại: clone cũ không có commit chung với `origin`; trỏ lại `origin` và `reset` về `origin/main`, đừng merge.
+- Sau khi `scripts/deps.json` đổi: chạy lại `scripts/fetch-deps.ps1`.
+- Không bao giờ tạo lại repo tên `Flevert` dưới tài khoản: bản 0.1.0 đã cài hỏi bản mới qua đường dẫn cũ, GitHub chuyển hướng nó sang Flevert (ADR-0009).
 
 ## Sau v0.2
 
-- Nhắc người dùng: bật 2FA GitHub, tạo API key VirusTotal mới, nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview. Hai PR Dependabot (#1 Test SDK 18, #2 xunit runner 4) chờ xem xét theo RELEASING.
 - v0.3 (media): sau v0.2; quyết GPL hay LGPL ffmpeg (spec, Open Question 1) ở bước Plan.
 
 ## Dựng máy mới
 
-Người dùng (chủ repo) chỉ clone repo, mở Claude Code trong thư mục repo rồi gõ "làm tiếp đi". Setup tải luôn pdfium/qpdf vào `deps/` (cần mạng; build Flevert.Pdf báo lỗi rõ nếu thiếu). [CLAUDE.md](../CLAUDE.md) chỉ Claude chạy `scripts/setup-dev.ps1`: cài .NET 10 SDK cho riêng user nếu thiếu, nhắc cài/đăng nhập GitHub CLI; **chỉ trên máy chủ repo** (gh đăng nhập tài khoản ID 79949229) mới cài Inno Setup, đặt danh tính commit, sửa rule git rewrite hỏng, cài plugin agent-skills; rồi build và chạy test từng project. Các việc phát hành (tag, publish) chỉ chủ repo làm. Plugin cài giữa phiên chỉ nạp sau khi khởi động lại hoặc `/reload-plugins`; trong lúc đó đọc skill từ `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/`.
+Clone repo rồi chạy `scripts/setup-dev.ps1` (CLAUDE.md). Setup tải luôn pdfium/qpdf vào `deps/` (cần mạng; build Flevert.Pdf báo lỗi rõ nếu thiếu). [CLAUDE.md](../CLAUDE.md) chỉ Claude chạy `scripts/setup-dev.ps1`: cài .NET 10 SDK cho riêng user nếu thiếu, nhắc cài/đăng nhập GitHub CLI; **chỉ trên máy chủ repo** (gh đăng nhập tài khoản ID 79949229) mới cài Inno Setup, đặt danh tính commit, sửa rule git rewrite hỏng, cài plugin agent-skills; rồi build và chạy test từng project. Các việc phát hành (tag, publish) chỉ chủ repo làm. Plugin cài giữa phiên chỉ nạp sau khi khởi động lại hoặc `/reload-plugins`; trong lúc đó đọc skill từ `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/`.
 
 Lưu ý môi trường (đã gặp):
 - SDK cài cho riêng user: shell mở trước khi chạy setup không có `dotnet` trong PATH; đặt `$env:Path = "$env:LOCALAPPDATA\Microsoft\dotnet;$env:Path"; $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"`.
