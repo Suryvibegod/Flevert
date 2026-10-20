@@ -485,11 +485,13 @@ Spec: [docs/specs/pdf.md](../../docs/specs/pdf.md), mục "v0.2.1" (cùng kết 
 | P6.1/P6.2 S3, S4 | Xong | `487bf4d`: bản ghi đóng lô ghi `reported` và `cancelled`; tiến trình còn chạy → "did not reach Flevert in time"; file muộn của lô đã báo/đã hủy → log `skipped`, thoát 0, không thông báo. Test tiến trình thật (treo > 30 s) xanh trên CI 13 |
 | P6.6 SA-L1 | Xong | `44333c8`: tổng pixel > 4000 MP → TooLarge; ước lượng 0,5 B/px JPG, 3 B/px PNG so với `GetDiskFreeSpaceEx` → lỗi chỗ trống. CI 14 xanh phần này |
 | P3 Convert > Text | Xong | `14a7d3e`, `1837cbe`: yêu cầu worker mới; PDF tiếng Việt tạo bằng pdfium + Arial của Windows lúc chạy test. CI 15: khoảng trắng khác (Arial: một glyph cho space và NBSP) → chuẩn hóa mọi khoảng trắng Zs |
-| P1 Compress > For sharing (spike + làm) | Xong, chờ CI | Spike đạt (bảng trong spec). `b24cf1b`. Bản C# của worker chạy được trên Linux bằng reflection (0,5 s/trang); phần qpdf + JSON chỉ kiểm được trên Windows (đường dẫn `\\?\`) |
+| P1 Compress > For sharing (spike + làm) | Xong | Spike đạt (bảng trong spec). `b24cf1b`; sửa theo CI: `08c264a` (từ điển theo số thành phần JPEG thật: ImageMagick ghi JPEG xám cho ảnh RGB toàn xám, đã đối chứng), `0db1d01` (policy ImageMagick chặn `gradient:` trong fixture), `143e6f0` (fixture scan thêm nhiễu cảm biến: không có thì 87 KB/trang, chỉ còn 47%). Bản C# của worker chạy được trên Linux bằng reflection (0,5 s/trang); phần qpdf + JSON chỉ kiểm được trên Windows (đường dẫn `\\?\`) |
 | P2 Reverse | Bỏ | P1 đạt (spec) |
 | P7 Dependabot | Xong | `87fe350`: Test.Sdk 18.10.1 + runner 4.0.1 (mỗi PR xanh riêng trên `main`); Dependabot tự đóng PR khi `main` có bản mới. Không gộp/đóng PR Dependabot từ phiên này |
-| P7 `ContinuousIntegrationBuild` | Xong, chờ CI | `5fac6fc`: biến môi trường ở `ci.yml` và `release.yml`; `scripts/test-build-paths.ps1` (+ test) kiểm `Flevert*.dll`/`flevert.dll` không chứa đường dẫn checkout (UTF-8, UTF-16) |
+| P7 `ContinuousIntegrationBuild` | Xong | `5fac6fc`, `c00b806` (`-Include` không lọc khi có `-LiteralPath`): biến môi trường ở `ci.yml` và `release.yml`; `scripts/test-build-paths.ps1` (+ test) kiểm `Flevert*.dll`/`flevert.dll` không chứa đường dẫn checkout (UTF-8, UTF-16) |
 | Docs | Xong | spec (kết quả spike, đã quyết), README, CHANGELOG `[Unreleased]`. HANDOFF không sửa trên nhánh này (spec, Boundaries) |
+
+**CI:** lần 19 (`143e6f0`, 2026-10-20) xanh toàn bộ: build, `test-build-paths.ps1` trên bản build thật, format, Core 497, Image 245, Pdf 839+.
 
 **Còn lại cho maintainer (bước Verify/Review của bản phát hành, trên máy Windows thật):**
 - MenuProbe trên `.pdf`: 16 mục, `Convert > Text`, `Compress > Lossless / For sharing`; chạy thật `flevert.exe run pdf.compress-sharing` và `pdf.extract-text` headless; `uninstall-menu`.
