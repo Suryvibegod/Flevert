@@ -14,7 +14,8 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath)
 
     public void Install(IEnumerable<IMenuOperation> operations)
     {
-        var ops = operations.ToList();
+        // An operation without a menu path is run by its id only (the PDF tools window's): nothing of it goes in the menu.
+        var ops = operations.Where(op => op.MenuPath.Length > 0).ToList();
         foreach (var op in ops)
             Validate(op);
         foreach (var ext in ops.SelectMany(op => op.Extensions).Distinct(StringComparer.OrdinalIgnoreCase))

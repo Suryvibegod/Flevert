@@ -113,6 +113,16 @@ public sealed class MenuTests
         Assert.Throws<ArgumentException>(() => Install(new FakeOp(id, menuPath, ".jpg")));
     }
 
+    [Fact]
+    public void An_operation_without_a_menu_path_is_run_by_id_only_and_writes_nothing_to_the_menu()
+    {
+        // The PDF tools window runs such operations (docs/specs/pdf.md, v0.2.2); flevert.exe run still finds them.
+        Install(new FakeOp("pdf.flatten", "", ".pdf"), new FakeOp("image.to-png", "Convert/PNG", ".jpg"));
+
+        Assert.DoesNotContain(_registry.Snapshot().Keys, key => key.Contains(".pdf", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(_registry.KeysUnder(@"Flevert.Menu.jpg\shell"));
+    }
+
     [Theory]
     [InlineData("jpg")]
     [InlineData(@".j\pg")]

@@ -281,6 +281,88 @@ public sealed class FlevertExeTests : IDisposable
         Assert.Contains("\tSigned PDF: the digital signature is not valid in the output.", log, StringComparison.Ordinal);
     }
 
+    public static TheoryData<string, string> Tools() => new()
+    {
+        { "pdf.remove-blank-pages", "Hồ sơ (no blank pages).pdf" },
+        { "pdf.n-up-2", "Hồ sơ (2 per sheet).pdf" },
+        { "pdf.n-up-4", "Hồ sơ (4 per sheet).pdf" },
+        { "pdf.fit-a4", "Hồ sơ (A4).pdf" },
+        { "pdf.split-10mb", "Hồ sơ (parts)" },
+        { "pdf.page-numbers", "Hồ sơ (numbered).pdf" },
+        { "pdf.flatten", "Hồ sơ (flattened).pdf" },
+        { "pdf.extract-images", "Hồ sơ (images)" },
+    };
+
+    [Theory]
+    [MemberData(nameof(Tools))]
+    public async Task Flevert_exe_runs_each_pdf_tool_without_windows_with_its_defaults(string operationId, string output)
+    {
+        // docs/specs/pdf.md, v0.2.2: every tool runs headless, for tests and automation.
+        var input = _dir.Combine("Hồ sơ.pdf");
+        switch (operationId)
+        {
+            case "pdf.flatten":
+                ToolPdf.WriteFilledForm(input, "Nguyen Van A");
+                break;
+            case "pdf.extract-images":
+                ToolPdf.WriteImages(input, TestJpeg.Make(96, 64), 96, 64);
+                break;
+            case "pdf.split-10mb":
+                ToolPdf.WriteHeavyPages(input, 6_000_000, 300, 301);
+                break;
+            default:
+                ToolPdf.WriteScan(input, ToolPdf.ScanPage.Text, ToolPdf.ScanPage.Blank, ToolPdf.ScanPage.Text);
+                break;
+        }
+
+        var exit = await RunToEndAsync(operationId, input);
+
+        Assert.True(exit == 0, string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)));
+        Assert.True(Path.Exists(_dir.Combine(output)), string.Join(", ", Directory.GetFileSystemEntries(_dir.Path)));
+    }
+
+    [Fact]
+    public async Task Without_windows_add_watermark_fails_clearly_since_it_has_no_text()
+    {
+        var input = CopyFixture("three-colours.pdf", "Hồ sơ.pdf");
+
+        var exit = await RunToEndAsync("pdf.watermark", input);
+
+        Assert.Equal(1, exit);
+        Assert.Contains("Add watermark needs the text to write on the pages", string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)),
+            StringComparison.Ordinal);
+        Assert.Equal([input], Directory.GetFileSystemEntries(_dir.Path));
+    }
+
+    [Fact]
+    public async Task A_pdf_under_25_mb_is_skipped_by_split_into_parts_under_25_mb_and_flevert_exe_succeeds()
+    {
+        var input = CopyFixture("three-colours.pdf", "Hồ sơ.pdf");
+
+        var exit = await RunToEndAsync("pdf.split-25mb", input);
+
+        Assert.Equal(0, exit);
+        Assert.Contains("This PDF is already under 25 MB: there is nothing to split.", string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)),
+            StringComparison.Ordinal);
+        Assert.Equal([input], Directory.GetFileSystemEntries(_dir.Path));
+    }
+
+    private async Task<int> RunToEndAsync(string operationId, string input)
+    {
+        using var flevert = StartRun(operationId, input);
+        try
+        {
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+        }
+        finally
+        {
+            if (!flevert.HasExited)
+                flevert.Kill(entireProcessTree: true);
+        }
+
+        return flevert.ExitCode;
+    }
+
     private string CopyFixture(string fixture, string name)
     {
         var path = _dir.Combine(name);
