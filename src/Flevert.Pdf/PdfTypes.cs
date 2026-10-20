@@ -49,6 +49,9 @@ public enum PdfError
 
     /// <summary>Working on the PDF needs more memory than Flevert allows a PDF tool.</summary>
     TooComplex,
+
+    /// <summary>The PDF has no pages to work on.</summary>
+    NoPages,
 }
 
 /// <summary>A PDF Flevert cannot use, with a message for the user.</summary>

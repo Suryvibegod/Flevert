@@ -72,7 +72,7 @@ public sealed class PdfToImages : IOperation
         using var pdf = PdfDocument.Open(inputPath);
         var total = pdf.PageCount;
         if (total == 0)
-            throw new PdfException("This PDF has no pages.");
+            throw new PdfException(PdfError.NoPages, "This PDF has no pages.");
 
         MagickSetup.EnsureInitialized();
         var stem = Path.GetFileNameWithoutExtension(inputPath);

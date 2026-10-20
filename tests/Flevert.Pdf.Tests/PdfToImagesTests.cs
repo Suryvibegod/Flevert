@@ -59,6 +59,9 @@ public class PdfToImagesTests(ITestOutputHelper output)
             using var images = ImageFile.Read(Path.Combine(folder, Names(folder)[page]));
             var image = images[0];
             Assert.Equal(MagickFormat.Jpeg, image.Format);
+            // Spec: quality 90 with 4:2:0 chroma (ImageMagick would keep 4:4:4 from quality 90 up).
+            Assert.Equal(90u, image.Quality);
+            Assert.Equal("2x2,1x1,1x1", image.GetAttribute("jpeg:sampling-factor"));
             Assert.Equal((ThreeColoursAt150[page].Width, ThreeColoursAt150[page].Height), ((int)image.Width, (int)image.Height));
             Assert.Equal(150, image.Density.X, 0.5);
             Assert.Equal(DensityUnit.PixelsPerInch, image.Density.Units);
@@ -194,6 +197,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         var ex = await Assert.ThrowsAsync<PdfException>(
             () => new PdfToImages(PdfPageImageFormat.Png).RunAsync(input, CancellationToken.None));
 
+        Assert.Equal(PdfError.NoPages, ex.Error);
         Assert.Equal("This PDF has no pages.", ex.Message);
         Assert.Equal(["empty.pdf"], Names(dir.Path));
     }
@@ -231,7 +235,8 @@ public class PdfToImagesTests(ITestOutputHelper output)
     public async Task A_long_name_is_shortened_so_every_page_name_fits()
     {
         using var dir = new TempDir();
-        var stem = string.Concat(Enumerable.Repeat("Ảnh chụp ", 30))[..240];
+        // 251 + ".pdf" is the longest name a file can have; " 001.jpg" pushes a page name past 255, so it must be cut.
+        var stem = string.Concat(Enumerable.Repeat("Ảnh chụp ", 30))[..251];
         var input = dir.Combine("x.pdf");
         File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
         var longInput = @"\\?\" + dir.Combine(stem + ".pdf");
@@ -241,7 +246,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
 
         var names = Names(folder);
         Assert.Equal(3, names.Length);
-        Assert.All(names, name => Assert.True(name.Length <= 255, name));
+        Assert.All(names, name => Assert.Equal(255, name.Length));
         Assert.EndsWith(" 001.jpg", names[0], StringComparison.Ordinal);
         Assert.StartsWith(stem[..200], names[0], StringComparison.Ordinal);
     }

@@ -140,6 +140,11 @@ public sealed class PdfRotateTests : IDisposable
         // Pages without /Resources: every viewer opens it, qpdf adds the entry and exits with code 3 (warnings).
         var input = _dir.Combine("no resources.pdf");
         WriteBlank(input, 3);
+        // The same rotation run on qpdf directly: the fixture really makes qpdf exit with 3, or this test proves nothing.
+        var direct = await ExternalTool.RunAsync(Qpdf.NextToApp.ExePath, ["--rotate=+90:1-z", "@-"], TimeSpan.FromSeconds(30),
+            System.Text.Encoding.UTF8.GetBytes($"{input}\n{_dir.Combine("direct.pdf")}\n"));
+        Assert.Equal(3, direct.ExitCode);
+        File.Delete(_dir.Combine("direct.pdf"));
 
         var output = await Op("pdf.rotate-right").RunAsync(input, CancellationToken.None);
 
