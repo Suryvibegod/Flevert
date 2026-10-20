@@ -33,6 +33,15 @@ public sealed class MemoryBudget
     /// </summary>
     public static MemoryBudget Shared { get; } = new(Math.Max(1, Math.Min(MagickSetup.MemoryLimit, (ulong)GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 4)));
 
+    /// <summary>The most this budget grants at once.</summary>
+    public ulong Capacity => _capacity;
+
+    /// <summary>
+    /// How much of the budget a request for <paramref name="bytes"/> takes: more than half is all of it (see
+    /// <see cref="AcquireAsync"/>). One that holds shares already can tell from it that one more would never be granted.
+    /// </summary>
+    public ulong ShareFor(ulong bytes) => bytes > _capacity / 2 ? _capacity : Math.Max(bytes, 1);
+
     /// <summary>
     /// The memory converting <paramref name="path"/> needs, from its header and size only. <see cref="ulong.MaxValue"/>
     /// when the header cannot be read: the file then runs alone, and the operation reports what is wrong with it.
@@ -69,7 +78,7 @@ public sealed class MemoryBudget
     /// </summary>
     public Task<IDisposable> AcquireAsync(ulong bytes, CancellationToken ct)
     {
-        var need = bytes > _capacity / 2 ? _capacity : Math.Max(bytes, 1);
+        var need = ShareFor(bytes);
         LinkedListNode<(ulong Need, TaskCompletionSource<IDisposable> Granted)> node;
         lock (_gate)
         {

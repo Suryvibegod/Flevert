@@ -176,6 +176,19 @@ public sealed class MemoryBudgetTests
     }
 
     [Fact]
+    public void Says_how_much_of_it_a_request_takes_so_a_holder_of_several_shares_can_tell_one_more_never_fits()
+    {
+        // Images to PDF keeps shares for every page it holds; asking for one that cannot fit beside them would wait for ever.
+        var budget = new MemoryBudget(100);
+
+        Assert.Equal(100UL, budget.Capacity);
+        Assert.Equal(1UL, budget.ShareFor(0));
+        Assert.Equal(50UL, budget.ShareFor(50));
+        Assert.Equal(100UL, budget.ShareFor(51)); // more than half runs alone
+        Assert.Equal(100UL, budget.ShareFor(500));
+    }
+
+    [Fact]
     public void A_budget_of_zero_is_refused()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new MemoryBudget(0));
