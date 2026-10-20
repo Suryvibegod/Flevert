@@ -11,7 +11,7 @@ import sys
 
 
 def write_pdf(path, pages):
-    """pages: list of (width_pt, height_pt, content_stream_bytes)."""
+    """pages: list of (width_pt, height_pt, content_stream_bytes) or (width_pt, height_pt, content, rotate)."""
     objects = []  # bodies, object number = index + 1
 
     def add(body):
@@ -21,10 +21,11 @@ def write_pdf(path, pages):
     catalog = add(None)
     page_tree = add(None)
     kids = []
-    for width, height, content in pages:
+    for width, height, content, *rotate in pages:
         stream = add(b"<< /Length %d >>\nstream\n" % len(content) + content + b"\nendstream")
-        kids.append(add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s] /Resources << >> /Contents %d 0 R >>"
-                        % (page_tree, number(width), number(height), stream)))
+        rotation = b" /Rotate %d" % rotate[0] if rotate else b""
+        kids.append(add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s]%s /Resources << >> /Contents %d 0 R >>"
+                        % (page_tree, number(width), number(height), rotation, stream)))
     objects[catalog - 1] = b"<< /Type /Catalog /Pages %d 0 R >>" % page_tree
     objects[page_tree - 1] = b"<< /Type /Pages /Kids [%s] /Count %d >>" % (
         b" ".join(b"%d 0 R" % kid for kid in kids), len(kids))
@@ -65,6 +66,10 @@ def main(folder):
     write_pdf(folder / "huge-page.pdf", [
         (14400, 144, fill(1, 0, 0, 0, 0, 7200, 144) + b"\n" + fill(0, 0, 1, 7200, 0, 7200, 144)),
     ])
+    # Four 400 x 300 pages, white with a red 100 x 100 square in the top-left corner of the page as drawn, and
+    # /Rotate 0, 90, 180 and 270: shown on screen, the square sits top-left, top-right, bottom-right and bottom-left.
+    mark = fill(1, 1, 1, 0, 0, 400, 300) + b"\n" + fill(1, 0, 0, 0, 200, 100, 100)
+    write_pdf(folder / "rotations.pdf", [(400, 300, mark, rotate) for rotate in (0, 90, 180, 270)])
 
 
 if __name__ == "__main__":
