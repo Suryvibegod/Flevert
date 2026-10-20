@@ -28,7 +28,7 @@ Từ 2026-10-20 người dùng muốn bớt quy trình: **xây hết rồi mới
 | core | Xong, review nhiều vòng ([todo.md](todo.md)). Chạy song song nhiều file trong một lô ([perf/todo.md](perf/todo.md)). Báo bản mới từ GitHub Releases ([update/todo.md](update/todo.md), ADR-0006). |
 | image | Xong ([image/todo.md](image/todo.md), ADR-0004). Ngân sách bộ nhớ chung khi chạy song song. |
 | installer (v0.1) | Xong, review 5 vòng ([installer/todo.md](installer/todo.md)); menu cổ điển kiểm tay đạt (ADR-0005); trang "New versions" (`/UPDATECHECK`). |
-| pdf (v0.2) | Đang làm: T1, T2, T3, T5, T7, T9, T10 trên `main`; năm nhánh `wip/*` chờ gộp (bên dưới). Plan/todo: [pdf/](pdf/). |
+| pdf (v0.2) | Đang làm: T1, T2, T3, T5, T7, T9, T10, T11a và các nhóm sửa review vòng 1 (F1, F2/F3/F7, F4, F5) trên `main`; tiếp theo T11. Plan/todo: [pdf/](pdf/). |
 | media (v0.3) | Spec đã chốt: [docs/specs/media.md](../docs/specs/media.md). Chưa có plan/code. |
 
 Test trên `main` (2026-10-20): Core 354 (+1 skip), Image 240, Pdf 78. Test đầu-cuối installer: `scripts/test-installer.ps1` (9 kịch bản, chạy tay trên máy thật, `%LOCALAPPDATA%\Flevert` phải không tồn tại). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` + [docs/RELEASING.md](../docs/RELEASING.md).
