@@ -104,6 +104,22 @@ public sealed class RunnerFileProgressTests : IDisposable
         Assert.Equal(2, Directory.GetFiles(output).Length);
     }
 
+    // Stems of 248 to 251 characters make "<stem> (pages)" longer than 255: the stem is shortened, not the suffix.
+    [Fact]
+    public async Task Dev_split_keeps_the_pages_suffix_whole_for_a_long_input_name()
+    {
+        var file = _dir.File(new string('n', 250) + ".txt");
+        var split = new DevSplit(pages: 1, pageDelay: TimeSpan.Zero);
+
+        var first = Path.GetFileName(await split.RunAsync(file, CancellationToken.None));
+        var second = Path.GetFileName(await split.RunAsync(file, CancellationToken.None));
+
+        Assert.EndsWith("n (pages)", first, StringComparison.Ordinal);
+        Assert.Equal(255, first.Length);
+        Assert.EndsWith("n (pages) (1)", second, StringComparison.Ordinal);
+        Assert.Equal(255, second.Length);
+    }
+
     [Fact]
     public async Task Cancelling_midway_through_a_folder_output_leaves_no_folder_behind()
     {

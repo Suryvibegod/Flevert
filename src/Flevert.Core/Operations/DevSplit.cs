@@ -9,6 +9,7 @@ namespace Flevert.Core.Operations;
 public sealed class DevSplit(int pages, TimeSpan pageDelay) : IOperation
 {
     private const int MaxFileNameLength = 255;
+    private const string FolderSuffix = " (pages)";
 
     // FLEVERT_DEV_PAGE_MS sets the time per page: 0 for fast integration tests, longer to look at the progress window.
     public DevSplit()
@@ -28,10 +29,10 @@ public sealed class DevSplit(int pages, TimeSpan pageDelay) : IOperation
     public Task<string> RunAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
     {
         var stem = Path.GetFileNameWithoutExtension(inputPath);
-        var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, $"{stem} (pages)");
+        var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, stem + FolderSuffix);
         var digits = pages.ToString(CultureInfo.InvariantCulture).Length;
 
-        return OutputPath.WriteDirectoryAtomicallyAsync(desired, async (folder, token) =>
+        return OutputPath.WriteDirectoryAtomicallyAsync(desired, FolderSuffix, async (folder, token) =>
         {
             for (var page = 1; page <= pages; page++)
             {

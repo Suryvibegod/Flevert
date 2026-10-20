@@ -251,6 +251,24 @@ public class PdfToImagesTests(ITestOutputHelper output)
         Assert.StartsWith(stem[..200], names[0], StringComparison.Ordinal);
     }
 
+    // Stems of 248 to 251 characters make "<stem> (pages)" longer than 255: the stem is shortened, not the suffix.
+    [Fact]
+    public async Task A_long_name_keeps_the_pages_suffix_on_the_folder()
+    {
+        using var dir = new TempDir();
+        var stem = string.Concat(Enumerable.Repeat("Ảnh chụp ", 30))[..249];
+        var input = dir.Combine("x.pdf");
+        File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
+        var longInput = @"\\?\" + dir.Combine(stem + ".pdf");
+        File.Move(input, longInput);
+
+        var folder = await new PdfToImages(PdfPageImageFormat.Jpeg, 10, new MemoryBudget(1UL << 30)).RunAsync(longInput, CancellationToken.None);
+
+        Assert.EndsWith(" (pages)", folder, StringComparison.Ordinal);
+        Assert.Equal(255, Path.GetFileName(folder).Length);
+        Assert.Equal(3, Names(folder).Length);
+    }
+
     [Fact]
     public async Task Waits_for_its_share_of_the_memory_budget_before_rendering()
     {

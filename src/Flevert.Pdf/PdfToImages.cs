@@ -28,6 +28,7 @@ public sealed class PdfToImages : IOperation
 
     private const uint JpegQuality = 90;
     private const int MaxFileNameLength = 255;
+    private const string FolderSuffix = " (pages)";
 
     // What a page holds in memory at once: the rendered BGRA pixels, ImageMagick's copy of them (Q8, four channels: the
     // same size) and the encoded file, which for a page is at most about the size of the raw pixels.
@@ -76,10 +77,10 @@ public sealed class PdfToImages : IOperation
 
         MagickSetup.EnsureInitialized();
         var stem = Path.GetFileNameWithoutExtension(inputPath);
-        var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, $"{stem} (pages)");
+        var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, stem + FolderSuffix);
         var digits = Math.Max(3, total.ToString(CultureInfo.InvariantCulture).Length);
 
-        return await OutputPath.WriteDirectoryAtomicallyAsync(desired, async (folder, token) =>
+        return await OutputPath.WriteDirectoryAtomicallyAsync(desired, FolderSuffix, async (folder, token) =>
         {
             for (var index = 0; index < total; index++)
             {

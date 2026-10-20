@@ -10,18 +10,23 @@ public static class OutputPath
     /// directory, counts as taken, and the stem is shortened so the name always fits in 255 characters.
     /// </summary>
     public static string Reserve(string desiredPath) =>
-        ReserveName(desiredPath, Path.GetFileNameWithoutExtension(desiredPath), Path.GetExtension(desiredPath));
+        ReserveName(desiredPath, Path.GetFileNameWithoutExtension(desiredPath), "", Path.GetExtension(desiredPath));
 
-    // A folder has no extension: "report.v2 (pages)" becomes "report.v2 (pages) (1)", not "report (1).v2 (pages)".
-    private static string ReserveDirectory(string desiredDirectory) =>
-        ReserveName(desiredDirectory, Path.GetFileName(desiredDirectory), "");
+    // A folder has no extension: "report.v2 (pages)" becomes "report.v2 (pages) (1)", not "report (1).v2 (pages)". The
+    // suffix stays whole like an extension, so a long name loses characters of the stem, never "(pages)".
+    private static string ReserveDirectory(string desiredDirectory, string keepSuffix)
+    {
+        var name = Path.GetFileName(desiredDirectory);
+        return ReserveName(desiredDirectory, name[..^keepSuffix.Length], keepSuffix, "");
+    }
 
-    private static string ReserveName(string desiredPath, string stem, string ext)
+    // "<stem><beforeCounter> (n)<afterCounter>", with only the stem shortened.
+    private static string ReserveName(string desiredPath, string stem, string beforeCounter, string afterCounter)
     {
         var dir = Path.GetDirectoryName(desiredPath)!;
         for (var n = 0; n < MaxAttempts; n++)
         {
-            var candidate = Path.Combine(dir, FitName(stem, n == 0 ? "" : $" ({n})", ext));
+            var candidate = Path.Combine(dir, FitName(stem, beforeCounter + (n == 0 ? "" : $" ({n})") + afterCounter));
             if (!IsTaken(candidate))
                 return candidate;
         }
@@ -57,11 +62,29 @@ public static class OutputPath
     /// write throws or is cancelled, the temporary folder and everything in it is deleted.
     /// </summary>
     /// <returns>The folder created.</returns>
+    public static Task<string> WriteDirectoryAtomicallyAsync(
+        string desiredDirectory,
+        Func<string, CancellationToken, Task> write,
+        CancellationToken ct) =>
+        WriteDirectoryAtomicallyAsync(desiredDirectory, "", write, ct);
+
+    /// <inheritdoc cref="WriteDirectoryAtomicallyAsync(string, Func{string, CancellationToken, Task}, CancellationToken)"/>
+    /// <param name="desiredDirectory">The folder wanted; its name ends with <paramref name="keepSuffix"/>.</param>
+    /// <param name="keepSuffix">
+    /// The end of the name, such as <c>" (pages)"</c>, kept whole when the name is shortened to 255 characters: only the
+    /// part before it is cut, and a counter goes after it.
+    /// </param>
+    /// <param name="write">Fills the temporary folder it is given.</param>
+    /// <param name="ct">Stops the write; the temporary folder is then deleted.</param>
     public static async Task<string> WriteDirectoryAtomicallyAsync(
         string desiredDirectory,
+        string keepSuffix,
         Func<string, CancellationToken, Task> write,
         CancellationToken ct)
     {
+        if (!Path.GetFileName(desiredDirectory).EndsWith(keepSuffix, StringComparison.Ordinal))
+            throw new ArgumentException($"The folder name does not end with \"{keepSuffix}\".", nameof(keepSuffix));
+
         var dir = Path.GetDirectoryName(desiredDirectory)!;
         var temp = Path.Combine(dir, $".flevert-{Guid.NewGuid():N}.partial");
         // CreateDirectory succeeds on an existing folder; a GUID name is never one, and an empty folder must be handed over.
@@ -71,7 +94,7 @@ public static class OutputPath
         {
             await write(temp, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
-            return MoveToFreeName(temp, desiredDirectory, ReserveDirectory, static (from, to) => Directory.Move(from, to));
+            return MoveToFreeName(temp, desiredDirectory, d => ReserveDirectory(d, keepSuffix), static (from, to) => Directory.Move(from, to));
         }
         finally
         {
@@ -115,11 +138,11 @@ public static class OutputPath
         catch (DirectoryNotFoundException) { return false; }
     }
 
-    private static string FitName(string stem, string suffix, string ext)
+    private static string FitName(string stem, string tail)
     {
-        var room = MaxFileNameLength - suffix.Length - ext.Length;
+        var room = MaxFileNameLength - tail.Length;
         if (room < 1)
-            throw new PathTooLongException($"The extension {ext[..Math.Min(ext.Length, 20)]}… leaves no room for a file name.");
+            throw new PathTooLongException($"The ending {tail[..Math.Min(tail.Length, 20)]}… leaves no room for a name.");
         if (stem.Length > room)
         {
             stem = stem[..room];
@@ -127,7 +150,7 @@ public static class OutputPath
                 stem = stem[..^1];
         }
 
-        return stem + suffix + ext;
+        return stem + tail;
     }
 
     // A failed cleanup (e.g. antivirus holding the file) must not hide the original error.
