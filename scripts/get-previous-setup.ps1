@@ -27,6 +27,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # the progress bar makes Invoke-WebRequest many times slower
 
 $version = '0.1.0'
+# 0.1.0 was released as Flevert (ADR-0009); GitHub redirects the old repository path to Flevert.
 $url = "https://github.com/Suryvibegod/Flevert/releases/download/v$version/Flevert-Setup-$version.exe"
 if (-not $Sha256) { $Sha256 = 'aa85392b25b34aed58d6bc9f1e514d8feed38cb0f28b86c5901a91f396bf92e3' }
 if (-not $Destination) { $Destination = Join-Path ([IO.Path]::GetTempPath()) "flevert-previous-setup-$([guid]::NewGuid())" }
