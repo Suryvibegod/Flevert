@@ -7,10 +7,11 @@ Mỗi task: test viết trước và thấy đỏ; build, `dotnet format --verif
 Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `dotnet test tests/Flevert.Media.Tests` (cùng ba project test cũ).
 
 ## T1: deps ffmpeg, project, Ffprobe
-- [ ] `scripts/deps.json`: ffmpeg `autobuild-2026-09-30-13-08` `win64-gpl-shared-8.1` + SHA256, giữ exe/DLL/LICENSE (plan, "Bản dựng ffmpeg"); notices tạm cho `write-notices.ps1`
-- [ ] `src/Flevert.Media` (chép `deps/ffmpeg/bin/*` vào `ffmpeg\`), `tests/Flevert.Media.Tests` (sln; CI/release/setup-dev ở T8)
-- [ ] `Ffprobe`: JSON, timeout 10 s, whitelist giao thức + demuxer; `MediaInfo` (thời lượng, luồng video/audio, xoay, HDR); từ chối: không có luồng, thời lượng 0 hoặc > 12 h, > 8K, không đọc được
+- [x] `scripts/deps.json`: ffmpeg `autobuild-2026-09-30-13-08` `win64-gpl-shared-8.1` + SHA256, giữ exe/DLL/LICENSE (plan, "Bản dựng ffmpeg"); notices tạm cho `write-notices.ps1`
+- [x] `src/Flevert.Media` (chép `deps/ffmpeg/bin/*` vào `ffmpeg\`), `tests/Flevert.Media.Tests` (sln; CI/release/setup-dev ở T8)
+- [x] `Ffprobe`: JSON, timeout 10 s, whitelist giao thức + demuxer; `MediaInfo` (thời lượng, luồng video/audio, xoay, HDR); từ chối: không có luồng, thời lượng 0 hoặc > 12 h, > 8K, không đọc được
 - Kiểm: unit đọc JSON (xoay ở `side_data_list` và `tags.rotate`, HDR, ảnh bìa); tích hợp với fixture sinh bằng ffmpeg
+- Đã làm (2026-10-20, Linux, ffmpeg 6.1 của hệ thống): `Ffmpeg.ProbeAsync` + `MediaInfo.Parse`; 36 test xanh. Fixture không lưu trong repo: `Fixtures.cs` sinh bằng lavfi lần đầu được dùng (1080p, MOV điện thoại xoay 90° có GPS, HEVC HDR10, MKV hai audio, WAV, M4A). Đối chứng âm: bỏ `-format_whitelist` thì test danh sách concat (file nó trỏ là video thật) đỏ; HLS và concat trỏ file không có vẫn bị từ chối nhờ whitelist giao thức. Core (2 commit riêng): `ExternalToolLimits.BelowNormalPriority` (đặt trên tiến trình, không qua giới hạn của job vì cần đặc quyền; **cần kiểm trên Windows**: test PowerShell in lớp ưu tiên của nó và của tiến trình con) và `FileProgress.Percent` ("37%", thanh tiến độ theo %). Tên `VideoTrack`/`AudioTrack` (CA1711 cấm hậu tố Stream).
 
 ## T2: lát dọc `audio.to-mp3`
 - [ ] `Ffmpeg.RunAsync`: `-nostdin -hide_banner -nostats -n -progress pipe:1`, input `file:`, output `file:` + `-f`; tiến độ `out_time_us`; timeout thời lượng × 6 + 60 s; lỗi → `MediaException` tiếng Anh ngắn, chi tiết stderr vào log

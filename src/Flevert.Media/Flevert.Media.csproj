@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Fetched by scripts/fetch-deps.ps1, pinned by SHA256 (ADR-0009); never committed. -->
+    <FfmpegBin>$(MSBuildThisFileDirectory)..\..\deps\ffmpeg\bin\</FfmpegBin>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flevert.Core\Flevert.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flevert.Media.Tests" />
+  </ItemGroup>
+
+  <!-- ffmpeg.exe, ffprobe.exe and the DLLs they share go to a folder of their own next to every assembly that references
+       this one (flevert.exe and the tests), so they never mix with Flevert's DLLs (docs/specs/media.md). -->
+  <ItemGroup Condition="Exists('$(FfmpegBin)ffmpeg.exe')">
+    <None Include="$(FfmpegBin)*.exe;$(FfmpegBin)*.dll" Link="ffmpeg\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <!-- Fail early and say how to fix it, rather than build something that fails at run time. -->
+  <Target Name="RequireFfmpeg" BeforeTargets="BeforeBuild" Condition="!Exists('$(FfmpegBin)ffmpeg.exe') Or !Exists('$(FfmpegBin)ffprobe.exe')">
+    <Error Text="deps\ffmpeg\bin\ffmpeg.exe or ffprobe.exe is missing. Run: powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1" />
+  </Target>
+
+</Project>
