@@ -48,7 +48,7 @@ public enum PdfError
     UnsupportedFileName,
 
     /// <summary>Working on the PDF needs more memory than Flevert allows a PDF tool.</summary>
-    TooComplex,
+    NeedsTooMuchMemory,
 
     /// <summary>The PDF has no pages to work on.</summary>
     NoPages,

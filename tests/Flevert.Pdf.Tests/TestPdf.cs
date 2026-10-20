@@ -69,6 +69,42 @@ internal static class TestPdf
         File.WriteAllBytes(path, Encoding.ASCII.GetBytes(body.ToString()));
     }
 
+    /// <summary>
+    /// One page whose content is a single stream of <paramref name="bytes"/> spaces, marked as a JPEG (DCTDecode), as in
+    /// a scan. qpdf 12.4.2 copies such a stream without decoding it and needs about twice its size (300 MB took 602 MB).
+    /// </summary>
+    public static void WriteWithOneStream(string path, long bytes)
+    {
+        using var file = File.Create(path);
+        var offsets = new List<long>();
+        void Write(string text) => file.Write(Encoding.ASCII.GetBytes(text));
+        Write("%PDF-1.4\n");
+        string[] objects =
+        [
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Contents 4 0 R >>",
+        ];
+        for (var i = 0; i < objects.Length; i++)
+        {
+            offsets.Add(file.Position);
+            Write(string.Create(CultureInfo.InvariantCulture, $"{i + 1} 0 obj\n{objects[i]}\nendobj\n"));
+        }
+
+        offsets.Add(file.Position);
+        Write(string.Create(CultureInfo.InvariantCulture, $"4 0 obj\n<< /Filter /DCTDecode /Length {bytes} >>\nstream\n"));
+        var chunk = new byte[1 << 20];
+        Array.Fill(chunk, (byte)' ');
+        for (var left = bytes; left > 0; left -= chunk.Length)
+            file.Write(chunk, 0, (int)Math.Min(left, chunk.Length));
+        Write("\nendstream\nendobj\n");
+        var xref = file.Position;
+        Write("xref\n0 5\n0000000000 65535 f \n");
+        foreach (var offset in offsets)
+            Write(string.Create(CultureInfo.InvariantCulture, $"{offset:D10} 00000 n \n"));
+        Write(string.Create(CultureInfo.InvariantCulture, $"trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"));
+    }
+
     /// <summary>The pixel at (x, y) as (red, green, blue, alpha).</summary>
     public static (byte R, byte G, byte B, byte A) Pixel(PdfBitmap bitmap, int x, int y)
     {

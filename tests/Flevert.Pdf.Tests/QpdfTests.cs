@@ -131,13 +131,13 @@ public sealed class QpdfTests : IDisposable
         // The job's message is best effort, and an outer job or a machine out of memory sends none at all.
         var error = Qpdf.Untrustworthy(Result(exitCode, stderr), 1UL << 30);
 
-        Assert.Equal(PdfError.TooComplex, error?.Error);
+        Assert.Equal(PdfError.NeedsTooMuchMemory, error?.Error);
     }
 
     [Fact]
     public void The_jobs_message_alone_fails_the_run()
     {
-        Assert.Equal(PdfError.TooComplex, Qpdf.Untrustworthy(Result(0, "", overLimit: true), 1UL << 30)?.Error);
+        Assert.Equal(PdfError.NeedsTooMuchMemory, Qpdf.Untrustworthy(Result(0, "", overLimit: true), 1UL << 30)?.Error);
     }
 
     [Fact]
@@ -159,12 +159,32 @@ public sealed class QpdfTests : IDisposable
         Assert.Null(Qpdf.Untrustworthy(Result(exitCode, stderr), 1UL << 30));
     }
 
-    [Fact]
-    public void Qpdf_may_use_one_gigabyte_of_memory()
+    [Theory]
+    // At least 1 GB: 500 000 small pages (a 50 MB file) took 830 MB.
+    [InlineData(0L, 1024L)]
+    [InlineData(300L << 20, 1024L)]
+    // 256 MB plus 2.5 times the file: one stream takes about twice its size (300 MB took 602 MB).
+    [InlineData(600L << 20, 256 + 1500L)]
+    [InlineData(1L << 30, 256 + 2560L)]
+    // At most 3 GB, even for the largest PDF accepted (2 GB).
+    [InlineData(2L << 30, 3072L)]
+    public void The_memory_qpdf_may_use_grows_with_the_input(long inputBytes, long megabytes)
     {
-        // ADR-0008: 500 000 pages took qpdf 830 MB; four at once (MaxParallel) stay within 4 GB.
-        Assert.Equal(1UL << 30, Qpdf.DefaultMaxMemoryBytes);
-        Assert.Equal(Qpdf.DefaultMaxMemoryBytes, Qpdf.NextToApp.MaxMemoryBytes);
+        Assert.Equal((ulong)megabytes << 20, Qpdf.MaxMemoryFor(inputBytes));
+    }
+
+    [Fact]
+    public async Task A_pdf_with_one_stream_too_large_for_one_gigabyte_rotates()
+    {
+        // Review DD-2: one 530 MB image stream needs about 1 060 MB, past a flat 1 GB cap; scaled with the input it fits.
+        // Writes about 1 GB to %TEMP% and takes a few seconds.
+        var input = _dir.Combine("scan.pdf");
+        TestPdf.WriteWithOneStream(input, 530L << 20);
+
+        var output = await new PdfRotate(90, Qpdf.NextToApp).RunAsync(input, CancellationToken.None);
+
+        Assert.True(new FileInfo(output).Length > 530L << 20, "the stream did not reach the output");
+        File.Delete(output);
     }
 
     [Fact]
@@ -184,8 +204,8 @@ public sealed class QpdfTests : IDisposable
         var limited = new PdfRotate(90, new Qpdf(Qpdf.NextToApp.ExePath) { MaxMemoryBytes = limit });
         var ex = await Assert.ThrowsAsync<PdfException>(() => limited.RunAsync(input, CancellationToken.None));
 
-        Assert.Equal(PdfError.TooComplex, ex.Error);
-        Assert.StartsWith("This PDF is too complex", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(PdfError.NeedsTooMuchMemory, ex.Error);
+        Assert.Equal("This PDF needs more memory than Flevert allows for it (64 MB): it is too large or too complex to process.", ex.Message);
         Assert.Equal(["in.pdf"], TestPdf.FileNames(_dir.Path));
         // Control: within the default limit the same PDF rotates.
         var output = await new PdfRotate(90, Qpdf.NextToApp).RunAsync(input, CancellationToken.None);

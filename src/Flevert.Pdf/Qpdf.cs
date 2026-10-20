@@ -57,14 +57,25 @@ public sealed class Qpdf
     /// <summary>Inputs larger than this are refused before qpdf reads them (docs/specs/pdf.md: 2 GB).</summary>
     internal long MaxInputBytes { get; init; } = PdfDocument.MaxFileBytes;
 
-    /// <summary>
-    /// The memory one qpdf may commit (ADR-0008). qpdf holds a PDF's object structure in memory (500 000 pages took 830 MB)
-    /// and a stream it rewrites (a 400 MB stream took 403 MB); a PDF needing more is refused as too complex, and four at
-    /// once (<see cref="PdfRotate.MaxParallel"/>) stay within 4 GB.
-    /// </summary>
-    public const ulong DefaultMaxMemoryBytes = 1UL << 30;
+    private const ulong MinMemoryBytes = 1UL << 30;
+    private const ulong MaxMemoryCeilingBytes = 3UL << 30;
+    private const ulong BaseMemoryBytes = 256UL << 20;
 
-    internal ulong MaxMemoryBytes { get; init; } = DefaultMaxMemoryBytes;
+    /// <summary>
+    /// The memory one qpdf may commit for an input of <paramref name="inputBytes"/> (ADR-0008): 256 MB plus 2.5 times the
+    /// file, at least 1 GB and at most 3 GB. Measured with 12.4.2: qpdf holds the object structure (500 000 small pages,
+    /// a 50 MB file, took 830 MB) and a stream it copies about twice over (300 MB took 602 MB, 520 MB took 1 043 MB); a
+    /// stream it re-encodes about once (300 MB took 303 MB). A PDF needing more is refused.
+    /// </summary>
+    public static ulong MaxMemoryFor(long inputBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(inputBytes);
+        var scaled = BaseMemoryBytes + (ulong)inputBytes * 5 / 2;
+        return Math.Clamp(scaled, MinMemoryBytes, MaxMemoryCeilingBytes);
+    }
+
+    /// <summary>A fixed limit instead of <see cref="MaxMemoryFor"/>, for tests.</summary>
+    internal ulong? MaxMemoryBytes { get; init; }
 
     /// <summary>
     /// Two minutes, plus a second per megabyte of input. qpdf rewrites tens of megabytes a second (a 30 MB PDF of 300 000
@@ -86,8 +97,8 @@ public sealed class Qpdf
     /// <param name="outputPath">Fully qualified, like <paramref name="inputPath"/>; usually the temporary path from <see cref="OutputPath.WriteAtomicallyAsync"/>.</param>
     /// <exception cref="PdfException">
     /// The input needs a password, is not a PDF or is damaged beyond repair, is too large, or needs more memory than
-    /// <see cref="DefaultMaxMemoryBytes"/> (<see cref="PdfError.TooComplex"/>, whatever qpdf's exit code); or a path has a
-    /// character qpdf cannot be given (<see cref="PdfError.UnsupportedFileName"/>).
+    /// <see cref="MaxMemoryFor"/> allows (<see cref="PdfError.NeedsTooMuchMemory"/>, whatever qpdf's exit code); or a path
+    /// has a character qpdf cannot be given (<see cref="PdfError.UnsupportedFileName"/>).
     /// </exception>
     /// <exception cref="IOException">qpdf could not write <paramref name="outputPath"/>.</exception>
     /// <exception cref="FileNotFoundException">qpdf.exe is missing.</exception>
@@ -110,7 +121,8 @@ public sealed class Qpdf
         if (length > MaxInputBytes)
             throw PdfDocument.TooLargeError(MaxInputBytes);
 
-        var run = await RunWithPathsAsync(commandLine, [inputPath, outputPath], TimeoutFor(length), ct).ConfigureAwait(false);
+        var maxMemory = MaxMemoryBytes ?? MaxMemoryFor(length);
+        var run = await RunWithPathsAsync(commandLine, [inputPath, outputPath], TimeoutFor(length), maxMemory, ct).ConfigureAwait(false);
         if (run.ExitCode is 0 or ExitWarnings)
         {
             if (!File.Exists(outputPath))
@@ -121,7 +133,7 @@ public sealed class Qpdf
         var detail = Detail(run);
         if (run.ExitCode != ExitError)
             throw new QpdfException(run.ExitCode, detail);
-        if (await RequiresPasswordAsync(inputPath, ct).ConfigureAwait(false))
+        if (await RequiresPasswordAsync(inputPath, maxMemory, ct).ConfigureAwait(false))
             throw new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage);
         // qpdf names the file it failed on, as it was given; the output's name is a fresh temporary one no input contains.
         if (run.StandardError.Contains(ToExtendedPath(outputPath), StringComparison.OrdinalIgnoreCase))
@@ -131,13 +143,14 @@ public sealed class Qpdf
 
     // Asked only after a failure, so a PDF that opens costs no second process. qpdf documents these exit codes, while
     // its error text ("invalid password") may change between versions.
-    private async Task<bool> RequiresPasswordAsync(string inputPath, CancellationToken ct)
+    private async Task<bool> RequiresPasswordAsync(string inputPath, ulong maxMemory, CancellationToken ct)
     {
-        var probe = await RunWithPathsAsync(["--requires-password"], [inputPath], ProbeTimeout, ct).ConfigureAwait(false);
+        var probe = await RunWithPathsAsync(["--requires-password"], [inputPath], ProbeTimeout, maxMemory, ct).ConfigureAwait(false);
         return probe.ExitCode == ExitPasswordRequired;
     }
 
-    private async Task<ExternalToolResult> RunWithPathsAsync(string[] options, string[] paths, TimeSpan timeout, CancellationToken ct)
+    private async Task<ExternalToolResult> RunWithPathsAsync(
+        string[] options, string[] paths, TimeSpan timeout, ulong maxMemory, CancellationToken ct)
     {
         byte[] lines;
         try
@@ -150,10 +163,10 @@ public sealed class Qpdf
         }
 
         // qpdf starts no process of its own, so it may not start one.
-        var limits = new ExternalToolLimits { MaxMemoryBytes = MaxMemoryBytes, SingleProcess = true };
+        var limits = new ExternalToolLimits { MaxMemoryBytes = maxMemory, SingleProcess = true };
         var run = await ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, limits: limits,
             environment: ToolEnvironment, cancellationToken: ct).ConfigureAwait(false);
-        if (Untrustworthy(run, MaxMemoryBytes) is { } error)
+        if (Untrustworthy(run, maxMemory) is { } error)
             throw error;
         return run;
     }
@@ -175,7 +188,7 @@ public sealed class Qpdf
             || run.StandardError.Contains(": bad allocation", StringComparison.OrdinalIgnoreCase)
             || run.StandardError.Contains(": std::bad_alloc", StringComparison.OrdinalIgnoreCase);
         if (refused)
-            return new PdfException(PdfError.TooComplex, TooComplexMessage(maxMemoryBytes), new QpdfException(run.ExitCode, Detail(run)));
+            return new PdfException(PdfError.NeedsTooMuchMemory, NeedsTooMuchMemoryMessage(maxMemoryBytes), new QpdfException(run.ExitCode, Detail(run)));
         if (run.StandardErrorTruncated && run.ExitCode is 0 or ExitWarnings)
         {
             return new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage,
@@ -185,8 +198,14 @@ public sealed class Qpdf
         return null;
     }
 
-    private static string TooComplexMessage(ulong maxMemoryBytes) =>
-        $"This PDF is too complex: working on it needs more than {PdfDocument.DescribeBytes(checked((long)maxMemoryBytes))} of memory, the most Flevert allows.";
+    // The limit grows with the file, so the message names the one this file had: "1.6 GB", or "64 MB" under 1 GB.
+    private static string NeedsTooMuchMemoryMessage(ulong maxMemoryBytes)
+    {
+        var limit = maxMemoryBytes >= 1UL << 30
+            ? string.Create(CultureInfo.InvariantCulture, $"{maxMemoryBytes / (double)(1UL << 30):0.#} GB")
+            : string.Create(CultureInfo.InvariantCulture, $"{maxMemoryBytes >> 20} MB");
+        return $"This PDF needs more memory than Flevert allows for it ({limit}): it is too large or too complex to process.";
+    }
 
     /// <summary>
     /// The <c>\\?\</c> form of a fully qualified path, which qpdf opens at any length; without it qpdf cannot open a path
