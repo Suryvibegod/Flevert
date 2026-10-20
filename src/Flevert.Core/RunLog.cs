@@ -4,7 +4,8 @@ using System.Text;
 namespace Flevert.Core;
 
 /// <summary>
-/// Tab-separated, one line per processed file: time, pid, op-id, input, status, ms, output or error.
+/// Tab-separated, one line per processed file: time, pid, op-id, input, status, ms, output or error, and the output's
+/// note when the operation made one (<see cref="OutputNote"/>).
 /// Logging is best effort: it never throws, because a log failure must not stop or lose a batch.
 /// </summary>
 public sealed class RunLog(string directory)
@@ -30,6 +31,9 @@ public sealed class RunLog(string directory)
             result.Succeeded ? "ok" : result.Skipped ? "skipped" : "failed",
             ((long)elapsed.TotalMilliseconds).ToString(CultureInfo.InvariantCulture),
             OneLine((result.Succeeded ? result.Output : result.Error) ?? ""));
+        // An eighth column only when the operation noted something about the output (OutputNote).
+        if (result.Succeeded && result.Note is { } note)
+            line += '\t' + OneLine(note);
 
         BestEffort(() =>
         {

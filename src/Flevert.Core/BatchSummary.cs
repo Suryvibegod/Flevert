@@ -67,14 +67,21 @@ public sealed record BatchSummary(string Text, bool HasFailures, bool ShowsLog)
             return new($"Failed: {counts}. Details: {logDirectory}", true, true);
         }
 
-        var text = $"Done: {CountOfFiles(succeeded)}" + (skipped > 0 ? $", {skipped} skipped" : "");
+        // A note about an output (OutputNote) is read with it: in full for one output, counted for several (each is in the
+        // log line of its file).
+        var noted = results.Count(r => r.Succeeded && r.Note is not null);
+        var text = $"Done: {CountOfFiles(succeeded)}" + (noted > 0 ? $", {noted} with a note" : "") + (skipped > 0 ? $", {skipped} skipped" : "");
         if (failed > 0)
             // The balloon may be gone before the user reads it, so name the place rather than relying on a click.
             return new($"{text}, {failed} failed. Details: {logDirectory}", true, true);
 
-        return results.Count == 1
-            ? new($"Done: {Path.GetFileName(results[0].Output)}", false, false)
-            : new(text, false, false);
+        if (results.Count == 1)
+        {
+            var done = $"Done: {Path.GetFileName(results[0].Output)}";
+            return new(results[0].Note is { } note ? $"{done}. {Reason(note)}" : done, false, false);
+        }
+
+        return noted > 0 ? new($"{text}. Details: {logDirectory}", false, true) : new(text, false, false);
     }
 
     private static string CountOfFiles(int n) => n == 1 ? "1 file" : $"{n} files";

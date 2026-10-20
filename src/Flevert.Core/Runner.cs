@@ -10,6 +10,9 @@ public sealed record FileResult(string Input, string? Output, string? Error, boo
     public bool Succeeded => Error is null && !Skipped;
 
     public bool Failed => Error is not null && !Skipped;
+
+    /// <summary>What the operation noted about the output (<see cref="OutputNote"/>), or <c>null</c>.</summary>
+    public string? Note { get; init; }
 }
 
 /// <param name="Current">The file just started, or the file <paramref name="Within"/> is about; <c>null</c> when a file finished.</param>
@@ -183,6 +186,7 @@ public sealed class Runner(RunLog log)
         IBatchOperation operation, List<(string Given, string Real)> inputs, IProgress<BatchProgress>? progress, Stopwatch timer,
         CancellationToken ct)
     {
+        var notes = OutputNote.Begin();
         var first = inputs[0].Given;
         var finished = false;
         var gate = new Lock();
@@ -201,7 +205,7 @@ public sealed class Runner(RunLog log)
         try
         {
             running = operation.RunAsync([.. inputs.Select(i => i.Real)], within, ct);
-            result = new FileResult(first, await running.WaitAsync(ct).ConfigureAwait(false), null);
+            result = new FileResult(first, await running.WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -216,7 +220,7 @@ public sealed class Runner(RunLog log)
             }
 
             // It had already written its output when it stopped: the file exists, so report and log it like any other.
-            result = new FileResult(first, running.Result, null);
+            result = new FileResult(first, running.Result, null) { Note = notes.Text };
         }
         catch (OperationSkippedException ex)
         {
@@ -372,6 +376,7 @@ public sealed class Runner(RunLog log)
     private async Task<FileResult?> RunOneAsync(IOperation operation, string file, IProgress<FileProgress>? within, CancellationToken ct)
     {
         var timer = Stopwatch.StartNew();
+        var notes = OutputNote.Begin(); // this file's own, also when files run in parallel
         SafeFileHandle? pin = null;
         FileResult result;
         try
@@ -381,7 +386,7 @@ public sealed class Runner(RunLog log)
             // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned.
             result = reason is not null
                 ? new FileResult(file, null, reason)
-                : new FileResult(file, await operation.RunAsync(realPath, within, ct).WaitAsync(ct).ConfigureAwait(false), null);
+                : new FileResult(file, await operation.RunAsync(realPath, within, ct).WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
