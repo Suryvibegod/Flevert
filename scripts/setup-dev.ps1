@@ -163,7 +163,7 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 & dotnet build Flevert.sln -c Debug
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 # One project at a time, as on CI: run together, the image encodes starve the process-batching tests of CPU.
-foreach ($project in 'tests\Flevert.Core.Tests', 'tests\Flevert.Image.Tests', 'tests\Flevert.Pdf.Tests') {
+foreach ($project in 'tests\Flevert.Core.Tests', 'tests\Flevert.Image.Tests', 'tests\Flevert.Pdf.Tests', 'tests\Flevert.Media.Tests') {
     & dotnet test $project --no-build
     if ($LASTEXITCODE -ne 0) { throw "Tests failed in $project." }
 }

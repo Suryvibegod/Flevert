@@ -20,7 +20,7 @@ Open an issue describing what you want to do with your files, not just the butto
 
 You need Windows 10 or 11 and the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). For the installer, also [Inno Setup](https://jrsoftware.org/isinfo.php) 6.7.3 or later (free; `winget install JRSoftware.InnoSetup --scope user`).
 
-The PDF module needs pdfium and qpdf, which are downloaded (pinned by SHA256) into `deps/` rather than committed; the build stops with a message if they are missing.
+The PDF and media modules need pdfium, qpdf and ffmpeg, which are downloaded (pinned by SHA256) into `deps/` rather than committed; the build stops with a message if they are missing.
 
 ```
 powershell -ExecutionPolicy Bypass -File scripts/fetch-deps.ps1
@@ -28,6 +28,7 @@ dotnet build Flevert.sln
 dotnet test tests/Flevert.Core.Tests
 dotnet test tests/Flevert.Image.Tests
 dotnet test tests/Flevert.Pdf.Tests
+dotnet test tests/Flevert.Media.Tests
 dotnet format Flevert.sln --verify-no-changes
 powershell -File scripts/build-installer.ps1
 ```

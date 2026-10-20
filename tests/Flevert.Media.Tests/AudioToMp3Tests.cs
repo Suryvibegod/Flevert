@@ -57,6 +57,23 @@ public sealed class AudioToMp3Tests : IDisposable
     }
 
     [Fact]
+    public async Task A_file_deep_in_folders_past_260_characters_converts()
+    {
+        // ffmpeg turns a long Windows path into the \\?\ form itself (libavutil's win32_open); the temporary output beside
+        // the input is longer still.
+        var folder = Path.Combine(_dir.Path, new string('a', 100), new string('b', 100), new string('c', 60));
+        Directory.CreateDirectory(folder);
+        var input = Path.Combine(folder, "tone.wav");
+        File.Copy(await Fixtures.WavAsync(), input);
+        Assert.True(input.Length > 260, $"{input.Length} characters");
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.Equal(Path.Combine(folder, "tone.mp3"), output);
+        Assert.Equal("mp3", (await TestFfmpeg.Instance.ProbeAsync(output, CancellationToken.None)).MainAudio!.Codec);
+    }
+
+    [Fact]
     public async Task Reports_how_much_of_the_file_is_done_as_a_rising_percentage_that_ends_at_100()
     {
         var input = await Fixtures.CopyAsync(Fixtures.WavAsync(), _dir, "tone.wav");

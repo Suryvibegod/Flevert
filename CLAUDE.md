@@ -18,7 +18,7 @@ Continue the project without asking questions:
 
 Since 2026-10-20 the user wants the work built first and verified at the end, not reviewed task by task. The skills come from the plugin `agent-skills@addy-agent-skills`. If they are not loaded in this session (a plugin installed during a session only loads after a restart or `/reload-plugins`), read the skill files directly from the plugin cache, e.g. `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/<skill>/SKILL.md`, and follow them.
 
-- **Per task (keep it light):** spec/plan as needed → thin vertical slices with their tests (test first where it is cheap) → build, format and the three test projects green before each commit → short notes in the todo. No per-task review agents, no re-review rounds, no per-task runtime checks.
+- **Per task (keep it light):** spec/plan as needed → thin vertical slices with their tests (test first where it is cheap) → build, format and every test project green before each commit → short notes in the todo. No per-task review agents, no re-review rounds, no per-task runtime checks.
 - **Once, before a release:** run the app for real (MenuProbe, real `flevert.exe`, installer tests), then three fresh-context, read-only reviews (code-reviewer, security-auditor, doubt-driven) of everything since the last release, reconcile every finding, fix, and re-check the fixes with one combined reviewer until no Critical/High/Required remain → docs/ADRs → ship.
 - Keep at most two or three agents running at once: more starves the timing-sensitive tests and trips Smart App Control. Details are in `tasks/HANDOFF.md`.
 
@@ -30,7 +30,7 @@ Since 2026-10-20 the user wants the work built first and verified at the end, no
   - Flevert opens files from strangers: check that the source is maintained and has no unfixed security advisories, and review copied code like our own.
 - UI, README, commit messages: English. Specs and plans: Vietnamese.
 - One logical change per commit; the message explains why. Commit identity is set by the setup script on the maintainer's machines; never commit with a personal email address.
-- Run the two test projects one after the other, not `dotnet test Flevert.sln`: run together, the image encodes starve the process-batching tests of CPU (CI runs them one at a time too).
+- Run the test projects one after the other, not `dotnet test Flevert.sln`: run together, the image encodes starve the process-batching tests of CPU (CI runs them one at a time too).
 - Check `dotnet format Flevert.sln --verify-no-changes` by its exit code before committing (never through a pipe that hides it).
 - Never commit binaries (ffmpeg, qpdf, pdfium); they are fetched by scripts into `deps/`.
 - After trying the context menu on a real machine, run `flevert.exe uninstall-menu`.
@@ -43,6 +43,7 @@ dotnet build Flevert.sln
 dotnet test tests/Flevert.Core.Tests
 dotnet test tests/Flevert.Image.Tests
 dotnet test tests/Flevert.Pdf.Tests
+dotnet test tests/Flevert.Media.Tests
 dotnet format Flevert.sln --verify-no-changes
 dotnet publish src/Flevert.Cli -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o artifacts/publish
 powershell -File scripts/measure-startup.ps1
