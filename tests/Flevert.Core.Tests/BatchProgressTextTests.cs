@@ -41,6 +41,20 @@ public sealed class BatchProgressTextTests
     }
 
     [Fact]
+    public void Work_without_countable_parts_is_shown_as_a_percentage_and_moves_the_bar_by_it()
+    {
+        // A video encodes as one long stream (docs/specs/media.md): "37%", not "% 37 of 100".
+        var progress = new BatchProgress(1, 20, @"C:\x\clip.mov", FileProgress.Percent(37));
+
+        Assert.Equal("37%", BatchProgressText.DescribeWithin(progress));
+        Assert.Equal((1_370, 20_000), BatchProgressText.Bar(progress));
+        Assert.Equal((0, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, @"C:\x\clip.mov", FileProgress.Percent(0))));
+        Assert.Equal((1_000, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, @"C:\x\clip.mov", FileProgress.Percent(100))));
+        Assert.Equal("0%", BatchProgressText.DescribeWithin(new BatchProgress(0, 1, null, FileProgress.Percent(-5))));
+        Assert.Equal("100%", BatchProgressText.DescribeWithin(new BatchProgress(0, 1, null, FileProgress.Percent(140))));
+    }
+
+    [Fact]
     public void Has_no_line_inside_the_file_when_the_operation_reports_none()
     {
         Assert.Null(BatchProgressText.DescribeWithin(new BatchProgress(2, 10, @"C:\x\p7.heic")));
