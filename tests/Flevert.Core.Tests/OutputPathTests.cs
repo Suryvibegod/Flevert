@@ -580,7 +580,31 @@ public sealed class OutputPathTests : IDisposable
             Assert.False(File.GetAttributes(page).HasFlag(FileAttributes.NotContentIndexed), page));
     }
 
-    // Guard for the test above: a folder the user excluded from indexing keeps its children excluded.
+    // Hiding and readying the folder replace its attributes through FileBasicInfo. OneDrive's "Always keep on this device"
+    // (FILE_ATTRIBUTE_PINNED) is an attribute set the same way: a page or folder created in a pinned OneDrive folder carries
+    // it, and dropping it would let OneDrive free the output's space. Only the bits being changed may change.
+    [SkippableFact]
+    public async Task WriteDirectoryAtomically_keeps_attributes_it_does_not_change_such_as_onedrive_pinning()
+    {
+        const FileAttributes pinned = (FileAttributes)0x80000;
+        string? page = null;
+
+        var final = await OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
+        {
+            await WritePages(1)(temp, ct);
+            File.SetAttributes(temp, File.GetAttributes(temp) | pinned);
+            page = Path.Combine(temp, "1.txt");
+            File.SetAttributes(page, File.GetAttributes(page) | pinned | FileAttributes.NotContentIndexed);
+            Skip.IfNot(File.GetAttributes(temp).HasFlag(pinned), "this volume does not keep FILE_ATTRIBUTE_PINNED");
+        }, CancellationToken.None);
+
+        Assert.True(File.GetAttributes(final).HasFlag(pinned), $"{File.GetAttributes(final)}");
+        var after = File.GetAttributes(Path.Combine(final, "1.txt"));
+        Assert.True(after.HasFlag(pinned), $"{after}");
+        Assert.False(after.HasFlag(FileAttributes.NotContentIndexed), $"{after}");
+    }
+
+    // Guard for the hiding test: a folder the user excluded from indexing keeps its children excluded.
     [Fact]
     public async Task WriteDirectoryAtomically_keeps_the_result_out_of_indexing_when_the_folder_beside_it_is()
     {

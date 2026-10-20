@@ -61,8 +61,11 @@ internal sealed partial class PartialFolder : IDisposable
     private const uint FileAttributeReadOnly = 0x1;
     private const uint FileAttributeNormal = 0x80;
     private const uint FileAttributeNotContentIndexed = 0x2000;
-    // FILE_ATTRIBUTE_VALID_SET_FLAGS: read-only, hidden, system, archive, normal, temporary, offline, not content indexed.
-    private const uint ValidSetAttributes = 0x31A7;
+    // What FileBasicInfo replaces: FILE_ATTRIBUTE_VALID_SET_FLAGS (read-only, hidden, system, archive, normal, temporary,
+    // offline, not content indexed) plus OneDrive's PINNED (0x80000) and UNPINNED (0x100000), which `attrib +P/+U` sets the
+    // same way. Every bit read back is sent back unless it is the one being changed, so pinning survives (probed: leaving
+    // PINNED out of the mask cleared "Always keep on this device" on the folder and its pages).
+    private const uint ValidSetAttributes = 0x31A7 | 0x80000 | 0x100000;
 
     private const int ErrorInvalidFunction = 1;
     private const int ErrorNotSupported = 50;
