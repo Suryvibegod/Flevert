@@ -12,7 +12,9 @@ public sealed record FileResult(string Input, string? Output, string? Error, boo
     public bool Failed => Error is not null && !Skipped;
 }
 
-public sealed record BatchProgress(int Completed, int Total, string? Current);
+/// <param name="Current">The file just started, or the file <paramref name="Within"/> is about; <c>null</c> when a file finished.</param>
+/// <param name="Within">How far <paramref name="Current"/> is inside, when its operation reports it ("page 37 of 200").</param>
+public sealed record BatchProgress(int Completed, int Total, string? Current, FileProgress? Within = null);
 
 /// <param name="Results">Finished files, in the order they finished (files may run in parallel). A file interrupted by
 /// cancellation is not included; one that was already writing its output when cancelled may still have produced it.</param>
@@ -61,11 +63,23 @@ public sealed class Runner(RunLog log)
         // Results, counts and progress change together under one lock, so the running count only ever moves in order.
         // The total can dip by one for a moment: the queue hands out a file before it is counted as running. The
         // callbacks only record or post the numbers.
+        // A report inside a file goes out under the same lock, so it always falls between the file's start and its end;
+        // one that comes after the end (an operation that reports late) is dropped rather than shown for a finished file.
         async Task RunAndRecordAsync(string file)
         {
-            var result = await RunOneAsync(operation, file, ct).ConfigureAwait(false);
+            var finished = false;
+            var within = progress is null ? null : new FileProgressRelay(p =>
+            {
+                lock (gate)
+                {
+                    if (!finished)
+                        progress.Report(new BatchProgress(results.Count, results.Count + runningCount + pending(), file, p));
+                }
+            });
+            var result = await RunOneAsync(operation, file, within, ct).ConfigureAwait(false);
             lock (gate)
             {
+                finished = true;
                 if (result is null)
                     interrupted++;
                 else
@@ -114,7 +128,7 @@ public sealed class Runner(RunLog log)
     }
 
     /// <returns>The result, or <c>null</c> when cancellation interrupted this file.</returns>
-    private async Task<FileResult?> RunOneAsync(IOperation operation, string file, CancellationToken ct)
+    private async Task<FileResult?> RunOneAsync(IOperation operation, string file, IProgress<FileProgress>? within, CancellationToken ct)
     {
         var timer = Stopwatch.StartNew();
         SafeFileHandle? pin = null;
@@ -126,7 +140,7 @@ public sealed class Runner(RunLog log)
             // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned.
             result = reason is not null
                 ? new FileResult(file, null, reason)
-                : new FileResult(file, await operation.RunAsync(realPath, ct).WaitAsync(ct).ConfigureAwait(false), null);
+                : new FileResult(file, await operation.RunAsync(realPath, within, ct).WaitAsync(ct).ConfigureAwait(false), null);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -217,5 +231,10 @@ public sealed class Runner(RunLog log)
     {
         pin = InputPin.TryPin(file, out var reason, out realPath);
         return reason;
+    }
+
+    private sealed class FileProgressRelay(Action<FileProgress> report) : IProgress<FileProgress>
+    {
+        public void Report(FileProgress value) => report(value);
     }
 }

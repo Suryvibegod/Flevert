@@ -32,7 +32,7 @@ internal static class Program
         var invocationDirectory = Environment.CurrentDirectory;
         _running = AppMutex.TryHold();
         SafeStartup.Apply();
-        var catalog = new OperationCatalog([.. ImageOperations.All, new DevCopy(), new DevSlowCopy()]);
+        var catalog = new OperationCatalog([.. ImageOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);

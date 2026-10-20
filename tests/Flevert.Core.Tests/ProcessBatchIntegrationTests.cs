@@ -16,6 +16,9 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     // How long dev.slow-copy takes per file (FLEVERT_SLOW_COPY_MS; 1 s by default).
     private string? _slowCopyMs;
 
+    // How long dev.split takes per page (FLEVERT_DEV_PAGE_MS; 100 ms by default).
+    private string? _devPageMs;
+
     public void Dispose()
     {
         _dir.Dispose();
@@ -399,6 +402,22 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     private static extern uint GetShortPathNameW(string longPath, [System.Runtime.InteropServices.Out] char[] shortPath, uint length);
 
     [Fact]
+    public async Task Dev_split_writes_a_whole_folder_of_pages_and_a_second_run_gets_its_own_folder()
+    {
+        _devPageMs = "0";
+        var file = _dir.File("Báo cáo 1.txt");
+
+        await ExitAllOk([StartFlevert("dev.split", file)]);
+        await ExitAllOk([StartFlevert("dev.split", file)]);
+
+        Assert.Equal(["Báo cáo 1 (pages)", "Báo cáo 1 (pages) (1)", "Báo cáo 1.txt"],
+            Directory.GetFileSystemEntries(_dir.Path).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Assert.Equal(50, Directory.GetFiles(_dir.Combine("Báo cáo 1 (pages)")).Length);
+        Assert.Equal(50, Directory.GetFiles(_dir.Combine("Báo cáo 1 (pages) (1)")).Length);
+        Assert.Equal("Page 50 of 50", (await File.ReadAllTextAsync(_dir.Combine(@"Báo cáo 1 (pages)\Báo cáo 1 50.txt"))).TrimEnd());
+    }
+
+    [Fact]
     public async Task Relative_paths_resolve_against_the_directory_flevert_was_started_in()
     {
         _dir.File("relative.txt");
@@ -423,6 +442,8 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
             start.Environment["FLEVERT_BATCH_IDLE_MS"] = _idleWindowMs;
         if (_slowCopyMs is not null)
             start.Environment["FLEVERT_SLOW_COPY_MS"] = _slowCopyMs;
+        if (_devPageMs is not null)
+            start.Environment["FLEVERT_DEV_PAGE_MS"] = _devPageMs;
         return Process.Start(start)!;
     }
 

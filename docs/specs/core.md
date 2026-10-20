@@ -12,7 +12,7 @@ Cho phép người dùng Windows chuột phải vào file, chọn một thao tá
 - Nhận lệnh từ Explorer, gom nhiều file được chọn cùng lúc thành **một lô** xử lý bởi **một tiến trình**.
 - Đặt tên file output không bao giờ đè file có sẵn, không bao giờ sửa file gốc.
 - Báo kết quả bằng một thông báo góc màn hình cho cả lô.
-- Lô chạy lâu hơn 2 giây thì hiện cửa sổ tiến độ nhỏ (file thứ mấy / tổng, nút Cancel). Nén video mất vài phút; chạy im lặng thì người dùng tưởng treo. Cancel dừng **ngay** file đang chạy (bỏ file dở) và không xử lý các file còn lại.
+- Lô chạy lâu hơn 2 giây thì hiện cửa sổ tiến độ nhỏ (số file xong / tổng, nút Cancel; thao tác báo được tiến độ trong một file thì thêm dòng thứ hai, ví dụ `page 37 of 200`). Nén video mất vài phút; chạy im lặng thì người dùng tưởng treo. Cancel dừng **ngay** file đang chạy (bỏ file dở) và không xử lý các file còn lại.
 - Ghi log lỗi để người dùng gửi lại khi báo bug.
 - Định nghĩa hợp đồng `IOperation` để các module khác cắm thao tác vào.
 - Báo khi GitHub có bản phát hành mới hơn và mời người dùng cập nhật (xem "Báo bản mới").
@@ -53,7 +53,8 @@ Lệnh của `flevert.exe`:
 ```
 flevert.exe run <op-id> <file>...        Chạy thao tác (Explorer gọi lệnh này)
 flevert.exe install-menu [--dev] [--allow-insecure-location]
-                                    Ghi menu chuột phải vào HKCU (--dev: thêm thao tác thử dev.copy;
+                                    Ghi menu chuột phải vào HKCU (--dev: thêm các thao tác thử dev.*:
+                                    Copy, Slow copy, Split into pages;
                                     --allow-insecure-location: cho phép thư mục người khác sửa được, đi qua junction,
                                     chứa link, nằm trên ổ subst/ổ mạng/UNC; mặc định thư mục cài phải ở ổ cố định
                                     cục bộ có ACL (NTFS, không FAT/exFAT) và đường dẫn thật trùng đường dẫn đưa vào.
@@ -62,7 +63,7 @@ flevert.exe install-menu [--dev] [--allow-insecure-location]
 flevert.exe uninstall-menu               Gỡ mọi key đã ghi
 flevert.exe list-ops                     In danh sách thao tác và loại file áp dụng
 
-Biến môi trường: FLEVERT_HEADLESS=1 (chạy lô không UI), FLEVERT_LOG_DIR (đổi thư mục log), FLEVERT_BATCH_IDLE_MS (cửa sổ rảnh của lô, 100–10 000 ms; chỉ cho test tích hợp trên máy bận), FLEVERT_SLOW_COPY_MS (thời gian của thao tác dev Slow copy, 0–60 000 ms, mặc định 1 000; chỉ cho test tích hợp), FLEVERT_UPDATE_URL (GitHub giả cho test báo bản mới; chỉ nhận `http://` tới địa chỉ IP loopback)
+Biến môi trường: FLEVERT_HEADLESS=1 (chạy lô không UI), FLEVERT_LOG_DIR (đổi thư mục log), FLEVERT_BATCH_IDLE_MS (cửa sổ rảnh của lô, 100–10 000 ms; chỉ cho test tích hợp trên máy bận), FLEVERT_SLOW_COPY_MS (thời gian của thao tác dev Slow copy, 0–60 000 ms, mặc định 1 000; chỉ cho test tích hợp), FLEVERT_DEV_PAGE_MS (thời gian mỗi trang của thao tác dev Split into pages, 0–10 000 ms, mặc định 100; cho test tích hợp và để xem cửa sổ tiến độ), FLEVERT_UPDATE_URL (GitHub giả cho test báo bản mới; chỉ nhận `http://` tới địa chỉ IP loopback)
 ```
 
 ## Project Structure
@@ -91,9 +92,16 @@ public interface IOperation
     string Id { get; }                         // "image.to-png" — ổn định, dùng trong registry
     string MenuPath { get; }                   // "Convert/PNG" — dấu / tạo menu con
     IReadOnlyCollection<string> Extensions { get; }  // ".jpg", ".heic", ...
-    Task<string> RunAsync(string inputPath, CancellationToken ct);  // trả về đường dẫn output
+    int MaxParallel => 1;                      // xem "Xử lý song song trong một lô"
+    Task<string> RunAsync(string inputPath, CancellationToken ct);  // trả về đường dẫn output (file hoặc thư mục)
+    Task<string> RunAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
+        => RunAsync(inputPath, ct);            // runner gọi overload này; mặc định bỏ qua progress
 }
 ```
+
+**Tiến độ trong một file** ([ADR-0007](../adr/0007-progress-within-a-file-and-folder-outputs.md)): thao tác chạy lâu (render 200 trang) cài overload có `progress` và báo `new FileProgress("page", 37, 200)` (đơn vị là danh từ tiếng Anh số ít; vị trí từ 1 tới tổng, tổng ≥ 1, sai thì ném `ArgumentException`); overload cũ gọi overload mới với `null`. Thao tác không báo tiến độ chỉ cài overload cũ, không đổi gì. Runner chuyển mỗi lần báo thành `BatchProgress` có `Within` và `Current` là file đó, dưới cùng khóa với lúc file bắt đầu/xong, nên dòng trang luôn nằm giữa hai mốc đó; báo sau khi file đã xong thì bỏ. Cửa sổ tiến độ hiện dòng thứ hai `page 37 of 200` (`BatchProgressText.DescribeWithin`), xóa khi một file bắt đầu hoặc xong; thanh tiến độ vẫn đếm file. Tên trợ năng của dòng đó là `Progress in the current file: page 37 of 200` (UI Automation đọc được); không đặt live region để trình đọc màn hình không đọc từng trang một.
+
+Thao tác dev `dev.split` (`Dev > Split into pages`, chỉ có với `install-menu --dev`): ghi 50 file trang vào thư mục `<tên> (pages)`, báo tiến độ mỗi trang, để thử output thư mục, tiến độ trong file và Cancel từ đầu tới cuối.
 
 ### Luồng một lần bấm
 

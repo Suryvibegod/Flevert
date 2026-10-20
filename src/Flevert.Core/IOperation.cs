@@ -17,18 +17,31 @@ public interface IOperation
     /// </summary>
     int MaxParallel => 1;
 
-    /// <summary>Processes one file and returns the path of the file it produced.</summary>
+    /// <summary>Processes one file and returns the path of the file, or folder, it produced.</summary>
     /// <remarks>
     /// Contract for implementations:
     /// <list type="bullet">
-    /// <item>Write only through <see cref="OutputPath.WriteAtomicallyAsync"/>; never write next to the input directly.</item>
+    /// <item>Write only through <see cref="OutputPath.WriteAtomicallyAsync"/>, or <see cref="OutputPath.WriteDirectoryAtomicallyAsync"/>
+    /// for a folder of outputs (return the folder); never write next to the input directly.</item>
     /// <item>Open the input read-only with at least <see cref="FileShare.Read"/>; the runner holds it pinned meanwhile.</item>
     /// <item>Honour <paramref name="ct"/> promptly. An operation that ignores it is abandoned, not awaited.</item>
     /// <item>Do not return or throw while a child process or handle still uses the temporary output, or a
-    /// <c>.partial</c> file may be left behind.</item>
+    /// <c>.partial</c> file or folder may be left behind.</item>
     /// </list>
     /// </remarks>
     Task<string> RunAsync(string inputPath, CancellationToken ct);
+
+    /// <summary>
+    /// What the runner calls. Same contract as <see cref="RunAsync(string, CancellationToken)"/>, and the operation may
+    /// report how far it is inside the file ("page 37 of 200"), which the progress window shows under the batch line.
+    /// </summary>
+    /// <remarks>
+    /// The default ignores <paramref name="progress"/>, so an operation without such progress implements only the other
+    /// overload. One that has it implements this one and makes the other call it with <c>null</c> (never the reverse as
+    /// well, which would recurse). <paramref name="progress"/> may be <c>null</c>; report from any thread, in order, no
+    /// more often than real work is done; reports after the file is finished are ignored. ADR-0007.
+    /// </remarks>
+    Task<string> RunAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct) => RunAsync(inputPath, ct);
 }
 
 /// <summary>

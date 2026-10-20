@@ -59,9 +59,10 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 - Phụ thuộc: T3, T5. Cỡ: S
 
 ### T7: Output thư mục (1→N) và tiến độ trong file
-- [ ] `OutputPath.WriteDirectoryAtomicallyAsync`: thư mục tạm, đổi tên một lần, tên trùng → ` (1)`; hủy → không còn thư mục dở
-- [ ] `IProgress<FileProgress>` cho thao tác; cửa sổ tiến độ hiện "page 37 of 200" (UI Automation đọc được)
+- [x] `OutputPath.WriteDirectoryAtomicallyAsync`: thư mục tạm, đổi tên một lần, tên trùng → ` (1)`; hủy → không còn thư mục dở
+- [x] `IProgress<FileProgress>` cho thao tác; cửa sổ tiến độ hiện "page 37 of 200" (UI Automation đọc được)
 - Kiểm: thao tác dev tạo 50 file chậm, hủy giữa chừng; ảnh chụp cửa sổ tiến độ (chỉ cửa sổ app, báo người dùng trước)
+- Đã làm: `dev.split` (50 trang, `FLEVERT_DEV_PAGE_MS`), ADR-0007. Hủy giữa chừng kiểm bằng test runner (hủy ở trang 10 → không còn `.partial`), không bấm Cancel thật (không gửi phím vào desktop). Chạy thật có UI: PrintWindow chỉ cửa sổ Flevert thấy `0 of 1 done: Báo cáo quý.txt` / `page 24 of 50`; UI Automation đọc `Progress in the current file: page 25 of 50`; xong 50 file, không còn `.partial`. `Directory.Delete(recursive)` không dùng được (junction bên trong → cần admin, để lại thư mục), nên tự duyệt và gỡ link không đi theo
 - Phụ thuộc: T2. Cỡ: M
 
 ### T8: `pdf.split`

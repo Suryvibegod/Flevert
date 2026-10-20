@@ -6,6 +6,9 @@ internal sealed class ProgressForm : Form
 {
     // File names are shown as they are: with mnemonics on, "R&D.jpg" would read "RD.jpg" with an underlined D.
     private readonly Label _status = new() { AutoSize = false, Dock = DockStyle.Top, Height = 40, AutoEllipsis = true, UseMnemonic = false };
+    // "page 37 of 200" for the file named above, when its operation reports it; always there, empty otherwise, so the
+    // window does not jump. Not a live region: a screen reader announcing 200 pages would drown out everything else.
+    private readonly Label _detail = new() { AutoSize = false, Dock = DockStyle.Top, Height = 22, AutoEllipsis = true, UseMnemonic = false };
     // Named for screen readers, which otherwise announce only "progress bar".
     private readonly ProgressBar _bar = new() { Dock = DockStyle.Top, Height = 18, AccessibleName = "Conversion progress" };
     // No access key: on a focused button a bare letter fires it, so typing "c" would cancel the batch. Esc cancels.
@@ -20,7 +23,7 @@ internal sealed class ProgressForm : Form
         TopMost = true;
         ShowInTaskbar = true;
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(420, 110);
+        ClientSize = new Size(420, 132);
         Padding = new Padding(12);
         Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
 
@@ -29,6 +32,7 @@ internal sealed class ProgressForm : Form
         {
             _cancel.Enabled = false;
             _status.Text = "Cancelling…";
+            ShowDetail(null);
             cancellation.Cancel();
         };
 
@@ -43,7 +47,9 @@ internal sealed class ProgressForm : Form
         buttons.Controls.Add(_cancel);
         Controls.Add(buttons);
         Controls.Add(_bar);
+        Controls.Add(_detail); // docked top in reverse order: status, then detail, then the bar
         Controls.Add(_status);
+        ShowDetail(null);
         CancelButton = _cancel;
     }
 
@@ -70,7 +76,19 @@ internal sealed class ProgressForm : Form
         _bar.Maximum = Math.Max(progress.Total, 1); // grows when late files join the batch
         _bar.Value = Math.Min(progress.Completed, _bar.Maximum);
         if (_cancel.Enabled)
+        {
             _status.Text = BatchProgressText.Describe(progress, _lastStarted);
+            // A file starting or finishing reports no page: the line clears until the next file reports one.
+            ShowDetail(BatchProgressText.DescribeWithin(progress));
+        }
+
         _lastStarted = progress.Current ?? _lastStarted;
+    }
+
+    // The name carries the text with its context, so a screen reader reading the window says what the count is about.
+    private void ShowDetail(string? text)
+    {
+        _detail.Text = text ?? "";
+        _detail.AccessibleName = text is null ? "Progress in the current file: none reported" : $"Progress in the current file: {text}";
     }
 }
