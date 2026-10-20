@@ -8,11 +8,23 @@ using Flevert.Image;
 
 namespace Flevert.Pdf;
 
+/// <summary>What a worker is asked to do with the PDF (<see cref="PdfRenderRequest.Task"/>).</summary>
+internal enum PdfWorkerTask
+{
+    /// <summary>Render every page into the folder, in <see cref="PdfRenderRequest.Format"/> at <see cref="PdfRenderRequest.Dpi"/>.</summary>
+    Pictures,
+
+    /// <summary>Write the text into the new file the request's folder field names (<see cref="PdfExtractText"/>).</summary>
+    Text,
+
+    /// <summary>Write a smaller JPEG of each image drawn above <see cref="PdfRenderRequest.Dpi"/> into the folder (<see cref="PdfCompressSharing"/>).</summary>
+    ShrinkImages,
+}
+
 /// <summary>
-/// What one worker is asked to do: render <see cref="InputPath"/>, which must be the file <see cref="Input"/>, into
-/// <see cref="Folder"/>; or, when <see cref="Text"/> is set, write its text into the new file <see cref="Folder"/> names
-/// (<see cref="Format"/> and <see cref="Dpi"/> then say nothing). It travels on the worker's standard input, never its
-/// command line.
+/// What one worker is asked to do (<see cref="Task"/>) with <see cref="InputPath"/>, which must be the file
+/// <see cref="Input"/>, and where the result goes (<see cref="Folder"/>). It travels on the worker's standard input,
+/// never its command line.
 /// </summary>
 /// <remarks>
 /// The fields are the raw UTF-16 code units of their text, each ended by U+0000, which no path can hold: a Windows name may
@@ -21,8 +33,7 @@ namespace Flevert.Pdf;
 /// </remarks>
 internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, string Folder, PdfPageImageFormat Format, double Dpi)
 {
-    /// <summary>Extract the text instead of rendering (<see cref="PdfExtractText"/>).</summary>
-    public bool Text { get; init; }
+    public PdfWorkerTask Task { get; init; }
 
     /// <summary>Changes whenever the fields change, so a worker of another version refuses the request rather than misreading it.</summary>
     internal const string Magic = "flevert-pdf-worker/1";
@@ -36,7 +47,13 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
     {
         string[] fields =
         [
-            Magic, InputPath, Input.ToString(), Folder, Text ? "text" : Format == PdfPageImageFormat.Jpeg ? "jpeg" : "png",
+            Magic, InputPath, Input.ToString(), Folder,
+            Task switch
+            {
+                PdfWorkerTask.Text => "text",
+                PdfWorkerTask.ShrinkImages => "shrink",
+                _ => Format == PdfPageImageFormat.Jpeg ? "jpeg" : "png",
+            },
             Dpi.ToString("R", CultureInfo.InvariantCulture),
         ];
         if (fields.Any(field => field.Contains('\0', StringComparison.Ordinal)))
@@ -62,13 +79,19 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
             throw new FormatException("The request's paths must be fully qualified.");
         var imageFormat = format switch
         {
-            "jpeg" or "text" => PdfPageImageFormat.Jpeg,
+            "jpeg" or "text" or "shrink" => PdfPageImageFormat.Jpeg,
             "png" => PdfPageImageFormat.Png,
             _ => throw new FormatException($"Unknown image format: {format}"),
         };
         if (!double.TryParse(dpiText, NumberStyles.Float, CultureInfo.InvariantCulture, out var dpi) || !double.IsFinite(dpi) || dpi <= 0 || dpi > MaxDpi)
             throw new FormatException($"Not a DPI: {dpiText}");
-        return new PdfRenderRequest(input, FileIdentity.Parse(identity), folder, imageFormat, dpi) { Text = format == "text" };
+        var task = format switch
+        {
+            "text" => PdfWorkerTask.Text,
+            "shrink" => PdfWorkerTask.ShrinkImages,
+            _ => PdfWorkerTask.Pictures,
+        };
+        return new PdfRenderRequest(input, FileIdentity.Parse(identity), folder, imageFormat, dpi) { Task = task };
     }
 }
 
@@ -87,7 +110,11 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
 /// could not be set up; <c>NoText</c> when a PDF has no text to extract), exit code 1.</item>
 /// </list>
 /// A text request says the same, with <c>page &lt;n&gt; 1 1</c> before page n is read and <c>wrote &lt;n&gt;</c> once
-/// its text is in the file; there is no <c>busy</c>.
+/// its text is in the file; there is no <c>busy</c>. A request to shrink images says <c>page</c> and <c>wrote</c> as it
+/// looks at each page's images, then, once every page is seen, <c>encode &lt;hash&gt; &lt;width&gt; &lt;height&gt;</c>
+/// before it decodes and re-encodes an image of that pixel size, followed by <c>image &lt;hash&gt; &lt;width&gt;
+/// &lt;height&gt; &lt;gray|rgb&gt;</c> once <c>&lt;hash&gt;.jpg</c> is written, or <c>kept &lt;hash&gt;</c> when it is
+/// left as it is; then <c>done</c>.
 /// A request it cannot read, or an input that is not the file the request names, ends it with exit code 2 and nothing on
 /// standard output. Anything else (a crash in pdfium, a kill) is whatever the process ends with.
 /// </summary>
@@ -127,10 +154,18 @@ public static class PdfRenderWorker
 
         try
         {
-            if (request.Text)
-                ExtractText(request, file!, lines);
-            else
-                Render(request, file!, lines);
+            switch (request.Task)
+            {
+                case PdfWorkerTask.Text:
+                    ExtractText(request, file!, lines);
+                    break;
+                case PdfWorkerTask.ShrinkImages:
+                    ShrinkImages(request, file!, lines);
+                    break;
+                default:
+                    Render(request, file!, lines);
+                    break;
+            }
             return ExitDone;
         }
         catch (PdfException e)
@@ -229,6 +264,99 @@ public static class PdfRenderWorker
         }
 
         return anyText;
+    }
+
+    /// <summary>The JPEG quality of a shrunk image (docs/specs/pdf.md, P1: 150 DPI, quality 80).</summary>
+    internal const uint SharingJpegQuality = 80;
+
+    // Filters of 1-bit images, which JPEG would blur and make larger.
+    private static readonly HashSet<string> KeptFilters = new(StringComparer.Ordinal) { "JBIG2Decode", "CCITTFaxDecode" };
+
+    // Every image of every page, then a JPEG at request.Dpi of each one drawn above it everywhere it is drawn. The images
+    // are told apart by the SHA-256 of their stored data, which the parent finds again in qpdf's description of the PDF.
+    private static void ShrinkImages(PdfRenderRequest request, SafeFileHandle file, StreamWriter lines)
+    {
+        using var pdf = PdfDocument.Open(file, PdfLimits.Default);
+        var total = pdf.PageCount;
+        if (total == 0)
+            throw new PdfException(PdfError.NoPages, "This PDF has no pages.");
+        lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"pages {total}"));
+
+        var found = new Dictionary<string, ImageSeen>(StringComparer.Ordinal);
+        for (var index = 0; index < total; index++)
+        {
+            var page = index + 1;
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"page {page} 1 1"));
+            foreach (var image in pdf.GetImages(index))
+            {
+                // The largest size it is drawn at decides: the lowest resolution. Inside a form, the size is not known.
+                var keep = image.InForm || image.BitsPerPixel <= 1 || image.Filters.Any(KeptFilters.Contains)
+                    || (long)image.Width * image.Height > (long)PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels;
+                found[image.Hash] = found.TryGetValue(image.Hash, out var seen)
+                    ? seen with { Dpi = Math.Min(seen.Dpi, image.Dpi), Keep = seen.Keep || keep }
+                    : new ImageSeen(index, image.ObjectIndex, image.Width, image.Height, image.Dpi, keep);
+            }
+
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"wrote {page}"));
+        }
+
+        var shrink = found.Where(entry => !entry.Value.Keep && entry.Value.Dpi > request.Dpi).ToList();
+        if (shrink.Count > 0)
+        {
+            try
+            {
+                MagickSetup.EnsureInitialized();
+            }
+            catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or MagickException)
+            {
+                throw new SetupException($"Flevert could not set up its image encoder: {e.Message}", e);
+            }
+        }
+
+        foreach (var (hash, seen) in shrink)
+        {
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"encode {hash} {seen.Width} {seen.Height}"));
+            if (pdf.GetImagePixels(seen.PageIndex, seen.ObjectIndex) is not { } pixels)
+            {
+                lines.WriteLine($"kept {hash}");
+                continue;
+            }
+
+            var scale = request.Dpi / seen.Dpi;
+            var width = Math.Max(1, (int)Math.Round(pixels.Width * scale));
+            var height = Math.Max(1, (int)Math.Round(pixels.Height * scale));
+            EncodeShrunk(pixels, width, height, Path.Combine(request.Folder, hash + ".jpg"));
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"image {hash} {width} {height} {(pixels.Gray ? "gray" : "rgb")}"));
+        }
+
+        lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"done {total}"));
+    }
+
+    private sealed record ImageSeen(int PageIndex, int ObjectIndex, int Width, int Height, double Dpi, bool Keep);
+
+    private static void EncodeShrunk(PdfImagePixels pixels, int width, int height, string path)
+    {
+        using var image = new MagickImage();
+        // Raw pixels in memory, as for pages: no coder parses anything.
+        var settings = pixels.Gray
+            ? new PixelReadSettings((uint)pixels.Width, (uint)pixels.Height, StorageType.Char, "I")
+            : new PixelReadSettings((uint)pixels.Width, (uint)pixels.Height, StorageType.Char, PixelMapping.BGR);
+        image.ReadPixels(pixels.Pixels, settings);
+        if (pixels.Gray)
+            image.ColorType = ColorType.Grayscale;
+        image.Resize((uint)width, (uint)height);
+        image.Quality = SharingJpegQuality;
+        image.Settings.SetDefine(MagickFormat.Jpeg, "sampling-factor", "4:2:0");
+        try
+        {
+            // CreateNew in the parent's private folder: nothing there is ever replaced.
+            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            image.Write(stream, MagickFormat.Jpeg);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new PageWriteException($"Could not write a smaller image: {e.Message}", e);
+        }
     }
 
     /// <summary>

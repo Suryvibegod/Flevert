@@ -85,6 +85,8 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
             cases.Add(row.Fixture, "pdf.protect", row.Protect);
             // pdfium reads the text as it reads a page to draw it; none of these PDFs has any text.
             cases.Add(row.Fixture, "pdf.extract-text", row.Render == Ok ? Skipped : row.Render);
+            // qpdf counts the pages first, then pdfium reads the images; none of these has one above 150 DPI.
+            cases.Add(row.Fixture, "pdf.compress-sharing", row.Rotate != Ok ? row.Rotate : row.Render == Ok ? Skipped : row.Render);
         }
 
         return cases;
@@ -292,6 +294,7 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
                 "pdf.strip-metadata" => await new PdfStripMetadata(Qpdf.NextToApp).RunAsync(input, CancellationToken.None),
                 "pdf.protect" => await ProtectAsync(input),
                 "pdf.extract-text" => await new PdfExtractText(TestPdf.Worker).RunAsync(input, CancellationToken.None),
+                "pdf.compress-sharing" => await new PdfCompressSharing(Qpdf.NextToApp, TestPdf.Worker).RunAsync(input, CancellationToken.None),
                 _ => throw new ArgumentOutOfRangeException(nameof(operation)),
             };
             return (Ok, result);

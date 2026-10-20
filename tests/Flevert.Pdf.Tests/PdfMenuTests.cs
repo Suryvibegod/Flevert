@@ -24,13 +24,15 @@ public sealed class PdfMenuTests
             Labels(@"Flevert.Menu.pdf\shell"));
         Assert.Equal(
             [
-                $"\"{Exe}\" run pdf.merge \"%1\"", $"\"{Exe}\" run pdf.split \"%1\"", $"\"{Exe}\" run pdf.compress \"%1\"",
-                $"\"{Exe}\" run pdf.strip-metadata \"%1\"", $"\"{Exe}\" run pdf.protect \"%1\"", $"\"{Exe}\" run pdf.unlock \"%1\"",
+                $"\"{Exe}\" run pdf.merge \"%1\"", $"\"{Exe}\" run pdf.split \"%1\"", $"\"{Exe}\" run pdf.strip-metadata \"%1\"", $"\"{Exe}\" run pdf.protect \"%1\"", $"\"{Exe}\" run pdf.unlock \"%1\"",
             ],
             _registry.Children(@"Flevert.Menu.pdf\shell")
                 .Select(verb => _registry.GetValue($@"{verb}\command", ""))
                 .OfType<string>());
         Assert.Equal(["JPG pages", "PNG pages", "Text"], Labels(@"Flevert.Menu.pdf\Convert\shell"));
+        Assert.Equal(["Lossless", "For sharing"], Labels(@"Flevert.Menu.pdf\Compress\shell"));
+        // docs/specs/pdf.md, v0.2.1: all 16 entries Explorer shows.
+        Assert.Equal(16, CountEntries(@"Flevert.Menu.pdf\shell"));
         Assert.Equal(["90° right", "90° left", "180°"], Labels(@"Flevert.Menu.pdf\Rotate\shell"));
         Assert.Equal(
             ["pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180"],

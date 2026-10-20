@@ -168,6 +168,145 @@ public sealed class PdfDocument : IDisposable
         }
     }
 
+    /// <summary>An image whose stored data is larger than this is not looked at (no hash, never replaced).</summary>
+    internal const uint MaxImageDataBytes = 512 * 1024 * 1024;
+
+    /// <summary>
+    /// Every image page <paramref name="pageIndex"/> draws: its own image objects, and those of the form XObjects it draws
+    /// (<see cref="PdfPageImage.InForm"/>), whose size on the page is not known. An image whose data is larger than
+    /// <see cref="MaxImageDataBytes"/>, or that pdfium cannot describe, is left out.
+    /// </summary>
+    internal unsafe IReadOnlyList<PdfPageImage> GetImages(int pageIndex)
+    {
+        lock (Pdfium.Gate)
+        {
+            ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
+            using var page = PageHandle.Load(_handle, pageIndex);
+            var native = page.DangerousGetHandle();
+            var images = new List<PdfPageImage>();
+            var count = PdfiumNative.FPDFPage_CountObjects(native);
+            for (var index = 0; index < count; index++)
+                Collect(native, PdfiumNative.FPDFPage_GetObject(native, index), index, depth: 0, images);
+            return images;
+        }
+    }
+
+    // Form XObjects nest; pdfium itself stops at 16 levels, and so does this.
+    private const int MaxFormDepth = 16;
+
+    private static unsafe void Collect(nint page, nint item, int index, int depth, List<PdfPageImage> images)
+    {
+        if (item == 0)
+            return;
+        switch (PdfiumNative.FPDFPageObj_GetType(item))
+        {
+            case PdfiumNative.PageObjectImage:
+                if (Describe(page, item, depth == 0 ? index : -1) is { } image)
+                    images.Add(image);
+                break;
+            case PdfiumNative.PageObjectForm when depth < MaxFormDepth:
+                var count = PdfiumNative.FPDFFormObj_CountObjects(item);
+                for (var i = 0; i < count; i++)
+                    Collect(page, PdfiumNative.FPDFFormObj_GetObject(item, (uint)i), -1, depth + 1, images);
+                break;
+        }
+    }
+
+    private static unsafe PdfPageImage? Describe(nint page, nint image, int index)
+    {
+        PdfiumNative.ImageMetadata metadata;
+        if (PdfiumNative.FPDFImageObj_GetImageMetadata(image, page, &metadata) == 0 || metadata.Width == 0 || metadata.Height == 0)
+            return null;
+        var length = PdfiumNative.FPDFImageObj_GetImageDataRaw(image, null, 0);
+        if (length == 0 || length > MaxImageDataBytes)
+            return null;
+        var data = GC.AllocateUninitializedArray<byte>((int)length);
+        fixed (byte* buffer = data)
+        {
+            if (PdfiumNative.FPDFImageObj_GetImageDataRaw(image, buffer, length) != length)
+                return null;
+        }
+
+        var filters = new List<string>();
+        var filterCount = PdfiumNative.FPDFImageObj_GetImageFilterCount(image);
+        for (var i = 0; i < filterCount; i++)
+        {
+            var nameLength = PdfiumNative.FPDFImageObj_GetImageFilter(image, i, null, 0);
+            if (nameLength is 0 or > 64)
+                return null;
+            var name = new byte[nameLength];
+            fixed (byte* buffer = name)
+            {
+                if (PdfiumNative.FPDFImageObj_GetImageFilter(image, i, buffer, nameLength) != nameLength)
+                    return null;
+            }
+
+            filters.Add(System.Text.Encoding.ASCII.GetString(name, 0, (int)nameLength - 1));
+        }
+
+        var dpi = index < 0 ? 0 : Math.Min(metadata.HorizontalDpi, metadata.VerticalDpi);
+        return new PdfPageImage(index, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(data)),
+            (int)Math.Min(metadata.Width, int.MaxValue), (int)Math.Min(metadata.Height, int.MaxValue),
+            double.IsFinite(dpi) && dpi > 0 ? dpi : 0, (int)metadata.BitsPerPixel, filters);
+    }
+
+    /// <summary>
+    /// The pixels of image object <paramref name="objectIndex"/> of page <paramref name="pageIndex"/> (one
+    /// <see cref="GetImages"/> gave), decoded by pdfium: gray, or BGR for any other colorspace (CMYK, ICC, indexed and
+    /// <c>/Decode</c> applied), without its mask. <c>null</c> when pdfium cannot decode it, or gives alpha.
+    /// </summary>
+    internal unsafe PdfImagePixels? GetImagePixels(int pageIndex, int objectIndex)
+    {
+        lock (Pdfium.Gate)
+        {
+            ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
+            using var page = PageHandle.Load(_handle, pageIndex);
+            var image = PdfiumNative.FPDFPage_GetObject(page.DangerousGetHandle(), objectIndex);
+            if (image == 0 || PdfiumNative.FPDFPageObj_GetType(image) != PdfiumNative.PageObjectImage)
+                return null;
+            var bitmap = PdfiumNative.FPDFImageObj_GetBitmap(image);
+            if (bitmap == 0)
+                return null;
+            try
+            {
+                var (width, height, stride) = (PdfiumNative.FPDFBitmap_GetWidth(bitmap), PdfiumNative.FPDFBitmap_GetHeight(bitmap), PdfiumNative.FPDFBitmap_GetStride(bitmap));
+                var format = PdfiumNative.FPDFBitmap_GetFormat(bitmap);
+                var source = (byte*)PdfiumNative.FPDFBitmap_GetBuffer(bitmap);
+                var bytesPerPixel = format switch
+                {
+                    PdfiumNative.BitmapGray => 1,
+                    PdfiumNative.BitmapBgr => 3,
+                    PdfiumNative.BitmapBgrx => 4,
+                    _ => 0,
+                };
+                if (bytesPerPixel == 0 || width <= 0 || height <= 0 || source is null || stride < width * bytesPerPixel)
+                    return null;
+                var outBytes = bytesPerPixel == 1 ? 1 : 3;
+                var pixels = GC.AllocateUninitializedArray<byte>(checked(width * height * outBytes));
+                for (var y = 0; y < height; y++)
+                {
+                    var row = new ReadOnlySpan<byte>(source + ((long)y * stride), width * bytesPerPixel);
+                    var target = pixels.AsSpan(y * width * outBytes, width * outBytes);
+                    if (bytesPerPixel == outBytes)
+                    {
+                        row.CopyTo(target);
+                    }
+                    else
+                    {
+                        for (var x = 0; x < width; x++)
+                            row.Slice(x * 4, 3).CopyTo(target.Slice(x * 3, 3));
+                    }
+                }
+
+                return new PdfImagePixels(width, height, bytesPerPixel == 1, pixels);
+            }
+            finally
+            {
+                PdfiumNative.FPDFBitmap_Destroy(bitmap);
+            }
+        }
+    }
+
     /// <summary>
     /// The text of page <paramref name="pageIndex"/>, in the order pdfium reads it, lines ended as pdfium ends them
     /// (<c>\r\n</c>); an empty string for a page without text (a scan).

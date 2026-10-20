@@ -27,6 +27,27 @@ public sealed class PdfBitmap(int width, int height, double dpi, byte[] bgra)
     public ReadOnlyMemory<byte> Bgra { get; } = bgra;
 }
 
+/// <summary>
+/// An image a page draws (<see cref="PdfDocument.GetImages"/>): which one, by the SHA-256 of its stream data as stored,
+/// its pixel size, the resolution it is drawn at, and what it is stored as.
+/// </summary>
+/// <param name="ObjectIndex">Its index among the page's own objects, for <see cref="PdfDocument.GetImagePixels"/>.</param>
+/// <param name="Dpi">The lower of its horizontal and vertical resolution as drawn; 0 inside a form XObject, where pdfium
+/// gives the size in the form's space rather than the page's.</param>
+/// <param name="Filters">Its stream's filters, such as <c>DCTDecode</c>.</param>
+internal sealed record PdfPageImage(int ObjectIndex, string Hash, int Width, int Height, double Dpi, int BitsPerPixel, IReadOnlyList<string> Filters)
+{
+    /// <summary>Drawn by a form XObject: its size on the page is not known.</summary>
+    public bool InForm => ObjectIndex < 0;
+}
+
+/// <summary>A smaller JPEG the PDF worker wrote of an image (<see cref="PdfWorker.ShrinkImagesAsync"/>): which image, by
+/// the SHA-256 of its stored data, where the JPEG is, and its size and colours.</summary>
+internal sealed record PdfShrunkImage(string Hash, string Path, int Width, int Height, bool Gray);
+
+/// <summary>An image's pixels as pdfium decodes them: one byte a pixel when <see cref="Gray"/>, else blue, green, red.</summary>
+internal sealed record PdfImagePixels(int Width, int Height, bool Gray, byte[] Pixels);
+
 /// <summary>The limits that keep an untrusted PDF from taking the machine's memory (docs/specs/pdf.md).</summary>
 internal readonly record struct PdfLimits(int MaxPages, long MaxFileBytes, int MaxRenderPixels)
 {

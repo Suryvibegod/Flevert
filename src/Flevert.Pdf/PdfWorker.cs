@@ -123,16 +123,41 @@ public sealed class PdfWorker
     public async Task<int> ExtractTextAsync(string inputPath, string outputPath, IProgress<FileProgress>? progress, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(outputPath);
-        var (total, run) = await RunAsync(inputPath, input => new PdfRenderRequest(inputPath, input, outputPath, PdfPageImageFormat.Jpeg, 72) { Text = true },
+        var (total, run) = await RunAsync(inputPath, input => new PdfRenderRequest(inputPath, input, outputPath, PdfPageImageFormat.Jpeg, 72) { Task = PdfWorkerTask.Text },
             "read", progress, ct).ConfigureAwait(false);
         if (!File.Exists(outputPath))
             throw new PdfException(PdfError.ReaderFailed, FailedMessage(null, "read"), new PdfWorkerException(run, "the text file is missing"));
         return total;
     }
 
+    /// <summary>
+    /// Writes into <paramref name="folder"/> a smaller JPEG, <c>&lt;hash&gt;.jpg</c>, of every image of
+    /// <paramref name="inputPath"/> drawn above <paramref name="dpi"/> wherever it is drawn (<see cref="PdfCompressSharing"/>),
+    /// reporting each page as its images are looked at, and returns them.
+    /// </summary>
+    /// <param name="folder">An empty folder only this user, SYSTEM and administrators can change.</param>
+    /// <exception cref="PdfException">As for <see cref="RenderAsync"/>.</exception>
+    /// <exception cref="IOException">An image could not be written.</exception>
+    internal async Task<IReadOnlyList<PdfShrunkImage>> ShrinkImagesAsync(
+        string inputPath, string folder, double dpi, IProgress<FileProgress>? progress, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(folder);
+        IReadOnlyList<PdfShrunkImage>? shrunk = null;
+        var (_, run) = await RunAsync(inputPath, input => new PdfRenderRequest(inputPath, input, folder, PdfPageImageFormat.Jpeg, dpi) { Task = PdfWorkerTask.ShrinkImages },
+            "read", progress, ct, images => shrunk = images).ConfigureAwait(false);
+        foreach (var image in shrunk!)
+        {
+            if (!File.Exists(image.Path))
+                throw new PdfException(PdfError.ReaderFailed, FailedMessage(null, "read"), new PdfWorkerException(run, $"{image.Hash}.jpg is missing"));
+        }
+
+        return shrunk;
+    }
+
     // Runs one worker on the request made for the pinned input; "render" or "read" is what the messages say it was doing.
     private async Task<(int Total, ExternalToolResult Run)> RunAsync(
-        string inputPath, Func<FileIdentity, PdfRenderRequest> makeRequest, string doing, IProgress<FileProgress>? progress, CancellationToken ct)
+        string inputPath, Func<FileIdentity, PdfRenderRequest> makeRequest, string doing, IProgress<FileProgress>? progress, CancellationToken ct,
+        Action<IReadOnlyList<PdfShrunkImage>>? shrunk = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(inputPath);
         RequireExe();
@@ -143,9 +168,13 @@ public sealed class PdfWorker
         var length = RandomAccess.GetLength(pin);
         if (length > PdfDocument.MaxFileBytes)
             throw PdfDocument.TooLargeError(PdfDocument.MaxFileBytes);
-        var request = makeRequest(FileIdentity.Of(pin)).Encode();
+        var made = makeRequest(FileIdentity.Of(pin));
+        var request = made.Encode();
 
-        using var session = new Session(this, StallTimeout + (PerHundredMegabytes * (length / 100_000_000.0)), doing, progress, ct);
+        using var session = new Session(this, StallTimeout + (PerHundredMegabytes * (length / 100_000_000.0)), doing, progress, ct)
+        {
+            ShrinkFolder = made.Task == PdfWorkerTask.ShrinkImages ? made.Folder : null,
+        };
         var limits = new ExternalToolLimits { MaxMemoryBytes = MaxMemoryBytes, SingleProcess = true };
         ExternalToolResult run;
         try
@@ -170,7 +199,9 @@ public sealed class PdfWorker
             throw new PdfException(PdfError.ReaderFailed, session.FailedMessage(), e);
         }
 
-        return (session.Outcome(run, MaxMemoryBytes), run);
+        var total = session.Outcome(run, MaxMemoryBytes);
+        shrunk?.Invoke(session.Shrunk);
+        return (total, run);
     }
 
     private static string TooSlowMessage(int? page, string doing) => page is { } p
@@ -226,6 +257,22 @@ public sealed class PdfWorker
         private int _written;
         private bool _done;
         private (string Code, string Message)? _error;
+        private readonly List<PdfShrunkImage> _shrunk = [];
+        private readonly HashSet<string> _shrunkHashes = new(StringComparer.Ordinal);
+        private string? _encoding;
+
+        /// <summary>For a request to shrink images: the folder they are written to.</summary>
+        public string? ShrinkFolder { get; init; }
+
+        /// <summary>The images the worker said it wrote, once it is done.</summary>
+        public IReadOnlyList<PdfShrunkImage> Shrunk
+        {
+            get
+            {
+                lock (_gate)
+                    return [.. _shrunk];
+            }
+        }
 
         public Session(PdfWorker worker, TimeSpan openWindow, string doing, IProgress<FileProgress>? progress, CancellationToken cancel)
         {
@@ -302,7 +349,32 @@ public sealed class PdfWorker
                         _written = Number(parts[1], _current, _current);
                         Watch(_worker.StallTimeout);
                         return null;
-                    case "done" when parts.Length == 2 && _total > 0 && _written == _total:
+                    case "encode" when ShrinkFolder is not null && parts.Length == 3 && _total > 0 && _written == _total && _encoding is null:
+                        var encode = parts[2].Split(' ');
+                        if (encode.Length != 2 || !IsHash(parts[1]) || _shrunkHashes.Contains(parts[1]))
+                            throw new ProtocolException(line);
+                        _encoding = parts[1];
+                        // Decoding and encoding grow with the pixels, as drawing a page does.
+                        Watch(_worker.StallWindow(Number(encode[0], 1, PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels),
+                            Number(encode[1], 1, PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels)));
+                        return null;
+                    case "image" when _encoding is not null && parts.Length == 3 && parts[1] == _encoding:
+                        var image = parts[2].Split(' ');
+                        if (image.Length != 3 || image[2] is not ("gray" or "rgb"))
+                            throw new ProtocolException(line);
+                        _shrunk.Add(new PdfShrunkImage(parts[1], Path.Combine(ShrinkFolder!, parts[1] + ".jpg"),
+                            Number(image[0], 1, PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels),
+                            Number(image[1], 1, PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels), image[2] == "gray"));
+                        _shrunkHashes.Add(parts[1]);
+                        _encoding = null;
+                        Watch(_worker.StallTimeout);
+                        return null;
+                    case "kept" when _encoding is not null && parts.Length == 2 && parts[1] == _encoding:
+                        _shrunkHashes.Add(parts[1]);
+                        _encoding = null;
+                        Watch(_worker.StallTimeout);
+                        return null;
+                    case "done" when parts.Length == 2 && _total > 0 && _written == _total && _encoding is null:
                         Number(parts[1], _total, _total);
                         _done = true;
                         _stall.CancelAfter(Timeout.InfiniteTimeSpan);
@@ -312,7 +384,7 @@ public sealed class PdfWorker
                         _error = (parts[1], PdfRenderWorker.OneLine(parts[2]));
                         Watch(_worker.StallTimeout); // it is about to exit
                         return null;
-                    case "pages" or "page" or "busy" or "wrote" or "done" or "error":
+                    case "pages" or "page" or "busy" or "wrote" or "done" or "error" or "encode" or "image" or "kept":
                         throw new ProtocolException(line);
                     default:
                         // Not the worker's: a native library writing to standard output. It proves nothing, so it does
@@ -323,6 +395,9 @@ public sealed class PdfWorker
         }
 
         private void Watch(TimeSpan window) => _stall.CancelAfter(window);
+
+        // A SHA-256 as the worker writes it: 64 lower-case hexadecimal digits, which is also a safe file name.
+        private static bool IsHash(string text) => text.Length == 64 && text.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f'));
 
         private static int Number(string text, int min, int max) =>
             int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value >= min && value <= max

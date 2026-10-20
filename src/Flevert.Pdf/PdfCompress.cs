@@ -3,9 +3,9 @@ using Flevert.Core;
 namespace Flevert.Pdf;
 
 /// <summary>
-/// <c>Compress</c> (docs/specs/pdf.md, lossless): writes <c>&lt;name&gt; (compressed).pdf</c> beside the original, with the
+/// <c>Compress/Lossless</c> (docs/specs/pdf.md; a menu item of its own until 0.2.0, "Compress"): writes <c>&lt;name&gt; (compressed).pdf</c> beside the original, with the
 /// same content stored in less space. Nothing is re-encoded with loss: images and pages are what they were, so a scan
-/// made of JPEGs gets little smaller (that is Compress for sharing, if it comes). A result that is not smaller than the
+/// made of JPEGs gets little smaller (that is <see cref="PdfCompressSharing"/>). A result that is not smaller than the
 /// original is no use, so the file is skipped and nothing is written.
 /// </summary>
 /// <remarks>
@@ -52,7 +52,7 @@ public sealed class PdfCompress : IOperation
 
     public string Id => "pdf.compress";
 
-    public string MenuPath => "Compress";
+    public string MenuPath => "Compress/Lossless";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
 

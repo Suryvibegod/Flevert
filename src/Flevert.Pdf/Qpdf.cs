@@ -242,6 +242,23 @@ public sealed class Qpdf
         return Repaired(run);
     }
 
+    /// <summary>
+    /// Runs <c>qpdf --json-output=2 --json-stream-data=file --json-stream-prefix=&lt;prefix&gt; --decode-level=none</c>:
+    /// the input described in <paramref name="jsonPath"/>, and the data of every stream, as stored (no filter undone),
+    /// in a file of its own, <c>&lt;prefix&gt;-&lt;object number&gt;</c>, which the description names. The prefix goes
+    /// through <c>@-</c> like the paths.
+    /// </summary>
+    /// <param name="streamPrefix">Fully qualified, in a folder nobody else can change: qpdf creates the files by name.</param>
+    /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
+    public async Task<bool> DescribeWithStreamDataAsync(string inputPath, string jsonPath, string streamPrefix, CancellationToken ct)
+    {
+        RequireArgumentLine(streamPrefix, nameof(streamPrefix));
+        var run = await RunCheckedAsync(["--json-output=2", "--json-stream-data=file", "--decode-level=none"], [inputPath],
+            [JsonStreamPrefix + streamPrefix, inputPath, jsonPath], jsonPath, ct).ConfigureAwait(false);
+        RequireOutput(run, jsonPath);
+        return Repaired(run);
+    }
+
     /// <summary>Whether the PDF is encrypted, and whether it opens without a password (<c>qpdf --requires-password</c>).</summary>
     /// <exception cref="PdfException">The file is not a PDF, or is damaged beyond repair, or too large.</exception>
     public async Task<PdfEncryption> GetEncryptionAsync(string inputPath, CancellationToken ct)
@@ -303,13 +320,16 @@ public sealed class Qpdf
         return Repaired(run);
     }
 
-    // An option whose value is a path: given through @- like the paths, as "<option><\\?\ path>".
+    // Options whose value is a path: given through @- like the paths, as "<option><\\?\ path>".
     private const string UpdateFromJson = "--update-from-json=";
+    private const string JsonStreamPrefix = "--json-stream-prefix=";
 
     // The path in a line of @-: the line itself, or the value of a path option. A path is fully qualified, so it never
     // starts like the option.
     private static string PathIn(string line) =>
-        line.StartsWith(UpdateFromJson, StringComparison.Ordinal) ? line[UpdateFromJson.Length..] : line;
+        line.StartsWith(UpdateFromJson, StringComparison.Ordinal) ? line[UpdateFromJson.Length..]
+        : line.StartsWith(JsonStreamPrefix, StringComparison.Ordinal) ? line[JsonStreamPrefix.Length..]
+        : line;
 
     /// <summary>
     /// Lines of <c>@-</c> that carry the password, before the paths: <see cref="Before"/>, then each of
