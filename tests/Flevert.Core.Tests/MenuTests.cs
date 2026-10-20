@@ -115,6 +115,31 @@ public sealed class MenuTests
             _registry.KeysUnder(@"Flevert.Menu.pdf\shell").Select(verb => _registry.GetValue(verb, "CommandFlags")));
     }
 
+    [Fact]
+    public void The_looks_of_two_modules_combine_and_a_label_they_share_keeps_its_look()
+    {
+        var images = new Dictionary<string, MenuEntryLook> { ["Convert to"] = new("arrow_swap", 1), ["Remove hidden info"] = new("shield", 2) };
+        var media = new Dictionary<string, MenuEntryLook> { ["Convert to"] = new("arrow_swap", 1), ["Extract audio"] = new("music_note_2", 1) };
+
+        var looks = MenuEntryLook.Combine(images, media);
+
+        Assert.Equal(new MenuEntryLook("arrow_swap", 1), looks["Convert to"]);
+        Assert.Equal(new MenuEntryLook("shield", 2), looks["Remove hidden info"]);
+        Assert.Equal(new MenuEntryLook("music_note_2", 1), looks["Extract audio"]);
+        Assert.Equal(3, looks.Count);
+    }
+
+    [Theory]
+    [InlineData("arrow_minimize", 1)]
+    [InlineData("arrow_swap", 2)]
+    public void Two_modules_cannot_give_one_label_two_looks(string icon, int group)
+    {
+        var images = new Dictionary<string, MenuEntryLook> { ["Convert to"] = new("arrow_swap", 1) };
+        var media = new Dictionary<string, MenuEntryLook> { ["Convert to"] = new(icon, group) };
+
+        Assert.Throws<ArgumentException>(() => MenuEntryLook.Combine(images, media));
+    }
+
     [Theory]
     [InlineData(@"..\..\evil")]
     [InlineData("Arrow Swap")]

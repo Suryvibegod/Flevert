@@ -97,7 +97,8 @@ internal static class Program
                 }
 
                 var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));
-                new MenuInstaller(new WindowsRegistry(), exe).Install(ops, MenuOperations.Looks);
+                // Pictures and PDFs, then video and audio: a label both have (Convert to, Compress, Remove hidden info) looks the same.
+                new MenuInstaller(new WindowsRegistry(), exe).Install(ops, MenuEntryLook.Combine(MenuOperations.Looks, MediaOperations.Looks));
                 ShellNotify.AssociationsChanged();
                 return Ok;
 

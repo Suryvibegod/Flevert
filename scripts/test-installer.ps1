@@ -286,9 +286,11 @@ try {
     Assert (@(MenuCommands '.jpg' | Where-Object { $_ -like '* run pdf.from-images *' }).Count -eq 1) 'the .jpg menu combines pictures into a PDF'
     Assert ((Get-ItemProperty "$associations\.pdf\shell\Flevert.Tools" -ErrorAction SilentlyContinue).MUIVerb -eq 'Flevert PDF tools') 'PDFs have the second menu, Flevert PDF tools'
     Assert (@(MenuCommands '.pdf.tools' | Where-Object { $_ -like '* run pdf.remove-blank-pages *' }).Count -eq 1) 'Flevert PDF tools removes blank pages'
-    # Every entry at the top of both PDF menus has an icon, installed beside flevert.exe (docs/specs/pdf.md, v0.2.2).
-    $icons = @(Get-ChildItem "$classes\Flevert.Menu.pdf\shell", "$classes\Flevert.Menu.pdf.tools\shell" | ForEach-Object { $_.GetValue('Icon') })
-    Assert ($icons.Count -gt 0 -and @($icons | Where-Object { -not ($_ -and (Test-Path -LiteralPath ($_ -replace '^"(.*)",0$', '$1'))) }).Count -eq 0) "every entry of the .pdf menus shows an icon from $app\icons"
+    # Every entry at the top of both PDF menus, and of the video and audio menus, has an icon, installed beside flevert.exe
+    # (docs/specs/pdf.md, v0.2.2; docs/specs/media.md, "Menu").
+    $icons = @(Get-ChildItem "$classes\Flevert.Menu.pdf\shell", "$classes\Flevert.Menu.pdf.tools\shell", "$classes\Flevert.Menu.mp4\shell", "$classes\Flevert.Menu.mp3\shell" | ForEach-Object { $_.GetValue('Icon') })
+    Assert ($icons.Count -ge 18 -and @($icons | Where-Object { -not ($_ -and (Test-Path -LiteralPath ($_ -replace '^"(.*)",0$', '$1'))) }).Count -eq 0) "every entry of the .pdf, .mp4 and .mp3 menus shows an icon from $app\icons ($($icons.Count))"
+    Assert (@(MenuCommands '.mp4' | Where-Object { $_ -like '* run video.compress-under-25mb *' }).Count -eq 1) 'the .mp4 menu compresses a video under 25 MB'
     $menuCount = @(MenuKeys).Count
 
     AssertConversions "$work\fresh"

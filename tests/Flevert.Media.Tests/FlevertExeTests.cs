@@ -110,7 +110,7 @@ public sealed class FlevertExeTests : IDisposable
         return null;
     }
 
-    private static string FlevertExe
+    internal static string FlevertExe
     {
         get
         {
