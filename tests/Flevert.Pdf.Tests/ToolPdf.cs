@@ -44,6 +44,30 @@ internal static class ToolPdf
         Write(path, objects);
     }
 
+    /// <summary>
+    /// One A4 page with a filled text field ("name": <paramref name="value"/>, in Helvetica at 100, 700) and a red square
+    /// comment (a /Square annotation from 100, 400 to 200, 500), both with their appearance; with
+    /// <paramref name="needAppearances"/>, the field has none and the form asks viewers to draw it.
+    /// </summary>
+    public static void WriteFilledForm(string path, string value, bool needAppearances = false)
+    {
+        var field = needAppearances ? "" : " /AP << /N 5 0 R >>";
+        var fieldAppearance = Ascii($"/Tx BMC q BT /Helv 12 Tf 0 g 2 5 Td ({value}) Tj ET Q EMC");
+        var square = "1 0 0 RG 4 w 2 2 96 96 re S"u8.ToArray();
+        Write(path,
+        [
+            Ascii("<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 6 0 R >> >>"
+                + (needAppearances ? " /NeedAppearances true" : "") + " >> >>"),
+            Ascii("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
+            Ascii("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << >> /Annots [4 0 R 7 0 R] >>"),
+            Ascii($"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V ({value}) /Rect [100 700 300 720] /P 3 0 R /F 4{field} /DA (/Helv 12 Tf 0 g) >>"),
+            Stream("/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 6 0 R >> >>", fieldAppearance),
+            Ascii("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"),
+            Ascii("<< /Type /Annot /Subtype /Square /Rect [100 400 200 500] /C [1 0 0] /F 4 /AP << /N 8 0 R >> >>"),
+            Stream("/Type /XObject /Subtype /Form /BBox [0 0 100 100]", square),
+        ]);
+    }
+
     /// <summary>Writes objects 1..n, a cross-reference table and a trailer whose root is object 1.</summary>
     public static void Write(string path, IReadOnlyList<byte[]> objects, string trailer = "")
     {
