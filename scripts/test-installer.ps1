@@ -1,17 +1,22 @@
 <#
 .SYNOPSIS
-End-to-end test of the installer on this machine: installs silently without admin, checks files, menu and a real
-conversion, installs over itself, uninstalls and checks that nothing Flevert wrote is left. Further scenarios
-cover the update-check choice, the uninstall safety net, a classic-menu key the user created, a refused install folder, /DIR, uninstalling
-while flevert.exe runs, an install folder that is a junction, one that already holds someone else's files, and setup
-started from a junction.
+End-to-end test of the installer on this machine: installs silently without admin, checks files, licences, menu and
+real conversions (a picture, PDF operations through the bundled qpdf and pdfium, pictures combined into a PDF), installs
+over itself, uninstalls and checks that nothing Flevert wrote is left. Further scenarios cover the update-check
+choice, the uninstall safety net, a classic-menu key the user created, a refused install folder, /DIR, uninstalling
+while flevert.exe runs, an install folder that is a junction, one that already holds someone else's files, setup
+started from a junction, and an upgrade over the previous release (downloaded and checked by get-previous-setup.ps1).
 
 Uses the real per-user install location and HKCU, so it refuses to run when anything of Flevert is present.
 
 .PARAMETER Setup
 The setup executable; defaults to the newest artifacts\installer\Flevert-Setup-*.exe.
+
+.PARAMETER PreviousSetup
+The previous release's setup, downloaded earlier, for the upgrade scenario. Without it the scenario downloads it. Either
+way it is copied into a private folder and must have the SHA256 pinned in get-previous-setup.ps1.
 #>
-param([string]$Setup)
+param([string]$Setup, [string]$PreviousSetup)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -25,6 +30,14 @@ $classes = 'HKCU:\Software\Classes'
 $associations = "$classes\SystemFileAssociations"
 $classicKey = "$classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"
 $heic = Join-Path $root 'tests\Flevert.Image.Tests\fixtures\gradient-320x240.heic'
+$rotationsPdf = Join-Path $root 'tests\Flevert.Pdf.Tests\fixtures\rotations.pdf'
+# Every folder flevert.exe writes under app data (AppData.Subfolders); the uninstaller deletes exactly these.
+$appDataFolders = 'logs', 'pipes', 'magick', 'update'
+# Each "notices" entry of deps.json: files from deps\ the installer ships, with the title their licences carry.
+$bundled = @(([IO.File]::ReadAllText((Join-Path $root 'scripts\deps.json')) | ConvertFrom-Json).notices)
+$bundledFiles = @($bundled | ForEach-Object { $_.files } | Sort-Object -Unique)
+# What only a conversion loads: setup must not unpack it into %TEMP% to check the install folder (Flevert.iss, [Files]).
+$conversionOnly = $bundledFiles + 'openssl.cnf', 'Magick.Native-*.dll'
 
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw "FAIL: $Message" }
@@ -54,11 +67,11 @@ function SetupRefused($Run, [string]$Reason) {
     Assert ((Get-Content $Run.Log -Raw).Contains($Reason)) "setup logs why: '$Reason'"
 }
 
-function Setup([string[]]$Arguments, [string]$WorkingDirectory = $work) {
+function Setup([string[]]$Arguments, [string]$WorkingDirectory = $work, [string]$Exe = $Setup) {
     $log = Join-Path $work "setup-$([guid]::NewGuid()).log"
     $all = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=`"$log`"") + $Arguments
     $timer = [Diagnostics.Stopwatch]::StartNew()
-    $p = Start-Process $Setup -ArgumentList $all -WorkingDirectory $WorkingDirectory -Wait -PassThru
+    $p = Start-Process $Exe -ArgumentList $all -WorkingDirectory $WorkingDirectory -Wait -PassThru
     return [pscustomobject]@{ ExitCode = $p.ExitCode; Log = $log; Seconds = $timer.Elapsed.TotalSeconds }
 }
 
@@ -109,6 +122,77 @@ function RunFlevertHeadless([string[]]$Arguments, [switch]$NoWait) {
     finally { Remove-Item Env:\FLEVERT_HEADLESS }
 }
 
+function InstalledFiles {
+    @(Get-ChildItem -LiteralPath $app -Recurse -File -Force | ForEach-Object { $_.FullName.Substring($app.Length + 1) } | Sort-Object)
+}
+
+# The command lines of every menu item for one file type, e.g. '.pdf'.
+function MenuCommands([string]$Extension) {
+    @(Get-ChildItem "$classes\Flevert.Menu$Extension" -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.PSChildName -eq 'command' } | ForEach-Object { $_.GetValue('') })
+}
+
+# The installed qpdf.exe, with the empty OpenSSL configuration flevert.exe gives it (ADR-0008).
+function Qpdf([string[]]$Arguments) {
+    $env:OPENSSL_CONF = "$app\openssl.cnf"
+    try {
+        $output = & "$app\qpdf.exe" @Arguments
+        # 3: done, with warnings.
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3) { throw "qpdf $Arguments failed ($LASTEXITCODE)" }
+        return $output
+    }
+    finally { Remove-Item Env:\OPENSSL_CONF }
+}
+
+# Each page's own /Rotate, in page order (0 when it has none).
+function PageRotations([string]$Pdf) {
+    $json = (Qpdf @('--json=2', '--json-key=pages', '--json-key=qpdf', $Pdf)) -join "`n" | ConvertFrom-Json
+    $objects = $json.qpdf[1]
+    foreach ($page in $json.pages) {
+        $rotate = $objects.PSObject.Properties["obj:$($page.object)"].Value.value.PSObject.Properties['/Rotate']
+        if ($rotate) { [int]$rotate.Value } else { 0 }
+    }
+}
+
+function AssertImage([string]$Path, [Drawing.Imaging.ImageFormat]$Format, [string]$Message) {
+    $image = [Drawing.Image]::FromFile($Path)
+    try { Assert ($image.RawFormat.Equals($Format)) $Message }
+    finally { $image.Dispose() }
+}
+
+# Real conversions with the installed flevert.exe, in a new folder: a picture (ImageMagick), a PDF rotated (qpdf) and
+# rendered (pdfium), and two pictures combined into a PDF.
+function AssertConversions([string]$Folder) {
+    New-Item -ItemType Directory $Folder | Out-Null
+    Copy-Item $heic "$Folder\photo.heic"
+    $code = (RunFlevertHeadless @('run', 'image.to-jpg', "`"$Folder\photo.heic`"")).ExitCode
+    Assert ($code -eq 0) "installed flevert.exe converts HEIC to JPG (exit $code)"
+    $jpg = [Drawing.Image]::FromFile("$Folder\photo.jpg")
+    try { Assert ($jpg.RawFormat.Equals([Drawing.Imaging.ImageFormat]::Jpeg) -and $jpg.Width -eq 320 -and $jpg.Height -eq 240) 'photo.jpg is a 320x240 JPEG' }
+    finally { $jpg.Dispose() }
+
+    Copy-Item $rotationsPdf "$Folder\rotations.pdf"
+    $code = (RunFlevertHeadless @('run', 'pdf.rotate-right', "`"$Folder\rotations.pdf`"")).ExitCode
+    Assert ($code -eq 0) "installed flevert.exe rotates a PDF with the bundled qpdf (exit $code)"
+    # The fixture's pages are turned 0, 90, 180 and 270 degrees.
+    $rotations = @(PageRotations "$Folder\rotations (rotated).pdf") -join ','
+    Assert ($rotations -eq '90,180,270,0') "every page is turned a further 90 degrees right (/Rotate $rotations)"
+
+    $code = (RunFlevertHeadless @('run', 'pdf.to-png', "`"$Folder\rotations.pdf`"")).ExitCode
+    Assert ($code -eq 0) "installed flevert.exe renders PDF pages with the bundled pdfium (exit $code)"
+    $pages = @(Get-ChildItem -LiteralPath "$Folder\rotations (pages)" -Filter *.png -ErrorAction SilentlyContinue)
+    Assert ($pages.Count -eq 4) "one PNG per page ($($pages.Count) of 4)"
+    foreach ($page in $pages) { AssertImage $page.FullName ([Drawing.Imaging.ImageFormat]::Png) "$($page.Name) is a PNG" }
+
+    New-Item -ItemType Directory "$Folder\combine" | Out-Null
+    Copy-Item "$Folder\photo.jpg" "$Folder\combine\a.jpg"
+    Copy-Item $pages[0].FullName "$Folder\combine\b.png"
+    $code = (RunFlevertHeadless @('run', 'pdf.from-images', "`"$Folder\combine\a.jpg`"", "`"$Folder\combine\b.png`"")).ExitCode
+    Assert ($code -eq 0) "installed flevert.exe combines two pictures into a PDF (exit $code)"
+    $pageCount = Qpdf @('--show-npages', "$Folder\combine\a (+1).pdf")
+    Assert ("$pageCount" -eq '2') "the PDF has one page per picture ($pageCount)"
+}
+
 if (-not $Setup) {
     $Setup = Get-ChildItem (Join-Path $root 'artifacts\installer\Flevert-Setup-*.exe') -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
@@ -129,17 +213,37 @@ $work = Join-Path $env:TEMP "flevert-installer-test-$([guid]::NewGuid())"
 New-Item -ItemType Directory $work | Out-Null
 Write-Host "Testing $Setup"
 try {
+    # 0.1.0 was 42.6 MB and 0.2.0 47.3 MB (pdfium, qpdf and its runtime): a jump past the limit means something
+    # unexpected is packed (docs/specs/installer.md, Success Criteria 1).
     $size = (Get-Item $Setup).Length / 1MB
     Assert ($size -le 60) ("the setup file is at most 60 MB ({0:N1} MB)" -f $size)
 
     Write-Host 'Scenario 1: install, convert, install again, uninstall'
     $run = Install '1'
     Assert ($run.Seconds -lt 30) 'installs in under 30 s'
-    Assert ((Get-Content $run.Log -Raw).Contains('Administrative install mode: No')) 'installed without administrator rights'
+    $log = Get-Content $run.Log
+    Assert (@($log | Where-Object { $_.Contains('Administrative install mode: No') }).Count -gt 0) 'installed without administrator rights'
+    # Inno logs each file it unpacks to run flevert.exe check-location from %TEMP% before copying anything.
+    $unpacked = @($log | Where-Object { $_.Contains('Extracting temporary file: ') } | ForEach-Object { ($_ -split '\\')[-1] })
+    Assert ($unpacked -contains 'flevert.exe') 'setup unpacked flevert.exe to check the install folder'
+    $engines = @($unpacked | Where-Object { $name = $_; @($conversionOnly | Where-Object { $name -like $_ }).Count -gt 0 })
+    Assert ($engines.Count -eq 0) "setup did not unpack what only a conversion loads ($($engines -join ', '))"
+    $freshFiles = InstalledFiles
+    $freshExe = (Get-FileHash "$app\flevert.exe").Hash
     Assert (Test-Path "$app\flevert.exe") 'flevert.exe is installed'
     Assert (Test-Path "$app\LICENSE.txt") 'LICENSE.txt is installed'
+    foreach ($file in $bundledFiles + 'openssl.cnf') { Assert (Test-Path -LiteralPath "$app\$file") "$file is installed" }
+    $settings = @(Get-Content "$app\openssl.cnf" | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') })
+    Assert ($settings.Count -eq 0) 'the installed openssl.cnf holds no setting, so OpenSSL in qpdf loads nothing'
     $notices = Get-Content "$app\THIRD-PARTY-NOTICES.txt" -Raw -ErrorAction SilentlyContinue
     Assert ($notices -and $notices.Contains('ImageMagick License') -and $notices.Contains('.NET Foundation')) 'third-party notices cover ImageMagick and .NET'
+    # write-notices.ps1 heads each licence "<title> - <file>": one for every package and runtime pack the build holds,
+    # and one for every component from deps\.
+    $libraries = @(([IO.File]::ReadAllText("$app\flevert.deps.json") | ConvertFrom-Json).libraries.PSObject.Properties |
+        Where-Object { $_.Value.type -ne 'project' } | ForEach-Object { ($_.Name -replace '^runtimepack\.', '') -replace '/', ' ' })
+    $titles = @($libraries) + @($bundled | ForEach-Object { $_.title })
+    $unlisted = @($titles | Where-Object { -not $notices.Contains("$_ - ") })
+    Assert ($unlisted.Count -eq 0) "third-party notices list every bundled component ($($titles.Count); missing: $($unlisted -join ', '))"
     Assert (@(Get-ChildItem $app -Recurse -Filter *.pdb).Count -eq 0) 'no debug symbols shipped'
     Assert (Test-Path $arpKey) 'listed in Installed apps'
     $command = (Get-ChildItem "$classes\Flevert.Menu.heic" -Recurse |
@@ -148,15 +252,14 @@ try {
     Assert (Test-Path "$associations\.jpg\shell\Flevert") 'menu entry for .jpg'
     Assert ((Get-ItemProperty $classicKey).Flevert -eq '1') 'classic menu key created and marked'
     Assert (UpdateCheckEnabled) 'the check for new versions is on by default'
+    Assert (@(MenuCommands '.pdf' | Where-Object { $_ -like '* run pdf.rotate-right *' }).Count -eq 1) 'the .pdf menu rotates PDFs'
+    Assert (@(MenuCommands '.jpg' | Where-Object { $_ -like '* run pdf.from-images *' }).Count -eq 1) 'the .jpg menu combines pictures into a PDF'
     $menuCount = @(MenuKeys).Count
 
-    Copy-Item $heic "$work\photo.heic"
-    $code = (RunFlevertHeadless @('run', 'image.to-jpg', "`"$work\photo.heic`"")).ExitCode
-    Assert ($code -eq 0) "installed flevert.exe converts HEIC to JPG (exit $code)"
-    $jpg = [Drawing.Image]::FromFile("$work\photo.jpg")
-    try { Assert ($jpg.RawFormat.Equals([Drawing.Imaging.ImageFormat]::Jpeg) -and $jpg.Width -eq 320 -and $jpg.Height -eq 240) 'photo.jpg is a 320x240 JPEG' }
-    finally { $jpg.Dispose() }
+    AssertConversions "$work\fresh"
     Assert (Test-Path "$appData\logs") 'the conversion wrote its log under app data'
+    $unknown = @(Get-ChildItem $appData -Force | Where-Object { $appDataFolders -notcontains $_.Name } | ForEach-Object { $_.Name })
+    Assert ($unknown.Count -eq 0) "app data holds only folders the uninstaller deletes ($($unknown -join ', '))"
 
     Install | Out-Null
     Assert (@(MenuKeys).Count -eq $menuCount) 'installing again leaves the same menu'
@@ -275,6 +378,40 @@ try {
     Assert ($run.ExitCode -eq 0) "setup exits with 0 (got $($run.ExitCode); log $($run.Log))"
     Uninstall
     (Get-Item $cwdLink).Delete()
+    AssertClean
+
+    Write-Host 'Scenario 10: an upgrade over the previous release keeps both choices, adds the new menu, leaves no stale file'
+    # Downloaded (or copied from -PreviousSetup) into a new private folder and checked against the pinned SHA256 first.
+    $getPrevious = @{ Destination = (Join-Path $work 'previous') }
+    if ($PreviousSetup) { $getPrevious.Path = $PreviousSetup }
+    $previous = & (Join-Path $PSScriptRoot 'get-previous-setup.ps1') @getPrevious
+    $run = Setup @('/CLASSICMENU=1', '/UPDATECHECK=0') -Exe $previous
+    Assert ($run.ExitCode -eq 0) "the previous release installs (got $($run.ExitCode); log $($run.Log))"
+    Write-Host "      installed $((Get-Item "$app\flevert.exe").VersionInfo.ProductVersion) from $previous"
+    Assert ((Get-ItemProperty $classicKey).Flevert -eq '1') 'the previous release switched the classic menu on'
+    Assert (-not (UpdateCheckEnabled)) 'the previous release turned the check for new versions off'
+    $previousFiles = InstalledFiles
+    Copy-Item $heic "$work\before-upgrade.heic"
+    $code = (RunFlevertHeadless @('run', 'image.to-jpg', "`"$work\before-upgrade.heic`"")).ExitCode
+    Assert ($code -eq 0 -and (Test-Path "$work\before-upgrade.jpg")) "the previous release converts a picture (exit $code)"
+
+    Install | Out-Null
+    Assert ((Get-FileHash "$app\flevert.exe").Hash -eq $freshExe) 'flevert.exe is the new version'
+    Assert ((Get-ItemProperty $classicKey -ErrorAction SilentlyContinue).Flevert -eq '1') 'upgrading without /CLASSICMENU keeps the classic menu'
+    Assert (-not (UpdateCheckEnabled)) 'upgrading without /UPDATECHECK keeps the check for new versions off'
+    Assert (Test-Path "$associations\.pdf\shell\Flevert") 'the menu now has an entry for .pdf'
+    Assert (@(MenuCommands '.pdf' | Where-Object { $_ -like '* run pdf.rotate-right *' }).Count -eq 1) 'the .pdf menu rotates PDFs'
+    Assert (@(MenuCommands '.jpg' | Where-Object { $_ -like '* run pdf.from-images *' }).Count -eq 1) 'the .jpg menu combines pictures into a PDF'
+    # Inno never deletes what an earlier version installed: anything a fresh install lacks is left over (Flevert.iss,
+    # [InstallDelete]).
+    $upgraded = InstalledFiles
+    $stale = @($upgraded | Where-Object { $freshFiles -notcontains $_ })
+    Assert ($stale.Count -eq 0) "no file of the previous release that this one does not ship is left ($($stale -join ', '))"
+    $missing = @($freshFiles | Where-Object { $upgraded -notcontains $_ })
+    Assert ($missing.Count -eq 0) "every file of a fresh install is there ($($missing -join ', '))"
+    Write-Host "      the previous release had $($previousFiles.Count) files, this one $($upgraded.Count)"
+    AssertConversions "$work\upgraded"
+    Uninstall
     AssertClean
 
     Write-Host 'PASS'

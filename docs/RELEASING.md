@@ -8,7 +8,7 @@ For maintainers. Releases are built only by [`.github/workflows/release.yml`](..
 2. The repository is clean (below).
 3. CI is green on the commit three times in a row (re-run it from the Actions tab).
 4. The three reviews (code, security, doubt) of every change since the last release found nothing Critical, High or Required. The scope is `git diff v<previous>..HEAD`: features released and verified before are not reviewed again unless their code changed, but shared code that changed (runner, batching, output paths, setup, menus) is in scope because it touches old features too. The manual runtime check covers what is new or changed; every automated test still runs, as on CI, to catch regressions, and the upgrade over the previous release (step 5) is always tried.
-5. From v0.1.1 on, upgrade over the previous release: install the previous published setup, convert a file, run the new setup over it (from the draft, below), and check the menu still works and uninstalling removes everything.
+5. From v0.1.1 on, upgrade over the previous release: install the previous published setup, convert a file, run the new setup over it (from the draft, below), and check the menu still works and uninstalling removes everything. `scripts/test-installer.ps1` does this in its last scenario: it gets the previous setup through `scripts/get-previous-setup.ps1`, which downloads it (or copies the file given with `-PreviousSetup`) and refuses it unless its SHA256 is the one pinned there.
 
 ## Clean the repository
 
@@ -19,7 +19,7 @@ Visitors judge a project by its branch list, its open pull requests and its root
 3. **Files:** `git status --ignored` shows only build output, `deps/` and local files under `.claude/` (worktrees, `settings.local.json`, locks); nothing stray is tracked at the root (notes, probes, logs, personal files such as `AGENTS.md`). `git grep -i -e convertanything -e "ca\.exe"` finds only this line and the deliberate history note in `tasks/todo.md`.
 4. **Docs:** README, CHANGELOG, `docs/install.md` and the specs describe the release as shipped; `tasks/HANDOFF.md` marks the finished module as done and drops notes that no longer apply.
    - **No hand-over traces** (the maintainer's rule): `tasks/HANDOFF.md` keeps only the goal, the process, the state and the next task. Sections written to move work between machines or sessions go: which computer the work moved to, tables of `wip/*` branches, "stopped mid-way" notes, agent and worktree instructions tied to one session, local folder names. `git grep -n -i -e "wip/" -e "bàn giao giữa chừng" -e "máy văn phòng" -e "máy PC" -e "worktree-agent" -- tasks/HANDOFF.md` prints nothing. The per-module `todo.md` files stay as the work's history.
-5. **After publishing:** delete local build output (`artifacts/`) and stale branches that appeared during the release (a Dependabot branch, a fix branch).
+5. **After publishing:** delete local build output (`artifacts/`) and stale branches that appeared during the release (a Dependabot branch, a fix branch). Pin the release just published in `scripts/get-previous-setup.ps1` (its version and the SHA256 from its `SHA256SUMS.txt`), so the next release's upgrade test starts from it.
 
 ## Tag and check the draft
 
