@@ -50,4 +50,5 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 - [ ] CI, release, setup-dev: bước `dotnet test tests/Flevert.Media.Tests`; `ffmpeg -version` khớp bản ghim; RELEASING: lịch kiểm bản mới hằng tháng
 
 ## T9: file độc
-- [ ] HLS, concat, subfile, 0 byte, hỏng, thời lượng giả 99 giờ: ≤ 10 s hoặc lỗi rõ, không kết nối mạng, không còn `.partial`
+- [x] HLS, concat, subfile, 0 byte, hỏng, thời lượng giả 99 giờ: ≤ 10 s hoặc lỗi rõ, không kết nối mạng, không còn `.partial`
+- Đã làm: `MaliciousMediaTests` (11 test, mỗi file < 10 s, thư mục chỉ còn input, `TcpListener` loopback không nhận kết nối nào): playlist HLS đặt tên `.mp4` trỏ cổng test (qua 4 loại thao tác), danh sách concat `.mkv` trỏ video thật bên cạnh, file rỗng/văn bản/script, MOV cắt mất `moov`, MPEG-TS có mốc thời gian nhảy 99 giờ (→ "longer than 12 hours", trước khi mã hóa), MKV hỏng giữa file (ra file hoặc lỗi rõ). `subfile:` không áp dụng: input luôn là `file:<đường dẫn>`, nội dung file không chọn được giao thức. Đối chứng âm: bỏ hai whitelist thì test concat đỏ; bản đầu của test concat có thêm dòng `http://…` nên vẫn xanh khi bỏ whitelist (demuxer concat tự từ chối URL, `safe=1`), đã sửa để chỉ còn tên file. HLS trong `.mp4` còn bị chính ffmpeg (≥ 6) từ chối vì đuôi không phải `.m3u8`; whitelist là lớp thứ hai.
