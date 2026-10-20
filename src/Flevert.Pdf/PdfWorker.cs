@@ -144,7 +144,7 @@ public sealed class PdfWorker
         ArgumentException.ThrowIfNullOrEmpty(folder);
         IReadOnlyList<PdfShrunkImage>? shrunk = null;
         var (_, run) = await RunAsync(inputPath, input => new PdfRenderRequest(inputPath, input, folder, PdfPageImageFormat.Jpeg, dpi) { Task = PdfWorkerTask.ShrinkImages },
-            "read", progress, ct, images => shrunk = images).ConfigureAwait(false);
+            "read", progress, ct, session => shrunk = session.Shrunk).ConfigureAwait(false);
         foreach (var image in shrunk!)
         {
             if (!File.Exists(image.Path))
@@ -154,10 +154,77 @@ public sealed class PdfWorker
         return shrunk;
     }
 
+    /// <summary>
+    /// The pages of <paramref name="inputPath"/> that are blank (<see cref="PdfRemoveBlankPages"/>), numbered from 1, in
+    /// order, and the number of pages; each page is reported as it is looked at.
+    /// </summary>
+    /// <exception cref="PdfException">As for <see cref="RenderAsync"/>.</exception>
+    internal async Task<(int Total, IReadOnlyList<int> Blank)> FindBlankPagesAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
+    {
+        IReadOnlyList<int> blank = [];
+        // Nothing is written: the folder field names the input's folder, which the worker never opens.
+        var (total, _) = await RunAsync(inputPath,
+            input => new PdfRenderRequest(inputPath, input, Path.GetDirectoryName(Path.GetFullPath(inputPath))!, PdfPageImageFormat.Jpeg, PdfToolsWorker.BlankDpi)
+            {
+                Task = PdfWorkerTask.BlankPages,
+            },
+            "read", progress, ct, session => blank = session.Blank).ConfigureAwait(false);
+        return (total, blank);
+    }
+
+    /// <summary>
+    /// Makes <paramref name="edit"/> to <paramref name="inputPath"/> and saves the result as the new file
+    /// <paramref name="outputPath"/>, reporting each page; returns the number of pages of the input.
+    /// </summary>
+    /// <param name="outputPath">A path no file has yet: the worker creates it.</param>
+    /// <exception cref="OperationSkippedException">There is nothing to do (every page is A4 already).</exception>
+    /// <exception cref="PdfException">As for <see cref="RenderAsync"/>.</exception>
+    /// <exception cref="InvalidOperationException">The worker could not set itself up (the Arial font of Windows is missing).</exception>
+    internal async Task<int> EditAsync(string inputPath, string outputPath, PdfEdit edit, IProgress<FileProgress>? progress, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+        var (total, run) = await RunAsync(inputPath,
+            input => new PdfRenderRequest(inputPath, input, outputPath, PdfPageImageFormat.Jpeg, 72) { Task = PdfWorkerTask.Edit, Options = edit.Encode() },
+            "read", progress, ct).ConfigureAwait(false);
+        if (!File.Exists(outputPath))
+            throw new PdfException(PdfError.ReaderFailed, FailedMessage(null, "read"), new PdfWorkerException(run, "the PDF is missing"));
+        return total;
+    }
+
+    /// <summary>
+    /// Writes every image the pages of <paramref name="inputPath"/> draw into <paramref name="folder"/>
+    /// (<see cref="PdfExtractImages"/>): <c>&lt;name&gt; 001.jpg</c> or <c>.png</c>, reporting each page as it is looked at
+    /// and each image as it is written. Returns the names written, in order.
+    /// </summary>
+    /// <param name="folder">An empty folder the caller holds (<see cref="OutputPath.WriteDirectoryAtomicallyAsync(string, string, Func{string, CancellationToken, Task}, CancellationToken)"/>).</param>
+    /// <exception cref="OperationSkippedException">The pages draw no image.</exception>
+    /// <exception cref="PdfException">As for <see cref="RenderAsync"/>.</exception>
+    /// <exception cref="IOException">An image could not be written.</exception>
+    internal async Task<IReadOnlyList<string>> ExtractImagesAsync(string inputPath, string folder, IProgress<FileProgress>? progress, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(folder);
+        IReadOnlyList<string> kinds = [];
+        var (_, run) = await RunAsync(inputPath,
+            input => new PdfRenderRequest(inputPath, input, folder, PdfPageImageFormat.Jpeg, 72) { Task = PdfWorkerTask.ExtractImages },
+            "read", progress, ct, session => kinds = session.Extracted).ConfigureAwait(false);
+        var stem = Path.GetFileNameWithoutExtension(inputPath);
+        var names = new List<string>(kinds.Count);
+        for (var i = 0; i < kinds.Count; i++)
+        {
+            var name = PdfToImages.PageName(stem, i + 1, kinds.Count, kinds[i] == "jpg" ? PdfPageImageFormat.Jpeg : PdfPageImageFormat.Png);
+            if (!File.Exists(Path.Combine(folder, name)))
+                throw new PdfException(PdfError.ReaderFailed, FailedMessage(null, "read"), new PdfWorkerException(run, $"{name} is missing from the folder"));
+            names.Add(name);
+        }
+
+        return names;
+    }
+
     // Runs one worker on the request made for the pinned input; "render" or "read" is what the messages say it was doing.
+    // finished: what the request needs from the session, once the worker has done.
     private async Task<(int Total, ExternalToolResult Run)> RunAsync(
         string inputPath, Func<FileIdentity, PdfRenderRequest> makeRequest, string doing, IProgress<FileProgress>? progress, CancellationToken ct,
-        Action<IReadOnlyList<PdfShrunkImage>>? shrunk = null)
+        Action<Session>? finished = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(inputPath);
         RequireExe();
@@ -174,6 +241,7 @@ public sealed class PdfWorker
         using var session = new Session(this, StallTimeout + (PerHundredMegabytes * (length / 100_000_000.0)), doing, progress, ct)
         {
             ShrinkFolder = made.Task == PdfWorkerTask.ShrinkImages ? made.Folder : null,
+            Task = made.Task,
         };
         var limits = new ExternalToolLimits { MaxMemoryBytes = MaxMemoryBytes, SingleProcess = true };
         ExternalToolResult run;
@@ -200,7 +268,7 @@ public sealed class PdfWorker
         }
 
         var total = session.Outcome(run, MaxMemoryBytes);
-        shrunk?.Invoke(session.Shrunk);
+        finished?.Invoke(session);
         return (total, run);
     }
 
@@ -263,6 +331,39 @@ public sealed class PdfWorker
 
         /// <summary>For a request to shrink images: the folder they are written to.</summary>
         public string? ShrinkFolder { get; init; }
+
+        /// <summary>What the worker was asked to do: the lines of the v0.2.2 tools are accepted only for theirs.</summary>
+        public PdfWorkerTask Task { get; init; }
+
+        private readonly List<int> _blank = [];
+        private int? _imageCount;
+        private int _extracted;
+        private int _extracting;
+        private readonly List<string> _extensions = [];
+        private int _savedMegabytes = -1;
+
+        /// <summary>For a request to find blank pages: those the worker said are blank, numbered from 1.</summary>
+        public IReadOnlyList<int> Blank
+        {
+            get
+            {
+                lock (_gate)
+                    return [.. _blank];
+            }
+        }
+
+        /// <summary>For a request to extract images: "jpg" or "png" for each image written, in order.</summary>
+        public IReadOnlyList<string> Extracted
+        {
+            get
+            {
+                lock (_gate)
+                    return [.. _extensions];
+            }
+        }
+
+        /// <summary>The most images a PDF may give: 2 000 pages of some each.</summary>
+        private const int MaxImages = 1_000_000;
 
         /// <summary>The images the worker said it wrote, once it is done.</summary>
         public IReadOnlyList<PdfShrunkImage> Shrunk
@@ -373,7 +474,35 @@ public sealed class PdfWorker
                         _encoding = null;
                         Watch(_worker.StallTimeout);
                         return null;
-                    case "done" when parts.Length == 2 && _total > 0 && _written == _total && _encoding is null:
+                    case "blank" when Task == PdfWorkerTask.BlankPages && parts.Length == 2 && _current > _written
+                        && (_blank.Count == 0 || _blank[^1] != _current):
+                        _blank.Add(Number(parts[1], _current, _current));
+                        return null;
+                    case "saved" when Task == PdfWorkerTask.Edit && parts.Length == 2 && _total > 0 && _written == _total:
+                        _savedMegabytes = Number(parts[1], _savedMegabytes + 1, int.MaxValue);
+                        Watch(_worker.StallTimeout);
+                        return null;
+                    case "images" when Task == PdfWorkerTask.ExtractImages && parts.Length == 2 && _total > 0 && _written == _total && _imageCount is null:
+                        _imageCount = Number(parts[1], 0, MaxImages);
+                        Watch(_worker.StallTimeout);
+                        return null;
+                    case "extract" when _imageCount is { } count && parts.Length == 3 && _extracting == 0 && _extracted < count:
+                        _extracting = Number(parts[1], _extracted + 1, _extracted + 1);
+                        var extract = parts[2].Split(' ');
+                        if (extract.Length != 2)
+                            throw new ProtocolException(line);
+                        // A JPEG is copied, not decoded: its size only sets the watchdog's window, capped like a page.
+                        var (extractWidth, extractHeight) = ImageSize(extract[0], extract[1], line, long.MaxValue);
+                        Watch(_worker.StallWindow(Math.Min(extractWidth, PdfDocument.MaxRenderPixels), Math.Min(extractHeight, PdfDocument.MaxRenderPixels)));
+                        return new FileProgress("image", _extracting, count);
+                    case "extracted" when _extracting > 0 && parts.Length == 3 && parts[2] is "jpg" or "png":
+                        Number(parts[1], _extracting, _extracting);
+                        _extensions.Add(parts[2]);
+                        (_extracted, _extracting) = (_extracting, 0);
+                        Watch(_worker.StallTimeout);
+                        return null;
+                    case "done" when parts.Length == 2 && _total > 0 && _written == _total && _encoding is null
+                        && (Task != PdfWorkerTask.ExtractImages || (_imageCount == _extracted && _extracting == 0)):
                         Number(parts[1], _total, _total);
                         _done = true;
                         _stall.CancelAfter(Timeout.InfiniteTimeSpan);
@@ -383,7 +512,8 @@ public sealed class PdfWorker
                         _error = (parts[1], PdfRenderWorker.OneLine(parts[2]));
                         Watch(_worker.StallTimeout); // it is about to exit
                         return null;
-                    case "pages" or "page" or "busy" or "wrote" or "done" or "error" or "encode" or "image" or "kept":
+                    case "pages" or "page" or "busy" or "wrote" or "done" or "error" or "encode" or "image" or "kept"
+                        or "blank" or "saved" or "images" or "extract" or "extracted":
                         throw new ProtocolException(line);
                     default:
                         // Not the worker's: a native library writing to standard output. It proves nothing, so it does
@@ -396,11 +526,14 @@ public sealed class PdfWorker
         private void Watch(TimeSpan window) => _stall.CancelAfter(window);
 
         // The pixel size of an image the worker decodes or wrote: at most MaxRenderPixels² in all, the most it decodes.
-        private static (int Width, int Height) ImageSize(string width, string height, string line)
+        private static (int Width, int Height) ImageSize(string width, string height, string line) =>
+            ImageSize(width, height, line, PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels);
+
+        private static (int Width, int Height) ImageSize(string width, string height, string line, long maxPixels)
         {
-            const int MaxPixels = PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels;
-            var size = (Width: Number(width, 1, MaxPixels), Height: Number(height, 1, MaxPixels));
-            return (long)size.Width * size.Height <= MaxPixels ? size : throw new ProtocolException(line);
+            var side = (int)Math.Min(maxPixels, int.MaxValue);
+            var size = (Width: Number(width, 1, side), Height: Number(height, 1, side));
+            return (long)size.Width * size.Height <= maxPixels ? size : throw new ProtocolException(line);
         }
 
         // A SHA-256 as the worker writes it: 64 lower-case hexadecimal digits, which is also a safe file name.
@@ -433,6 +566,8 @@ public sealed class PdfWorker
                         throw new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage);
                     if (code == PdfRenderWorker.NoTextCode)
                         throw new OperationSkippedException(PdfRenderWorker.NoTextMessage);
+                    if (code == PdfRenderWorker.SkippedCode)
+                        throw new OperationSkippedException(message);
                     if (Enum.TryParse<PdfError>(code, ignoreCase: false, out var error) && Enum.IsDefined(error) && !code.Any(char.IsDigit))
                         throw new PdfException(error, message, new PdfWorkerException(run, null));
                 }

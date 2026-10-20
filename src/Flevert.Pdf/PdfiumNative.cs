@@ -229,4 +229,77 @@ internal static unsafe partial class PdfiumNative
 
     [LibraryImport(Library)]
     public static partial int FPDF_SaveAsCopy(nint document, FileWrite* fileWrite, uint flags);
+
+    // Editing pages of an existing document (v0.2.2 PDF tools): fpdfview.h, fpdf_edit.h, fpdf_ppo.h, fpdf_flatten.h.
+
+    /// <summary>FS_RECTF: note the order, left, top, right, bottom.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RectF
+    {
+        public float Left;
+        public float Top;
+        public float Right;
+        public float Bottom;
+    }
+
+    public const int FontTrueType = 2;
+
+    // FPDFPage_Flatten: flatten for printing; the result says whether there was anything to flatten.
+    public const int FlattenForPrint = 1;
+    public const int FlattenFailed = 0;
+    public const int FlattenNothingToDo = 2;
+
+    [LibraryImport(Library)]
+    public static partial nint FPDF_CreateNewDocument();
+
+    /// <summary>The page's crop box (within its media box), in its own space, before its /Rotate.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDF_GetPageBoundingBox(nint page, RectF* rect);
+
+    /// <summary>The page's /Rotate in quarter turns clockwise: 0 to 3.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_GetRotation(nint page);
+
+    /// <summary>A text object in one of the 14 standard fonts, named in ASCII (<c>Helvetica</c>), which is not embedded.</summary>
+    [LibraryImport(Library)]
+    public static partial nint FPDFPageObj_NewTextObj(nint document, byte* font, float fontSize);
+
+    [LibraryImport(Library)]
+    public static partial nint FPDFText_LoadFont(nint document, byte* data, uint size, int fontType, int cid);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFFont_Close(nint font);
+
+    [LibraryImport(Library)]
+    public static partial nint FPDFPageObj_CreateTextObj(nint document, nint font, float fontSize);
+
+    /// <summary><paramref name="text"/> is UTF-16, ended by a NUL.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFText_SetText(nint textObject, ushort* text);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPageObj_Transform(nint pageObject, double a, double b, double c, double d, double e, double f);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPageObj_SetFillColor(nint pageObject, uint red, uint green, uint blue, uint alpha);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPageObj_GetBounds(nint pageObject, float* left, float* bottom, float* right, float* top);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_Flatten(nint page, int flag);
+
+    /// <summary>A form XObject in <paramref name="destination"/> drawing the source page as shown, from (0, 0) to its shown size.</summary>
+    [LibraryImport(Library)]
+    public static partial nint FPDF_NewXObjectFromPage(nint destination, nint source, int sourcePageIndex);
+
+    [LibraryImport(Library)]
+    public static partial void FPDF_CloseXObject(nint xobject);
+
+    [LibraryImport(Library)]
+    public static partial nint FPDF_NewFormObjectFromXObject(nint xobject);
+
+    /// <summary>Copies pages, annotations included, into <paramref name="destination"/> at <paramref name="index"/> (unsigned long: 32 bits on Windows).</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDF_ImportPagesByIndex(nint destination, nint source, int* pageIndices, uint length, int index);
 }
