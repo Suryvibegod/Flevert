@@ -14,16 +14,33 @@ internal static class PdfRepair
 
     public const string MissingPagesMessage = "This PDF is damaged: the result would miss pages.";
 
+    public const string UnreadableMessage = "This PDF is too damaged: Flevert could not write a copy of it that opens.";
+
     /// <summary>
     /// Called on the output before it is committed: when qpdf <paramref name="repaired"/> the input, counts the pages of
     /// <paramref name="outputPath"/>, and fails unless they are the <paramref name="pages"/> the input was counted with.
     /// </summary>
+    /// <remarks>
+    /// The output may not open at all: qpdf 12.4.2, given a PDF with neither cross-reference table nor trailer, finds its
+    /// pages by their catalog but writes no /Root and no /Size in the output's trailer. Written plainly, qpdf finds the
+    /// catalog again when it reads the output; packed into object streams (Compress), it cannot (probed).
+    /// </remarks>
     public static async Task CheckAsync(Qpdf qpdf, bool repaired, int pages, string outputPath, CancellationToken ct)
     {
         if (!repaired)
             return;
-        if (await qpdf.CountPagesAsync(outputPath, ct).ConfigureAwait(false) != pages)
-            throw new PdfException(PdfError.MissingPages, MissingPagesMessage);
+        int written;
+        try
+        {
+            written = await qpdf.CountPagesAsync(outputPath, ct).ConfigureAwait(false);
+        }
+        catch (PdfException e) when (e.Error == PdfError.NotPdf)
+        {
+            throw new PdfException(PdfError.RepairFailed, UnreadableMessage, e);
+        }
+
+        if (written != pages)
+            throw new PdfException(PdfError.RepairFailed, MissingPagesMessage);
         OutputNote.Add(RepairedNote);
     }
 

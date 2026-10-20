@@ -17,8 +17,19 @@ public sealed class PdfRepairTests : IDisposable
 
         var ex = await Assert.ThrowsAsync<PdfException>(() => PdfRepair.CheckAsync(Qpdf.NextToApp, repaired: true, pages: 5, output, CancellationToken.None));
 
-        Assert.Equal(PdfError.MissingPages, ex.Error);
+        Assert.Equal(PdfError.RepairFailed, ex.Error);
         Assert.Equal("This PDF is damaged: the result would miss pages.", ex.Message);
+    }
+
+    [Fact]
+    public async Task A_repaired_output_that_does_not_open_fails_as_too_damaged()
+    {
+        var output = _dir.File("out.pdf", "%PDF-1.7\nnothing here\n");
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => PdfRepair.CheckAsync(Qpdf.NextToApp, repaired: true, pages: 1, output, CancellationToken.None));
+
+        Assert.Equal(PdfError.RepairFailed, ex.Error);
+        Assert.Equal("This PDF is too damaged: Flevert could not write a copy of it that opens.", ex.Message);
     }
 
     [Fact]

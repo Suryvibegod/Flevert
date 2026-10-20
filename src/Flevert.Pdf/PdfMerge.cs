@@ -89,7 +89,7 @@ public sealed class PdfMerge : IBatchOperation
             // Fewer pages than counted, from inputs qpdf had to repair: pages were lost on the way (P4). Which input lost
             // them is not known.
             if (repaired && written < total)
-                throw new PdfException(PdfError.MissingPages, PdfRepair.MissingPagesMessage);
+                throw new PdfException(PdfError.RepairFailed, PdfRepair.MissingPagesMessage);
             PdfRepair.Note(repaired);
         }, ct).ConfigureAwait(false);
         if (signed)
