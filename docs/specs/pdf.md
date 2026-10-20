@@ -515,12 +515,12 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
 | op-id | Tên trong menu | Output | Cách làm |
 |---|---|---|---|
 | `pdf.remove-blank-pages` | Remove blank pages | `<tên> (no blank pages).pdf` | Xem mục "Remove blank pages" ngay dưới bảng. |
-| `pdf.page-numbers` | Add page numbers | `<tên> (numbered).pdf` | Tùy chọn vị trí: dưới giữa (mặc định), dưới phải, trên phải. Tùy chọn kiểu: `1` (mặc định), `1 / 12`, `Page 1 of 12`. Chữ đen Helvetica (font chuẩn của PDF, không nhúng) 10 pt, cách mép 28 pt (~1 cm), theo **trang đã xoay** để số nằm đúng chỗ khi xem. pdfium trong worker (`FPDFPageObj_NewTextObj`, `FPDFPage_GenerateContent`). |
+| `pdf.page-numbers` | Add page numbers | `<tên> (numbered).pdf` | Tùy chọn vị trí: dưới giữa (mặc định), dưới phải, trên phải. Tùy chọn kiểu: `1` (mặc định của công cụ), `1 / 12`, `Page 1 of 12`. **Từ menu** (`PdfToolMenu`): dưới giữa, kiểu `1 / 12` (không có hộp thoại hỏi tùy chọn). Chữ đen Helvetica (font chuẩn của PDF, không nhúng) 10 pt, cách mép 28 pt (~1 cm), theo **trang đã xoay** để số nằm đúng chỗ khi xem. pdfium trong worker (`FPDFPageObj_NewTextObj`, `FPDFPage_GenerateContent`). |
 | `pdf.watermark` | Add watermark | `<tên> (watermarked).pdf` | Xem mục "Add watermark" ngay dưới bảng. |
-| `pdf.n-up-2` / `pdf.n-up-4` | 2 pages per sheet / 4 pages per sheet | `<tên> (2 per sheet).pdf` | A4 ngang cho 2 trang, A4 dọc cho 4 trang, giữ tỉ lệ, theo thứ tự đọc. pdfium `FPDF_ImportNPagesToOne` trong worker. |
-| `pdf.fit-a4` | Fit pages to A4 | `<tên> (A4).pdf` | Mỗi trang thu/phóng vừa A4 (dọc hoặc ngang theo trang gốc), giữ tỉ lệ, căn giữa. Trang đã đúng A4 (±1 pt) giữ nguyên; mọi trang đã là A4 → skipped. pdfium `FPDF_ImportNPagesToOne` 1×1 trong worker. |
-| `pdf.flatten` | Lock filled forms | `<tên> (flattened).pdf` | pdfium `FPDFPage_Flatten`: giữ vector và chữ chọn được, **không** render thành ảnh như Stirling. Không có form hay chú thích → skipped. |
-| `pdf.split-10mb` / `pdf.split-25mb` | Split into parts under 10 MB / 25 MB | thư mục `<tên> (parts)\<tên> part 1.pdf` … | Xem mục "Split into parts" ngay dưới bảng. |
+| `pdf.n-up-2` / `pdf.n-up-4` | Print layout > 2 pages per sheet / 4 pages per sheet | `<tên> (2 per sheet).pdf` | A4 ngang cho 2 trang, A4 dọc cho 4 trang, giữ tỉ lệ, theo thứ tự đọc, lề 10 pt mỗi ô. Worker: làm phẳng form và chú thích của từng trang (`FPDFPage_Flatten`), rồi `FPDF_ImportNPagesToOne` một lần cho cả tài liệu (một bộ chép: font, ảnh dùng chung chỉ chép một lần), rồi dời mỗi trang (form XObject) vào trong lề ô của nó (`FPDFPageObj_Transform`). Tài liệu mới để in: không giữ bookmark, Info, link, nhãn trang, tag, trường form. |
+| `pdf.fit-a4` | Fit pages to A4 | `<tên> (A4).pdf` | Mỗi trang thu/phóng vừa A4 (dọc hoặc ngang theo trang **như hiển thị**), giữ tỉ lệ, căn giữa; trang A4 (±1 pt) đi cùng đường (tỉ lệ ~1), mọi trang đã là A4 → skipped. Worker: làm phẳng form và chú thích, `FPDF_ImportNPagesToOne` 1×1 (pdfium chép nguyên các trang, một bộ chép cho cả tài liệu), rồi trên mỗi trang `FPDFPage_TransFormWithClip` (ma trận theo `/Rotate`, cắt theo khung trang cũ), bỏ chú thích còn lại (link), đặt mọi hộp trang về A4. Để in, như n-up. |
+| `pdf.flatten` | Lock filled forms | `<tên> (flattened).pdf` | qpdf `--flatten-annotations=all` (lệch spec 1 của phần B: pdfium để lại `/AcroForm`): giữ vector và chữ chọn được, **không** render thành ảnh như Stirling. Form có `/NeedAppearances`: qpdf vẽ lại (`--generate-appearances`) **chỉ khi** mọi câu trả lời là ASCII in được (qpdf vẽ bằng bảng mã một byte của font, chữ Việt thành "?"); nếu không, bỏ `/NeedAppearances` trong cùng lần chạy (`--update-from-json`) và khóa theo appearance sẵn có; câu trả lời không có appearance mà cần vẽ → lỗi "This form has answers Flevert cannot redraw…", không ghi gì. Không có form hay chú thích → skipped. |
+| `pdf.split-10mb` / `pdf.split-25mb` | Split by size > Under 10 MB / Under 25 MB | thư mục `<tên> (parts)\<tên> part 1.pdf` … | Xem mục "Split into parts" ngay dưới bảng. |
 | `pdf.extract-images` | Extract images | thư mục `<tên> (images)\<tên> 001.jpg` … | Xem mục "Extract images" ngay dưới bảng. |
 | `pdf.extract-text` | Convert to > Text (menu Flevert) | như v0.2.1 | Không đổi. |
 
@@ -541,8 +541,11 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
 - Hộp thoại watermark phải nói rõ: watermark nằm trên trang nhưng **không** chống được việc sửa (người có công cụ vẫn xóa được).
 
 **Split into parts** (`pdf.split-10mb` / `pdf.split-25mb`):
-- Chia tham lam theo trang, như `SplitPdfBySizeController` của Stirling-PDF: thêm trang tới khi phần vượt giới hạn thì lùi lại một trang.
+- Chia tham lam theo trang, như `SplitPdfBySizeController` của Stirling-PDF: mỗi phần lấy nhiều trang nhất còn dưới giới hạn.
 - Mỗi phần ghi bằng qpdf `--pages … --stream-data=preserve`, rồi đo cỡ thật của file.
+- Đoán trước bằng cỡ từng trang riêng (qpdf `--split-pages`). Trang dùng chung font, ảnh thì mỗi trang riêng mang một bản: thư mục được đo trong lúc qpdf ghi, dừng qpdf khi vượt 4 × cỡ PDF (đoán theo trang trung bình) hoặc vượt chỗ trống trừ lề (lỗi rõ).
+- Tìm mỗi phần theo cỡ thật: lớn dần theo chi phí mỗi trang đo được, rồi thu hẹp giữa ứng viên vừa và ứng viên vượt. Sau 2 × số phần + 16 lần chạy qpdf, phần lấy ứng viên vừa lớn nhất.
+- Trước khi ghi cạnh file gốc: tổng các phần ≤ 4 × cỡ PDF và vừa chỗ trống.
 - Một trang đơn lẻ đã vượt giới hạn → lỗi nêu số trang.
 - File đã dưới giới hạn → skipped.
 - 1 MB = 1 000 000 byte.
