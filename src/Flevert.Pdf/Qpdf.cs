@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using Flevert.Core;
 
@@ -204,6 +205,62 @@ public sealed class Qpdf
         RequireOutput(run, outputPath);
     }
 
+    /// <summary>Whether the PDF is encrypted, and whether it opens without a password (<c>qpdf --requires-password</c>).</summary>
+    /// <exception cref="PdfException">The file is not a PDF, or is damaged beyond repair, or too large.</exception>
+    public async Task<PdfEncryption> GetEncryptionAsync(string inputPath, CancellationToken ct)
+    {
+        RequireArgumentLine(inputPath, nameof(inputPath));
+        RequireExe();
+        var length = new FileInfo(inputPath).Length;
+        if (length > MaxInputBytes)
+            throw PdfDocument.TooLargeError(MaxInputBytes);
+
+        var run = await RunWithLinesAsync(["--requires-password"], [inputPath], TimeoutFor(length), MaxMemoryBytes ?? MaxMemoryFor(length), ct)
+            .ConfigureAwait(false);
+        // Documented exit codes: 0 a password is needed, 2 not encrypted, 3 encrypted but it opens. 2 is also qpdf's
+        // error code, and then stderr ends with qpdf's error ("qpdf: <path>: …") rather than warnings ("WARNING: …").
+        return run.ExitCode switch
+        {
+            ExitPasswordRequired => PdfEncryption.NeedsPassword,
+            ExitWarnings => PdfEncryption.OpensWithoutPassword,
+            ExitError when !run.StandardError.TrimEnd().Split('\n')[^1].StartsWith("qpdf: ", StringComparison.Ordinal) => PdfEncryption.None,
+            _ => throw new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage, new QpdfException(run.ExitCode, Detail(run))),
+        };
+    }
+
+    /// <summary>
+    /// Writes <paramref name="outputPath"/>: the input encrypted with AES-256, user and owner password both
+    /// <paramref name="password"/>, nothing restricted. The password reaches qpdf only on its standard input.
+    /// </summary>
+    /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
+    /// <exception cref="ArgumentException">The password holds a line break, a null character or a lone surrogate
+    /// (<see cref="PasswordRules"/> keeps them out).</exception>
+    public async Task EncryptAsync(string inputPath, string outputPath, PdfPassword password, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+        // The passwords come before --bits: qpdf 12.4.2 reads --user-password after it as an unrecognized argument, and
+        // repeats it in its error. "--" ends the encryption options.
+        var secret = new Secret(password, EncryptOptionsBeforePasswords, ["--user-password=", "--owner-password="], ["--bits=256", EndOfPages]);
+        var run = await RunCheckedAsync(["--encrypt"], [inputPath], [inputPath, outputPath], outputPath, ct, secret).ConfigureAwait(false);
+        RequireOutput(run, outputPath);
+    }
+
+    /// <summary>
+    /// Writes <paramref name="outputPath"/>: the input opened with <paramref name="password"/>, without encryption. The
+    /// password reaches qpdf only on its standard input.
+    /// </summary>
+    /// <exception cref="PdfException"><see cref="PdfError.WrongPassword"/> when the password does not open it; otherwise as
+    /// for <see cref="TransformAsync"/>.</exception>
+    /// <exception cref="ArgumentException">As for <see cref="EncryptAsync"/>.</exception>
+    public async Task DecryptAsync(string inputPath, string outputPath, PdfPassword password, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+        var secret = new Secret(password, [], ["--password="], []);
+        var run = await RunCheckedAsync(["--decrypt"], [inputPath], [inputPath, outputPath], outputPath, ct, secret, opening: password)
+            .ConfigureAwait(false);
+        RequireOutput(run, outputPath);
+    }
+
     // An option whose value is a path: given through @- like the paths, as "<option><\\?\ path>".
     private const string UpdateFromJson = "--update-from-json=";
 
@@ -211,6 +268,39 @@ public sealed class Qpdf
     // starts like the option.
     private static string PathIn(string line) =>
         line.StartsWith(UpdateFromJson, StringComparison.Ordinal) ? line[UpdateFromJson.Length..] : line;
+
+    /// <summary>
+    /// Lines of <c>@-</c> that carry the password, before the paths: <see cref="Before"/>, then each of
+    /// <see cref="Prefixes"/> followed by the password (<c>--password=…</c>), then <see cref="After"/>. The password goes
+    /// from its characters straight into the bytes qpdf reads, and those bytes are zeroed once qpdf has exited.
+    /// </summary>
+    private sealed record Secret(PdfPassword Password, string[] Before, string[] Prefixes, string[] After);
+
+    /// <summary>What stands in for qpdf's message when it holds the password (qpdf repeats an argument it does not
+    /// recognize), so the message never reaches an exception, the log or a notification.</summary>
+    internal const string PasswordInMessage = "(qpdf's message was not kept: it could hold the password)";
+
+    /// <summary>
+    /// <paramref name="run"/> with any output that holds the password replaced as a whole: replacing only the password
+    /// would show where it was, and with it the password.
+    /// </summary>
+    internal static ExternalToolResult WithoutPassword(ExternalToolResult run, PdfPassword password)
+    {
+        var chars = password.Chars;
+        var inError = run.StandardError.AsSpan().IndexOf(chars) >= 0;
+        var inOutput = run.StandardOutput.AsSpan().IndexOf(chars) >= 0;
+        return inError || inOutput
+            ? run with
+            {
+                StandardError = inError ? PasswordInMessage : run.StandardError,
+                StandardOutput = inOutput ? PasswordInMessage : run.StandardOutput,
+            }
+            : run;
+    }
+
+    /// <summary>For tests: encryption options put on <c>@-</c> before the passwords instead of after them, where qpdf
+    /// refuses the passwords as unrecognized arguments and repeats them in its error.</summary>
+    internal string[] EncryptOptionsBeforePasswords { get; init; } = [];
 
     // qpdf's placeholder for the page number in the output name of --split-pages.
     private const string PageNumber = "%d";
@@ -234,8 +324,12 @@ public sealed class Qpdf
     /// that comes from one of them is a <see cref="BatchInputException"/> naming it. <paramref name="output"/>, when
     /// qpdf's error names it (or a file in it), makes the failure an <see cref="IOException"/>.
     /// </summary>
+    /// <param name="secret">Password lines put on <c>@-</c> before <paramref name="lines"/>.</param>
+    /// <param name="opening">The password that opens the input, if one was given: the check after a failure uses it, and
+    /// a password that does not open the input is <see cref="PdfError.WrongPassword"/>.</param>
     private async Task<ExternalToolResult> RunCheckedAsync(
-        string[] options, IReadOnlyList<string> inputs, string[] lines, string? output, CancellationToken ct)
+        string[] options, IReadOnlyList<string> inputs, string[] lines, string? output, CancellationToken ct,
+        Secret? secret = null, PdfPassword? opening = null)
     {
         // The options stay on the command line, where qpdf's C runtime would expand them as wildcards.
         if (options.FirstOrDefault(option => option.AsSpan().ContainsAny('*', '?')) is { } wild)
@@ -264,7 +358,7 @@ public sealed class Qpdf
         }
 
         var maxMemory = MaxMemoryBytes ?? MaxMemoryFor(total);
-        var run = await RunWithLinesAsync(options, lines, TimeoutFor(total), maxMemory, ct).ConfigureAwait(false);
+        var run = await RunWithLinesAsync(options, lines, TimeoutFor(total), maxMemory, ct, secret).ConfigureAwait(false);
         if (run.ExitCode is 0 or ExitWarnings)
             return run;
 
@@ -276,8 +370,12 @@ public sealed class Qpdf
         var named = inputs.Count == 1 ? inputs[0] : NamedInput(run, inputs);
         foreach (var input in named is null ? inputs : [named])
         {
-            if (await RequiresPasswordAsync(input, maxMemory, ct).ConfigureAwait(false))
-                throw ForInput(inputs, input, new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage));
+            if (await RequiresPasswordAsync(input, maxMemory, ct, opening).ConfigureAwait(false))
+            {
+                throw ForInput(inputs, input, opening is null
+                    ? new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage)
+                    : new PdfException(PdfError.WrongPassword, PdfException.WrongPasswordMessage));
+            }
         }
 
         // The output's name is a fresh temporary one no input contains.
@@ -299,15 +397,17 @@ public sealed class Qpdf
         inputs.Count > 1 && input is not null ? BatchInputException.ForInput(input, error.Message, error) : error;
 
     // Asked only after a failure, so a PDF that opens costs no second process. qpdf documents these exit codes, while
-    // its error text ("invalid password") may change between versions.
-    private async Task<bool> RequiresPasswordAsync(string inputPath, ulong maxMemory, CancellationToken ct)
+    // its error text ("invalid password") may change between versions. With a password, 0 means it does not open the
+    // file either.
+    private async Task<bool> RequiresPasswordAsync(string inputPath, ulong maxMemory, CancellationToken ct, PdfPassword? password = null)
     {
-        var probe = await RunWithLinesAsync(["--requires-password"], [inputPath], ProbeTimeout, maxMemory, ct).ConfigureAwait(false);
+        var secret = password is null ? null : new Secret(password, [], ["--password="], []);
+        var probe = await RunWithLinesAsync(["--requires-password"], [inputPath], ProbeTimeout, maxMemory, ct, secret).ConfigureAwait(false);
         return probe.ExitCode == ExitPasswordRequired;
     }
 
     private async Task<ExternalToolResult> RunWithLinesAsync(
-        string[] options, string[] paths, TimeSpan timeout, ulong maxMemory, CancellationToken ct)
+        string[] options, string[] paths, TimeSpan timeout, ulong maxMemory, CancellationToken ct, Secret? secret = null)
     {
         byte[] lines;
         try
@@ -319,13 +419,65 @@ public sealed class Qpdf
             throw new PdfException(PdfError.UnsupportedFileName, UnsupportedFileNameMessage, e);
         }
 
-        // qpdf starts no process of its own, so it may not start one.
-        var limits = new ExternalToolLimits { MaxMemoryBytes = maxMemory, SingleProcess = true };
-        var run = await ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, limits: limits,
-            environment: ToolEnvironment(), cancellationToken: ct).ConfigureAwait(false);
-        if (Untrustworthy(run, maxMemory) is { } error)
-            throw error;
-        return run;
+        if (secret is not null)
+            lines = WithPasswordLines(secret, lines);
+        try
+        {
+            // qpdf starts no process of its own, so it may not start one.
+            var limits = new ExternalToolLimits { MaxMemoryBytes = maxMemory, SingleProcess = true };
+            var run = await ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, limits: limits,
+                environment: ToolEnvironment(), cancellationToken: ct).ConfigureAwait(false);
+            if (secret is not null)
+                run = WithoutPassword(run, secret.Password);
+            if (Untrustworthy(run, maxMemory) is { } error)
+                throw error;
+            return run;
+        }
+        finally
+        {
+            // ExternalTool writes these bytes straight to qpdf's pipe and keeps no copy.
+            if (secret is not null)
+                CryptographicOperations.ZeroMemory(lines);
+        }
+    }
+
+    // The bytes of @-: the secret's lines, the password encoded from its characters into place, then the paths. Nothing
+    // of the password passes through a string.
+    private static byte[] WithPasswordLines(Secret secret, byte[] paths)
+    {
+        var password = secret.Password.Chars;
+        if (password.ContainsAny('\r', '\n', '\0'))
+            throw new ArgumentException("The password must not contain a line break or a null character.", nameof(secret));
+        int passwordBytes;
+        try
+        {
+            passwordBytes = PdfPassword.StrictUtf8.GetByteCount(password);
+        }
+        catch (EncoderFallbackException)
+        {
+            // Not the exception: it would carry the character it could not encode.
+            throw new ArgumentException("The password has a character UTF-8 cannot hold.", nameof(secret));
+        }
+
+        var before = StrictUtf8.GetBytes(string.Concat(secret.Before.Select(line => line + "\n")));
+        var after = StrictUtf8.GetBytes(string.Concat(secret.After.Select(line => line + "\n")));
+        var prefixes = secret.Prefixes.Select(StrictUtf8.GetBytes).ToArray();
+        var bytes = new byte[before.Length + prefixes.Sum(prefix => prefix.Length + passwordBytes + 1) + after.Length + paths.Length];
+        var at = bytes.AsSpan();
+        before.CopyTo(at);
+        at = at[before.Length..];
+        foreach (var prefix in prefixes)
+        {
+            prefix.CopyTo(at);
+            at = at[prefix.Length..];
+            at = at[PdfPassword.StrictUtf8.GetBytes(password, at)..];
+            at[0] = (byte)'\n';
+            at = at[1..];
+        }
+
+        after.CopyTo(at);
+        paths.CopyTo(at[after.Length..]);
+        return bytes;
     }
 
     // A line of @- as qpdf reads it: every path, alone or as an option's value, in the \\?\ form.

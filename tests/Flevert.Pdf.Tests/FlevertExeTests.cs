@@ -218,6 +218,30 @@ public sealed class FlevertExeTests : IDisposable
         Assert.Equal(1, pdf.PageCount);
     }
 
+    [Theory]
+    [InlineData("pdf.protect", "three-colours.pdf")]
+    [InlineData("pdf.unlock", "password-protected.pdf")]
+    public async Task Without_windows_a_password_operation_fails_clearly_rather_than_wait(string operationId, string fixture)
+    {
+        var input = CopyFixture(fixture, "Hóa đơn.pdf");
+
+        using var flevert = StartRun(operationId, input);
+        try
+        {
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+        }
+        finally
+        {
+            if (!flevert.HasExited)
+                flevert.Kill(entireProcessTree: true);
+        }
+
+        Assert.Equal(1, flevert.ExitCode);
+        Assert.Contains(PasswordPrompts.NoWindowMessage, string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)),
+            StringComparison.Ordinal);
+        Assert.Equal([input], Directory.GetFileSystemEntries(_dir.Path));
+    }
+
     private string CopyFixture(string fixture, string name)
     {
         var path = _dir.Combine(name);

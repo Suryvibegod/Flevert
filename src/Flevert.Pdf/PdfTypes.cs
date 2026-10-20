@@ -33,6 +33,19 @@ internal readonly record struct PdfLimits(int MaxPages, long MaxFileBytes, int M
     public static PdfLimits Default { get; } = new(PdfDocument.MaxPages, PdfDocument.MaxFileBytes, PdfDocument.MaxRenderPixels);
 }
 
+/// <summary>A PDF's encryption, as far as opening it goes.</summary>
+public enum PdfEncryption
+{
+    /// <summary>Not encrypted.</summary>
+    None,
+
+    /// <summary>Encrypted, but it opens without a password (its author restricted printing or copying, say).</summary>
+    OpensWithoutPassword,
+
+    /// <summary>Encrypted, and it opens only with a password.</summary>
+    NeedsPassword,
+}
+
 /// <summary>Why a PDF cannot be used.</summary>
 public enum PdfError
 {
@@ -58,6 +71,9 @@ public enum PdfError
 
     /// <summary>The PDF worker ended without finishing or saying why: it crashed on the file, or was ended from outside.</summary>
     ReaderFailed,
+
+    /// <summary>The password given does not open the PDF.</summary>
+    WrongPassword,
 }
 
 /// <summary>A PDF Flevert cannot use, with a message for the user.</summary>
@@ -77,4 +93,7 @@ public sealed class PdfException : Exception
 
     /// <summary>The same words for every PDF operation, qpdf or pdfium (docs/specs/pdf.md).</summary>
     public const string NeedsPasswordMessage = "This PDF needs a password: use Remove password first";
+
+    /// <summary>Remove password with a password that does not open the PDF.</summary>
+    public const string WrongPasswordMessage = "Wrong password: it does not open this PDF.";
 }

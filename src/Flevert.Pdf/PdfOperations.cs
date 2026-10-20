@@ -4,7 +4,9 @@ namespace Flevert.Pdf;
 
 /// <summary>
 /// The PDF operations offered in the menu, in menu order (docs/specs/pdf.md, table of operations): Convert, Merge PDFs,
-/// Split into pages, Rotate, Compress, Remove metadata. Nothing here loads pdfium or starts qpdf.
+/// Split into pages, Rotate, Compress, Remove metadata, Protect with password, Remove password. Nothing here loads pdfium
+/// or starts qpdf. The two password operations here have no window to ask in (they fail clearly); flevert.exe gives the
+/// one it runs its dialog (<see cref="IPasswordOperation.WithPrompt"/>).
 /// </summary>
 public static class PdfOperations
 {
@@ -18,5 +20,7 @@ public static class PdfOperations
         new PdfRotate(180, Qpdf.NextToApp),
         new PdfCompress(Qpdf.NextToApp),
         new PdfStripMetadata(Qpdf.NextToApp),
+        new PdfProtect(Qpdf.NextToApp),
+        new PdfUnlock(Qpdf.NextToApp),
     ];
 }
