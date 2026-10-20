@@ -47,7 +47,10 @@ Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile
 
 **Việc tiếp theo** (spec đã duyệt 2026-10-20), hai nhánh song song, mỗi nhánh mở pull request; maintainer review (code, security, doubt) rồi gộp, v0.2.1 trước:
 - `feat/v0.2.1-pdf`: [docs/specs/pdf.md](../docs/specs/pdf.md), mục "v0.2.1" (menu PDF 16 mục, Compress for sharing có spike, Extract text, báo "đã sửa", giới hạn T18 cho mọi thao tác ghi PDF, mục review còn mở, Dependabot). Tiến độ: `tasks/pdf/todo.md`.
+- `feat/v0.2.2-pdf` (tạo sau khi v0.2.1 vào `main`): [docs/specs/pdf.md](../docs/specs/pdf.md), mục "v0.2.2" (8 công cụ PDF tham khảo Stirling-PDF trong cửa sổ "More PDF tools…", menu ảnh và PDF sắp lại cho người dùng thật, icon Fluent). Thứ tự phát hành: v0.2.1 → v0.2.2 → v0.3.0 → v0.4.0 (OCR).
 - `feat/v0.3-media`: [docs/specs/media.md](../docs/specs/media.md) (ffmpeg bản GPL, menu video 16 mục). Tiến độ: `tasks/media/plan.md`, `tasks/media/todo.md`. Rebase lên `main` sau khi v0.2.1 được gộp.
+- `feat/v0.3.1-media` (sau v0.3.0): [docs/specs/media.md](../docs/specs/media.md), mục "v0.3.1" (Trim, xoay/lật không mã hóa lại, tắt tiếng, làm đều âm lượng, lấy khung hình, ghép clip an toàn, nén theo nơi gửi Email 18 MB/WhatsApp 16 MB/Messenger 25 MB, cửa sổ Video/Audio tools).
+- **Bản hiệu năng** (người dùng yêu cầu 2026-10-20, số phiên bản linh hoạt: 0.2.3 hoặc 0.3.2): sau v0.2.2 và v0.3.x, đo tốc độ theo skill `performance-optimization` (đo, sửa một chỗ, đo lại, giữ hoặc hoàn tác, ghi sổ). Chỉ phát hành khi số đo chậm hơn mục tiêu; đã nhanh thì bỏ. Mục tiêu trên máy 4 nhân: khởi động lạnh `flevert.exe run` ≤ 300 ms; ảnh HEIC 12 MP → JPG ≤ 1 s/ảnh; PDF → JPG ≤ 0,3 s/trang A4 ở 150 DPI; Compress for sharing ≤ 2 s/trang; Merge/Rotate 100 trang ≤ 2 s; video 1080p Convert/Compress ≤ 2× thời lượng. Công cụ đo có sẵn: `scripts/measure-startup.ps1`, `scripts/measure-convert.ps1`.
 
 **Ghi chú kỹ thuật:**
 - qpdf tự mở rộng ký tự đại diện trong đối số dòng lệnh (làm hỏng `\\?\` đường dẫn dài): đường dẫn đưa cho qpdf qua stdin `@-`; tùy chọn có `*`/`?`/`@` bị từ chối.

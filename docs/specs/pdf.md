@@ -299,3 +299,269 @@ Như phần v0.2 ở trên. Test chạy **lần lượt** từng project (`dotne
 
 1. **Bố cục menu** 16 mục như trên: Extract images ra ngoài v0.2.1; Repair thành thông báo tự động (P4), không có mục riêng; Reverse chỉ khi P1 bị bỏ; không làm cây menu thứ hai. Lý do: Rotate 180° (scan lộn ngược) dùng nhiều hơn Reverse; người dùng không biết khi nào cần Repair; Convert > JPG pages đáp ứng phần lớn nhu cầu lấy ảnh.
 2. **For sharing một mức**: 150 DPI + JPEG q80 (mức "ebook" quen thuộc của công cụ nén PDF: chữ nhỏ vẫn đọc rõ trên điện thoại và khi in A4). Không thêm mức thấp hơn: chữ hóa đơn nhòe, và vượt 16 mục.
+
+---
+
+# v0.2.2: thêm công cụ PDF (tham khảo Stirling-PDF)
+
+Trạng thái: **đã duyệt** (2026-10-20); nhãn và icon cụ thể được duyệt bằng ảnh chụp trong pull request. Làm trên nhánh `feat/v0.2.2-pdf`, tạo từ `main` **sau khi v0.2.1 được gộp** (cùng đụng menu PDF, worker và `Qpdf`); phát hành sau v0.2.1. Mọi quy tắc của v0.2 và v0.2.1 vẫn áp dụng.
+
+## Objective (v0.2.2)
+
+Người dùng giấy tờ ở Việt Nam hay cần thêm vài việc trước khi nộp hoặc in:
+- bỏ trang trắng của bản scan hai mặt;
+- đóng chữ "Chỉ dùng để nộp hồ sơ…" lên bản scan CCCD;
+- đánh số trang;
+- in 2 hoặc 4 trang trên một tờ;
+- đưa mọi trang về khổ A4;
+- khóa form đã điền;
+- chia file cho vừa giới hạn email;
+- lấy ảnh ra khỏi PDF.
+
+Hôm nay họ làm các việc này trên web, tức là để lộ giấy tờ. v0.2.2 thêm các việc đó, chạy trên máy, và làm lại menu chuột phải (ảnh và PDF) cho người dùng thật: sắp theo việc hay làm, tên dễ hiểu, có icon.
+
+## Nguồn tham khảo: Stirling-PDF
+
+[Stirling-Tools/Stirling-PDF](https://github.com/Stirling-Tools/Stirling-PDF): khoảng 95 000 sao, Java/Spring + PDFBox, giao diện web.
+
+Giấy phép: phần lõi là **MIT**. Các thư mục `app/proprietary`, `app/saas`, `engine/` và vài thư mục frontend có giấy phép riêng: **không đọc, không lấy gì từ đó**.
+
+Khảo sát 2026-10-20 trên `app/core` (khoảng 60 controller), đối chiếu với Flevert v0.2.1:
+
+| Nhóm của Stirling | Flevert đã có (v0.2.1) | Chọn cho v0.2.2 | Không làm, lý do |
+|---|---|---|---|
+| Trang | Merge, Split, Rotate | Bỏ trang trắng, Nhiều trang trên một tờ, Đưa về A4, Chia theo dung lượng | Sắp xếp/xóa trang tùy ý, booklet, poster, cắt lề, gộp thành một trang dài: cần giao diện chọn trang hoặc ít người dùng |
+| Chuyển đổi | Ảnh ↔ PDF, PDF → chữ | Lấy ảnh ra (Extract images) | Office ↔ PDF: cần LibreOffice (~300 MB). PDF → Word/Excel/EPUB/video: ngoài phạm vi |
+| Chỉnh nội dung | — | Đánh số trang, Watermark chữ, Làm phẳng form và chú thích | Sửa chữ, chú thích, mục lục. Đổi/đảo màu: đổi màu đúng nghĩa phải render trang thành ảnh, mất chữ chọn được |
+| Bảo mật | Mật khẩu, Remove metadata | — | Che thông tin: redact thật cần xóa nội dung dưới vùng che, mà pdfium không có API. Ký số, kiểm chữ ký: ngoài phạm vi. Gỡ hạn chế không có mật khẩu: là phá khóa |
+| Khác | Nén, sửa tự động | — | **OCR** (Tesseract, Apache-2.0): làm ở **v0.4.0** (người dùng chốt 2026-10-20). Tự xoay theo chữ: cần OCR, xét cùng v0.4.0. So sánh, pipeline: ngoài phạm vi |
+
+**Không chép code Java.** Flevert là C# với pdfium + qpdf. Chỉ lấy **ý tưởng và tham số mặc định** đã được kiểm chứng (ví dụ ngưỡng trang trắng), và ghi nguồn trong spec và commit message (quy tắc "Reuse before writing" của CLAUDE.md).
+
+## Menu: sắp lại theo người dùng thật, có icon, thêm "More PDF tools…" (bắt buộc ≤ 16 mục)
+
+Người dùng duyệt (2026-10-20): v0.2.2 thêm cửa sổ PDF tools **và** làm lại menu ảnh lẫn menu PDF.
+
+Mục tiêu: một người lần đầu chuột phải vào file thấy ngay việc mình cần, đọc tên là hiểu, nhìn icon là nhận ra. Không cần biết chữ "metadata" hay "lossless".
+
+### Nguyên tắc
+
+1. **Việc hay làm nhất đứng trên.**
+   - Thứ tự lấy theo mức phổ biến của các công cụ PDF/ảnh trên web (Smallpdf, iLovePDF, Stirling-PDF đều xếp nén, ghép, tách, chuyển ảnh lên đầu).
+   - Với ảnh: đổi định dạng (HEIC → JPG) là việc số một.
+2. **Tên là lời thường, nói kết quả.**
+   - "Remove metadata" thành **"Remove hidden info"**. Tooltip/mô tả nói rõ: GPS, máy ảnh, tác giả, ngày.
+   - Nhóm đổi định dạng là **"Convert to ▸"**. Mức nén nói tác dụng, không nói kỹ thuật.
+   - **op-id không đổi** (chỉ đổi nhãn), nên README, docs và test menu cập nhật theo.
+3. **Mỗi nhóm và mỗi việc có icon:**
+   - nhóm Convert, Compress, Rotate có icon riêng;
+   - mỗi việc đơn lẻ (Merge, Split, Protect, Remove password, Remove hidden info, Combine into PDF, More PDF tools) có icon;
+   - mục định dạng con (JPG, PNG…) không cần icon. Danh sách định dạng dài, thêm icon chỉ rối.
+4. **Nhóm bằng đường kẻ (separator)** giữa các cụm việc (đổi / sắp trang / bảo vệ), nếu đường kẻ **không** tính vào giới hạn 16 mục. Task đầu tiên đo điều này bằng MenuProbe trên Explorer thật (`CommandFlags` `ECF_SEPARATORBEFORE`). Nếu đường kẻ tính vào giới hạn thì bỏ đường kẻ, giữ thứ tự.
+5. **≤ 16 mục mỗi đuôi**, tính cả mục mở submenu (core.md, mục Menu). Test menu khẳng định điều này cho mọi đuôi.
+
+### Menu PDF (16 mục)
+
+```
+[icon] Compress ▸        Smaller, same quality · Smallest, for sharing     (3)
+[icon] Merge PDFs                                                           (1)
+[icon] Split into pages                                                     (1)
+[icon] Convert to ▸      JPG images · PNG images                            (3)
+[icon] Rotate ▸          Right 90° · Left 90° · 180°                        (4)
+──────
+[icon] Protect with password                                                (1)
+[icon] Remove password                                                      (1)
+[icon] Remove hidden info                                                   (1)
+──────
+[icon] More PDF tools…                                                      (1)   = 16
+```
+
+### Menu ảnh (≤ 16 mục; ví dụ `.jpg`)
+
+```
+[icon] Convert to ▸      PNG · WebP · AVIF · GIF · BMP · TIFF (bỏ đích trùng nguồn)          (7)
+[icon] Compress ▸        Light (best quality) · Balanced · Strong (smallest)
+                         · Under 500 KB · Under 1 MB · Under 5 MB                             (7)
+──────
+[icon] Remove hidden info                                                                     (1)
+[icon] Combine into PDF                                                                       (1)   = 16
+```
+
+- Thứ tự mới đưa **Remove hidden info** lên trước **Combine into PDF**: xóa GPS trước khi gửi ảnh là việc thường ngày, gộp ảnh thành PDF thì ít hơn.
+- HEIC/HEIF vẫn không có `Convert to > GIF` (giới hạn 16, image.md).
+
+### Icon
+
+- **Nguồn:** [microsoft/fluentui-system-icons](https://github.com/microsoft/fluentui-system-icons), giấy phép MIT, cùng phong cách với Windows 11.
+  - Dùng biến thể **Color** khi có (đọc rõ trên menu sáng lẫn tối).
+  - Không có biến thể Color thì dùng **Filled**, tô một màu nhấn đủ tương phản trên cả nền sáng `#F9F9F9` và nền tối `#2C2C2C` (≥ 3:1, WCAG cho đồ họa).
+- **Cách tạo:**
+  - Script `scripts/make-menu-icons.py` (hoặc `.ps1`) đọc SVG ở commit đã ghim của repo Fluent (URL + SHA256 trong script). Script xuất `.ico` nhiều cỡ (16, 20, 24, 32, 40, 48 px, cho mọi mức DPI) vào `assets/menu/`.
+  - `.ico` được **commit**: là tài sản nhỏ như `assets/app.ico`, không phải binary phụ thuộc.
+  - Thêm giấy phép MIT của Fluent vào `THIRD-PARTY-NOTICES.txt` (`write-notices.ps1` kiểm).
+- **Cài đặt:**
+  - Installer chép icon vào `{app}\icons\`.
+  - `install-menu` ghi giá trị `Icon` = `"<thư mục cài>\icons\<tên>.ico"` cho từng verb (top-level `Flevert` giữ icon của exe).
+  - Gỡ cài thì icon đi theo thư mục cài.
+  - Icon thiếu (bản dev) → menu vẫn ghi, không có icon; không lỗi.
+- **Bộ icon đề xuất** (tên Fluent; agent chọn biến thể đúng ở bước Plan và đưa ảnh chụp để duyệt):
+
+  | Mục | Icon Fluent |
+  |---|---|
+  | Convert to | `arrow_swap` |
+  | Compress | `arrow_minimize` (hoặc `archive`) |
+  | Merge PDFs | `merge` (hoặc `document_add`) |
+  | Split into pages | `split_vertical` (hoặc `cut`) |
+  | Rotate | `arrow_rotate_clockwise` |
+  | Protect with password | `lock_closed` |
+  | Remove password | `lock_open` |
+  | Remove hidden info | `shield` / `eye_off` |
+  | Combine into PDF | `document_pdf` |
+  | More PDF tools | `toolbox` (hoặc `apps`) |
+
+### Cửa sổ "Flevert — PDF tools" (mở từ `More PDF tools…`)
+
+- WinForms, cùng kiểu với hộp thoại mật khẩu: luôn trên cùng, có tên trợ năng, Enter/Esc, phím Tab đi đúng thứ tự.
+- Câu trên cùng nêu số file đang chọn ("3 PDFs selected").
+- Danh sách công cụ, mỗi dòng có:
+  - **icon** (cùng nguồn Fluent);
+  - **tên** ngắn;
+  - **một câu** nói kết quả (ví dụ "Remove blank pages: drops empty pages left by a two-sided scan.").
+- Các dòng xếp theo nhóm có tiêu đề (Pages · Add to pages · Extract), việc hay dùng trước:
+  - **Pages:** Remove blank pages · 2 pages per sheet · 4 pages per sheet · Fit pages to A4 · Split into parts under 10 MB / 25 MB
+  - **Add to pages:** Add watermark · Add page numbers · Flatten forms and comments
+  - **Extract:** Extract text · Extract images
+- Chọn công cụ có tùy chọn thì tùy chọn hiện ngay dưới (chữ watermark, vị trí và kiểu số trang). Mặc định là lựa chọn phổ biến, để người dùng chỉ cần bấm **Run**.
+- Hai nút: **Run** (nút mặc định) và **Cancel**.
+- Cửa sổ ghi nhớ công cụ chọn lần trước (thiết lập của người dùng trong `%LOCALAPPDATA%\Flevert`, không có dữ liệu file).
+
+**Nhiều file:**
+- Explorer mở một tiến trình cho mỗi file như mọi thao tác (ADR-0002); lô được gom như hiện nay.
+- Cửa sổ chỉ hỏi **một lần** cho cả lô (như "Use this password for all N files").
+- Công cụ chạy cho từng file (v0.2.2 không có công cụ N → 1).
+
+**Cancel và chạy không cửa sổ:**
+- Cancel → không file nào bị đổi, không thông báo lỗi.
+- Không có cửa sổ (`FLEVERT_HEADLESS=1`): `flevert.exe run <op-id> <file>` vẫn chạy từng công cụ với **tùy chọn mặc định** (để test và tự động hóa).
+- Công cụ cần chữ do người dùng nhập (watermark) thì lỗi rõ khi không có cửa sổ, như thao tác mật khẩu.
+
+`Convert > Text` (v0.2.1) chuyển thành dòng **Extract text** trong cửa sổ; op-id `pdf.extract-text` **không đổi**.
+
+### Kiểm như người dùng thật
+
+- **Ảnh chụp:** chụp menu thật (classic menu, Windows 11) của `.jpg`, `.heic`, `.pdf` ở chế độ **sáng và tối**, và cửa sổ PDF tools, ở 100% và 150% DPI. Ảnh đặt vào mô tả PR.
+- **Duyệt:** người dùng duyệt ảnh chụp **trước khi gộp**.
+- **Kịch bản tìm việc:** mỗi việc tới được trong ≤ 2 lần di chuột từ `Flevert`, tên đọc là hiểu không cần README. Các kịch bản:
+  - "gửi ảnh iPhone cho người dùng Windows";
+  - "giảm dung lượng PDF scan để gửi Zalo";
+  - "xóa vị trí GPS khỏi ảnh";
+  - "ghép 3 PDF";
+  - "đóng chữ lên bản scan CCCD";
+  - "bỏ trang trắng".
+
+  Reviewer doubt chạy các kịch bản này như một người dùng mới và ghi chỗ khó hiểu.
+- **Trợ năng:** UI Automation đọc được tên mọi mục của cửa sổ; cửa sổ dùng được chỉ bằng bàn phím.
+- Báo người dùng trước khi chạy test bật cửa sổ trên màn hình.
+
+## Yêu cầu
+
+Quy tắc chung cho mọi công cụ:
+- op-id riêng, gọi được bằng `flevert.exe run`.
+- Output cạnh file gốc theo quy tắc `(1)` của core; file gốc không đổi.
+- Đếm trang (tối đa 2 000) và giới hạn 2 GB như hiện có.
+- PDF có mật khẩu mở → lỗi như hiện có; chữ ký số → ghi chú.
+- Dữ liệu PDF lạ chỉ được pdfium đọc **trong worker** (`flevert.exe pdf-worker`, trần 2,5 GB, ngân sách thời gian).
+
+Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu** được tài liệu (`FPDF_SaveAsCopy` vào file `.partial` của cha). Thêm loại yêu cầu mới theo giao thức dòng hiện có, không đổi các dòng cũ.
+
+| op-id | Tên trong cửa sổ | Output | Cách làm |
+|---|---|---|---|
+| `pdf.remove-blank-pages` | Remove blank pages | `<tên> (no blank pages).pdf` | Xem mục "Remove blank pages" ngay dưới bảng. |
+| `pdf.page-numbers` | Add page numbers | `<tên> (numbered).pdf` | Tùy chọn vị trí: dưới giữa (mặc định), dưới phải, trên phải. Tùy chọn kiểu: `1` (mặc định), `1 / 12`, `Page 1 of 12`. Chữ đen Helvetica (font chuẩn của PDF, không nhúng) 10 pt, cách mép 28 pt (~1 cm), theo **trang đã xoay** để số nằm đúng chỗ khi xem. pdfium trong worker (`FPDFPageObj_NewTextObj`, `FPDFPage_GenerateContent`). |
+| `pdf.watermark` | Add watermark | `<tên> (watermarked).pdf` | Xem mục "Add watermark" ngay dưới bảng. |
+| `pdf.n-up-2` / `pdf.n-up-4` | 2 pages per sheet / 4 pages per sheet | `<tên> (2 per sheet).pdf` | A4 ngang cho 2 trang, A4 dọc cho 4 trang, giữ tỉ lệ, theo thứ tự đọc. pdfium `FPDF_ImportNPagesToOne` trong worker. |
+| `pdf.fit-a4` | Fit pages to A4 | `<tên> (A4).pdf` | Mỗi trang thu/phóng vừa A4 (dọc hoặc ngang theo trang gốc), giữ tỉ lệ, căn giữa. Trang đã đúng A4 (±1 pt) giữ nguyên; mọi trang đã là A4 → skipped. pdfium `FPDF_ImportNPagesToOne` 1×1 trong worker. |
+| `pdf.flatten` | Flatten forms and comments | `<tên> (flattened).pdf` | pdfium `FPDFPage_Flatten`: giữ vector và chữ chọn được, **không** render thành ảnh như Stirling. Không có form hay chú thích → skipped. |
+| `pdf.split-10mb` / `pdf.split-25mb` | Split into parts under 10 MB / 25 MB | thư mục `<tên> (parts)\<tên> part 1.pdf` … | Xem mục "Split into parts" ngay dưới bảng. |
+| `pdf.extract-images` | Extract images | thư mục `<tên> (images)\<tên> 001.jpg` … | Xem mục "Extract images" ngay dưới bảng. |
+| `pdf.extract-text` | Extract text | như v0.2.1 | Chỉ đổi chỗ trong menu. |
+
+**Remove blank pages** (`pdf.remove-blank-pages`):
+- Worker render từng trang ở 150 DPI xám.
+- Một trang là trắng khi cả hai điều kiện đúng:
+  - ≥ 99,9% điểm ảnh có độ sáng ≥ 245 (ngưỡng 10 trên 255). Ngưỡng lấy từ `BlankPageController` của Stirling-PDF (MIT).
+  - Trang không có ký tự nào (`FPDFText_CountChars` = 0). Điều kiện này Flevert thêm vào, để không bỏ nhầm trang chỉ có một dòng chữ nhỏ.
+- Giữ các trang còn lại bằng qpdf `--pages`: chép nguyên, không mã hóa lại.
+- Thông báo nêu số trang đã bỏ: "Removed 3 blank pages: 2, 8, 9."
+- Không trang nào trắng → skipped "This PDF has no blank pages."
+- Mọi trang đều trắng → lỗi "Every page of this PDF looks blank: nothing was removed."
+
+**Add watermark** (`pdf.watermark`):
+- Tùy chọn: chữ, bắt buộc, tối đa 100 ký tự, tiếng Việt được. Ô nhập có gợi ý "Chỉ dùng để nộp hồ sơ …".
+- Chữ xám, độ mờ 30%, xoay 45°, lặp thành lưới phủ cả trang (một dấu duy nhất trên bản scan giấy tờ thì dễ cắt bỏ). Cỡ chữ theo khổ trang.
+- Font: **Arial của Windows**, nhúng phần cần dùng lúc chạy (`FPDFText_LoadFont` với byte của `%WINDIR%\Fonts\arial.ttf`). Không đóng gói font. Thiếu Arial → lỗi rõ.
+- Mô tả trong cửa sổ phải nói rõ: watermark nằm trên trang nhưng **không** chống được việc sửa (người có công cụ vẫn xóa được).
+
+**Split into parts** (`pdf.split-10mb` / `pdf.split-25mb`):
+- Chia tham lam theo trang, như `SplitPdfBySizeController` của Stirling-PDF: thêm trang tới khi phần vượt giới hạn thì lùi lại một trang.
+- Mỗi phần ghi bằng qpdf `--pages … --stream-data=preserve`, rồi đo cỡ thật của file.
+- Một trang đơn lẻ đã vượt giới hạn → lỗi nêu số trang.
+- File đã dưới giới hạn → skipped.
+- 1 MB = 1 000 000 byte.
+- Ghi qua `WriteDirectoryAtomicallyAsync` (1 → N).
+
+**Extract images** (`pdf.extract-images`):
+- Như spec v0.2 (dòng `pdf.extract-images`): JPEG trong PDF ra `.jpg` nguyên byte; ảnh khác ra `.png`, giải mã trong worker.
+- Ảnh dùng lại ở nhiều chỗ chỉ ra một lần.
+- Ảnh nhỏ hơn 32 × 32 px bỏ qua (biểu tượng, đường kẻ).
+- Không có ảnh → skipped.
+- Giới hạn tổng pixel và kiểm chỗ trống như P6.6.
+
+## Testing Strategy (v0.2.2)
+
+- Test viết trước và thấy đỏ.
+- Fixture sinh bằng script, ghi nguồn gốc:
+  - scan 6 trang, trong đó 2 trang trắng và 1 trang chỉ có một dòng chữ nhỏ (trang này không được bỏ);
+  - PDF có trang xoay `/Rotate 90` (số trang và watermark phải đúng chỗ khi xem);
+  - trang Letter, A3 và khổ lạ (cho fit A4);
+  - form AcroForm đã điền, kèm chú thích;
+  - PDF 30 MB có ảnh (cho split 10 MB);
+  - PDF có JPEG, ảnh Flate, và ảnh dùng lại.
+- Kiểm nội dung, không chỉ kiểm file có tồn tại:
+  - render và so điểm mẫu: số trang ở góc dưới giữa, watermark có mặt ở giữa trang;
+  - số trang và khổ trang, đọc bằng qpdf;
+  - cỡ từng phần < giới hạn;
+  - JPEG xuất ra trùng byte với luồng trong PDF;
+  - chữ tiếng Việt của watermark lấy lại được bằng `pdf.extract-text`.
+- Mỗi công cụ mới chạy qua bảng PDF độc `MaliciousPdf`: ≤ 10 s hoặc lỗi rõ, không còn file tạm.
+- Cửa sổ chọn công cụ:
+  - test không cần UI cho phần logic (danh sách, tùy chọn, một câu trả lời cho cả lô);
+  - UI Automation kiểm tên trợ năng và phím. Báo người dùng trước khi chạy test bật cửa sổ trên màn hình;
+  - MenuProbe: menu `.pdf` đúng 16 mục.
+
+## Boundaries (v0.2.2)
+
+- **Always:** như v0.2.1; mọi việc pdfium với PDF lạ chạy trong worker; nêu nguồn Stirling-PDF khi lấy tham số hay thuật toán.
+- **Ask first:** thêm công cụ ngoài bảng trên; đóng gói font hay binary mới; đổi bố cục menu.
+- **Never:**
+  - đọc hay lấy gì từ các thư mục giấy phép riêng của Stirling-PDF, hay chép code Java;
+  - render trang thành ảnh để "làm phẳng" hay "đổi màu" (mất chữ);
+  - đẩy thẳng vào `main`;
+  - sửa version, `tasks/HANDOFF.md`, hay mục đã phát hành của CHANGELOG.
+
+## Success Criteria (v0.2.2)
+
+1. Menu `.pdf` và menu ảnh thật đúng bố cục ở trên (≤ 16 mục, đúng thứ tự, đúng tên, có icon, rõ trên nền sáng và tối). `More PDF tools…` mở cửa sổ, chạy được từng công cụ cho 1 file và cho 5 file (một câu hỏi cho cả lô). Người dùng đã duyệt ảnh chụp menu và cửa sổ; các kịch bản tìm việc đạt (≤ 2 lần di chuột).
+2. Bỏ trang trắng: fixture 6 trang → 4 trang; trang chỉ có một dòng chữ được giữ; thông báo nêu số trang đã bỏ.
+3. Số trang và watermark nằm đúng chỗ trên trang thường và trang xoay; watermark tiếng Việt lấy lại được nguyên văn.
+4. 2/4 trang mỗi tờ và A4: khổ trang output đúng A4 (±1 pt); số trang đúng (⌈N/2⌉, ⌈N/4⌉, N).
+5. Làm phẳng: form không còn trường điền được (qpdf `--json` không còn `/AcroForm` có trường); nội dung đã điền vẫn hiện và chọn được.
+6. Chia theo dung lượng: mọi phần < giới hạn, tổng số trang bằng input, đúng thứ tự.
+7. Lấy ảnh: JPEG trùng byte; ảnh dùng lại chỉ ra một lần.
+8. Mọi công cụ đạt bảng PDF độc. CI xanh 3 lần. `test-installer.ps1` đạt (gồm nâng cấp từ bản đã ghim). Ba review bối cảnh trống không còn Critical/High/Required.
+
+## Đã quyết (v0.2.2, người dùng 2026-10-20)
+
+1. **Menu**: thêm `More PDF tools…` mở cửa sổ chọn công cụ (có icon, có nhóm); `Convert > Text` vào cửa sổ; làm lại menu ảnh và PDF theo người dùng thật, có icon Fluent (MIT).
+2. **Phạm vi**: cả 8 công cụ trong bảng Yêu cầu.
+3. **OCR**: v0.4.0, sau media (v0.3.0); spec riêng viết khi bắt đầu v0.4.0 (Tesseract Apache-2.0 + dữ liệu `vie`, bộ cài nặng thêm khoảng 30–60 MB).
