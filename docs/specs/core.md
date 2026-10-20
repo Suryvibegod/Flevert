@@ -54,7 +54,7 @@ Lệnh của `flevert.exe`:
 flevert.exe run <op-id> <file>...        Chạy thao tác (Explorer gọi lệnh này)
 flevert.exe install-menu [--dev] [--allow-insecure-location]
                                     Ghi menu chuột phải vào HKCU (--dev: thêm các thao tác thử dev.*:
-                                    Copy, Slow copy, Split into pages;
+                                    Copy, Slow copy, Split into pages, Join;
                                     --allow-insecure-location: cho phép thư mục người khác sửa được, đi qua junction,
                                     chứa link, nằm trên ổ subst/ổ mạng/UNC; mặc định thư mục cài phải ở ổ cố định
                                     cục bộ có ACL (NTFS, không FAT/exFAT) và đường dẫn thật trùng đường dẫn đưa vào.
@@ -63,7 +63,7 @@ flevert.exe install-menu [--dev] [--allow-insecure-location]
 flevert.exe uninstall-menu               Gỡ mọi key đã ghi
 flevert.exe list-ops                     In danh sách thao tác và loại file áp dụng
 
-Biến môi trường: FLEVERT_HEADLESS=1 (chạy lô không UI), FLEVERT_LOG_DIR (đổi thư mục log), FLEVERT_BATCH_IDLE_MS (cửa sổ rảnh của lô, 100–10 000 ms; chỉ cho test tích hợp trên máy bận), FLEVERT_SLOW_COPY_MS (thời gian của thao tác dev Slow copy, 0–60 000 ms, mặc định 1 000; chỉ cho test tích hợp), FLEVERT_DEV_PAGE_MS (thời gian mỗi trang của thao tác dev Split into pages, 0–10 000 ms, mặc định 100; cho test tích hợp và để xem cửa sổ tiến độ), FLEVERT_UPDATE_URL (GitHub giả cho test báo bản mới; chỉ nhận `http://` tới địa chỉ IP loopback)
+Biến môi trường: FLEVERT_HEADLESS=1 (chạy lô không UI), FLEVERT_LOG_DIR (đổi thư mục log), FLEVERT_BATCH_IDLE_MS (cửa sổ rảnh của lô, 100–10 000 ms, thao tác N → 1 tối thiểu 1 000 ms; chỉ cho test tích hợp trên máy bận), FLEVERT_SLOW_COPY_MS (thời gian của thao tác dev Slow copy, 0–60 000 ms, mặc định 1 000; chỉ cho test tích hợp), FLEVERT_DEV_PAGE_MS (thời gian mỗi trang của thao tác dev Split into pages, 0–10 000 ms, mặc định 100; cho test tích hợp và để xem cửa sổ tiến độ), FLEVERT_UPDATE_URL (GitHub giả cho test báo bản mới; chỉ nhận `http://` tới địa chỉ IP loopback)
 ```
 
 ## Project Structure
@@ -87,21 +87,45 @@ Module sau thêm project riêng: `src/Flevert.Image/`, `src/Flevert.Media/`, `sr
 ### Hợp đồng thao tác
 
 ```csharp
-public interface IOperation
+public interface IMenuOperation                // phần chung mà menu, catalog, list-ops cần
 {
     string Id { get; }                         // "image.to-png" — ổn định, dùng trong registry
     string MenuPath { get; }                   // "Convert/PNG" — dấu / tạo menu con
     IReadOnlyCollection<string> Extensions { get; }  // ".jpg", ".heic", ...
+}
+
+public interface IOperation : IMenuOperation   // mỗi file một output
+{
     int MaxParallel => 1;                      // xem "Xử lý song song trong một lô"
     Task<string> RunAsync(string inputPath, CancellationToken ct);  // trả về đường dẫn output (file hoặc thư mục)
     Task<string> RunAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
         => RunAsync(inputPath, ct);            // runner gọi overload này; mặc định bỏ qua progress
 }
+
+public interface IBatchOperation : IMenuOperation  // cả lô → một output (ghép PDF, ảnh → PDF)
+{
+    Task<string> RunAsync(IReadOnlyList<string> inputPaths, IProgress<FileProgress>? progress, CancellationToken ct);
+}
 ```
+
+`OperationCatalog` nhận cả hai loại (`IMenuOperation`) và từ chối thao tác là cả hai loại hoặc không loại nào, vì `run` chọn đường chạy theo loại. Menu ghi cùng một lệnh cho cả hai loại (`run <op-id> "%1"`, Explorer vẫn chạy mỗi file một tiến trình); `list-ops` liệt kê cả hai.
 
 **Tiến độ trong một file** ([ADR-0007](../adr/0007-progress-within-a-file-and-folder-outputs.md)): thao tác chạy lâu (render 200 trang) cài overload có `progress` và báo `new FileProgress("page", 37, 200)` (đơn vị là danh từ tiếng Anh số ít; vị trí từ 1 tới tổng, tổng ≥ 1, sai thì ném `ArgumentException`); overload cũ gọi overload mới với `null`. Thao tác không báo tiến độ chỉ cài overload cũ, không đổi gì. Runner chuyển mỗi lần báo thành `BatchProgress` có `Within` và `Current` là file đó, dưới cùng khóa với lúc file bắt đầu/xong, nên dòng trang luôn nằm giữa hai mốc đó; báo sau khi file đã xong thì bỏ. Cửa sổ tiến độ hiện dòng thứ hai `page 37 of 200` (`BatchProgressText.DescribeWithin`), xóa khi một file bắt đầu hoặc xong; thanh tiến độ vẫn đếm file. Tên trợ năng của dòng đó là `Progress in the current file: page 37 of 200` (UI Automation đọc được); không đặt live region để trình đọc màn hình không đọc từng trang một.
 
 Thao tác dev `dev.split` (`Dev > Split into pages`, chỉ có với `install-menu --dev`): ghi 50 file trang vào thư mục `<tên> (pages)`, báo tiến độ mỗi trang, để thử output thư mục, tiến độ trong file và Cancel từ đầu tới cuối.
+
+**Thao tác N → 1** ([ADR-0007](../adr/0007-progress-within-a-file-and-folder-outputs.md), phần 2), `Runner.RunAsync(IBatchOperation, files, progress, ct)`:
+
+- **Chờ đủ lô:** runner đọc hết luồng file của chủ lô rồi mới làm gì khác. Chủ lô (không đổi) chỉ kết thúc luồng khi rảnh, hàng đợi trống, không ai gửi path trong cửa sổ rảnh và lô ≥ 1,5 s; lúc đó pipe đã đóng, nên hết luồng nghĩa là không còn file nào tới. Với thao tác N → 1, cửa sổ rảnh tối thiểu **1 s** (thay vì 400 ms): tiến trình đến muộn tạo lô thứ hai, ở đây là một output thứ hai thiếu file chứ không chỉ một thông báo thứ hai.
+- **Ghim hết, giữ suốt lúc chạy:** mọi file qua đúng các kiểm tra của mục "Đầu vào bị từ chối"; mọi handle giữ tới khi thao tác xong (hoặc bị bỏ sau Cancel). Hai cách viết của cùng một file (tên 8.3 và tên dài) ra cùng đường dẫn thật thì chỉ ghép một lần.
+- **Thứ tự:** `NaturalOrder.PathComparer`: `StrCmpLogicalW` (thứ tự Explorer dùng) trên tên file thật, rồi trên cả đường dẫn, rồi so ordinal, nên thứ tự luôn cố định dù file tới theo thứ tự nào. Giữ đúng giới hạn của Windows để khớp Explorer: dấu thanh và chữ đ xếp sau chữ và số (`Ảnh 2` trước `anh 3` trước `ảnh 10`; `đ` giữa `d` và `e`), dãy số tới 18 chữ số so theo giá trị, dài hơn thì so như chữ; theo locale của người dùng.
+- **Tất cả hoặc không:** một file bị từ chối → thao tác không chạy, không có output; log ghi từng file bị từ chối kèm lý do, kết quả nêu file đầu tiên (theo thứ tự tự nhiên) và số file bị từ chối khác. Thao tác ném `BatchInputException(inputPath, message)` khi không dùng được một file (ảnh hỏng) để thông báo nêu đúng file đó; lỗi khác làm output thất bại với message của nó.
+- **Thao tác** nhận danh sách đường dẫn thật (≥ 1 file, đã sắp), ghi output cạnh file đầu tiên qua `OutputPath`, tự quyết một file có được không (merge: không; ảnh → PDF: được).
+- **Kết quả:** `BatchOutcome { OneOutput = true }`, `Total` = 1, một kết quả (không có khi bị hủy). Thông báo: `Done: <tên output>`; `Failed: <file>: <lý do> Details: <thư mục log>` (chỉ dòng đầu, tối đa 120 ký tự, stack ở log); `Skipped: <lý do>`; `Cancelled.`. Ghép xong thì log mỗi file đầu vào một dòng `ok` kèm output.
+- **Tiến độ:** dòng lô đếm một "file": `0 of 1 done: <file đầu>`, dòng hai là tiến độ của thao tác (`file 3 of 12`), rồi `1 of 1`.
+- **Hủy:** khi file còn đang tới thì không chạy gì; khi đang chạy thì thao tác nhận token và tối đa 2 s để dừng và xóa output tạm, sau đó bị bỏ và các file được thả ghim.
+
+Thao tác dev `dev.join` (`Dev > Join`, chỉ có với `install-menu --dev`): nối các `.txt` theo thứ tự vào `<tên đầu> (+N).txt` cạnh file đầu (N = số file − 1; một file: `<tên> (joined).txt`), báo tiến độ mỗi file.
 
 ### Luồng một lần bấm
 
@@ -194,7 +218,7 @@ Thao tác ném `OperationSkippedException` khi đầu vào đã đáp ứng yêu
 
 Bấm vào thông báo mở log khi thông báo có chỉ tới log: có file lỗi (kể cả lô bị hủy giữa chừng), hoặc cả lô bị bỏ qua vì nhiều lý do khác nhau.
 
-Mã thoát của `flevert.exe run` (dùng cho script, chế độ headless): chỉ **tiến trình chủ lô** báo kết quả lô: 0 nếu mọi file đã xử lý và không file nào lỗi (file bị bỏ qua vẫn là 0, dù không có output); 1 nếu có file lỗi hoặc lô bị hủy; 2 nếu sai cú pháp/thao tác không tồn tại. Tiến trình giao file cho một lô đang chạy thoát 0 ngay khi giao xong, bất kể kết quả các file đó; script cần kết quả từng file thì đọc log (hoặc chạy các lệnh cách nhau quá cửa sổ gom lô).
+Mã thoát của `flevert.exe run` (dùng cho script, chế độ headless): chỉ **tiến trình chủ lô** báo kết quả lô: 0 nếu mọi file đã xử lý và không file nào lỗi (file bị bỏ qua vẫn là 0, dù không có output; thao tác N → 1: output đã ghi hoặc bị bỏ qua); 1 nếu có file lỗi hoặc lô bị hủy (N → 1: output thất bại, kể cả vì một file bị từ chối); 2 nếu sai cú pháp/thao tác không tồn tại. Tiến trình giao file cho một lô đang chạy thoát 0 ngay khi giao xong, bất kể kết quả các file đó; script cần kết quả từng file thì đọc log (hoặc chạy các lệnh cách nhau quá cửa sổ gom lô).
 
 ## Code Style
 
@@ -222,8 +246,8 @@ public static class OutputPath
 
 ## Testing Strategy
 
-- **Unit** (`Flevert.Core.Tests`): đặt tên output, mô hình menu từ danh sách thao tác, gom lô trong cùng tiến trình (50 lời gọi song song, file đến muộn khi đang xử lý, surrogate lẻ), parse lệnh.
-- **Tiến trình thật** (`ProcessBatchIntegrationTests`): chạy `flevert.exe` với `FLEVERT_HEADLESS=1` và `FLEVERT_LOG_DIR` trỏ thư mục tạm.
+- **Unit** (`Flevert.Core.Tests`): đặt tên output, mô hình menu từ danh sách thao tác, gom lô trong cùng tiến trình (50 lời gọi song song, file đến muộn khi đang xử lý, surrogate lẻ), parse lệnh, thứ tự tự nhiên (`NaturalOrderTests`), thao tác N → 1 (`RunnerBatchOperationTests`: chờ đủ lô, tất cả hoặc không, ghim suốt lúc chạy, tiến độ, hủy).
+- **Tiến trình thật** (`ProcessBatchIntegrationTests`): chạy `flevert.exe` với `FLEVERT_HEADLESS=1` và `FLEVERT_LOG_DIR` trỏ thư mục tạm; có 12 tiến trình `dev.join` → đúng một file theo thứ tự tự nhiên.
 - **Integration**: ghi/gỡ registry vào key test riêng `HKCU\Software\Classes\Flevert.Test`, kiểm tra gỡ xong không còn key nào; gom lô thật bằng nhiều tiến trình `flevert.exe`.
 - **Runtime thủ công** (bắt buộc trước khi đóng module): bấm thật trong Explorer bằng thao tác `dev.copy`.
 - Viết test trước, chạy đỏ, rồi mới code cho xanh (theo `test-driven-development`).

@@ -49,10 +49,11 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 ## Giai đoạn 2: thao tác nhiều file
 
 ### T5: Thao tác N→1 trong core (`IBatchOperation`)
-- [ ] Hợp đồng mới cạnh `IOperation` (không đổi đường đi hiện có): nhận danh sách file đã ghim, thứ tự `StrCmpLogicalW`, trả một output; menu và catalog nhận cả hai loại
-- [ ] Runner ghim mọi file của lô trước khi gọi; một file bị từ chối (đuôi, đường dẫn) → cả lô lỗi, thông báo nêu file
-- [ ] Thông báo `Done: <tên output>`; ADR-0007
+- [x] Hợp đồng mới cạnh `IOperation` (không đổi đường đi hiện có): nhận danh sách file đã ghim, thứ tự `StrCmpLogicalW`, trả một output; menu và catalog nhận cả hai loại
+- [x] Runner ghim mọi file của lô trước khi gọi; một file bị từ chối (đuôi, đường dẫn) → cả lô lỗi, thông báo nêu file
+- [x] Thông báo `Done: <tên output>`; ADR-0007
 - Kiểm: thao tác dev `dev.join` (nối các `.txt`) qua 12 tiến trình `flevert.exe` thật → một file đúng thứ tự tự nhiên (`ảnh 2` trước `ảnh 10`); toàn bộ test tích hợp cũ vẫn xanh
+- Đã làm (2026-10-20): `IMenuOperation` (Id, MenuPath, Extensions) là gốc chung của `IOperation` (không đổi gì khác) và `IBatchOperation`; catalog từ chối thao tác vừa là cả hai loại. Chủ lô không đổi: runner N → 1 đọc hết `ReadAllAsync` (hết luồng = pipe đã đóng) rồi mới ghim; cửa sổ rảnh tối thiểu 1 s cho N → 1. `NaturalOrder` (`StrCmpLogicalW` qua `LibraryImport`): đo trên máy này, dãy số > 18 chữ số so như chữ và dấu thanh xếp sau số (`Ảnh 2` < `anh 3`), giữ nguyên để khớp Explorer. `BatchInputException` để thao tác nêu file hỏng; hủy cho thao tác 2 s để dọn `.partial`. 31 test mới đỏ với stub rồi xanh; đột biến (thả ghim trước khi chạy, bỏ sắp xếp) làm test tương ứng đỏ, kể cả test 12 tiến trình. Chạy thật headless: 6 tiến trình khởi động lộn thứ tự → một `ghi chú 1 (+5).txt` đúng thứ tự; có file `.md` → chủ lô thoát 1, hai tiến trình kia 0, không có output, log nêu file. Chưa chạy qua menu thật và cửa sổ tiến độ (không có UI mới; để T6 khi có `pdf.merge`)
 - Phụ thuộc: T2. Cỡ: M
 
 ### T6: `pdf.merge`
