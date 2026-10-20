@@ -72,12 +72,14 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
 /// input, renders and encodes every page into the folder it names, and says what it does, one line at a time, on standard
 /// output (ADR-0008, "Reading untrusted PDFs in a worker"):
 /// <list type="bullet">
-/// <item><c>pages &lt;count&gt;</c> once the PDF is open;</item>
+/// <item><c>pages &lt;count&gt;</c> once the PDF is open, after which the size of every page is read
+/// (<see cref="PdfRenderBudget"/>);</item>
 /// <item><c>page &lt;n&gt; &lt;width&gt; &lt;height&gt;</c> before pdfium reads and draws page n, at that pixel size;</item>
 /// <item><c>busy &lt;n&gt;</c> at most twice a second while ImageMagick encodes page n;</item>
 /// <item><c>wrote &lt;n&gt;</c> once page n is written; <c>done &lt;count&gt;</c> at the end, exit code 0;</item>
 /// <item><c>error &lt;code&gt; &lt;message&gt;</c> as the last line when it cannot go on (a <see cref="PdfError"/> name;
-/// <c>Write</c> when a page could not be written; <c>Setup</c> when ImageMagick could not be set up), exit code 1.</item>
+/// <c>Write</c> when a page could not be written, or the disk has not the room for them all; <c>Setup</c> when ImageMagick
+/// could not be set up), exit code 1.</item>
 /// </list>
 /// A request it cannot read, or an input that is not the file the request names, ends it with exit code 2 and nothing on
 /// standard output. Anything else (a crash in pdfium, a kill) is whatever the process ends with.
@@ -151,6 +153,17 @@ public static class PdfRenderWorker
         if (total == 0)
             throw new PdfException(PdfError.NoPages, "This PDF has no pages.");
         lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"pages {total}"));
+
+        // Every page's pixel size, before any is drawn: too many pixels in all, or not the room for them, ends it here.
+        long allPixels = 0;
+        for (var index = 0; index < total; index++)
+        {
+            var size = pdf.GetRenderSize(index, request.Dpi);
+            allPixels += (long)size.Width * size.Height;
+        }
+
+        if (PdfRenderBudget.Check(allPixels, request.Format, PdfRenderBudget.FreeBytes(request.Folder)) is { } noRoom)
+            throw new PageWriteException(noRoom, null);
 
         try
         {
@@ -252,7 +265,7 @@ public static class PdfRenderWorker
     }
 
     /// <summary>A page could not be written to the folder (disk full, access denied): not the PDF's fault.</summary>
-    private sealed class PageWriteException(string message, Exception inner) : Exception(message, inner);
+    private sealed class PageWriteException(string message, Exception? inner) : Exception(message, inner);
 
     /// <summary>ImageMagick could not be set up in the worker (its configuration folder could not be written).</summary>
     private sealed class SetupException(string message, Exception inner) : Exception(message, inner);
