@@ -33,7 +33,8 @@ public sealed class PdfCompressSharingTests(ITestOutputHelper output) : IDisposa
     public async Task A_twenty_page_scan_at_300_dpi_comes_out_at_most_40_percent_as_large_and_looks_the_same()
     {
         // The spike's fixture (docs/specs/pdf.md, P1): 20 A4 pages scanned as JPEGs at 300 DPI, each a different page,
-        // so the time and the size are those of 20 images decoded, shrunk and encoded.
+        // so the time and the size are those of 20 images decoded, shrunk and encoded. With a sensor's noise (SharingPdf):
+        // measured 28% (22.2 to 6.2 MB); the clean scan below is the harder case.
         var scans = Enumerable.Range(0, 20).Select(seed => Jpeg(ScanJpeg(seed), 2480, 3508)).ToList();
         var input = _dir.Combine("Hồ sơ scan.pdf");
         Write(input, scans, [.. Enumerable.Range(0, 20).Select(p => new[] { (p, FullPage) })]);
@@ -58,6 +59,23 @@ public sealed class PdfCompressSharingTests(ITestOutputHelper output) : IDisposa
             output.WriteLine($"page {page + 1}: {difference:0.00}");
             Assert.True(difference <= 3, $"page {page + 1} differs by {difference:0.00} on average");
         }
+    }
+
+    [Fact]
+    public async Task A_twenty_page_clean_scan_comes_out_at_most_half_as_large_and_looks_the_same()
+    {
+        // The same pages without sensor noise: a cleaner scan has less to gain. Measured 47% (2026-10-20, Windows, the
+        // ImageMagick of this solution); the bound is that, rounded up, not the 40% of the noisy scan.
+        var scans = Enumerable.Range(0, 20).Select(seed => Jpeg(ScanJpeg(seed, noise: false), 2480, 3508)).ToList();
+        var input = _dir.Combine("clean scan.pdf");
+        Write(input, scans, [.. Enumerable.Range(0, 20).Select(p => new[] { (p, FullPage) })]);
+
+        var result = await Op().RunAsync(input, CancellationToken.None);
+
+        var (before, after) = (new FileInfo(input).Length, new FileInfo(result).Length);
+        output.WriteLine($"{before} → {after} bytes ({100.0 * after / before:0}%)");
+        Assert.True(after <= before * 0.5, $"{before} → {after} bytes");
+        Assert.True(MeanDifference(input, result, 0) <= 3);
     }
 
     [Fact]

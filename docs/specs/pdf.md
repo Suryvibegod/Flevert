@@ -286,7 +286,7 @@ Như phần v0.2 ở trên. Test chạy **lần lượt** từng project (`dotne
 ## Success Criteria (v0.2.1)
 
 1. Menu `.pdf` thật (MenuProbe) đúng bố cục đã duyệt, ≤ 16 mục.
-2. P1 (nếu giữ): fixture scan 20 trang → output ≤ 40% cỡ, khác biệt render ≤ 3/255, ≤ 2 s/trang; PDF đã nhỏ → skipped. Nếu bỏ: kết quả spike ghi lại, P2 xong.
+2. P1 (nếu giữ): fixture scan 20 trang khác nhau **có nhiễu cảm biến** → output ≤ 40% cỡ; cùng 20 trang **scan sạch** (không nhiễu) → ≤ 50% (đo được 47% trên Windows, 2026-10-20; bound trung thực, không phải 40%); khác biệt render ≤ 3/255, ≤ 2 s cho mỗi ảnh mã hóa lại; PDF đã nhỏ → skipped. Nếu bỏ: kết quả spike ghi lại, P2 xong. (Review trước phát hành: fixture cũ dùng lại 4 ảnh cho 20 trang và chỉ đạt 40% nhờ nhiễu độc lập từng kênh; nay nhiễu là độ sáng, chung cho R, G, B, hạt khoảng 2 pixel.)
 3. P3: PDF có chữ tiếng Việt → `.txt` UTF-8 BOM đúng chữ, đúng thứ tự trang, `\f` giữa trang; PDF scan → skipped.
 4. P4: PDF hỏng nhẹ → output + ghi chú "had to repair"; output đã sửa không mở được hoặc khác số trang qpdf đếm ở input → lỗi, không có output (trang mất do chính lần sửa thì không phát hiện được, xem P4).
 5. P5, P6: mỗi mục có test đỏ trước rồi xanh; Split ra `(split)`.
@@ -311,7 +311,7 @@ Như phần v0.2 ở trên. Test chạy **lần lượt** từng project (`dotne
 | ảnh Flate RGB 300 DPI | 4,52 → 0,47 MB | 2,69 | |
 | JPEG CMYK có `/Decode [1 0 …]` | 3,77 → 0,42 MB | 2,73 | |
 
-Bản C# (worker `flevert.exe pdf-worker`, ImageMagick thu nhỏ) chạy trên Linux qua reflection: 20 ảnh 2480×3508 → 1240×1754, 0,5 s/trang. Test trên CI Windows dùng fixture sinh lúc chạy (`SharingPdf`), cùng các tiêu chí.
+Bản C# (worker `flevert.exe pdf-worker`, ImageMagick thu nhỏ) chạy trên Linux qua reflection: 20 ảnh 2480×3508 → 1240×1754, 0,5 s/trang. Test trên CI Windows dùng fixture sinh lúc chạy (`SharingPdf`), cùng các tiêu chí. Đo lại trên Windows sau review trước phát hành (2026-10-20), 20 trang khác nhau: có nhiễu độ sáng 22,2 → 6,2 MB (28%), 6,2 s (0,31 s mỗi ảnh); scan sạch 8,8 → 4,1 MB (47%). README và CHANGELOG nói "a quarter to a half", không nói một con số chỉ fixture có nhiễu đạt.
 
 ## Đã quyết khi làm (v0.2.1)
 

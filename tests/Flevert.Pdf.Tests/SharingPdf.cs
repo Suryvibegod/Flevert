@@ -28,14 +28,21 @@ internal static class SharingPdf
         string.Create(CultureInfo.InvariantCulture, $"{width} 0 0 {height} {x} {y}");
 
     /// <summary>A page of A4 at 300 DPI, as a scanner writes it: 2480 x 3508 px, JPEG of quality 85.</summary>
-    public static byte[] ScanJpeg(int seed, uint quality = 85)
+    /// <param name="noise">With a scanner's sensor noise (<see cref="ScanPage"/>); without, a page as clean as a scan gets.</param>
+    public static byte[] ScanJpeg(int seed, uint quality = 85, bool noise = true)
     {
-        using var page = ScanPage(seed);
+        using var page = ScanPage(seed, noise: noise);
         page.Quality = quality;
         return page.ToByteArray(MagickFormat.Jpeg);
     }
 
-    public static MagickImage ScanPage(int seed, uint width = 2480, uint height = 3508)
+    /// <summary>
+    /// A page of word-sized dark blocks on paper, a photograph-like block on every third, slightly blurred as a scanner's
+    /// optics do; with <paramref name="noise"/>, a sensor's noise too: brightness a few levels up or down, the same in red,
+    /// green and blue (a sensor's noise is mostly in brightness, and JPEG keeps colour at half resolution anyway), in
+    /// grains of about two pixels rather than independent from pixel to pixel.
+    /// </summary>
+    public static MagickImage ScanPage(int seed, uint width = 2480, uint height = 3508, bool noise = true)
     {
         MagickSetup.EnsureInitialized();
         var random = new Random(seed);
@@ -60,16 +67,29 @@ internal static class SharingPdf
 
         image.GaussianBlur(0, 1);
         image.Strip();
-        // A scanner's sensor noise, a few levels either way: a page without it is far more compressible than any scan
-        // (87 KB a page instead of hundreds), and Compress for sharing would have little to gain.
+        if (!noise)
+            return image;
+
+        // One brightness offset per two-by-two pixels, smoothed over the page by the resize.
+        var (grainWidth, grainHeight) = ((width + 1) / 2, (height + 1) / 2);
+        var grain = new byte[grainWidth * grainHeight];
+        for (var i = 0; i < grain.Length; i++)
+            grain[i] = (byte)(128 + random.Next(-NoiseLevels, NoiseLevels + 1));
+        using var field = new MagickImage();
+        field.ReadPixels(grain, new PixelReadSettings(grainWidth, grainHeight, StorageType.Char, "I"));
+        field.Resize(new MagickGeometry(width, height) { IgnoreAspectRatio = true });
+        var offsets = field.GetPixels().ToByteArray("R")!;
         var pixels = image.GetPixels().ToByteArray(PixelMapping.RGB)!;
         for (var i = 0; i < pixels.Length; i++)
-            pixels[i] = (byte)Math.Clamp(pixels[i] + random.Next(-4, 5), 0, 255);
+            pixels[i] = (byte)Math.Clamp(pixels[i] + offsets[i / 3] - 128, 0, 255);
         image.Dispose();
         var noisy = new MagickImage();
         noisy.ReadPixels(pixels, new PixelReadSettings(width, height, StorageType.Char, PixelMapping.RGB));
         return noisy;
     }
+
+    // How many levels of 255 the sensor noise goes up or down at most, before smoothing.
+    private const int NoiseLevels = 6;
 
     /// <summary>
     /// A top-to-bottom gradient between two colours, from pixels: Flevert's ImageMagick policy allows no coder that makes
