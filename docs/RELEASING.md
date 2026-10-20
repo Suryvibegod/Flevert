@@ -7,7 +7,7 @@ For maintainers. Releases are built only by [`.github/workflows/release.yml`](..
 1. `<Version>` in `Directory.Build.props` is the new version (`MAJOR.MINOR.PATCH`, nothing after it). In `CHANGELOG.md`, the `[Unreleased]` section is renamed to `[X.Y.Z] - <date>`, a new empty `[Unreleased]` goes above it, and the links at the bottom are updated. The verify commands in [docs/install.md](install.md#check-your-download) name a version as an example; change it if they should show the new one. The README lists only what the release really does.
 2. The repository is clean (below).
 3. CI is green on the commit three times in a row (re-run it from the Actions tab).
-4. The three reviews (code, security, doubt) of every change since the last release found nothing Critical, High or Required.
+4. The three reviews (code, security, doubt) of every change since the last release found nothing Critical, High or Required. The scope is `git diff v<previous>..HEAD`: features released and verified before are not reviewed again unless their code changed, but shared code that changed (runner, batching, output paths, setup, menus) is in scope because it touches old features too. The manual runtime check covers what is new or changed; every automated test still runs, as on CI, to catch regressions, and the upgrade over the previous release (step 5) is always tried.
 5. From v0.1.1 on, upgrade over the previous release: install the previous published setup, convert a file, run the new setup over it (from the draft, below), and check the menu still works and uninstalling removes everything.
 
 ## Clean the repository
