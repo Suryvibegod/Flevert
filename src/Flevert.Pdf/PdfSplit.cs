@@ -41,6 +41,9 @@ public sealed class PdfSplit : IOperation
         _qpdf = qpdf;
     }
 
+    /// <summary>Run with qpdf's private folder once qpdf has written every page, for tests: a program holding a page.</summary>
+    internal Action<string>? AfterQpdf { get; init; }
+
     public string Id => "pdf.split";
 
     public string MenuPath => "Split into pages";
@@ -80,6 +83,7 @@ public sealed class PdfSplit : IOperation
             var split = _qpdf.SplitPagesAsync(inputPath, scratch, ct);
             await ReportWhileRunningAsync(split, scratch, total, progress).ConfigureAwait(false);
             await split.ConfigureAwait(false);
+            AfterQpdf?.Invoke(scratch);
 
             var pages = WrittenPages(scratch, total);
             var digits = Math.Max(3, total.ToString(CultureInfo.InvariantCulture).Length);

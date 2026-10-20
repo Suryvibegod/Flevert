@@ -338,15 +338,11 @@ public sealed class PdfSplitTests : IDisposable
         var input = _dir.Combine("book.pdf");
         WriteBlank(input, 1_500, resources: true);
         FileStream? held = null;
-        var progress = new SynchronousProgress(report =>
-        {
-            if (report.Position > 1)
-                held ??= HoldAPageOfQpdf();
-        });
+        var op = new PdfSplit(Qpdf.NextToApp) { AfterQpdf = scratch => held = HoldAPage(scratch) };
 
         try
         {
-            var ex = await Assert.ThrowsAsync<IOException>(() => Op().RunAsync(input, progress, CancellationToken.None));
+            var ex = await Assert.ThrowsAsync<IOException>(() => op.RunAsync(input, CancellationToken.None));
 
             Assert.NotNull(held);
             Assert.Equal("Flevert could not remove its working copy of the pages: another program is using one of them. Try again.", ex.Message);
@@ -365,19 +361,19 @@ public sealed class PdfSplitTests : IDisposable
         WriteBlank(input, 1_500, resources: true);
         FileStream? held = null;
         Task? released = null;
-        var progress = new SynchronousProgress(report =>
+        var op = new PdfSplit(Qpdf.NextToApp)
         {
-            if (report.Position > 1 && held is null && HoldAPageOfQpdf() is { } page)
+            AfterQpdf = scratch =>
             {
-                held = page;
-                released = ReleaseAfterTheLastCopyAsync(held, Path.GetDirectoryName(Path.GetDirectoryName(held.Name))!, 1_500);
-            }
-        });
+                held = HoldAPage(scratch);
+                released = ReleaseAfterTheLastCopyAsync(held, Path.GetDirectoryName(scratch)!, 1_500);
+            },
+        };
 
         string folder;
         try
         {
-            folder = await Op().RunAsync(input, progress, CancellationToken.None);
+            folder = await op.RunAsync(input, CancellationToken.None);
             await released!;
         }
         finally
@@ -398,13 +394,10 @@ public sealed class PdfSplitTests : IDisposable
         await held.DisposeAsync();
     }
 
-    // Opened for reading without sharing delete, while qpdf is still writing the other pages; null when no page is
-    // there yet (the next report tries again).
-    private FileStream? HoldAPageOfQpdf()
+    // One of qpdf's pages, opened for reading without sharing delete, as a scanner would.
+    private static FileStream HoldAPage(string scratch)
     {
-        var partial = Assert.Single(Directory.GetDirectories(_dir.Path, ".flevert-*.partial"));
-        var scratch = Assert.Single(Directory.GetDirectories(partial, ".qpdf-*"));
-        var page = Directory.GetFiles(scratch, "*.pdf").Order(StringComparer.Ordinal).FirstOrDefault();
-        return page is null ? null : new FileStream(page, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var page = Directory.GetFiles(scratch, "*.pdf").Order(StringComparer.Ordinal).First();
+        return new FileStream(page, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
     }
 }
