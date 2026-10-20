@@ -36,26 +36,10 @@ if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
     -p:PublishReadyToRun=true -o $publish
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 
-# Redistributing the .NET runtime and Magick.NET (ImageMagick and the libraries it bundles) requires shipping their
-# notices. Every package and runtime pack in flevert.deps.json is what the publish folder contains, so collect from each one
-# and fail rather than ship a package without its licence.
+# THIRD-PARTY-NOTICES.txt, or a failure if the publish folder holds a file without a licence notice.
 # The command may print other lines first (the first-run banner on a fresh machine); take only the folder.
 $packages = (& $dotnet nuget locals global-packages --list | Select-String '^global-packages:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
-$deps = Get-Content (Join-Path $publish 'flevert.deps.json') -Raw | ConvertFrom-Json
-$licenceNames = 'Notice.txt', 'Copyright.txt', 'LICENSE.TXT', 'LICENSE', 'THIRD-PARTY-NOTICES.TXT'
-$notices = [Text.StringBuilder]::new()
-[void]$notices.AppendLine('Flevert includes the following third-party software.')
-foreach ($library in $deps.libraries.PSObject.Properties | Where-Object { $_.Value.type -ne 'project' }) {
-    $id, $version = $library.Name -replace '^runtimepack\.', '' -split '/'
-    $folder = Join-Path $packages "$($id.ToLowerInvariant())\$version"
-    $files = @(Get-ChildItem $folder -File | Where-Object { $licenceNames -contains $_.Name })
-    if ($files.Count -eq 0) { throw "No licence or notice file for $id $version in $folder" }
-    foreach ($file in $files) {
-        [void]$notices.AppendLine().AppendLine(('=' * 78)).AppendLine("$id $version - $($file.Name)").AppendLine(('=' * 78))
-        [void]$notices.AppendLine((Get-Content $file.FullName -Raw))
-    }
-}
-[IO.File]::WriteAllText((Join-Path $publish 'THIRD-PARTY-NOTICES.txt'), $notices.ToString(), [Text.UTF8Encoding]::new($false))
+& (Join-Path $PSScriptRoot 'write-notices.ps1') -Publish $publish -Packages $packages
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $publish 'LICENSE.txt')
 
 & $Iscc /Qp "/DSourceDir=$publish" (Join-Path $root 'installer\Flevert.iss')
