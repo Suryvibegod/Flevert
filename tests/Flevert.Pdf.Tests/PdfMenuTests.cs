@@ -36,10 +36,24 @@ public sealed class PdfMenuTests
         Assert.DoesNotContain(".pdf", MenuOperations.All.Single(op => op.Id == "pdf.from-images").Extensions);
     }
 
+    [Fact]
+    public void No_file_type_gets_more_menu_entries_than_explorer_shows()
+    {
+        // Seen on Windows 11 with MenuProbe: Explorer shows at most 16 entries of a static cascade, submenus and the
+        // commands in them all counted, and silently drops the rest (Remove metadata vanished from HEIC when Combine into
+        // PDF made its 17th entry).
+        foreach (var extension in MenuOperations.All.SelectMany(op => op.Extensions).Distinct())
+        {
+            var entries = CountEntries($@"Flevert.Menu{extension}\shell");
+            Assert.True(entries <= 16, $"{extension}: {entries} entries in the Flevert menu");
+        }
+    }
+
     [Theory]
     [InlineData(".jpg")]
     [InlineData(".png")]
     [InlineData(".heic")]
+    [InlineData(".heif")]
     [InlineData(".webp")]
     [InlineData(".tiff")]
     public void Image_files_get_combine_into_pdf_between_compress_and_remove_metadata_and_no_other_pdf_operation(string extension)
@@ -53,6 +67,10 @@ public sealed class PdfMenuTests
             commands.Where(command => command.Contains(" run pdf.", StringComparison.Ordinal)));
         Assert.DoesNotContain(ImageOperations.All, op => op.Extensions.Contains(".pdf"));
     }
+
+    // Every entry below the menu key: each command and each submenu, as Explorer counts them.
+    private int CountEntries(string shellKey) => _registry.Children(shellKey).Sum(verb =>
+        1 + (_registry.GetValue(verb, "ExtendedSubCommandsKey") is { } submenu ? CountEntries($@"{submenu}\shell") : 0));
 
     private string[] Labels(string key) =>
         _registry.Children(key).Select(child => _registry.GetValue(child, "MUIVerb")!).ToArray();

@@ -174,6 +174,8 @@ Chỉ ghi HKCU nên không cần admin. Key tool tạo đều có tên bắt đ�
 
 **Giới hạn đã biết:** chọn > 100 file thì menu không hiện. Bỏ giới hạn cần verb COM (`DropTarget`), để phiên bản sau.
 
+**Tối đa 16 mục mỗi menu** (thấy bằng MenuProbe trên Windows 11, 2026-10-20; Microsoft không ghi): Explorer chỉ hiện 16 mục đầu của cây menu tĩnh dưới `Flevert` (tính cả submenu lẫn lệnh trong đó, theo thứ tự cây) và **lặng lẽ bỏ** phần còn lại. Khi T11 thêm `Combine into PDF`, menu `.heic`/`.heif` thành 17 mục và `Remove metadata` biến mất; bỏ trên registry một lệnh Convert thì nó hiện lại. Test `PdfMenuTests.No_file_type_gets_more_menu_entries_than_explorer_shows` giữ mọi đuôi ≤ 16 mục; thêm thao tác mới phải bớt mục khác.
+
 ### Ngôn ngữ
 
 Menu, thông báo, log, README: tiếng Anh. Tài liệu nội bộ (spec, plan) giữ tiếng Việt.

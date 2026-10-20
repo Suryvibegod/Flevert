@@ -37,7 +37,7 @@ Người dùng chuột phải vào ảnh → `Flevert` → chọn thao tác → 
 | `image.to-png` | Convert/PNG | mọi nguồn trừ `.png` | `tên.png` |
 | `image.to-webp` | Convert/WEBP | mọi nguồn trừ `.webp` | `tên.webp` (quality 90) |
 | `image.to-avif` | Convert/AVIF | mọi nguồn trừ `.avif` | `tên.avif` (quality 80) |
-| `image.to-gif` | Convert/GIF | mọi nguồn trừ `.gif` | `tên.gif` |
+| `image.to-gif` | Convert/GIF | mọi nguồn trừ `.gif .heic .heif` (từ v0.2: 256 màu làm hỏng ảnh chụp, và mục này là mục thứ 17 của menu HEIC/HEIF khi có Combine into PDF, quá 16 mục Explorer hiện; xem core.md, mục Menu) | `tên.gif` |
 | `image.to-bmp` | Convert/BMP | mọi nguồn trừ `.bmp` | `tên.bmp` |
 | `image.to-tiff` | Convert/TIFF | mọi nguồn trừ `.tif .tiff` | `tên.tiff` |
 | `image.compress-light` | Compress/Light | mọi nguồn | `tên (compressed).<ext>` |

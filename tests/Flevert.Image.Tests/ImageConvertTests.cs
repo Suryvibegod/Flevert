@@ -22,6 +22,18 @@ public sealed class ImageConvertTests : IDisposable
     }
 
     [Fact]
+    public void To_gif_is_not_offered_for_heic_or_heif_photos()
+    {
+        // 256 colours ruin a photo, and the entry would push the menu of these types past the 16 entries Explorer shows
+        // (docs/specs/image.md).
+        var op = ImageOperations.All.Single(op => op.Id == "image.to-gif");
+
+        Assert.Equal(
+            ImageFile.ReadableExtensions.Where(e => e is not (".gif" or ".heic" or ".heif")).Order(StringComparer.Ordinal),
+            op.Extensions.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task Jpg_stored_sideways_with_exif_orientation_6_becomes_an_upright_png_beside_it()
     {
         // Stored 40×20: left half red, right half blue. Orientation 6 means "rotate 90° clockwise to display", so the
