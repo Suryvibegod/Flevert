@@ -37,6 +37,12 @@ Test đầu-cuối installer: `scripts/test-installer.ps1` (10 kịch bản; k�
 
 Module core, image, installer xong và qua kiểm phát hành ([release/todo.md](release/todo.md)). Bản đầu tiên tải được trên GitHub Releases là 0.2.0.
 
+## v0.2.1: đã phát hành 2026-10-20
+
+https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.1 (latest, immutable). Compress > For sharing, Convert > Text, báo PDF đã phải sửa, giới hạn T18 cho mọi thao tác ghi PDF, sửa các mục review của 0.2.0. Ba review + soát lại (bảng reconcile trong [pdf/todo.md](pdf/todo.md)); kiểm thật: 35 thao tác qua `flevert.exe` đã cài, For sharing 0,42 s/trang (26% cỡ), menu `.pdf` 16 mục (MenuProbe), `test-installer.ps1` đạt trên file bản nháp gồm nâng cấp từ 0.2.0; CI ×3; Defender sạch, VirusTotal 0/68. `get-previous-setup.ps1` ghim 0.2.1.
+
+Còn mở cho v0.2.2: lần thử lại của Lossless chưa lùi về bản không giải mã khi chậm; Compress for sharing coi mọi `IOException` là lỗi đĩa; khối `finally` của `test-installer.ps1` xóa thư mục cài nhưng để lại khóa Installed apps và menu khi gỡ cài không chạy được.
+
 ## v0.2.0 (pdf): đã phát hành 2026-10-20
 
 https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.0 (latest, immutable). Kiểm trước khi publish: CI ×3 xanh, hash và attestation khớp, `test-installer.ps1` đạt trên file của bản nháp, Defender sạch, VirusTotal 0/68. Sau khi publish: cài bản tải về, chạy thật cả 30 thao tác (ảnh, PDF, mật khẩu qua hộp thoại) và menu Explorer cho JPG, HEIC, PDF, đều đúng; đã gỡ. `get-previous-setup.ps1` ghim 0.2.0 nên lần phát hành sau chạy kịch bản nâng cấp.
