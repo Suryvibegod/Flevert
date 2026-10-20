@@ -236,7 +236,8 @@ Người dùng: PDF scan 20 trang 25 MB, cần gửi qua Zalo/email.
 
 ### P4. Báo khi PDF đã phải sửa (thay cho Repair; review DD-M7)
 
-- Mọi thao tác ghi PDF bằng qpdf: mã thoát 3 (qpdf đã sửa gì đó khi đọc) → thao tác vẫn xong và thêm `OutputNote` "Flevert had to repair this PDF while reading it: check that every page is there." **Và** so số trang input (đếm trước) với output (đếm lại): khác nhau → **lỗi**, không giữ output ("This PDF is damaged: the result would miss pages.").
+- Mọi thao tác ghi PDF bằng qpdf: mã thoát 3 (qpdf đã sửa gì đó khi đọc) → thao tác vẫn xong và thêm `OutputNote` "Flevert had to repair this PDF while reading it: check that the pages look right." **Và** kiểm output đã sửa: không mở được, hoặc số trang khác số qpdf đã đếm ở input → **lỗi**, không giữ output ("This PDF is damaged: the result would miss pages.").
+- Giới hạn (review trước phát hành, maintainer quyết 2026-10-20): số trang input cũng do qpdf đếm (`--show-pages`), qua **cùng** lần sửa, nên trang mà chính lần sửa làm mất **không phát hiện được** (mọi trình đọc sửa theo cùng cách). Không tự đếm trang độc lập (dễ vỡ); ghi chú yêu cầu người dùng xem lại.
 - Không áp dụng cho Remove password và Protect (vẫn ghi chú, không so trang vì đã đếm qua mật khẩu).
 
 ### P5. Áp giới hạn T18 cho mọi thao tác ghi PDF (mục còn mở của T18)
@@ -287,7 +288,7 @@ Như phần v0.2 ở trên. Test chạy **lần lượt** từng project (`dotne
 1. Menu `.pdf` thật (MenuProbe) đúng bố cục đã duyệt, ≤ 16 mục.
 2. P1 (nếu giữ): fixture scan 20 trang → output ≤ 40% cỡ, khác biệt render ≤ 3/255, ≤ 2 s/trang; PDF đã nhỏ → skipped. Nếu bỏ: kết quả spike ghi lại, P2 xong.
 3. P3: PDF có chữ tiếng Việt → `.txt` UTF-8 BOM đúng chữ, đúng thứ tự trang, `\f` giữa trang; PDF scan → skipped.
-4. P4: PDF hỏng nhẹ → output + ghi chú "had to repair"; PDF mà sửa làm mất trang → lỗi, không có output.
+4. P4: PDF hỏng nhẹ → output + ghi chú "had to repair"; output đã sửa không mở được hoặc khác số trang qpdf đếm ở input → lỗi, không có output (trang mất do chính lần sửa thì không phát hiện được, xem P4).
 5. P5, P6: mỗi mục có test đỏ trước rồi xanh; Split ra `(split)`.
 6. P7: Dependabot xử lý xong; `flevert.dll` của bản CI không chứa `D:\a\`.
 7. CI xanh 3 lần; `test-installer.ps1` đạt, kể cả kịch bản nâng cấp từ 0.2.0 (đã ghim).

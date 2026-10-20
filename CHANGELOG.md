@@ -8,7 +8,7 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 - **Compress > For sharing** for PDFs: pictures above 150 DPI become 150 DPI JPEGs, so a 25 MB scan of 20 pages comes out at about a third of the size and still reads on a phone. Text, drawings and pictures already at 150 DPI or less stay exactly as they were.
 - **Convert > Text** for PDFs: `report.txt` with the text of every page, a page break between pages, in UTF-8 that Notepad reads. A scan has no text to extract: Flevert does not recognise text in pictures.
-- When Flevert had to repair a damaged PDF to read it, the notification says so and asks you to check that every page is there; a repair that would lose pages fails instead.
+- When Flevert had to repair a damaged PDF to read it, the notification says so and asks you to check that the pages look right. A repaired result that does not open, or has a different number of pages than Flevert counted, fails instead. Pages lost by the repair itself cannot be detected: every PDF reader repairs the same way.
 
 ### Changed
 

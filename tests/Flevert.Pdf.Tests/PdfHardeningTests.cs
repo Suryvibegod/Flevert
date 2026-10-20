@@ -245,7 +245,7 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         var result = await RunThroughRunnerAsync(operation, operation == "pdf.merge" ? [CopyGood(), damaged] : [damaged]);
 
         Assert.True(result.Succeeded, result.Error);
-        Assert.Equal("Flevert had to repair this PDF while reading it: check that every page is there.", result.Note);
+        Assert.Equal("Flevert had to repair this PDF while reading it: check that the pages look right.", result.Note);
     }
 
     [Fact]
