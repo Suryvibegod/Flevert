@@ -96,9 +96,9 @@ public static class Batch
                         JoinRecord? closed = null;
                         return BatchLeader.Start(() => CreateServer(name), server, files, idle,
                             onClosed: () => TryRotateSecret(operationId, key), gate,
-                            beforeClose: () =>
+                            beforeClose: cancelled =>
                             {
-                                closed = new JoinRecord(Open: false, self, DateTime.UtcNow, gate.Members) { Reported = gate.Absentees() };
+                                closed = new JoinRecord(Open: false, self, DateTime.UtcNow, gate.Members) { Reported = gate.Absentees(), Cancelled = cancelled };
                                 WriteRecord(operationId, closed, self, onlyOverOwn: true);
                             },
                             onCancelled: () =>
@@ -505,12 +505,13 @@ public sealed class BatchLeader : IAsyncDisposable
     private readonly JoinGate? _gate;
     private readonly Action? _onCancelled;
     private bool _busy;
+    private bool _cancelled;
     private int _running;
     private int _disposed;
 
     private BatchLeader(
         Func<NamedPipeServerStream>? createServer, NamedPipeServerStream? server, IReadOnlyList<string> files, TimeSpan idle,
-        Action? onClosed, Func<uint, bool>? isTrusted = null, JoinGate? gate = null, Action? beforeClose = null, Action? onCancelled = null)
+        Action? onClosed, Func<uint, bool>? isTrusted = null, JoinGate? gate = null, Action<bool>? beforeClose = null, Action? onCancelled = null)
     {
         _isTrusted = isTrusted ?? PipePeer.IsTrusted;
         _gate = gate;
@@ -567,6 +568,7 @@ public sealed class BatchLeader : IAsyncDisposable
     {
         if (_onCancelled is null)
             return;
+        Volatile.Write(ref _cancelled, true);
         await _stop.CancelAsync().ConfigureAwait(false);
         try
         {
@@ -611,11 +613,12 @@ public sealed class BatchLeader : IAsyncDisposable
 
     /// <param name="gate">Decides which senders belong to this joining batch and holds it open for those still starting.</param>
     /// <param name="beforeClose">Runs as the batch closes, before <paramref name="onClosed"/> and also when the pipe name
-    /// was lost, while no one else can have taken the name after the close.</param>
+    /// was lost, while no one else can have taken the name after the close; told whether the consumer was cancelled by
+    /// then, so the record it writes says so from the start.</param>
     /// <param name="onCancelled">Runs once the batch has closed, when the user cancelled it (<see cref="MarkCancelledAsync"/>).</param>
     internal static BatchLeader Start(
         Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle,
-        Action onClosed, JoinGate gate, Action beforeClose, Action? onCancelled = null) =>
+        Action onClosed, JoinGate gate, Action<bool> beforeClose, Action? onCancelled = null) =>
         new(createServer, server, files, idle, onClosed, gate: gate, beforeClose: beforeClose, onCancelled: onCancelled);
 
     internal static BatchLeader Alone(IReadOnlyList<string> files) => new(null, null, files, TimeSpan.Zero, null);
@@ -646,6 +649,9 @@ public sealed class BatchLeader : IAsyncDisposable
         }
         finally
         {
+            // Before the listener can close: the record it writes as it closes then says the batch was cancelled.
+            if (ct.IsCancellationRequested)
+                Volatile.Write(ref _cancelled, true);
             await _stop.CancelAsync().ConfigureAwait(false);
         }
     }
@@ -688,7 +694,7 @@ public sealed class BatchLeader : IAsyncDisposable
     private bool IsIdle => _queue.Reader.Count == 0 && !Volatile.Read(ref _busy) && Volatile.Read(ref _running) == 0;
 
     private async Task ListenAsync(
-        Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed, Action? beforeClose)
+        Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed, Action<bool>? beforeClose)
     {
         var ct = _stop.Token;
         // Restarted only when a trusted sender delivered paths, measured from the end of that exchange: connections that
@@ -779,7 +785,7 @@ public sealed class BatchLeader : IAsyncDisposable
             // a newer batch using the same key: rotating would send its followers elsewhere.
             try
             {
-                beforeClose?.Invoke();
+                beforeClose?.Invoke(Volatile.Read(ref _cancelled));
             }
 #pragma warning disable CA1031 // Closing must always finish; the record is best effort.
             catch (Exception)

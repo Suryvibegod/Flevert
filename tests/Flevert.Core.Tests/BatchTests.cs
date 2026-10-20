@@ -488,6 +488,35 @@ public sealed class BatchTests
     }
 
     [Fact]
+    public async Task A_join_cancelled_before_it_closes_writes_its_record_cancelled_as_it_closes()
+    {
+        // Without waiting for MarkCancelledAsync: between the close and that second write, a process of the selection that
+        // ran would read a record not cancelled, and bring a "left out" notification.
+        var op = UniqueOp();
+        try
+        {
+            var leader = (await Batch.LeadOrJoinOneOutputAsync(op, [@"C:\a.txt"], Idle, ProcessStamp.Self, _ => [], CancellationToken.None))!;
+            await using (leader)
+            {
+                using var cancel = new CancellationTokenSource();
+                await cancel.CancelAsync();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+                {
+                    await foreach (var _ in leader.ReadAllAsync(cancel.Token))
+                    {
+                    }
+                });
+            }
+
+            Assert.True(Batch.ReadRecord(op)!.Cancelled);
+        }
+        finally
+        {
+            File.Delete(Batch.RecordPath(op));
+        }
+    }
+
+    [Fact]
     public async Task A_join_that_was_not_cancelled_still_reports_a_late_file_left_out()
     {
         // The control for the test above: the same straggler, after a join that ran.
