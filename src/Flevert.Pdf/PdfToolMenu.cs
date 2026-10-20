@@ -4,9 +4,9 @@ using Flevert.Core.Menu;
 namespace Flevert.Pdf;
 
 /// <summary>
-/// The second menu of a PDF, <c>Flevert PDF tools</c> (docs/specs/pdf.md, v0.2.2): the tools of <see cref="PdfTools"/>
-/// placed in it, each run straight from the menu with its default options. Only Add watermark… asks something: the text,
-/// in a dialog like the password one (<see cref="PdfWatermarkMenu"/>).
+/// The second menu of a PDF, <c>Flevert: more PDF tools</c>, shown only with Shift + right-click (docs/specs/pdf.md,
+/// v1.2.3): the less used tools of <see cref="PdfTools"/> and the PNG pictures of the pages, each run straight from the menu
+/// with its default options. Add watermark…, the one tool that asks something, is in the Flevert menu (<see cref="PdfWatermarkMenu"/>).
 /// </summary>
 public static class PdfToolMenu
 {
@@ -19,13 +19,13 @@ public static class PdfToolMenu
     [
         Placed("pdf.remove-blank-pages", "Remove blank pages"),
         Placed("pdf.page-numbers", "Add page numbers", PageNumbers),
-        new PdfWatermarkMenu(),
         Placed("pdf.n-up-2", "Print layout/2 pages per sheet"),
         Placed("pdf.n-up-4", "Print layout/4 pages per sheet"),
         Placed("pdf.fit-a4", "Fit pages to A4"),
         Placed("pdf.flatten", "Lock filled forms"),
         Placed("pdf.split-10mb", "Split by size/Under 10 MB"),
         Placed("pdf.split-25mb", "Split by size/Under 25 MB"),
+        new PlacedOperation(new PdfToImages(PdfPageImageFormat.Png), "Convert to PNG images", MenuCascade.PdfTools),
         Placed("pdf.extract-images", "Extract images"),
     ];
 
@@ -221,7 +221,7 @@ public sealed class BatchWatermarks(IWatermarkPrompt prompt)
 }
 
 /// <summary>
-/// <c>Add watermark…</c> in Flevert PDF tools: asks for the text, once for the batch when the user agrees, then writes it
+/// <c>Add watermark…</c> in the Flevert menu of a PDF: asks for the text, once for the batch when the user agrees, then writes it
 /// on every page with the watermark tool (<c>&lt;name&gt; (watermarked).pdf</c>). Cancel skips the file. Without a window
 /// (FLEVERT_HEADLESS) each file fails at once, saying why.
 /// </summary>
@@ -245,7 +245,7 @@ public sealed class PdfWatermarkMenu : IOperation, IMenuPlacement
 
     public string MenuPath => "Add watermark…";
 
-    public MenuCascade Cascade => MenuCascade.PdfTools;
+    public MenuCascade Cascade => MenuCascade.Main;
 
     public IReadOnlyCollection<string> Extensions => _defaults.Extensions;
 

@@ -2,17 +2,22 @@ using System.Runtime.InteropServices;
 
 // Usage:
 //   MenuProbe list <file>...                   prints the context menu tree Explorer builds for the selection
-//   MenuProbe invoke "A/B/C" <file>...         clicks the item at that label path, as a user would
+//   MenuProbe list --shift <file>...           the same with Shift held (CMF_EXTENDEDVERBS): verbs marked Extended too
+//   MenuProbe invoke [--shift] "A/B/C" <file>... clicks the item at that label path, as a user would
 // Exit codes: 0 ok, 3 item not found, 2 bad usage.
 
-if (args.Length < 2 || args[0] is not ("list" or "invoke") || (args[0] == "invoke" && args.Length < 3))
+var shiftArg = args.Length > 1 && args[1] == "--shift" ? 1 : 0;
+if (args.Length < 2 + shiftArg || args[0] is not ("list" or "invoke") || (args[0] == "invoke" && args.Length < 3 + shiftArg))
 {
-    Console.Error.WriteLine("usage: MenuProbe list <file>... | MenuProbe invoke \"A/B/C\" <file>...");
+    Console.Error.WriteLine("usage: MenuProbe list [--shift] <file>... | MenuProbe invoke [--shift] \"A/B/C\" <file>...");
     return 2;
 }
 
 int result = 0;
-var thread = new Thread(() => result = args[0] == "list" ? Probe.List(args[1..]) : Probe.Invoke(args[1], args[2..]));
+if (shiftArg == 1)
+    Probe.Flags = 0x100; // CMF_EXTENDEDVERBS, as when Shift is held
+var rest = args[(1 + shiftArg)..];
+var thread = new Thread(() => result = args[0] == "list" ? Probe.List(rest) : Probe.Invoke(rest[0], rest[1..]));
 thread.SetApartmentState(ApartmentState.STA);
 thread.Start();
 thread.Join();
@@ -20,6 +25,8 @@ return result;
 
 static class Probe
 {
+    public static uint Flags;
+
     const uint FirstId = 1, LastId = 0x7FFF;
 
     public static int List(string[] files)
@@ -72,7 +79,7 @@ static class Probe
             Marshal.Release(ppv);
             _menu3 = _menu as IContextMenu3;
             _hmenu = CreatePopupMenu();
-            Marshal.ThrowExceptionForHR(_menu.QueryContextMenu(_hmenu, 0, FirstId, LastId, 0 /* CMF_NORMAL */));
+            Marshal.ThrowExceptionForHR(_menu.QueryContextMenu(_hmenu, 0, FirstId, LastId, Probe.Flags /* CMF_NORMAL, or CMF_EXTENDEDVERBS */));
         }
 
         public void Walk(Action<int, string, uint?> visit) => Walk(_hmenu, 0, visit);

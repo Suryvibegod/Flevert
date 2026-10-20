@@ -11,7 +11,7 @@ public enum PdfPageImageFormat
 }
 
 /// <summary>
-/// <c>Convert to/JPG images</c> and <c>Convert to/PNG images</c> (docs/specs/pdf.md): renders every page with pdfium at
+/// <c>Convert to/JPG images</c>, and Convert to PNG images in the Shift-only menu (docs/specs/pdf.md): renders every page with pdfium at
 /// <see cref="Dpi"/> (lower for a page past <see cref="PdfDocument.MaxRenderPixels"/>) into a folder
 /// <c>&lt;name&gt; (pages)</c> of <c>&lt;name&gt; 001.jpg</c>…, written whole or not at all, with progress per page.
 /// </summary>
@@ -91,11 +91,11 @@ public sealed class PdfToImages : IOperation
 }
 
 /// <summary>
-/// The operations that read a PDF with pdfium, in the worker (<c>pdf.to-jpg</c>, <c>pdf.to-png</c>,
-/// <c>pdf.extract-text</c>): the Convert submenu. A list of its own beside the qpdf operations, so the catalog adds both.
+/// The operations that read a PDF with pdfium, in the worker, of the Convert to submenu (<c>pdf.to-jpg</c>,
+/// <c>pdf.extract-text</c>; <c>pdf.to-png</c> is in the Shift-only menu, <see cref="PdfToolMenu"/>). A list of its own beside the qpdf operations, so the catalog adds both.
 /// </summary>
 public static class PdfRenderOperations
 {
     public static IReadOnlyList<IOperation> All { get; } =
-        [new PdfToImages(PdfPageImageFormat.Jpeg), new PdfToImages(PdfPageImageFormat.Png), new PdfExtractText()];
+        [new PdfToImages(PdfPageImageFormat.Jpeg), new PdfExtractText()];
 }

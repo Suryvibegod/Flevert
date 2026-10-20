@@ -58,23 +58,24 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 | **Compress** > Smallest, for sharing | `report (small).pdf`: pictures above 150 DPI brought down to 150 DPI, often a quarter to a half of the size, depending on the scan |
 | **Merge PDFs** | `report (merged).pdf`, in name order |
 | **Split into pages** | a folder `report (split)` with one PDF per page |
-| **Convert to** > JPG images, PNG images | a folder `report (pages)` with `report 001.jpg`, … |
+| **Convert to** > JPG images | a folder `report (pages)` with `report 001.jpg`, … |
 | **Convert to** > Text | `report.txt`, the text of every page (scans have none: Flevert does not recognise text in pictures) |
 | **Rotate** > Right 90°, Left 90°, 180° | `report (rotated).pdf` |
+| **Add watermark…** | `report (watermarked).pdf` with your text across every page, such as what the copy is for; it asks for the text once for all the PDFs you selected. Anyone with a PDF editor can still remove it. The font goes into the PDF and adds about 1 MB to the file. To mark a photo, use **Combine into PDF** first |
 | **Protect with password**, **Remove password** | `report (protected).pdf` (AES-256), `report (unlocked).pdf` |
 | **Remove hidden info** | `report (no metadata).pdf`, without author, dates, XMP, attachments or scripts |
 
-PDFs also have a second entry, **Flevert PDF tools**:
+Less used PDF tools are one step away: hold **Shift** while you right-click a PDF, and a second entry appears, **Flevert: more PDF tools** (Explorer shows at most 16 entries in one menu, so they would not fit in the first):
 
-| Flevert PDF tools > | You get |
+| Shift + right-click > Flevert: more PDF tools > | You get |
 |---|---|
 | **Remove blank pages** | `report (no blank pages).pdf`, without the empty pages a two-sided scan leaves |
 | **Add page numbers** | `report (numbered).pdf`, numbered "1 / 12" at the bottom centre |
-| **Add watermark…** | `report (watermarked).pdf` with your text across every page, such as what the copy is for; it asks for the text once for all the PDFs you selected. Anyone with a PDF editor can still remove it. The font goes into the PDF and adds about 1 MB to the file. To mark a photo, use **Combine into PDF** first |
 | **Print layout** > 2 pages per sheet, 4 pages per sheet | `report (2 per sheet).pdf` or `report (4 per sheet).pdf` on A4, to print on less paper. Made for printing: bookmarks, links and fillable fields are not kept |
 | **Fit pages to A4** | `report (A4).pdf`: Letter, A3 and odd sizes scaled to A4. Like Print layout, made for printing: bookmarks, links and fillable fields are not kept |
 | **Lock filled forms** | `report (flattened).pdf`: the answers of a filled form, and comments, become part of the page, so nobody can change them |
 | **Split by size** > Under 10 MB, Under 25 MB | a folder `report (parts)` with `report part 1.pdf`, …, in page order. **Under 10 MB** is the safe size for email (Gmail counts 25 MB after encoding, about 18 MB of file; Outlook takes 20 MB); **Under 25 MB** is for chat apps |
+| **Convert to PNG images** | a folder `report (pages)` with `report 001.png`, …, lossless |
 | **Extract images** | a folder `report (images)` with `report 001.jpg`, `report 002.png`, …: photos exactly as they are in the PDF, other pictures as PNG |
 
 PDFs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
@@ -108,6 +109,10 @@ Setup installs only into `%LOCALAPPDATA%\Programs\Flevert`, and only if no other
 ### Uninstall
 
 **Settings > Apps > Installed apps > Flevert > Uninstall** removes the program, its menu, logs and settings, and the classic menu if setup turned it on. Your converted files stay.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/) (applied for; until the first signed release, check your download with its hash and attestation). What is signed, who approves it and what Flevert sends over the network: [code signing policy](docs/code-signing-policy.md).
 
 ## Contributing and license
 

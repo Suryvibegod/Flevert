@@ -17,6 +17,13 @@ Video and audio: convert, compress to a size you choose, take the sound out of a
 - Video and audio keep their title, artist and recording date, never the place they were recorded. A converted video keeps its first sound track, and the notification says when there were others. The progress window shows how far the current file is, as a percentage.
 - The installer includes ffmpeg, which is free software under the GNU GPL: each release has its complete source beside the setup, as the files `ffmpeg-source-<build>-<n>-of-<count>.tar`.
 
+## [1.2.3] - 2026-10-21
+
+### Changed
+
+- A PDF's usual right-click menu has one **Flevert** entry again. The second entry of 1.2.2 is now **Flevert: more PDF tools** and appears only when you hold **Shift** while right-clicking: Remove blank pages, Add page numbers, Print layout, Fit pages to A4, Lock filled forms, Split by size, Extract images, and Convert to PNG images (moved from Convert to). Explorer shows at most 16 entries in one menu, so not every tool fits in the first.
+- **Add watermark…** moved into the **Flevert** menu, after Rotate.
+
 ## [1.2.2] - 2026-10-20
 
 Version numbers now start at 1: this release follows 0.2.1, and the next feature release is 1.3.0.
@@ -134,7 +141,8 @@ The first release: pictures, and an installer.
 - A specially crafted TIFF file can make the bundled ImageMagick 7.1.2-33 overflow its stack ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity): Flevert then closes, and the rest of that batch is not converted. No code runs. It will be fixed by updating once a Magick.NET release includes ImageMagick 7.1.2-34.
 - Windows Smart App Control may block this unsigned release (see the README).
 
-[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/Suryvibegod/Flevert/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/Suryvibegod/Flevert/compare/v0.2.1...v1.2.2
 [0.2.1]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.0

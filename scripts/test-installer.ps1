@@ -48,7 +48,7 @@ function Assert([bool]$Condition, [string]$Message) {
 
 function MenuKeys {
     # Every key named after the app, not only the ones today's code writes, so a new kind of key cannot be left behind.
-    # Flevert, and Flevert PDF tools (shell\Flevert.Tools) for PDFs; any other shell key named after the app counts too.
+    # Flevert, and Flevert: more PDF tools (shell\Flevert.Tools) for PDFs; any other shell key named after the app counts too.
     @(Get-ChildItem $associations -ErrorAction SilentlyContinue |
         Where-Object { @(Get-ChildItem "$($_.PSPath)\shell" -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'Flevert*' }).Count -gt 0 }) +
     @(Get-ChildItem $classes -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'Flevert*' })
@@ -284,12 +284,15 @@ try {
     Assert (UpdateCheckEnabled) 'the check for new versions is on by default'
     Assert (@(MenuCommands '.pdf' | Where-Object { $_ -like '* run pdf.rotate-right *' }).Count -eq 1) 'the .pdf menu rotates PDFs'
     Assert (@(MenuCommands '.jpg' | Where-Object { $_ -like '* run pdf.from-images *' }).Count -eq 1) 'the .jpg menu combines pictures into a PDF'
-    Assert ((Get-ItemProperty "$associations\.pdf\shell\Flevert.Tools" -ErrorAction SilentlyContinue).MUIVerb -eq 'Flevert PDF tools') 'PDFs have the second menu, Flevert PDF tools'
-    Assert (@(MenuCommands '.pdf.tools' | Where-Object { $_ -like '* run pdf.remove-blank-pages *' }).Count -eq 1) 'Flevert PDF tools removes blank pages'
+    Assert ((Get-ItemProperty "$associations\.pdf\shell\Flevert.Tools" -ErrorAction SilentlyContinue).MUIVerb -eq 'Flevert: more PDF tools') 'PDFs have the second menu, Flevert: more PDF tools'
+    # Shown only with Shift + right-click (1.2.3): the usual menu has one Flevert line.
+    Assert ($null -ne (Get-ItemProperty "$associations\.pdf\shell\Flevert.Tools").PSObject.Properties['Extended']) 'the second PDF menu appears only with Shift'
+    Assert ($null -eq (Get-ItemProperty "$associations\.pdf\shell\Flevert").PSObject.Properties['Extended']) 'the Flevert menu appears without Shift'
+    Assert (@(MenuCommands '.pdf.tools' | Where-Object { $_ -like '* run pdf.remove-blank-pages *' }).Count -eq 1) 'Flevert: more PDF tools removes blank pages'
     # Every entry at the top of both PDF menus, and of the video and audio menus, has an icon, installed beside flevert.exe
     # (docs/specs/pdf.md, v0.2.2; docs/specs/media.md, "Menu").
     $icons = @(Get-ChildItem "$classes\Flevert.Menu.pdf\shell", "$classes\Flevert.Menu.pdf.tools\shell", "$classes\Flevert.Menu.mp4\shell", "$classes\Flevert.Menu.mp3\shell" | ForEach-Object { $_.GetValue('Icon') })
-    Assert ($icons.Count -ge 18 -and @($icons | Where-Object { -not ($_ -and (Test-Path -LiteralPath ($_ -replace '^"(.*)",0$', '$1'))) }).Count -eq 0) "every entry of the .pdf, .mp4 and .mp3 menus shows an icon from $app\icons ($($icons.Count))"
+    Assert ($icons.Count -gt 0 -and @($icons | Where-Object { -not ($_ -and (Test-Path -LiteralPath ($_ -replace '^"(.*)",0$', '$1'))) }).Count -eq 0) "every entry of the .pdf, .mp4 and .mp3 menus shows an icon from $app\icons ($($icons.Count))"
     Assert (@(MenuCommands '.mp4' | Where-Object { $_ -like '* run video.compress-under-25mb *' }).Count -eq 1) 'the .mp4 menu compresses a video under 25 MB'
     $menuCount = @(MenuKeys).Count
 

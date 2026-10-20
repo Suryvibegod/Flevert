@@ -45,8 +45,8 @@ ICONS = [
     ("lock_open", "filled"),               # Remove password
     ("shield", "color"),                   # Remove hidden info
     ("document_pdf", "filled"),            # Combine into PDF
-    ("toolbox", "color"),                  # Flevert PDF tools, the second PDF menu
-    # The second PDF menu, Flevert PDF tools (its own entry shows toolbox).
+    ("toolbox", "color"),                  # Flevert: more PDF tools, the second PDF menu
+    # The second PDF menu, Flevert: more PDF tools (its own entry shows toolbox).
     ("document_dismiss", "filled"),        # Remove blank pages
     ("document_page_number", "filled"),    # Add page numbers
     ("draw_text", "filled"),               # Add watermark…

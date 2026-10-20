@@ -158,7 +158,10 @@ public sealed class MenuTests
             [new FakeOp("pdf.merge", "Merge PDFs", ".pdf"), new PlacedOp("pdf.flatten", "Lock filled forms", ".pdf")]);
 
         var tools = @"SystemFileAssociations\.pdf\shell\Flevert.Tools";
-        Assert.Equal("Flevert PDF tools", _registry.GetValue(tools, "MUIVerb"));
+        Assert.Equal("Flevert: more PDF tools", _registry.GetValue(tools, "MUIVerb"));
+        // Shown only with Shift + right-click (v1.2.3): the usual menu keeps one Flevert line, which has no such value.
+        Assert.Equal("", _registry.GetValue(tools, "Extended"));
+        Assert.Null(_registry.GetValue(@"SystemFileAssociations\.pdf\shell\Flevert", "Extended"));
         Assert.Equal("Flevert.Menu.pdf.tools", _registry.GetValue(tools, "ExtendedSubCommandsKey"));
         Assert.Equal("Player", _registry.GetValue(tools, "MultiSelectModel"));
         Assert.Equal(@"""C:\Program Files\Flevert\icons\toolbox.ico"",0", _registry.GetValue(tools, "Icon"));

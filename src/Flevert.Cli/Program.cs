@@ -43,7 +43,7 @@ internal static class Program
         if (command is PdfWorkerCommand)
             return PdfRenderWorker.Run(Console.OpenStandardInput(), Console.OpenStandardOutput());
 
-        // Every operation, the PDF tools with the options of their place in Flevert PDF tools.
+        // Every operation, the PDF tools with the options of their place in the menus.
         var catalog = new OperationCatalog([.. MenuOperations.All, .. MediaOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
