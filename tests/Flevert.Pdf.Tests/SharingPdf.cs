@@ -158,6 +158,19 @@ internal static class SharingPdf
                 $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {A4Width} {A4Height}] /Resources << /XObject << {resources} >> >> /Contents {3 + images.Count + (2 * p)} 0 R >>")));
         }
 
+        WriteObjects(path, objects);
+    }
+
+    /// <summary>A stream object: its dictionary without /Length, and its data.</summary>
+    public static byte[] Stream(string dictionary, byte[] data) =>
+        [.. Ascii($"<< {dictionary} /Length {data.Length} >>\nstream\n"), .. data, .. Ascii("\nendstream")];
+
+    /// <summary>A stream object whose data is text: a content stream.</summary>
+    public static byte[] Stream(string dictionary, string text) => Stream(dictionary, Ascii(text));
+
+    /// <summary>A PDF of these objects, numbered from 1, whose catalog is object 1.</summary>
+    public static void WriteObjects(string path, IReadOnlyList<byte[]> objects)
+    {
         using var file = File.Create(path);
         var offsets = new List<long>();
         file.Write(Ascii("%PDF-1.7\n"));
@@ -197,5 +210,5 @@ internal static class SharingPdf
         return sum / (left.Length * 0.75);
     }
 
-    private static byte[] Ascii(string text) => Encoding.ASCII.GetBytes(text);
+    public static byte[] Ascii(string text) => Encoding.ASCII.GetBytes(text);
 }

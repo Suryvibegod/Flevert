@@ -17,7 +17,8 @@ namespace Flevert.Pdf;
 /// An image is found by the SHA-256 of its stored data, which pdfium (in the worker) and qpdf (here) both read without
 /// decoding anything: no image data of the PDF is decoded in this process. Images with the same data are the same image
 /// to pdfium; if their dictionaries differ (one inverted by <c>/Decode</c>, say), the JPEG is right for only one, so none
-/// is replaced.
+/// is replaced. Only images a page draws from its resources are replaced, and only when nothing else in the PDF may draw
+/// them (<see cref="PageImages"/>).
 /// </para>
 /// <para>
 /// Left as they are: stencil masks (<c>/ImageMask</c>), images with a <c>/Mask</c> (a colour key would no longer match
@@ -60,6 +61,7 @@ internal static class ImageReplacement
         var matches = new List<Match>();
         // For each data hash the worker shrank: the SHA-256 of the one dictionary seen with it, or null once two differ.
         var dictionaries = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var pages = new PageImages();
         QpdfJsonFile.Read(describedPath, (element, key, value) =>
         {
             if (element == QpdfJsonFile.Header)
@@ -68,7 +70,15 @@ internal static class ImageReplacement
                 return;
             }
 
-            if (ImageData(value, prefix) is not var (dictionary, dataPath))
+            if (element == QpdfJsonFile.Pages)
+            {
+                pages.OnPage(value);
+                return;
+            }
+
+            pages.OnObject(key, value);
+            // Only the images pages draw from their resources are the worker's: it sees no other.
+            if (!pages.Drawn.Contains(key) || ImageData(value, prefix) is not var (dictionary, dataPath))
                 return;
             var (hash, stored) = Hash(dataPath);
             if (!byHash.TryGetValue(hash, out var image))
@@ -84,6 +94,12 @@ internal static class ImageReplacement
             throw new InvalidDataException("qpdf's description of the PDF has no header.");
 
         var written = matches.Where(match => dictionaries[match.Image.Hash] == match.DictionaryHash).ToDictionary(match => match.Key, StringComparer.Ordinal);
+        if (written.Count > 0)
+        {
+            foreach (var key in pages.UsedElsewhere(describedPath, written.Keys, ct))
+                written.Remove(key);
+        }
+
         var replaced = 0;
         using var output = new FileStream(updatePath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
         using var json = new Utf8JsonWriter(output, new JsonWriterOptions { MaxDepth = QpdfJsonFile.MaxDepth });
@@ -122,6 +138,173 @@ internal static class ImageReplacement
         json.WriteEndArray();
         json.WriteEndObject();
         return replaced;
+    }
+
+    /// <summary>
+    /// Which images the pages draw from their resources, as qpdf lists them (<c>--json-key=pages</c>: a page's own
+    /// <c>/Resources</c> or the one it inherits, <c>/XObject</c>, not inside forms), and which of them something else in
+    /// the PDF may draw too: an annotation's appearance, a pattern, a Type 3 glyph or a soft mask group that refers to
+    /// them, or to the resources or XObject dictionary that holds them. The worker sees only what a page's content
+    /// draws, so an image drawn anywhere else may be drawn larger there: it is never replaced.
+    /// </summary>
+    private sealed class PageImages
+    {
+        // Page objects and page tree nodes.
+        private readonly HashSet<string> _pageTree = new(StringComparer.Ordinal);
+
+        // A page tree object's /Resources: the object that is the dictionary, or the page tree object itself when inline.
+        private readonly Dictionary<string, string> _resources = new(StringComparer.Ordinal);
+
+        // An object's /XObject dictionary (a resources dictionary's, or the inline resources of a page tree object): the
+        // object that is the dictionary, or the owner itself when inline.
+        private readonly Dictionary<string, string> _xobjects = new(StringComparer.Ordinal);
+
+        private bool _objectsSeen;
+
+        /// <summary>The keys (<c>obj:N G R</c>) of the images some page draws from its resources.</summary>
+        public HashSet<string> Drawn { get; } = new(StringComparer.Ordinal);
+
+        public void OnPage(JsonNode? page)
+        {
+            // qpdf writes "pages" before "qpdf": the images drawn must be known as the objects go by.
+            if (_objectsSeen)
+                throw new InvalidDataException("qpdf's description of the PDF lists its pages after its objects.");
+            if (Key(page?["object"]) is { } pageKey)
+                _pageTree.Add(pageKey);
+            if (page?["images"] is not JsonArray images)
+                return;
+            foreach (var image in images)
+            {
+                if (Key(image?["object"]) is { } imageKey)
+                    Drawn.Add(imageKey);
+            }
+        }
+
+        public void OnObject(string key, JsonNode? value)
+        {
+            _objectsSeen = true;
+            if ((value?["value"] ?? value?["stream"]?["dict"]) is not JsonObject dictionary)
+                return;
+            if (_pageTree.Contains(key) || Is(dictionary, "/Type", "/Page") || Is(dictionary, "/Type", "/Pages"))
+            {
+                _pageTree.Add(key);
+                if (dictionary["/Resources"] is JsonObject inline)
+                {
+                    _resources[key] = key;
+                    if (Holder(key, inline["/XObject"]) is { } holder)
+                        _xobjects[key] = holder;
+                }
+                else if (Key(dictionary["/Resources"]) is { } resources)
+                {
+                    _resources[key] = resources;
+                }
+            }
+            else if (Holder(key, dictionary["/XObject"]) is { } holder)
+            {
+                _xobjects[key] = holder;
+            }
+        }
+
+        /// <summary>
+        /// Of <paramref name="images"/>, the ones something other than the pages' resources refers to, directly or through
+        /// the dictionaries that hold them. Reads the description once more.
+        /// </summary>
+        public HashSet<string> UsedElsewhere(string describedPath, IEnumerable<string> images, CancellationToken ct)
+        {
+            // The pages' resources dictionaries that are objects of their own, and the objects that hold the pages' XObject
+            // dictionaries: a page tree object, a resources dictionary, or an XObject dictionary of its own.
+            var resources = new HashSet<string>(StringComparer.Ordinal);
+            var holders = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (node, dictionary) in _resources)
+            {
+                if (dictionary != node)
+                    resources.Add(dictionary);
+                if (_xobjects.TryGetValue(dictionary, out var holder))
+                    holders.Add(holder);
+            }
+
+            var xobjects = holders.Where(holder => !_pageTree.Contains(holder) && !resources.Contains(holder)).ToHashSet(StringComparer.Ordinal);
+            var targets = images.ToHashSet(StringComparer.Ordinal);
+            var elsewhere = new HashSet<string>(StringComparer.Ordinal);
+            var held = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+            QpdfJsonFile.Read(describedPath, (element, key, value) =>
+            {
+                if (element != QpdfJsonFile.Objects)
+                    return;
+                foreach (var reference in References(value))
+                {
+                    if (targets.Contains(reference))
+                    {
+                        if (!holders.Contains(key))
+                            elsewhere.Add(reference);
+                        else if (held.TryGetValue(key, out var list))
+                            list.Add(reference);
+                        else
+                            held[key] = [reference];
+                    }
+                    else if ((resources.Contains(reference) && !_pageTree.Contains(key))
+                        || (xobjects.Contains(reference) && !_pageTree.Contains(key) && !resources.Contains(key)))
+                    {
+                        // A dictionary of the pages' resources that something else uses as well.
+                        elsewhere.Add(reference);
+                    }
+                }
+            }, ct);
+
+            // What a shared dictionary holds is used elsewhere too.
+            foreach (var shared in resources.Where(elsewhere.Contains).ToList())
+            {
+                if (_xobjects.TryGetValue(shared, out var holder))
+                    elsewhere.Add(holder);
+            }
+
+            foreach (var (holder, list) in held)
+            {
+                if (elsewhere.Contains(holder))
+                    elsewhere.UnionWith(list);
+            }
+
+            elsewhere.IntersectWith(targets);
+            return elsewhere;
+        }
+
+        // The object holding an XObject dictionary given as value: the one it refers to, or the owner when inline.
+        private static string? Holder(string owner, JsonNode? value) => value is JsonObject ? owner : Key(value);
+
+        // "obj:N G R" for a reference ("N G R"), null for anything else.
+        private static string? Key(JsonNode? value) =>
+            value is JsonValue text && text.TryGetValue<string>(out var reference) && IsReference(reference) ? "obj:" + reference : null;
+
+        private static bool IsReference(string text)
+        {
+            var parts = text.Split(' ');
+            return parts.Length == 3 && parts[2] == "R" && parts[0].Length is > 0 and <= 10 && parts[1].Length is > 0 and <= 5
+                && parts[0].All(char.IsAsciiDigit) && parts[1].All(char.IsAsciiDigit);
+        }
+
+        // Every reference anywhere in an object's value, as a key.
+        private static IEnumerable<string> References(JsonNode? value)
+        {
+            var pending = new Stack<JsonNode?>();
+            pending.Push(value);
+            while (pending.TryPop(out var node))
+            {
+                if (node is JsonObject entries)
+                {
+                    foreach (var (_, child) in entries)
+                        pending.Push(child);
+                }
+                else if (node is JsonArray items)
+                {
+                    foreach (var child in items)
+                        pending.Push(child);
+                }
+                else if (Key(node) is { } key)
+                {
+                    yield return key;
+                }
+            }
+        }
     }
 
     /// <summary>An image to replace, as found on the first read: its key, the SHA-256 of its dictionary, its JPEG.</summary>

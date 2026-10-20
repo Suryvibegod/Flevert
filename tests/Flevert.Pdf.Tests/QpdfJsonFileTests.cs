@@ -50,6 +50,29 @@ public sealed class QpdfJsonFileTests : IDisposable
         Assert.Contains(entries, entry => entry.Element == QpdfJsonFile.Objects && entry.Key == "trailer");
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(64)]
+    [InlineData(1 << 20)]
+    public async Task With_the_pages_key_each_page_comes_out_whole_before_the_objects(int initialBufferBytes)
+    {
+        var json = _dir.Combine("pages.json");
+        var run = await ExternalTool.RunAsync(Qpdf.NextToApp.ExePath,
+            ["--json-output=2", "--json-key=pages", "--json-key=qpdf", "--json-stream-data=none", Fixture("three-colours.pdf"), json], TimeSpan.FromSeconds(30));
+        Assert.True(run.ExitCode == 0, run.StandardError);
+        using var whole = JsonDocument.Parse(File.ReadAllBytes(json));
+        var pages = whole.RootElement.GetProperty("pages").EnumerateArray()
+            .Select((page, index) => (QpdfJsonFile.Pages, index.ToString(System.Globalization.CultureInfo.InvariantCulture), JsonNode.Parse(page.GetRawText())!.ToJsonString()))
+            .ToList();
+
+        var entries = ReadAll(json, initialBufferBytes, 1 << 20);
+
+        Assert.Equal(3, pages.Count);
+        Assert.Equal(pages, entries.Take(3));
+        Assert.All(entries.Skip(3), entry => Assert.NotEqual(QpdfJsonFile.Pages, entry.Element));
+        Assert.Contains(entries, entry => entry.Element == QpdfJsonFile.Objects && entry.Key == "trailer");
+    }
+
     [Fact]
     public async Task An_entry_larger_than_the_largest_buffer_is_refused()
     {

@@ -243,10 +243,11 @@ public sealed class Qpdf
     }
 
     /// <summary>
-    /// Runs <c>qpdf --json-output=2 --json-stream-data=file --json-stream-prefix=&lt;prefix&gt; --decode-level=none</c>:
-    /// the input described in <paramref name="jsonPath"/>, and the data of every stream, as stored (no filter undone),
-    /// in a file of its own, <c>&lt;prefix&gt;-&lt;object number&gt;</c>, which the description names. The prefix goes
-    /// through <c>@-</c> like the paths.
+    /// Runs <c>qpdf --json-output=2 --json-key=pages --json-key=qpdf --json-stream-data=file
+    /// --json-stream-prefix=&lt;prefix&gt; --decode-level=none</c>: the input described in <paramref name="jsonPath"/>,
+    /// its pages first (each page's object and the images it draws from its resources), then its objects, and the data
+    /// of every stream, as stored (no filter undone), in a file of its own, <c>&lt;prefix&gt;-&lt;object number&gt;</c>,
+    /// which the description names. The prefix goes through <c>@-</c> like the paths.
     /// </summary>
     /// <param name="streamPrefix">Fully qualified, in a folder nobody else can change: qpdf creates the files by name.</param>
     /// <param name="jsonPath">Fully qualified, in the folder of <paramref name="streamPrefix"/>.</param>
@@ -256,7 +257,7 @@ public sealed class Qpdf
     {
         RequireArgumentLine(streamPrefix, nameof(streamPrefix));
         // qpdf's error names the file it could not write: anything in the folder of both is an output.
-        var run = await RunCheckedAsync(["--json-output=2", "--json-stream-data=file", "--decode-level=none"], [inputPath],
+        var run = await RunCheckedAsync(["--json-output=2", "--json-key=pages", "--json-key=qpdf", "--json-stream-data=file", "--decode-level=none"], [inputPath],
             [JsonStreamPrefix + streamPrefix, inputPath, jsonPath], Path.GetDirectoryName(streamPrefix), ct).ConfigureAwait(false);
         RequireOutput(run, jsonPath);
         return Repaired(run);

@@ -221,6 +221,98 @@ public sealed class PdfCompressSharingTests(ITestOutputHelper output) : IDisposa
     }
 
     [Fact]
+    public async Task An_image_drawn_inside_a_form_xobject_is_left_as_it_is()
+    {
+        // pdfium gives the size of an image inside a form in the form's space, not the page's: never made smaller.
+        var input = _dir.Combine("form.pdf");
+        var jpeg = ScanJpeg(0);
+        WriteObjects(input,
+        [
+            Ascii("<< /Type /Catalog /Pages 2 0 R >>"),
+            Ascii("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
+            Ascii($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {A4}] /Resources << /XObject << /Fm0 4 0 R >> >> /Contents 6 0 R >>"),
+            Stream($"/Type /XObject /Subtype /Form /BBox [0 0 {A4}] /Resources << /XObject << /Im0 5 0 R >> >>", $"q {FullPage} cm /Im0 Do Q"),
+            Stream(Jpeg(jpeg, 2480, 3508).Dictionary, jpeg),
+            Stream("", "/Fm0 Do"),
+        ]);
+
+        var ex = await Assert.ThrowsAsync<OperationSkippedException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(AlreadySmall, ex.Message);
+    }
+
+    [Fact]
+    public async Task An_image_a_stamp_annotation_also_shows_is_kept_at_full_resolution()
+    {
+        // The page draws it at 300 DPI, and so does the stamp's appearance, which the worker does not see: it is also
+        // drawn outside the page's content, so it is not replaced.
+        var input = _dir.Combine("stamp.pdf");
+        WriteStamped(input, stampImage: 4);
+
+        var ex = await Assert.ThrowsAsync<OperationSkippedException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(AlreadySmall, ex.Message);
+    }
+
+    [Fact]
+    public async Task A_copy_of_the_page_image_in_a_stamp_annotation_keeps_full_resolution()
+    {
+        // Two objects with the same data and dictionary: the page's is replaced, the stamp's stays as it is.
+        var input = _dir.Combine("stamp copy.pdf");
+        WriteStamped(input, stampImage: 8);
+
+        var result = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.Equal([(1240, 1754), (2480, 3508)], ImageSizes(result).Order());
+    }
+
+    [Fact]
+    public async Task Images_with_the_same_data_but_different_dictionaries_are_none_of_them_replaced()
+    {
+        // The second is inverted by /Decode: the one JPEG the worker made is right for only one of them.
+        var jpeg = ScanJpeg(0);
+        var input = _dir.Combine("decode.pdf");
+        Write(input, [Jpeg(jpeg, 2480, 3508), Jpeg(jpeg, 2480, 3508, extra: "/Decode [1 0 1 0 1 0]")], [(0, FullPage)], [(1, FullPage)]);
+
+        var ex = await Assert.ThrowsAsync<OperationSkippedException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(AlreadySmall, ex.Message);
+    }
+
+    [Fact]
+    public async Task An_image_with_a_colour_key_mask_is_left_as_it_is()
+    {
+        // A JPEG's lossy pixels would no longer match the key colours.
+        var input = _dir.Combine("mask.pdf");
+        Write(input, [Jpeg(ScanJpeg(0), 2480, 3508, extra: "/Mask [240 255 240 255 240 255]")], [(0, FullPage)]);
+
+        var ex = await Assert.ThrowsAsync<OperationSkippedException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(AlreadySmall, ex.Message);
+    }
+
+    private static readonly string A4 = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{A4Width} {A4Height}");
+
+    // A page that draws image 4 (a 300 DPI scan) over the whole page, with a stamp annotation whose appearance draws
+    // image stampImage: 4 itself, or 8, a copy of it (same data, same dictionary).
+    private static void WriteStamped(string path, int stampImage)
+    {
+        var jpeg = ScanJpeg(0);
+        var image = Stream(Jpeg(jpeg, 2480, 3508).Dictionary, jpeg);
+        WriteObjects(path,
+        [
+            Ascii("<< /Type /Catalog /Pages 2 0 R >>"),
+            Ascii("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
+            Ascii($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {A4}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R] >>"),
+            image,
+            Stream("", $"q {FullPage} cm /Im0 Do Q"),
+            Ascii("<< /Type /Annot /Subtype /Stamp /Rect [0 0 595 842] /AP << /N 7 0 R >> >>"),
+            Stream($"/Type /XObject /Subtype /Form /BBox [0 0 595 842] /Resources << /XObject << /Im0 {stampImage} 0 R >> >>", "q 595 0 0 842 0 0 cm /Im0 Do Q"),
+            image,
+        ]);
+    }
+
+    [Fact]
     public async Task A_scratch_drive_without_twice_the_pdfs_size_free_is_refused_before_anything_is_written()
     {
         var input = _dir.Combine("scan.pdf");
