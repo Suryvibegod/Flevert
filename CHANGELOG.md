@@ -17,6 +17,33 @@ Video and audio: convert, compress to a size you choose, take the sound out of a
 - Video and audio keep their title, artist and recording date, never the place they were recorded. A converted video keeps its first sound track, and the notification says when there were others. The progress window shows how far the current file is, as a percentage.
 - The installer includes ffmpeg, which is free software under the GNU GPL: each release has its complete source beside the setup, as the files `ffmpeg-source-<build>-<n>-of-<count>.tar`.
 
+## [1.2.2] - 2026-10-20
+
+Version numbers now start at 1: this release follows 0.2.1, and the next feature release is 1.3.0.
+
+### Added
+
+- New PDF tools in **Flevert PDF tools**, a second entry beside **Flevert** in the PDF menu with its own list. Each runs straight from the menu, on your computer, for each PDF you select:
+  - **Remove blank pages** drops the empty backs of a two-sided scan and says which pages it removed. A page with a comment or with text you can select is always kept, and so is a scanned page with any small mark, such as initials, a stamp or a pencil note; a scanner's shadow along the edge and specks of dust do not count.
+  - **Add page numbers** at the bottom centre, as `1 / 12`, upright even on turned pages.
+  - **Add watermark…** asks for your text once for all the PDFs you selected, and writes it, Vietnamese included, across every page in light grey. It marks what a copy is for; it does not stop anyone from editing the PDF. Windows' Arial goes into the PDF with it, which adds about 1 MB to the file. The text is one line of up to 100 letters that Windows' Arial can draw: emoji, Chinese and invisible characters are refused with the reason.
+  - **Print layout** > **2 pages per sheet** and **4 pages per sheet** put the pages on A4 sheets, to print on less paper.
+  - **Fit pages to A4** scales Letter, A3 and odd-sized pages to A4. Pages already A4 stay as they are.
+  - Print layout and Fit pages to A4 are made for printing: bookmarks, links and fillable fields are not kept, though filled-in answers and comments stay on the page.
+  - **Lock filled forms** makes filled forms and comments part of the page, as the PDF draws them, so nobody can change the answers. Flevert draws an answer again only when the form asks for it and the answer is plain ASCII in a field of one line: a form that asks for it with other answers (Vietnamese ones, say, or in a field of several lines), or with an answer the PDF holds no drawing of, is left as it is, and the notification says why.
+  - **Split by size** > **Under 10 MB** or **Under 25 MB** writes the pages, in order, into as few PDFs as fit under the limit of an email or a chat app.
+  - **Extract images** saves the pictures of a PDF to a folder: JPEG photos exactly as they are in it, other pictures as PNG.
+- Icons beside the entries of the Flevert menus (not inside their submenus), from Microsoft's Fluent UI System Icons, readable on the light and the dark menu, and separators between groups of entries.
+
+### Changed
+
+- The right-click menus are laid out for the jobs people do most, with plain names. Pictures: **Convert to**, **Compress**, **Remove hidden info**, **Combine into PDF**. PDFs: **Compress**, **Merge PDFs**, **Split into pages**, **Convert to**, **Rotate**, **Protect with password**, **Remove password**, **Remove hidden info**.
+- New names: **Remove metadata** is **Remove hidden info**; **Convert** is **Convert to**, with WebP spelled that way; picture **Compress** levels are **Light (best quality)**, **Balanced** and **Strong (smallest)**; PDF **Compress** > Lossless and For sharing are **Smaller, same quality** and **Smallest, for sharing**; PDF **Convert** > JPG pages and PNG pages are **JPG images** and **PNG images**; **Rotate** > 90° right and 90° left are **Right 90°** and **Left 90°**. What each one does is unchanged.
+
+### Known issues
+
+- Installing an older version over 0.2.2 is not supported: uninstall first. The older setup does not know the **Flevert PDF tools** entry and leaves it in the menu, pointing to a list that is gone.
+
 ## [0.2.1] - 2026-10-20
 
 ### Added
@@ -107,6 +134,7 @@ The first release: pictures, and an installer.
 - A specially crafted TIFF file can make the bundled ImageMagick 7.1.2-33 overflow its stack ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity): Flevert then closes, and the rest of that batch is not converted. No code runs. It will be fixed by updating once a Magick.NET release includes ImageMagick 7.1.2-34.
 - Windows Smart App Control may block this unsigned release (see the README).
 
-[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/Suryvibegod/Flevert/compare/v0.2.1...v1.2.2
 [0.2.1]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.0

@@ -3,7 +3,7 @@ using Flevert.Core;
 namespace Flevert.Pdf;
 
 /// <summary>
-/// <c>Remove metadata</c> (docs/specs/pdf.md): writes <c>&lt;name&gt; (no metadata).pdf</c> beside the original, without
+/// <c>Remove hidden info</c> (docs/specs/pdf.md): writes <c>&lt;name&gt; (no metadata).pdf</c> beside the original, without
 /// the document information (but <c>/Producer (Flevert)</c>), XMP, private application data, attachments and
 /// JavaScript (<see cref="MetadataRemoval"/> lists them). The pages are copied as they are, so they look the same; a
 /// digital signature no longer matches the changed file.
@@ -28,7 +28,7 @@ public sealed class PdfStripMetadata : IOperation
 
     public string Id => "pdf.strip-metadata";
 
-    public string MenuPath => "Remove metadata";
+    public string MenuPath => "Remove hidden info";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
 

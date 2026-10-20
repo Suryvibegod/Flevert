@@ -3,7 +3,7 @@ using Flevert.Core;
 namespace Flevert.Pdf;
 
 /// <summary>
-/// <c>Compress/For sharing</c> (docs/specs/pdf.md, P1): writes <c>&lt;name&gt; (small).pdf</c> beside the original, every
+/// <c>Compress/Smallest, for sharing</c> (docs/specs/pdf.md, P1): writes <c>&lt;name&gt; (small).pdf</c> beside the original, every
 /// image drawn above 150 DPI wherever it is drawn brought down to 150 DPI as a JPEG of quality 80: a 25 MB scan becomes a
 /// file that goes through Zalo or email, and still reads on a phone and prints on A4. Images at 150 DPI or less, 1-bit
 /// images (fax, JBIG2, stencil masks), text and drawings stay as they are, byte for byte. A result not at least 5%
@@ -54,7 +54,7 @@ public sealed class PdfCompressSharing : IOperation
 
     public string Id => "pdf.compress-sharing";
 
-    public string MenuPath => "Compress/For sharing";
+    public string MenuPath => "Compress/Smallest, for sharing";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
 

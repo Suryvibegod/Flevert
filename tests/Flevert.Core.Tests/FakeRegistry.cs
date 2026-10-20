@@ -14,6 +14,9 @@ public sealed class FakeRegistry : IRegistry
         values[name] = value;
     }
 
+    public void SetDword(string key, string name, int value) =>
+        SetValue(key, name, value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
     public void DeleteTree(string key)
     {
         foreach (var k in _keys.Keys.Where(k => k.Equals(key, StringComparison.OrdinalIgnoreCase)

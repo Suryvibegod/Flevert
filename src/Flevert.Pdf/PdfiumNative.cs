@@ -88,6 +88,10 @@ internal static unsafe partial class PdfiumNative
     [LibraryImport(Library)]
     public static partial void FPDF_RenderPageBitmap(nint bitmap, nint page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
 
+    /// <summary>The number of annotations on the page (fpdf_annot.h), or -1 on an error.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_GetAnnotCount(nint page);
+
     // Reading text: fpdf_text.h.
 
     [LibraryImport(Library)]
@@ -229,4 +233,109 @@ internal static unsafe partial class PdfiumNative
 
     [LibraryImport(Library)]
     public static partial int FPDF_SaveAsCopy(nint document, FileWrite* fileWrite, uint flags);
+
+    // Editing pages of an existing document (v0.2.2 PDF tools): fpdfview.h, fpdf_edit.h, fpdf_ppo.h, fpdf_flatten.h.
+
+    /// <summary>FS_RECTF: note the order, left, top, right, bottom.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RectF
+    {
+        public float Left;
+        public float Top;
+        public float Right;
+        public float Bottom;
+    }
+
+    public const int FontTrueType = 2;
+
+    // FPDFPage_Flatten: flatten for printing; the result says whether there was anything to flatten.
+    public const int FlattenForPrint = 1;
+    public const int FlattenFailed = 0;
+    public const int FlattenNothingToDo = 2;
+
+    [LibraryImport(Library)]
+    public static partial nint FPDF_CreateNewDocument();
+
+    /// <summary>The page's crop box (within its media box), in its own space, before its /Rotate.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDF_GetPageBoundingBox(nint page, RectF* rect);
+
+    /// <summary>The page's /Rotate in quarter turns clockwise: 0 to 3.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_GetRotation(nint page);
+
+    /// <summary>A text object in one of the 14 standard fonts, named in ASCII (<c>Helvetica</c>), which is not embedded.</summary>
+    [LibraryImport(Library)]
+    public static partial nint FPDFPageObj_NewTextObj(nint document, byte* font, float fontSize);
+
+    [LibraryImport(Library)]
+    public static partial nint FPDFText_LoadFont(nint document, byte* data, uint size, int fontType, int cid);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFFont_Close(nint font);
+
+    [LibraryImport(Library)]
+    public static partial nint FPDFPageObj_CreateTextObj(nint document, nint font, float fontSize);
+
+    /// <summary><paramref name="text"/> is UTF-16, ended by a NUL.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFText_SetText(nint textObject, ushort* text);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPageObj_Transform(nint pageObject, double a, double b, double c, double d, double e, double f);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPageObj_SetFillColor(nint pageObject, uint red, uint green, uint blue, uint alpha);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPageObj_GetBounds(nint pageObject, float* left, float* bottom, float* right, float* top);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_Flatten(nint page, int flag);
+
+    /// <summary>
+    /// A new document of sheets <paramref name="width"/> by <paramref name="height"/>, each holding up to
+    /// <paramref name="columns"/> x <paramref name="rows"/> pages of the source in reading order, each page a form XObject
+    /// drawing it as shown, scaled to its cell and centred in it. One copier for the whole run: what pages share (fonts,
+    /// images) is copied once. size_t: 64 bits.
+    /// </summary>
+    [LibraryImport(Library)]
+    public static partial nint FPDF_ImportNPagesToOne(nint source, float width, float height, nuint columns, nuint rows);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPage_SetMediaBox(nint page, float left, float bottom, float right, float top);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPage_SetCropBox(nint page, float left, float bottom, float right, float top);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPage_SetBleedBox(nint page, float left, float bottom, float right, float top);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPage_SetTrimBox(nint page, float left, float bottom, float right, float top);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPage_SetArtBox(nint page, float left, float bottom, float right, float top);
+
+    /// <summary>FS_MATRIX.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Matrix
+    {
+        public float A;
+        public float B;
+        public float C;
+        public float D;
+        public float E;
+        public float F;
+    }
+
+    /// <summary>
+    /// Wraps the page's content in <c>q &lt;clip&gt; re W* n &lt;matrix&gt; cm … Q</c>: the clip in the page's new space,
+    /// then the matrix. Annotations are not moved.
+    /// </summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_TransFormWithClip(nint page, Matrix* matrix, RectF* clip);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_RemoveAnnot(nint page, int index);
 }

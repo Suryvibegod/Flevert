@@ -35,7 +35,7 @@ public sealed class PdfRotateTests : IDisposable
     public void The_three_rotations_are_named_and_placed_as_in_the_spec()
     {
         Assert.Equal(
-            [("pdf.rotate-right", "Rotate/90° right"), ("pdf.rotate-left", "Rotate/90° left"), ("pdf.rotate-180", "Rotate/180°")],
+            [("pdf.rotate-right", "Rotate/Right 90°"), ("pdf.rotate-left", "Rotate/Left 90°"), ("pdf.rotate-180", "Rotate/180°")],
             Rotations().Select(op => (op.Id, op.MenuPath)));
         foreach (var op in Rotations())
         {

@@ -9,7 +9,11 @@ public interface IMenuOperation
     /// <summary>Stable id used in registry commands, e.g. <c>image.to-png</c>. Never rename once released.</summary>
     string Id { get; }
 
-    /// <summary>Menu location below the Flevert entry; <c>/</c> separates submenus, e.g. <c>Convert/PNG</c>.</summary>
+    /// <summary>
+    /// Menu location below the Flevert entry; <c>/</c> separates submenus, e.g. <c>Convert/PNG</c>. Empty for an
+    /// operation that is not in the menu as it is (a PDF tool of v0.2.2, which the menu places in Flevert PDF tools with its
+    /// options: <c>IMenuPlacement</c>).
+    /// </summary>
     string MenuPath { get; }
 
     /// <summary>Lower-case file extensions with leading dot this operation accepts.</summary>

@@ -11,7 +11,7 @@ public enum PdfPageImageFormat
 }
 
 /// <summary>
-/// <c>Convert/JPG pages</c> and <c>Convert/PNG pages</c> (docs/specs/pdf.md): renders every page with pdfium at
+/// <c>Convert to/JPG images</c> and <c>Convert to/PNG images</c> (docs/specs/pdf.md): renders every page with pdfium at
 /// <see cref="Dpi"/> (lower for a page past <see cref="PdfDocument.MaxRenderPixels"/>) into a folder
 /// <c>&lt;name&gt; (pages)</c> of <c>&lt;name&gt; 001.jpg</c>…, written whole or not at all, with progress per page.
 /// </summary>
@@ -50,7 +50,7 @@ public sealed class PdfToImages : IOperation
 
     public string Id => _format == PdfPageImageFormat.Jpeg ? "pdf.to-jpg" : "pdf.to-png";
 
-    public string MenuPath => _format == PdfPageImageFormat.Jpeg ? "Convert/JPG pages" : "Convert/PNG pages";
+    public string MenuPath => _format == PdfPageImageFormat.Jpeg ? "Convert to/JPG images" : "Convert to/PNG images";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
 

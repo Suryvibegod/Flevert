@@ -17,6 +17,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The menu and PDF tools icons (assets/menu, Fluent UI System Icons, MIT; scripts/make-menu-icons.py), beside
+         flevert.exe in icons\: install-menu points the menu there, and the installer packs the folder with the rest. -->
+    <None Include="..\..\assets\menu\*.ico" Link="icons\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Flevert.Core\Flevert.Core.csproj" />
     <ProjectReference Include="..\Flevert.Image\Flevert.Image.csproj" />
     <ProjectReference Include="..\Flevert.Pdf\Flevert.Pdf.csproj" />

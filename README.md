@@ -22,7 +22,7 @@ iPhone photos to JPG, smaller files, copies without GPS, photos into one PDF. Fr
 - **Photos that fit**: compress them for chat and email, or to under 500 KB, 1 MB or 5 MB.
 - **Seven formats**: convert between JPG, PNG, WebP, AVIF, GIF, BMP and TIFF. Animations stay animated in GIF and WebP.
 - **No location in what you share**: remove GPS and camera details first.
-- **PDF tools**: photos into one PDF, pages into pictures, merge, split, rotate, compress, add or remove a password.
+- **PDF tools**: photos into one PDF, pages into pictures, merge, split, rotate, compress, add or remove a password; remove blank pages, add page numbers or a watermark, print 2 or 4 pages per sheet.
 - **Up to 100 files at once**, with one notification at the end.
 - **Originals untouched**: results are saved beside them and never overwrite a file.
 
@@ -40,11 +40,11 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 
 | Flevert > | You get |
 |---|---|
-| **Convert** > JPG, PNG, WEBP, AVIF, GIF, BMP, TIFF | `photo.jpg`, upright (no GIF for HEIC photos) |
-| **Compress** > Light, Balanced, Strong | `photo (compressed).jpg` |
+| **Convert to** > JPG, PNG, WebP, AVIF, GIF, BMP, TIFF | `photo.jpg`, upright (no GIF for HEIC photos) |
+| **Compress** > Light (best quality), Balanced, Strong (smallest) | `photo (compressed).jpg` |
 | **Compress** > Under 500 KB, 1 MB, 5 MB | `photo (under 1 MB).jpg`, the best quality that fits |
+| **Remove hidden info** | `photo (no metadata).jpg`, without GPS location, camera details, XMP or comments |
 | **Combine into PDF** | `photo (+3).pdf`: a page per picture, in name order, without GPS or camera details |
-| **Remove metadata** | `photo (no metadata).jpg`, without GPS, camera details, XMP or comments |
 
 <p align="center">
 <img src="assets/demo/combine.gif" width="720" alt="Four JPG photos, one of them in portrait, selected in Explorer; right-click, Flevert, Combine into PDF; one file IMG_2041 (+3).pdf appears beside them and a notification says Done: IMG_2041 (+3).pdf">
@@ -54,15 +54,28 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 
 | Flevert > | You get |
 |---|---|
-| **Convert** > JPG pages, PNG pages | a folder `report (pages)` with `report 001.jpg`, … |
-| **Convert** > Text | `report.txt`, the text of every page (scans have none: Flevert does not recognise text in pictures) |
+| **Compress** > Smaller, same quality | `report (compressed).pdf`, smaller with the same quality; also rewrites a slightly damaged PDF so that it opens |
+| **Compress** > Smallest, for sharing | `report (small).pdf`: pictures above 150 DPI brought down to 150 DPI, often a quarter to a half of the size, depending on the scan |
 | **Merge PDFs** | `report (merged).pdf`, in name order |
 | **Split into pages** | a folder `report (split)` with one PDF per page |
-| **Rotate** > 90° right, 90° left, 180° | `report (rotated).pdf` |
-| **Compress** > Lossless | `report (compressed).pdf`, smaller with the same quality; also rewrites a slightly damaged PDF so that it opens |
-| **Compress** > For sharing | `report (small).pdf`: pictures above 150 DPI brought down to 150 DPI, often a quarter to a half of the size, depending on the scan |
-| **Remove metadata** | `report (no metadata).pdf`, without author, dates, XMP, attachments or scripts |
+| **Convert to** > JPG images, PNG images | a folder `report (pages)` with `report 001.jpg`, … |
+| **Convert to** > Text | `report.txt`, the text of every page (scans have none: Flevert does not recognise text in pictures) |
+| **Rotate** > Right 90°, Left 90°, 180° | `report (rotated).pdf` |
 | **Protect with password**, **Remove password** | `report (protected).pdf` (AES-256), `report (unlocked).pdf` |
+| **Remove hidden info** | `report (no metadata).pdf`, without author, dates, XMP, attachments or scripts |
+
+PDFs also have a second entry, **Flevert PDF tools**:
+
+| Flevert PDF tools > | You get |
+|---|---|
+| **Remove blank pages** | `report (no blank pages).pdf`, without the empty pages a two-sided scan leaves |
+| **Add page numbers** | `report (numbered).pdf`, numbered "1 / 12" at the bottom centre |
+| **Add watermark…** | `report (watermarked).pdf` with your text across every page, such as what the copy is for; it asks for the text once for all the PDFs you selected. Anyone with a PDF editor can still remove it. The font goes into the PDF and adds about 1 MB to the file. To mark a photo, use **Combine into PDF** first |
+| **Print layout** > 2 pages per sheet, 4 pages per sheet | `report (2 per sheet).pdf` or `report (4 per sheet).pdf` on A4, to print on less paper. Made for printing: bookmarks, links and fillable fields are not kept |
+| **Fit pages to A4** | `report (A4).pdf`: Letter, A3 and odd sizes scaled to A4. Like Print layout, made for printing: bookmarks, links and fillable fields are not kept |
+| **Lock filled forms** | `report (flattened).pdf`: the answers of a filled form, and comments, become part of the page, so nobody can change them |
+| **Split by size** > Under 10 MB, Under 25 MB | a folder `report (parts)` with `report part 1.pdf`, …, in page order. **Under 10 MB** is the safe size for email (Gmail counts 25 MB after encoding, about 18 MB of file; Outlook takes 20 MB); **Under 25 MB** is for chat apps |
+| **Extract images** | a folder `report (images)` with `report 001.jpg`, `report 002.png`, …: photos exactly as they are in the PDF, other pictures as PNG |
 
 PDFs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
 
@@ -76,7 +89,7 @@ No account, no telemetry, no uploads. At most once a day, after a conversion, Fl
 
 ## Coming next
 
-**0.3**: video and audio. Ideas are welcome in [issues](https://github.com/Suryvibegod/Flevert/issues); changes are in the [CHANGELOG](CHANGELOG.md).
+**1.3**: video and audio. Ideas are welcome in [issues](https://github.com/Suryvibegod/Flevert/issues); changes are in the [CHANGELOG](CHANGELOG.md).
 
 ## Troubleshooting
 

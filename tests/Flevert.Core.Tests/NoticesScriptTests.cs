@@ -126,6 +126,35 @@ public sealed class NoticesScriptTests : IDisposable
     }
 
     [Fact]
+    public void A_wildcard_entry_covers_a_folder_of_like_files_such_as_the_menu_icons()
+    {
+        Write(Path.Combine(_publish, @"icons\merge.ico"), "icon");
+        Write(Path.Combine(_publish, @"icons\shield.ico"), "icon");
+        Write(Path.Combine(_root, @"assets\menu\LICENSE-fluentui-system-icons.txt"), "Fluent licence text");
+
+        var run = Notices(Manifest(Entry("Fluent UI System Icons", [@"icons\*.ico"], ["assets/menu/LICENSE-fluentui-system-icons.txt"])));
+
+        Assert.True(run.ExitCode == 0, run.Output);
+        Assert.Contains("Fluent licence text", NoticesText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_wildcard_entry_does_not_cover_other_files_beside_them_nor_match_nothing()
+    {
+        Write(Path.Combine(_publish, @"icons\merge.ico"), "icon");
+        Write(Path.Combine(_publish, @"icons\tool.dll"), "native code from somewhere");
+        Write(Path.Combine(_root, @"assets\menu\LICENSE.txt"), "Fluent licence text");
+
+        var stray = Notices(Manifest(Entry("Icons", [@"icons\*.ico"], ["assets/menu/LICENSE.txt"])));
+        var nothing = Notices(Manifest(Entry("Icons", [@"icons\*.ico", @"cursors\*.cur"], ["assets/menu/LICENSE.txt"])));
+
+        Assert.NotEqual(0, stray.ExitCode);
+        Assert.Contains(@"icons\tool.dll", stray.Output, StringComparison.Ordinal);
+        Assert.NotEqual(0, nothing.ExitCode);
+        Assert.Contains(@"cursors\*.cur", nothing.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_notices_entry_whose_licence_file_is_missing_stops_the_build()
     {
         Write(Path.Combine(_publish, "tool.exe"), "binary");
@@ -167,6 +196,9 @@ public sealed class NoticesScriptTests : IDisposable
         Assert.True(ffmpeg.Length >= 2, "deps\\ffmpeg is incomplete: run scripts\\fetch-deps.ps1");
         foreach (var file in ffmpeg)
             Write(Path.Combine(_publish, "ffmpeg", Path.GetFileName(file)), "binary");
+        // And the menu icons the build copies from assets\menu into icons\ (assets\notices.json).
+        foreach (var icon in Directory.GetFiles(Path.Combine(InstallerScriptTests.RepositoryRoot(), "assets", "menu"), "*.ico"))
+            Write(Path.Combine(_publish, "icons", Path.GetFileName(icon)), "icon");
 
         var run = PowerShellScript.Run("write-notices.ps1", ["-Publish", _publish, "-Packages", _packages]);
 
@@ -238,6 +270,7 @@ public sealed class NoticesScriptTests : IDisposable
         "Microsoft Visual C++",
         "FFmpeg 8.1.3",
         "GNU GENERAL PUBLIC LICENSE",
+        "Fluent UI System Icons", // the menu icons (assets\notices.json)
     ];
 
     private void Package(string id, string version, string licenceName, string text) =>

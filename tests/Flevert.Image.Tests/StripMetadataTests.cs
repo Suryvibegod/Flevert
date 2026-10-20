@@ -15,7 +15,7 @@ public sealed class StripMetadataTests : IDisposable
     [Fact]
     public void Remove_metadata_is_offered_for_every_readable_image()
     {
-        Assert.Equal("Remove metadata", StripOp().MenuPath);
+        Assert.Equal("Remove hidden info", StripOp().MenuPath);
         Assert.Equal(ImageFile.ReadableExtensions.Order(StringComparer.Ordinal), StripOp().Extensions.Order(StringComparer.Ordinal));
     }
 

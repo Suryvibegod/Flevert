@@ -10,6 +10,12 @@ public sealed class WindowsRegistry(string root = @"Software\Classes") : IRegist
         k.SetValue(name, value, RegistryValueKind.String);
     }
 
+    public void SetDword(string key, string name, int value)
+    {
+        using var k = Registry.CurrentUser.CreateSubKey(Full(key));
+        k.SetValue(name, value, RegistryValueKind.DWord);
+    }
+
     public string? GetValue(string key, string name)
     {
         using var k = Registry.CurrentUser.OpenSubKey(Full(key));

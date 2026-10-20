@@ -86,17 +86,65 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
             cases.Add(row.Fixture, "pdf.extract-text", row.Render == Ok ? Skipped : row.Render);
             // qpdf counts the pages first, then pdfium reads the images; none of these has one above 150 DPI.
             cases.Add(row.Fixture, "pdf.compress-sharing", row.Rotate != Ok ? row.Rotate : row.Render == Ok ? Skipped : row.Render);
+            foreach (var (tool, outcome) in Tools(row.Fixture, row.Rotate, row.Render))
+                cases.Add(row.Fixture, tool, outcome);
         }
 
         return cases;
     }
+
+    /// <summary>
+    /// The v0.2.2 tools (docs/specs/pdf.md: "Mỗi công cụ mới chạy qua bảng PDF độc"). Those that write a PDF count the
+    /// pages with qpdf first, so they fail as rotating does; then the worker reads the PDF as it does to draw it.
+    /// </summary>
+    private static IEnumerable<(string Tool, string Outcome)> Tools(string fixture, string rotate, string render)
+    {
+        // After qpdf's count, the worker reads the pages as it does to draw them.
+        string AfterCount(string worker) => rotate != Ok ? rotate : render != Ok ? render : worker;
+        foreach (var tool in PdfTools.All.Select(tool => tool.OperationId).Where(id => id != "pdf.extract-text"))
+        {
+            var rule = tool switch
+            {
+                // qpdf alone; these PDFs are under 10 MB, and have no form or comment.
+                "pdf.split-10mb" or "pdf.split-25mb" or "pdf.flatten" => rotate != Ok ? rotate : Skipped,
+                // The worker alone, as pictures; none has an image of 32 px or more.
+                "pdf.extract-images" => render != Ok ? render : Skipped,
+                // Their pages are all empty: every page looks blank.
+                "pdf.remove-blank-pages" => AfterCount(nameof(PdfError.NoPages)),
+                _ => AfterCount(Ok),
+            };
+            yield return (tool, ToolOutcomes.TryGetValue((fixture, tool), out var outcome) ? outcome : rule);
+        }
+    }
+
+    // Where a tool does other than the rule in Tools gives.
+    private static readonly Dictionary<(string Fixture, string Tool), string> ToolOutcomes = new()
+    {
+        [("signed", "pdf.flatten")] = Ok, // its signature field is a form field
+        [("many-objects", "pdf.split-10mb")] = Ok, // 16 MB, but its one page alone is small
+        [("bomb-image", "pdf.extract-images")] = Ok,
+        [("bomb-image", "pdf.remove-blank-pages")] = Skipped, // its image of zeros draws a black page
+        [("signed", "pdf.remove-blank-pages")] = Skipped, // its signature field is an annotation, which keeps its page
+        // Pages larger than PDF allows (14 400 units a side): the edit tools refuse them before measuring them.
+        [("page-giant", "pdf.page-numbers")] = nameof(PdfError.TooLarge),
+        [("page-giant", "pdf.watermark")] = nameof(PdfError.TooLarge),
+        [("page-giant", "pdf.n-up-2")] = nameof(PdfError.TooLarge),
+        [("page-giant", "pdf.n-up-4")] = nameof(PdfError.TooLarge),
+        [("page-giant", "pdf.fit-a4")] = nameof(PdfError.TooLarge),
+        [("page-inverted", "pdf.page-numbers")] = nameof(PdfError.TooLarge),
+        [("page-inverted", "pdf.watermark")] = nameof(PdfError.TooLarge),
+        [("page-inverted", "pdf.n-up-2")] = nameof(PdfError.TooLarge),
+        [("page-inverted", "pdf.n-up-4")] = nameof(PdfError.TooLarge),
+        [("page-inverted", "pdf.fit-a4")] = nameof(PdfError.TooLarge),
+    };
 
     // Remove metadata reads every object of the PDF twice, as qpdf's JSON and back (MetadataRemoval): real work that grows
     // with the file, like qpdf's own timeout. The 16 MB of many-objects (300 000 objects) took 13 s on CI, 5 s here.
     // Compress may decode for its whole budget before it packs the objects without decoding (PdfCompress).
     private static TimeSpan LimitFor(string operation, string input) => operation switch
     {
-        "pdf.strip-metadata" => Limit + TimeSpan.FromSeconds(new FileInfo(input).Length / (1024 * 1024)),
+        // Flatten reads qpdf's description of every object too, to see whether there is anything to flatten.
+        "pdf.strip-metadata" or "pdf.flatten" => Limit + TimeSpan.FromSeconds(new FileInfo(input).Length / (1024 * 1024)),
         "pdf.compress" => Limit + PdfCompress.FullRunTimeoutFor(new FileInfo(input).Length),
         _ => Limit,
     };
@@ -252,6 +300,22 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         Assert.Equal("Flevert had to repair this PDF while reading it: check that the pages look right.", result.Note);
     }
 
+    [Theory]
+    [InlineData("pdf.page-numbers")]
+    [InlineData("pdf.n-up-2")]
+    [InlineData("pdf.flatten")]
+    public async Task A_new_tool_says_a_signed_pdfs_signature_is_not_valid_in_the_output(string operation)
+    {
+        var signed = MaliciousPdf.Write("signed", _dir.Combine("hợp đồng ký số.pdf"));
+        using var logs = new TempDir();
+        var tool = PdfTools.Create(operation, new Dictionary<string, string>(), Qpdf.NextToApp, TestPdf.Worker);
+
+        var result = Assert.Single((await new Runner(new RunLog(logs.Path)).RunAsync(tool, [signed], null, CancellationToken.None)).Results);
+
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal("Signed PDF: the digital signature is not valid in the output.", result.Note);
+    }
+
     [Fact]
     public async Task Pages_rendered_from_a_signed_pdf_get_no_note()
     {
@@ -298,6 +362,9 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
                 "pdf.protect" => await ProtectAsync(input),
                 "pdf.extract-text" => await new PdfExtractText(TestPdf.Worker).RunAsync(input, CancellationToken.None),
                 "pdf.compress-sharing" => await new PdfCompressSharing(Qpdf.NextToApp, TestPdf.Worker).RunAsync(input, CancellationToken.None),
+                "pdf.watermark" => await new PdfWatermark("Bản sao", Qpdf.NextToApp, TestPdf.Worker).RunAsync(input, CancellationToken.None),
+                _ when PdfTools.All.Any(tool => tool.OperationId == operation) =>
+                    await PdfTools.Create(operation, new Dictionary<string, string>(), Qpdf.NextToApp, TestPdf.Worker).RunAsync(input, CancellationToken.None),
                 _ => throw new ArgumentOutOfRangeException(nameof(operation)),
             };
             return (Ok, result);

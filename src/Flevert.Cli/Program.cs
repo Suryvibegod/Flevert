@@ -43,6 +43,7 @@ internal static class Program
         if (command is PdfWorkerCommand)
             return PdfRenderWorker.Run(Console.OpenStandardInput(), Console.OpenStandardOutput());
 
+        // Every operation, the PDF tools with the options of their place in Flevert PDF tools.
         var catalog = new OperationCatalog([.. MenuOperations.All, .. MediaOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -96,7 +97,7 @@ internal static class Program
                 }
 
                 var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));
-                new MenuInstaller(new WindowsRegistry(), exe).Install(ops);
+                new MenuInstaller(new WindowsRegistry(), exe).Install(ops, MenuOperations.Looks);
                 ShellNotify.AssociationsChanged();
                 return Ok;
 
@@ -196,6 +197,14 @@ internal static class Program
             operation = asking = needsPassword.WithPrompt(passwords);
         }
 
+        // Add watermark… asks for the text the same way; without windows it fails each file at once.
+        DialogWatermarkPrompt? watermarks = null;
+        if (!headless && operation is PdfWatermarkMenu needsText)
+        {
+            watermarks = new DialogWatermarkPrompt();
+            operation = needsText.WithPrompt(watermarks);
+        }
+
         try
         {
             // Logs hold every path processed; keep the whole app-data folder private to this user, like the batch keys.
@@ -219,7 +228,7 @@ internal static class Program
             if (headless)
                 return batch(null, CancellationToken.None).GetAwaiter().GetResult().NoFailures ? Ok : SomeFilesFailed;
             // Alongside the batch, so it costs no time; asked about after the batch, if a newer version is out.
-            return BatchUi.Run(operation, leader.Pending, log, batch, UpdateOffer.Start(), passwords) ? Ok : SomeFilesFailed;
+            return BatchUi.Run(operation, leader.Pending, log, batch, UpdateOffer.Start(), (IBatchQuestion?)passwords ?? watermarks) ? Ok : SomeFilesFailed;
         }
         finally
         {

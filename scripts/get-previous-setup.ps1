@@ -37,8 +37,8 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # the progress bar makes Invoke-WebRequest many times slower
 
 # The pin: the release before the one being tested.
-$pinnedVersion = '0.2.1'
-$pinnedSha256 = '96f3f296775c4d3a521d07b93b68282acee3f64c48f1cef80d9f11f1b40b6dc3'
+$pinnedVersion = '1.2.2'
+$pinnedSha256 = 'edbfacb2141385b6e0482a705253421e171506d9292e789ef55d7c10a12ebb53'
 if ($IsPinned) { return [bool]($pinnedVersion -and $pinnedSha256) }
 if (-not $Version) { $Version = $pinnedVersion }
 if (-not $Sha256) { $Sha256 = $pinnedSha256 }

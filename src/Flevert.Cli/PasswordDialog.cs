@@ -11,7 +11,7 @@ namespace Flevert.Cli;
 /// batch runs on another thread and waits for the answer; <see cref="BatchPasswords"/> makes sure one question is open at
 /// a time and that an answer for all files is not asked again.
 /// </summary>
-internal sealed class DialogPasswordPrompt : IPasswordPrompt
+internal sealed class DialogPasswordPrompt : IPasswordPrompt, IBatchQuestion
 {
     private SynchronizationContext? _ui;
     private Func<IWin32Window?>? _owner;
@@ -19,13 +19,11 @@ internal sealed class DialogPasswordPrompt : IPasswordPrompt
     private BatchProgress? _latest;
 
     /// <summary>Called by <see cref="BatchUi"/> on its UI thread once its window exists.</summary>
-    /// <param name="owner">The progress window when it is on screen, so the dialog stays above it.</param>
-    /// <param name="asking">Told when a dialog opens and closes: the progress window waits for the answer.</param>
-    public void Attach(SynchronizationContext ui, Func<IWin32Window?> owner, Action<bool> asking)
+    public void Attach(BatchQuestionHost host)
     {
-        _ui = ui;
-        _owner = owner;
-        _asking = asking;
+        _ui = host.Ui;
+        _owner = host.Owner;
+        _asking = host.Asking;
     }
 
     /// <summary>The batch's progress, on the UI thread: how many files an answer could be for.</summary>

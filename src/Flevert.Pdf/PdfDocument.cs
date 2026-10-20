@@ -30,6 +30,9 @@ public sealed class PdfDocument : IDisposable
         _limits = limits;
     }
 
+    /// <summary>The document, for the PDF worker's tools that edit it (<see cref="PdfToolsWorker"/>); calls hold <see cref="Pdfium.Gate"/>.</summary>
+    internal DocumentHandle Handle => _handle;
+
     public int PageCount
     {
         get
@@ -185,8 +188,14 @@ public sealed class PdfDocument : IDisposable
             var native = page.DangerousGetHandle();
             var images = new List<PdfPageImage>();
             var count = PdfiumNative.FPDFPage_CountObjects(native);
+            var path = new List<int>();
             for (var index = 0; index < count; index++)
-                Collect(native, PdfiumNative.FPDFPage_GetObject(native, index), index, depth: 0, images);
+            {
+                path.Add(index);
+                Collect(native, PdfiumNative.FPDFPage_GetObject(native, index), index, depth: 0, path, images);
+                path.RemoveAt(path.Count - 1);
+            }
+
             return images;
         }
     }
@@ -194,7 +203,8 @@ public sealed class PdfDocument : IDisposable
     // Form XObjects nest; pdfium itself stops at 16 levels, and so does this.
     private const int MaxFormDepth = 16;
 
-    private static unsafe void Collect(nint page, nint item, int index, int depth, List<PdfPageImage> images)
+    // path: the item's index among the page's objects, then among each form's down to it.
+    private static unsafe void Collect(nint page, nint item, int index, int depth, List<int> path, List<PdfPageImage> images)
     {
         if (item == 0)
             return;
@@ -202,13 +212,92 @@ public sealed class PdfDocument : IDisposable
         {
             case PdfiumNative.PageObjectImage:
                 if (Describe(page, item, depth == 0 ? index : -1) is { } image)
-                    images.Add(image);
+                    images.Add(image with { Location = [.. path] });
                 break;
             case PdfiumNative.PageObjectForm when depth < MaxFormDepth:
                 var count = PdfiumNative.FPDFFormObj_CountObjects(item);
                 for (var i = 0; i < count; i++)
-                    Collect(page, PdfiumNative.FPDFFormObj_GetObject(item, (uint)i), -1, depth + 1, images);
+                {
+                    path.Add(i);
+                    Collect(page, PdfiumNative.FPDFFormObj_GetObject(item, (uint)i), -1, depth + 1, path, images);
+                    path.RemoveAt(path.Count - 1);
+                }
+
                 break;
+        }
+    }
+
+    // The image object at location (PdfPageImage.Location) on a loaded page, or 0.
+    private static nint Find(nint page, IReadOnlyList<int> location)
+    {
+        if (location.Count == 0 || location.Count > MaxFormDepth + 1)
+            return 0;
+        var item = PdfiumNative.FPDFPage_GetObject(page, location[0]);
+        for (var i = 1; i < location.Count && item != 0; i++)
+        {
+            if (PdfiumNative.FPDFPageObj_GetType(item) != PdfiumNative.PageObjectForm || location[i] < 0)
+                return 0;
+            item = PdfiumNative.FPDFFormObj_GetObject(item, (uint)location[i]);
+        }
+
+        return item != 0 && PdfiumNative.FPDFPageObj_GetType(item) == PdfiumNative.PageObjectImage ? item : 0;
+    }
+
+    /// <summary>
+    /// The stream data of the image at <paramref name="location"/> on page <paramref name="pageIndex"/> (one
+    /// <see cref="GetImages"/> gave), as stored, filters not undone; <c>null</c> when it is not there or larger than
+    /// <see cref="MaxImageDataBytes"/>.
+    /// </summary>
+    internal unsafe byte[]? GetImageData(int pageIndex, IReadOnlyList<int> location)
+    {
+        lock (Pdfium.Gate)
+        {
+            ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
+            using var page = PageHandle.Load(_handle, pageIndex);
+            var image = Find(page.DangerousGetHandle(), location);
+            if (image == 0)
+                return null;
+            var length = PdfiumNative.FPDFImageObj_GetImageDataRaw(image, null, 0);
+            if (length == 0 || length > MaxImageDataBytes)
+                return null;
+            var data = GC.AllocateUninitializedArray<byte>((int)length);
+            fixed (byte* buffer = data)
+                return PdfiumNative.FPDFImageObj_GetImageDataRaw(image, buffer, length) == length ? data : null;
+        }
+    }
+
+    /// <summary>The number of characters pdfium finds on page <paramref name="pageIndex"/>.</summary>
+    internal int CountChars(int pageIndex)
+    {
+        lock (Pdfium.Gate)
+        {
+            ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
+            using var page = PageHandle.Load(_handle, pageIndex);
+            var text = PdfiumNative.FPDFText_LoadPage(page.DangerousGetHandle());
+            if (text == 0)
+                throw new PdfException(PdfError.DamagedPage, $"Page {pageIndex + 1} of this PDF is damaged and its text cannot be read.");
+            try
+            {
+                return Math.Max(0, PdfiumNative.FPDFText_CountChars(text));
+            }
+            finally
+            {
+                PdfiumNative.FPDFText_ClosePage(text);
+            }
+        }
+    }
+
+    /// <summary>The number of annotations on page <paramref name="pageIndex"/> (comments, stamps, form fields, links).</summary>
+    internal int CountAnnotations(int pageIndex)
+    {
+        lock (Pdfium.Gate)
+        {
+            ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
+            using var page = PageHandle.Load(_handle, pageIndex);
+            var count = PdfiumNative.FPDFPage_GetAnnotCount(page.DangerousGetHandle());
+            if (count < 0)
+                throw new PdfException(PdfError.DamagedPage, $"Page {pageIndex + 1} of this PDF is damaged and its comments cannot be read.");
+            return count;
         }
     }
 
@@ -247,7 +336,10 @@ public sealed class PdfDocument : IDisposable
         var dpi = index < 0 ? 0 : Math.Min(metadata.HorizontalDpi, metadata.VerticalDpi);
         return new PdfPageImage(index, Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(data)),
             (int)Math.Min(metadata.Width, int.MaxValue), (int)Math.Min(metadata.Height, int.MaxValue),
-            double.IsFinite(dpi) && dpi > 0 ? dpi : 0, (int)metadata.BitsPerPixel, filters);
+            double.IsFinite(dpi) && dpi > 0 ? dpi : 0, (int)metadata.BitsPerPixel, filters)
+        {
+            DataLength = length,
+        };
     }
 
     /// <summary>
@@ -255,14 +347,17 @@ public sealed class PdfDocument : IDisposable
     /// <see cref="GetImages"/> gave), decoded by pdfium: gray, or BGR for any other colorspace (CMYK, ICC, indexed and
     /// <c>/Decode</c> applied), without its mask. <c>null</c> when pdfium cannot decode it, or gives alpha.
     /// </summary>
-    internal unsafe PdfImagePixels? GetImagePixels(int pageIndex, int objectIndex)
+    internal PdfImagePixels? GetImagePixels(int pageIndex, int objectIndex) => GetImagePixels(pageIndex, [objectIndex]);
+
+    /// <summary>As <see cref="GetImagePixels(int, int)"/>, for the image at <paramref name="location"/>, inside forms too.</summary>
+    internal unsafe PdfImagePixels? GetImagePixels(int pageIndex, IReadOnlyList<int> location)
     {
         lock (Pdfium.Gate)
         {
             ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
             using var page = PageHandle.Load(_handle, pageIndex);
-            var image = PdfiumNative.FPDFPage_GetObject(page.DangerousGetHandle(), objectIndex);
-            if (image == 0 || PdfiumNative.FPDFPageObj_GetType(image) != PdfiumNative.PageObjectImage)
+            var image = Find(page.DangerousGetHandle(), location);
+            if (image == 0)
                 return null;
             var bitmap = PdfiumNative.FPDFImageObj_GetBitmap(image);
             if (bitmap == 0)

@@ -6,7 +6,7 @@ namespace Flevert.Pdf;
 
 /// <summary>
 /// Turns qpdf's description of a PDF (<see cref="QpdfJsonFile"/>) into the update <c>qpdf --update-from-json</c> applies
-/// for <c>Remove metadata</c> (docs/specs/pdf.md): only the objects that change, each whole.
+/// for <c>Remove hidden info</c> (docs/specs/pdf.md): only the objects that change, each whole.
 /// </summary>
 /// <remarks>
 /// <para>What goes, wherever it is in the file:</para>
