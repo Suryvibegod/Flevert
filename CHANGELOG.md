@@ -4,6 +4,18 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Added
+
+- New PDF tools, run on your computer for each PDF you select (the **PDF tools** window chooses them):
+  - **Remove blank pages** drops the empty backs of a two-sided scan and says which pages it removed. A page with any text on it is kept.
+  - **2 pages per sheet** and **4 pages per sheet** put the pages on A4 sheets, to print on less paper.
+  - **Fit pages to A4** scales Letter, A3 and odd-sized pages to A4. Pages already A4 stay as they are.
+  - **Split into parts under 10 MB** or **25 MB** writes the pages, in order, into as few PDFs as fit under the limit of an email or a chat app.
+  - **Add watermark** writes your text, Vietnamese included, across every page in light grey. It marks what a copy is for; it does not stop anyone from editing the PDF.
+  - **Add page numbers** at the bottom centre, bottom right or top right, as `1`, `1 / 12` or `Page 1 of 12`, upright even on turned pages.
+  - **Flatten forms and comments** makes filled forms and comments part of the page, still as text that can be selected, so nobody can change the answers.
+  - **Extract images** saves the pictures of a PDF to a folder: JPEG photos exactly as they are in it, other pictures as PNG.
+
 ## [0.2.1] - 2026-10-20
 
 ### Added

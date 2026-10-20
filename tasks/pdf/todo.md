@@ -549,3 +549,42 @@ Ba review bối cảnh trống (code, security, doubt) trên nhánh trước ph�
 **Kiểm thật trước phát hành** (maintainer, máy Windows, 2026-10-20): `test-installer.ps1` đạt cả 10 kịch bản trên bộ cài 0.2.1, gồm nâng cấp từ bản 0.2.0 đã phát hành. Sau nâng cấp vẫn giữ menu cổ điển và lựa chọn kiểm bản mới; 235 file, không file thừa.
 
 **Kiểm sau khi sửa (máy Windows dev, 2026-10-20):** build và `dotnet format --verify-no-changes` sạch; ba project test chạy lần lượt: Core 498 đạt (2 bỏ qua), Image 245 đạt, Pdf 879/880: ca hỏng duy nhất là `bomb-content` × `pdf.to-png` (TooSlow sau 10,9 s thay vì NeedsTooMuchMemory), đúng ca đã hỏng khi chạy cả project **trước** mọi sửa đổi ở trên (cùng commit gốc, cùng máy); chạy riêng thì đạt (0,9 s). Là test nhạy thời gian khi máy bận, không liên quan các sửa đổi này; CI sẽ kiểm lại. Chưa chạy: MenuProbe, `flevert.exe` thật, `test-installer.ps1` (bước Verify của maintainer).
+
+---
+
+# v0.2.2 (phần B: tám công cụ PDF mới; nhánh `feat/v0.2.2-tools`, 2026-10-20)
+
+Phần A (menu mới, icon, cửa sổ "PDF tools", thao tác `pdf.tools`) làm song song ở nhánh khác. Phần B chỉ thêm thao tác và hợp đồng `PdfTools` cho phần A dùng; không sửa menu, installer, icon.
+
+## Đã làm
+
+| Việc | op-id | Cách làm | Commit |
+|---|---|---|---|
+| Chia theo dung lượng | `pdf.split-10mb`, `pdf.split-25mb` | qpdf `--split-pages` đo cỡ từng trang, rồi tham lam theo trang (như `SplitPdfBySizeController` của Stirling-PDF, MIT): mỗi phần ghi thật bằng qpdf `--empty --pages`, đo cỡ thật, thêm trang tới khi lần thử vượt giới hạn. Thư mục `<tên> (parts)\<tên> part 1.pdf` | `2fe5a10` |
+| Làm phẳng form và chú thích | `pdf.flatten` | qpdf `--generate-appearances --flatten-annotations=all` (xem lệch spec 1) | `f993426` |
+| Bỏ trang trắng | `pdf.remove-blank-pages` | worker render 150 DPI: trắng khi ≥ 99,9% điểm ảnh sáng ≥ 245 (Stirling, MIT) **và** không có ký tự; qpdf `<input> --pages . <các trang giữ> --` (giữ Info, bookmark, form). Ghi chú "Removed 2 blank pages: 2, 5." | `33fa86a` |
+| Đánh số trang | `pdf.page-numbers` | worker: Helvetica 10 pt, cách mép 28 pt, đặt theo trang đã xoay (ma trận từ khung nhìn sang không gian trang, `PageGeometry`) | `33fa86a` |
+| Watermark | `pdf.watermark` | worker: Arial của Windows nạp lúc chạy (`FPDFText_LoadFont`, CID), xám 128, độ mờ 30%, 45°, lưới phủ trang (tối đa 300 bản/trang), chữ NFC, ≤ 100 ký tự | `33fa86a` |
+| 2/4 trang mỗi tờ | `pdf.n-up-2`, `pdf.n-up-4` | worker: tài liệu mới, mỗi trang là form XObject (`FPDF_NewXObjectFromPage`) sau khi làm phẳng form/chú thích của trang đó (`FPDFPage_Flatten`), A4 ngang/dọc, lề 10 pt mỗi ô | `33fa86a` |
+| Đưa về A4 | `pdf.fit-a4` | như trên, 1 × 1, A4 dọc hoặc ngang theo trang; trang đã A4 (±1 pt) chép nguyên (`FPDF_ImportPagesByIndex`); mọi trang A4 → skipped | `33fa86a` |
+| Lấy ảnh | `pdf.extract-images` | worker: ảnh mọi trang (cả trong form), bỏ trùng theo SHA-256 dữ liệu lưu, bỏ < 32 px; `DCTDecode` đơn → `.jpg` nguyên byte, còn lại → PNG giải mã trong worker; kiểm chỗ trống và 5 000 MP như P6.6 | `33fa86a` |
+| Hợp đồng cho phần A + chạy headless | mọi công cụ | `PdfTools.All`, `PdfTools.Create`, `PdfTools.Operations` vào catalog của `flevert.exe` với `MenuPath` rỗng; `MenuInstaller` bỏ qua thao tác không có đường menu | `581ce32` |
+
+**Giao thức worker:** request giữ 6 trường cho các việc cũ; việc mới (`blank`, `edit`, `images`) có trường thứ 7 (tùy chọn, ví dụ `watermark␟<chữ>`), kiểm khi đọc request (sai → mã thoát 2). Dòng mới (`blank n`, `saved <MB>`, `images N`, `extract i w h`, `extracted i jpg|png`) chỉ hợp lệ cho đúng việc của nó; dòng cũ không đổi, magic vẫn `flevert-pdf-worker/2`. Công cụ không có gì để làm → `error Skipped <lời>` → skipped. Mọi công cụ ghi PDF bằng worker: qpdf đếm trang trước (2 000), worker ghi file mới (`CreateNew`) vào tên tạm của `OutputPath`, qpdf đếm lại trang của kết quả, ghi chú chữ ký số.
+
+## Lệch spec (quyết khi làm, cần maintainer xem)
+
+1. **Flatten bằng qpdf, không bằng pdfium `FPDFPage_Flatten`.** pdfium để nguyên `/AcroForm` và các trường trong catalog (tiêu chí 5 đòi không còn trường) và không vẽ được trường thiếu appearance; qpdf bỏ `/AcroForm` khi đã vẽ hết trường, sinh appearance cho form có `/NeedAppearances` (probe qpdf 12.4.2), chạy ngoài tiến trình như mọi thao tác qpdf, không cần việc worker mới. "Không có gì để làm" đọc từ JSON của qpdf (không dữ liệu luồng): có trường (`/FT`) hoặc chú thích có appearance (`/AP` + `/Rect`).
+2. **Watermark nhúng cả font Arial (khoảng 1 MB mỗi PDF), không chỉ phần cần dùng:** pdfium không cắt font (subset). Font không đóng gói (lấy của Windows lúc chạy) như spec.
+3. **n-up và fit A4 ra tài liệu mới:** không giữ bookmark, Info, form của file gốc (như Merge); form và chú thích được vẽ vào trang trước khi đặt lên tờ, nên vẫn thấy. Trang có CropBox nhỏ hơn MediaBox: form XObject của pdfium lấy hộp trang, chưa kiểm phần ngoài CropBox.
+4. **Chia theo dung lượng ghi từng trang một lần trước** (để ước lượng) thay vì chỉ "thêm trang tới khi vượt": ít lần chạy qpdf hơn; sau đó vẫn tham lam thật (thêm tới khi lần thử vượt giới hạn). Mỗi phần là PDF mới (`--empty`): không mang tệp đính kèm, Info của file gốc vào từng phần.
+5. **Bỏ trang trắng: trang scan chỉ có một dòng chữ ngắn (không có ký tự, chỉ điểm ảnh) có thể bị coi là trắng** nếu mực < 0,1% (ví dụ chỉ số trang). Đúng tham số Stirling; điều kiện "không có ký tự" chỉ giúp PDF có chữ thật. Fixture của spec ("một dòng chữ nhỏ") dùng chữ thật 6 pt.
+6. **Đánh số trang và watermark dùng ma trận tự tính từ `/Rotate` và CropBox** (`FPDF_GetPageBoundingBox`, `FPDFPage_GetRotation`); `/UserUnit` không xét.
+7. **Watermark headless:** `pdf.watermark` trong catalog không có chữ → mỗi file lỗi ngay ("Add watermark needs the text…"), như thao tác mật khẩu.
+
+## Còn mở
+
+- Phần A: nối `PdfTools.Create` vào cửa sổ; icon Fluent là tên đề xuất (`document_dismiss`, `layout_column_two`, `grid`, `page_fit`, `cut`, `stamp`, `document_page_number`, `layer`, `document_text`, `image_multiple`), phần A chọn biến thể và kiểm có trong repo Fluent.
+- Watermark: ký tự Arial không có (chữ Hán, emoji) hiện thành ô vuông; chưa kiểm trước.
+- Chưa đo thời gian thật trên PDF lớn (2 000 trang) cho watermark/n-up; ngân sách worker như render (60 s + 2 s/trang).
+- Review ba bối cảnh trống, MenuProbe, installer: bước Verify của bản phát hành.
