@@ -37,6 +37,12 @@ Test đầu-cuối installer: `scripts/test-installer.ps1` (10 kịch bản; k�
 
 Module core, image, installer xong và qua kiểm phát hành ([release/todo.md](release/todo.md)). Bản đầu tiên tải được trên GitHub Releases là 0.2.0.
 
+## v1.2.2: đã phát hành 2026-10-21
+
+https://github.com/Suryvibegod/Flevert/releases/tag/v1.2.2 (latest, immutable; bản đầu đánh số từ 1, sau 0.2.1). Menu ảnh và PDF sắp lại cho người dùng thật, nhãn dễ hiểu, icon Fluent (MIT); mũi tên thứ hai "Flevert PDF tools" (không cửa sổ công cụ, người dùng chốt) với 8 công cụ: bỏ trang trắng, đánh số trang, watermark (ô nhập kiểu mật khẩu), 2/4 trang mỗi tờ, vừa A4, khóa form đã điền, chia theo dung lượng, lấy ảnh. Ba review + hai vòng sửa + soát lại (bảng reconcile trong [pdf/todo.md](pdf/todo.md)); kiểm thật 45 thao tác qua bản cài, MenuProbe hai mũi tên PDF và menu ảnh, `test-installer.ps1` đạt trên file bản nháp gồm nâng cấp từ 0.2.1; CI ×3; Defender sạch, VirusTotal 0/66. `get-previous-setup.ps1` ghim 1.2.2.
+
+Còn mở cho bản sau: nhúng con font Arial cho watermark (HarfBuzz hb-subset); dòng `@-` của qpdf có kiểu (literal/path); Mark of the Web cho file lấy ra; lượt tách từng trang của Split by size vượt trần tạm ~50 ms; khối `finally` của `test-installer.ps1` để lại khóa khi gỡ cài không chạy được; đếm trang qpdf 3–8 s với file lớn/độc (ứng viên bản hiệu năng).
+
 ## v0.2.1: đã phát hành 2026-10-20
 
 https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.1 (latest, immutable). Compress > For sharing, Convert > Text, báo PDF đã phải sửa, giới hạn T18 cho mọi thao tác ghi PDF, sửa các mục review của 0.2.0. Ba review + soát lại (bảng reconcile trong [pdf/todo.md](pdf/todo.md)); kiểm thật: 35 thao tác qua `flevert.exe` đã cài, For sharing 0,42 s/trang (26% cỡ), menu `.pdf` 16 mục (MenuProbe), `test-installer.ps1` đạt trên file bản nháp gồm nâng cấp từ 0.2.0; CI ×3; Defender sạch, VirusTotal 0/68. `get-previous-setup.ps1` ghim 0.2.1.
@@ -54,7 +60,7 @@ Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile
 **Đánh số phiên bản** (người dùng đổi 2026-10-20): từ bản tiếp theo, số đầu là 1: bản tính năng tăng số giữa (1.3.0, 1.4.0), bản cập nhật/sửa lỗi tăng số cuối (1.2.2, 1.3.1). Hai bản đã phát hành v0.2.0 và v0.2.1 giữ tên cũ (release bất biến) và được xem là 1.2.0 và 1.2.1; bản đang làm là **1.2.2**. Tên nhánh `feat/v0.*` cũ giữ nguyên.
 
 **Việc tiếp theo** (spec đã duyệt 2026-10-20), hai nhánh song song, mỗi nhánh mở pull request; maintainer review (code, security, doubt) rồi gộp, v0.2.1 trước:
-- `feat/v0.2.2-pdf` (tạo sau khi v0.2.1 vào `main`): [docs/specs/pdf.md](../docs/specs/pdf.md), mục "v1.2.2" (8 công cụ PDF tham khảo Stirling-PDF trong cửa sổ "More PDF tools…", menu ảnh và PDF sắp lại cho người dùng thật, icon Fluent). Thứ tự phát hành: v0.2.1 → v1.2.2 → v1.3.0 → v1.4.0 (OCR).
+- (xong, v1.2.2) [docs/specs/pdf.md](../docs/specs/pdf.md), mục "v1.2.2" (8 công cụ PDF tham khảo Stirling-PDF trong cửa sổ "More PDF tools…", menu ảnh và PDF sắp lại cho người dùng thật, icon Fluent). Thứ tự phát hành: v0.2.1 → v1.2.2 → v1.3.0 → v1.4.0 (OCR).
 - `feat/v0.3-media`: [docs/specs/media.md](../docs/specs/media.md) (ffmpeg bản GPL, menu video 16 mục). Tiến độ: `tasks/media/plan.md`, `tasks/media/todo.md`. Rebase lên `main` sau khi v0.2.1 được gộp.
 - `feat/v0.3.1-media` (sau v1.3.0): [docs/specs/media.md](../docs/specs/media.md), mục "v1.3.1" (Trim, xoay/lật không mã hóa lại, tắt tiếng, làm đều âm lượng, lấy khung hình, ghép clip an toàn, nén theo nơi gửi Email 18 MB/WhatsApp 16 MB/Messenger 25 MB, cửa sổ Video/Audio tools).
 - **Bản hiệu năng** (người dùng yêu cầu 2026-10-20, số phiên bản linh hoạt: 1.2.3 hoặc 1.3.2): sau v1.2.2 và v1.3.x, đo tốc độ theo skill `performance-optimization` (đo, sửa một chỗ, đo lại, giữ hoặc hoàn tác, ghi sổ). Chỉ phát hành khi số đo chậm hơn mục tiêu; đã nhanh thì bỏ. Mục tiêu trên máy 4 nhân: khởi động lạnh `flevert.exe run` ≤ 300 ms; ảnh HEIC 12 MP → JPG ≤ 1 s/ảnh; PDF → JPG ≤ 0,3 s/trang A4 ở 150 DPI; Compress for sharing ≤ 2 s/trang; Merge/Rotate 100 trang ≤ 2 s; video 1080p Convert/Compress ≤ 2× thời lượng. Công cụ đo có sẵn: `scripts/measure-startup.ps1`, `scripts/measure-convert.ps1`.
