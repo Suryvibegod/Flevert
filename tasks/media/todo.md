@@ -40,8 +40,9 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 - Đã làm: `VideoToGif`, một lần chạy `split` → `palettegen` (stats_mode=diff) → `paletteuse` (bayer 5, diff_mode=rectangle), lặp vô hạn, không metadata; HDR tone map trước. 5 test (480 × 270 từ 640 × 360, đứng 270 × 480, nhỏ giữ cỡ, 45 s → 30 s); test note qua `Runner` (`"Only the first 30 seconds were converted to GIF."`) **cần kiểm trên Windows** (runner chỉ nhận đường dẫn Windows).
 
 ## T7: menu
-- [ ] Video 16 mục (15 khi đích trùng nguồn), audio ≤ 7; test ≤ 16 cho mọi đuôi; `.gif` vẫn là ảnh
-- [ ] MenuProbe trên Explorer thật (cần kiểm trên Windows)
+- [x] Video 16 mục (15 khi đích trùng nguồn), audio ≤ 7; test ≤ 16 cho mọi đuôi; `.gif` vẫn là ảnh
+- [ ] MenuProbe trên Explorer thật (cần kiểm trên Windows): `.mp4`, `.mov`, `.mkv`, `.mp3`, `.flac` (tiêu chí 9); rồi `uninstall-menu`
+- Đã làm: `MediaMenuTests` (17 test) cài `MediaOperations.All` vào registry giả: video `Convert ▸ MP4 · MOV · MKV · WEBM · GIF`, `Compress ▸ Light · Balanced · Strong · Under 10/25/100 MB`, `Extract audio ▸ MP3 · M4A` = 16 (15 cho `.mp4 .mov .mkv .webm`); audio `Convert ▸` 5 hoặc 6 đích; lệnh registry `run audio.to-<đích>`. Thứ tự menu đến từ thứ tự trong `MediaOperations.Create`.
 
 ## T8: đóng gói
 - [ ] `build-installer.ps1`/Inno: `ffmpeg\` trong thư mục cài; `THIRD-PARTY-NOTICES.txt`; `test-installer.ps1` kiểm `ffmpeg\`; cỡ bộ cài ≤ 150 MB (đo)
