@@ -33,6 +33,9 @@ public sealed class MediaException : Exception
 
     internal const string TooSlowMessage = "Converting this file took too long: it may be damaged, or made to stall video tools.";
 
+    internal const string NeedsTooMuchMemoryMessage =
+        "This file needs more memory than Flevert allows its video tool (2 GB): it is too large, or made to exhaust memory.";
+
     internal const string TooBigOutputMessage =
         "The converted file would be far larger than expected for this file, so Flevert stopped: the file may be damaged.";
 

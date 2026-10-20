@@ -57,8 +57,12 @@ public sealed class Ffmpeg
         ExternalTool.RunAsync(toolPath, arguments, timeout, limits: Limits, environment: ToolEnvironment(),
             standardOutputLine: standardOutputLine, cancellationToken: ct);
 
-    // ffmpeg uses every core for a video: below normal, so the machine stays responsive while it runs for minutes.
-    private static readonly ExternalToolLimits Limits = new() { BelowNormalPriority = true };
+    /// <summary>The most memory one ffmpeg or ffprobe may commit (docs/specs/media.md, "Engine").</summary>
+    internal const ulong MaxMemoryBytes = 2UL << 30;
+
+    // ffmpeg uses every core for a video: below normal, so the machine stays responsive while it runs for minutes. Neither
+    // tool starts a process of its own, so neither may.
+    private static readonly ExternalToolLimits Limits = new() { BelowNormalPriority = true, SingleProcess = true, MaxMemoryBytes = MaxMemoryBytes };
 
     /// <summary>
     /// How the tools' environment differs from flevert.exe's: FFREPORT makes ffmpeg write a report to a file it names,
@@ -109,6 +113,7 @@ public sealed class Ffmpeg
             throw new MediaException(MediaException.TooSlowMessage, e);
         }
 
+        RequireMemory(run, "ffprobe");
         if (run.ExitCode != 0 || run.StandardOutputTruncated)
             throw new MediaException(MediaException.UnreadableMessage, new FfmpegException("ffprobe", run.ExitCode, Detail(run)));
         return MediaInfo.Parse(run.StandardOutput);
@@ -146,6 +151,7 @@ public sealed class Ffmpeg
             throw new MediaException(MediaException.TooSlowMessage, e);
         }
 
+        RequireMemory(run, "ffmpeg");
         if (run.ExitCode != 0)
             throw new MediaException(MediaException.ToolFailedMessage, new FfmpegException("ffmpeg", run.ExitCode, Detail(run)));
         if (outputPath is not null && new FileInfo(outputPath) is var written && (!written.Exists || written.Length >= maxOutputBytes))
@@ -162,6 +168,13 @@ public sealed class Ffmpeg
     public static TimeSpan TimeoutFor(TimeSpan duration, double slowness = DefaultSlowness) => duration * slowness + TimeSpan.FromMinutes(1);
 
     internal const double DefaultSlowness = 6;
+
+    // Refused memory, the tool may fail, crash or go on without it: whatever it reports cannot be trusted.
+    private static void RequireMemory(ExternalToolResult run, string tool)
+    {
+        if (run.MemoryLimitExceeded)
+            throw new MediaException(MediaException.NeedsTooMuchMemoryMessage, new FfmpegException(tool, run.ExitCode, Detail(run)));
+    }
 
     private static void RequireTool(string path)
     {
