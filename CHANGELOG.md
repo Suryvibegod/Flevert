@@ -6,7 +6,15 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ### Added
 
-- PDFs have a second entry beside **Flevert**, **Flevert PDF tools**, with its own list: **Remove blank pages**, **Add page numbers**, **Add watermark…**, **Print layout** > 2 or 4 pages per sheet, **Fit pages to A4**, **Flatten forms and comments**, **Split by size** > Under 10 MB or 25 MB, **Extract images**. Each runs straight from the menu; only **Add watermark…** asks something, the text, once for all the PDFs you selected.
+- New PDF tools in **Flevert PDF tools**, a second entry beside **Flevert** in the PDF menu with its own list. Each runs straight from the menu, on your computer, for each PDF you select:
+  - **Remove blank pages** drops the empty backs of a two-sided scan and says which pages it removed. A page with any text on it is kept.
+  - **Add page numbers** at the bottom centre, as `1 / 12`, upright even on turned pages.
+  - **Add watermark…** asks for your text once for all the PDFs you selected, and writes it, Vietnamese included, across every page in light grey. It marks what a copy is for; it does not stop anyone from editing the PDF.
+  - **Print layout** > **2 pages per sheet** and **4 pages per sheet** put the pages on A4 sheets, to print on less paper.
+  - **Fit pages to A4** scales Letter, A3 and odd-sized pages to A4. Pages already A4 stay as they are.
+  - **Flatten forms and comments** makes filled forms and comments part of the page, still as text that can be selected, so nobody can change the answers.
+  - **Split by size** > **Under 10 MB** or **Under 25 MB** writes the pages, in order, into as few PDFs as fit under the limit of an email or a chat app.
+  - **Extract images** saves the pictures of a PDF to a folder: JPEG photos exactly as they are in it, other pictures as PNG.
 - Icons beside every entry of the Flevert menus, from Microsoft's Fluent UI System Icons, readable on the light and the dark menu, and separators between groups of entries.
 
 ### Changed

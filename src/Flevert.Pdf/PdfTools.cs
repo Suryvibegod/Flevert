@@ -1,8 +1,5 @@
 using Flevert.Core;
 
-// TEMPORARY stand-in for src/Flevert.Pdf/PdfTools.cs of part B of v0.2.2 (branch v022-b, commit 581ce32): the same
-// public API and tool list, so the PDF tools menu builds and runs before the tools are merged. Only Extract text runs;
-// the other tools fail with "not built yet". Delete this file when PdfTools.cs arrives.
 namespace Flevert.Pdf;
 
 /// <summary>The headed groups of the PDF tools window (docs/specs/pdf.md, v0.2.2), in window order.</summary>
@@ -39,7 +36,7 @@ public static class PdfTools
     public const string OfTotalStyle = "1 / N";
     public const string WordsStyle = "Page 1 of N";
 
-    /// <summary>Option key of Add watermark: the text, required, at most 100 characters.</summary>
+    /// <summary>Option key of Add watermark: the text, required, at most <see cref="PdfEdit.MaxWatermarkLength"/> characters.</summary>
     public const string Text = "text";
 
     private static readonly IReadOnlyList<string> Positions = [BottomCenter, BottomRight, TopRight];
@@ -60,7 +57,7 @@ public static class PdfTools
         new("pdf.split-25mb", "Split into parts under 25 MB", "Splits the PDF into parts for apps that take files up to 25 MB.", PdfToolGroup.Pages, "cut", []),
         new("pdf.watermark", "Add watermark", "Writes your text across every page to mark what a copy is for. It does not stop anyone from editing the PDF.",
             PdfToolGroup.AddToPages, "stamp",
-            [new(Text, "Text", PdfToolOptionKind.Text, [], "", 100)]),
+            [new(Text, "Text", PdfToolOptionKind.Text, [], "", PdfEdit.MaxWatermarkLength)]),
         new("pdf.page-numbers", "Add page numbers", "Numbers every page, at the bottom or at the top right.", PdfToolGroup.AddToPages, "document_page_number",
             [
                 new(Position, "Position", PdfToolOptionKind.Choice, Positions, BottomCenter, 0),
@@ -80,23 +77,64 @@ public static class PdfTools
     public static IReadOnlyList<IOperation> Operations { get; } =
         [.. All.Where(tool => tool.OperationId != "pdf.extract-text").Select(tool => Create(tool.OperationId, new Dictionary<string, string>()))];
 
-    public static IOperation Create(string operationId, IReadOnlyDictionary<string, string> options)
+    /// <summary>
+    /// The operation for a tool with the user's options (missing keys → their default), reading PDFs with the flevert.exe
+    /// and qpdf.exe beside the running program, as <see cref="PdfOperations"/> does.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="operationId"/> is not a tool's, an option's key is not the tool's, a choice is not one of its
+    /// <see cref="PdfToolOption.Choices"/>, or a text is too long or not one line of characters.
+    /// </exception>
+    public static IOperation Create(string operationId, IReadOnlyDictionary<string, string> options) =>
+        Create(operationId, options, Qpdf.NextToApp, PdfWorker.NextToApp);
+
+    /// <summary>As <see cref="Create(string, IReadOnlyDictionary{string, string})"/>, with the qpdf and worker tests built.</summary>
+    internal static IOperation Create(string operationId, IReadOnlyDictionary<string, string> options, Qpdf qpdf, PdfWorker worker)
     {
+        ArgumentNullException.ThrowIfNull(operationId);
         ArgumentNullException.ThrowIfNull(options);
         var tool = All.FirstOrDefault(tool => tool.OperationId == operationId)
             ?? throw new ArgumentException($"'{operationId}' is not a PDF tool.", nameof(operationId));
-        return tool.OperationId == "pdf.extract-text" ? new PdfExtractText() : new NotYetBuilt(tool.OperationId);
-    }
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var option in tool.Options)
+            values[option.Key] = option.Default;
+        foreach (var (key, value) in options)
+        {
+            var option = tool.Options.FirstOrDefault(option => option.Key == key)
+                ?? throw new ArgumentException($"'{operationId}' has no option '{key}'.", nameof(options));
+            ArgumentNullException.ThrowIfNull(value, nameof(options));
+            if (option.Kind == PdfToolOptionKind.Choice && !option.Choices.Contains(value, StringComparer.Ordinal))
+                throw new ArgumentException($"'{value}' is not a choice of '{key}'.", nameof(options));
+            values[key] = value;
+        }
 
-    private sealed class NotYetBuilt(string id) : IOperation
-    {
-        public string Id => id;
-
-        public string MenuPath => "";
-
-        public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
-
-        public Task<string> RunAsync(string inputPath, CancellationToken ct) =>
-            throw new NotSupportedException($"{id} is not built yet (part B of v0.2.2).");
+        return operationId switch
+        {
+            "pdf.remove-blank-pages" => new PdfRemoveBlankPages(qpdf, worker),
+            "pdf.n-up-2" => new PdfNUp(2, qpdf, worker),
+            "pdf.n-up-4" => new PdfNUp(4, qpdf, worker),
+            "pdf.fit-a4" => new PdfFitA4(qpdf, worker),
+            "pdf.split-10mb" => new PdfSplitBySize(10, qpdf),
+            "pdf.split-25mb" => new PdfSplitBySize(25, qpdf),
+            "pdf.watermark" => new PdfWatermark(values[Text], qpdf, worker),
+            "pdf.page-numbers" => new PdfPageNumbers(
+                values[Position] switch
+                {
+                    BottomRight => PdfPageNumberPosition.BottomRight,
+                    TopRight => PdfPageNumberPosition.TopRight,
+                    _ => PdfPageNumberPosition.BottomCenter,
+                },
+                values[Style] switch
+                {
+                    OfTotalStyle => PdfPageNumberStyle.OfTotal,
+                    WordsStyle => PdfPageNumberStyle.Words,
+                    _ => PdfPageNumberStyle.Number,
+                },
+                qpdf, worker),
+            "pdf.flatten" => new PdfFlatten(qpdf),
+            "pdf.extract-text" => new PdfExtractText(worker),
+            "pdf.extract-images" => new PdfExtractImages(worker),
+            _ => throw new ArgumentException($"'{operationId}' is not a PDF tool.", nameof(operationId)),
+        };
     }
 }

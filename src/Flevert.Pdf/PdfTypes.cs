@@ -37,6 +37,12 @@ public sealed class PdfBitmap(int width, int height, double dpi, byte[] bgra)
 /// <param name="Filters">Its stream's filters, such as <c>DCTDecode</c>.</param>
 internal sealed record PdfPageImage(int ObjectIndex, string Hash, int Width, int Height, double Dpi, int BitsPerPixel, IReadOnlyList<string> Filters)
 {
+    /// <summary>Its index among the page's objects, then among each form's objects down to it.</summary>
+    public IReadOnlyList<int> Location { get; init; } = [];
+
+    /// <summary>The length of its stream data as stored.</summary>
+    public long DataLength { get; init; }
+
     /// <summary>Drawn by a form XObject: its size on the page is not known.</summary>
     public bool InForm => ObjectIndex < 0;
 }

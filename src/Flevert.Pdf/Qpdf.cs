@@ -10,7 +10,7 @@ namespace Flevert.Pdf;
 /// untrusted PDF cannot take flevert.exe down, and qpdf ends with flevert.exe. Its exit codes and messages become
 /// exceptions the user can act on.
 /// </summary>
-public sealed class Qpdf
+public sealed partial class Qpdf
 {
     public const string FileName = "qpdf.exe";
 
@@ -160,6 +160,40 @@ public sealed class Qpdf
         RequireOutput(run, outputPath);
         return Repaired(run);
     }
+
+    /// <summary>
+    /// Writes <paramref name="outputPath"/> with only the pages <paramref name="pageRange"/> names (qpdf's syntax, such as
+    /// <c>1-3,5</c>, pages counted from 1), in that order, streams copied as they are. With
+    /// <paramref name="keepDocument"/>, the result is the input less the other pages: <c>qpdf &lt;input&gt; --pages .
+    /// &lt;range&gt; -- &lt;output&gt;</c> keeps its document information, bookmarks and form. Without, it is a new PDF of
+    /// those pages (<c>--empty --pages &lt;input&gt; &lt;range&gt; --</c>), as Merge writes, with nothing of the rest:
+    /// what a part of a larger PDF should carry.
+    /// </summary>
+    /// <param name="pageRange">Page numbers and ranges separated by commas, nothing else (<see cref="IsPageRange"/>).</param>
+    /// <exception cref="ArgumentException"><paramref name="pageRange"/> is not such a list.</exception>
+    /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
+    /// <exception cref="IOException">qpdf could not write <paramref name="outputPath"/>.</exception>
+    public async Task<bool> SelectPagesAsync(string inputPath, string pageRange, string outputPath, bool keepDocument, CancellationToken ct)
+    {
+        if (!IsPageRange(pageRange))
+            throw new ArgumentException($"Not a list of pages: {pageRange}", nameof(pageRange));
+        string[] options = keepDocument ? [KeepStreamsAsTheyAre] : [KeepStreamsAsTheyAre, "--empty", "--pages"];
+        string[] lines = keepDocument
+            ? [inputPath, PagesOption, PrimaryInput, pageRange, EndOfPages, outputPath]
+            : [inputPath, pageRange, EndOfPages, outputPath];
+        var run = await RunCheckedAsync(options, [inputPath], lines, outputPath, ct).ConfigureAwait(false);
+        RequireOutput(run, outputPath);
+        return Repaired(run);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="text"/> is a list of pages as <see cref="SelectPagesAsync"/> takes it: numbers from 1 and
+    /// ranges <c>a-b</c>, separated by commas, without spaces. Nothing else reaches qpdf's <c>@-</c> in place of a path.
+    /// </summary>
+    internal static bool IsPageRange(string text) => PageRangeSyntax().IsMatch(text);
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^[1-9][0-9]{0,6}(-[1-9][0-9]{0,6})?(,[1-9][0-9]{0,6}(-[1-9][0-9]{0,6})?)*\z")]
+    private static partial System.Text.RegularExpressions.Regex PageRangeSyntax();
 
     /// <summary>
     /// The number of pages qpdf finds in the PDF's page tree, refusing a PDF with more than
@@ -377,6 +411,13 @@ public sealed class Qpdf
     // Ends the list of files after --pages. Not a path: it goes through @- as it is.
     private const string EndOfPages = "--";
 
+    // --pages, and "." for the primary input after it (SelectPagesAsync): on @-, since the input must come before them.
+    private const string PagesOption = "--pages";
+    private const string PrimaryInput = ".";
+
+    // A line of @- that is not a path: given as it is.
+    private static bool IsLiteralLine(string line) => line is EndOfPages or PagesOption or PrimaryInput || IsPageRange(line);
+
     // qpdf's exit code 3: it wrote the output, and warned about the input, which it read by repairing what it could (a
     // damaged cross-reference table, say).
     private static bool Repaired(ExternalToolResult run) => run.ExitCode == ExitWarnings;
@@ -408,7 +449,7 @@ public sealed class Qpdf
         if (options.FirstOrDefault(option => option.StartsWith('@')) is { } file)
             throw new ArgumentException($"qpdf would read the option {file} as a file of options.", nameof(options));
         // qpdf has no end-of-options marker ("--" is not one): a relative path such as "-x.pdf" would be an option.
-        foreach (var line in lines.Where(line => line != EndOfPages))
+        foreach (var line in lines.Where(line => !IsLiteralLine(line)))
             RequireArgumentLine(PathIn(line), nameof(lines));
         RequireExe();
 
@@ -609,7 +650,7 @@ public sealed class Qpdf
     // A line of @- as qpdf reads it: every path, alone or as an option's value, in the \\?\ form.
     private static string ToLine(string line)
     {
-        if (line == EndOfPages)
+        if (IsLiteralLine(line))
             return line;
         var path = PathIn(line);
         return line[..^path.Length] + ToExtendedPath(path);

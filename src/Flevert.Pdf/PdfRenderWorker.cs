@@ -19,6 +19,15 @@ internal enum PdfWorkerTask
 
     /// <summary>Write a smaller JPEG of each image drawn above <see cref="PdfRenderRequest.Dpi"/> into the folder (<see cref="PdfCompressSharing"/>).</summary>
     ShrinkImages,
+
+    /// <summary>Say which pages are blank, drawn at <see cref="PdfRenderRequest.Dpi"/> (<see cref="PdfRemoveBlankPages"/>); nothing is written.</summary>
+    BlankPages,
+
+    /// <summary>Make the edit <see cref="PdfRenderRequest.Options"/> describes (<see cref="PdfEdit"/>) and save the PDF as the new file the folder field names.</summary>
+    Edit,
+
+    /// <summary>Write every image the pages draw into the folder (<see cref="PdfExtractImages"/>).</summary>
+    ExtractImages,
 }
 
 /// <summary>
@@ -29,11 +38,17 @@ internal enum PdfWorkerTask
 /// <remarks>
 /// The fields are the raw UTF-16 code units of their text, each ended by U+0000, which no path can hold: a Windows name may
 /// hold a lone surrogate, which UTF-8 (and .NET's encoders) would replace with U+FFFD, naming another file (review round 1,
-/// SA-M1, for qpdf).
+/// SA-M1, for qpdf). The tasks of v0.2.2 (<see cref="PdfWorkerTask.BlankPages"/> and after) have a seventh field,
+/// <see cref="Options"/>; the requests of the tasks before keep their six.
 /// </remarks>
 internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, string Folder, PdfPageImageFormat Format, double Dpi)
 {
     public PdfWorkerTask Task { get; init; }
+
+    /// <summary>For the tasks of v0.2.2: what to do, such as the edit (<see cref="PdfEdit.Encode"/>); empty when nothing more is needed.</summary>
+    public string Options { get; init; } = "";
+
+    private bool HasOptions => Task is PdfWorkerTask.BlankPages or PdfWorkerTask.Edit or PdfWorkerTask.ExtractImages;
 
     /// <summary>Changes whenever the fields change, so a worker of another version refuses the request rather than misreading it.</summary>
     internal const string Magic = "flevert-pdf-worker/2";
@@ -52,9 +67,13 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
             {
                 PdfWorkerTask.Text => "text",
                 PdfWorkerTask.ShrinkImages => "shrink",
+                PdfWorkerTask.BlankPages => "blank",
+                PdfWorkerTask.Edit => "edit",
+                PdfWorkerTask.ExtractImages => "images",
                 _ => Format == PdfPageImageFormat.Jpeg ? "jpeg" : "png",
             },
             Dpi.ToString("R", CultureInfo.InvariantCulture),
+            .. HasOptions ? [Options] : Array.Empty<string>(),
         ];
         if (fields.Any(field => field.Contains('\0', StringComparison.Ordinal)))
             throw new ArgumentException("A field of the request holds a null character.");
@@ -71,7 +90,8 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
         if (!text.EndsWith('\0'))
             throw new FormatException("The request is incomplete.");
         var fields = text[..^1].Split('\0');
-        if (fields.Length != 6 || fields[0] != Magic)
+        var withOptions = fields.Length > 4 && fields[4] is "blank" or "edit" or "images";
+        if (fields.Length != (withOptions ? 7 : 6) || fields[0] != Magic)
             throw new FormatException("Not a request of this version.");
 
         var (input, identity, folder, format, dpiText) = (fields[1], fields[2], fields[3], fields[4], fields[5]);
@@ -79,7 +99,7 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
             throw new FormatException("The request's paths must be fully qualified.");
         var imageFormat = format switch
         {
-            "jpeg" or "text" or "shrink" => PdfPageImageFormat.Jpeg,
+            "jpeg" or "text" or "shrink" or "blank" or "edit" or "images" => PdfPageImageFormat.Jpeg,
             "png" => PdfPageImageFormat.Png,
             _ => throw new FormatException($"Unknown image format: {format}"),
         };
@@ -89,9 +109,19 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
         {
             "text" => PdfWorkerTask.Text,
             "shrink" => PdfWorkerTask.ShrinkImages,
+            "blank" => PdfWorkerTask.BlankPages,
+            "edit" => PdfWorkerTask.Edit,
+            "images" => PdfWorkerTask.ExtractImages,
             _ => PdfWorkerTask.Pictures,
         };
-        return new PdfRenderRequest(input, FileIdentity.Parse(identity), folder, imageFormat, dpi) { Task = task };
+        // An edit this version does not know is refused with the rest of the request.
+        if (task == PdfWorkerTask.Edit)
+            PdfEdit.Decode(fields[6]);
+        return new PdfRenderRequest(input, FileIdentity.Parse(identity), folder, imageFormat, dpi)
+        {
+            Task = task,
+            Options = withOptions ? fields[6] : "",
+        };
     }
 }
 
@@ -162,6 +192,15 @@ public static class PdfRenderWorker
                 case PdfWorkerTask.ShrinkImages:
                     ShrinkImages(request, file!, lines);
                     break;
+                case PdfWorkerTask.BlankPages:
+                    PdfToolsWorker.FindBlankPages(request, file!, lines);
+                    break;
+                case PdfWorkerTask.Edit:
+                    PdfToolsWorker.Edit(request, file!, lines);
+                    break;
+                case PdfWorkerTask.ExtractImages:
+                    PdfToolsWorker.ExtractImages(request, file!, lines);
+                    break;
                 default:
                     Render(request, file!, lines);
                     break;
@@ -194,7 +233,15 @@ public static class PdfRenderWorker
             lines.WriteLine($"error {NoTextCode} {OneLine(e.Message)}");
             return ExitFailed;
         }
+        catch (SkipException e)
+        {
+            lines.WriteLine($"error {SkippedCode} {OneLine(e.Message)}");
+            return ExitFailed;
+        }
     }
+
+    /// <summary>The error code of a PDF the tool has nothing to do for: the parent skips the file with the message.</summary>
+    internal const string SkippedCode = "Skipped";
 
     /// <summary>The error code of a PDF without text: the parent skips the file rather than failing it.</summary>
     internal const string NoTextCode = "NoText";
@@ -535,11 +582,17 @@ public static class PdfRenderWorker
     }
 
     /// <summary>A page could not be written to the folder (disk full, access denied): not the PDF's fault.</summary>
-    private sealed class PageWriteException(string message, Exception? inner) : Exception(message, inner);
+    internal sealed class PageWriteException(string message, Exception? inner) : Exception(message, inner);
 
     /// <summary>The PDF has no text at all.</summary>
     private sealed class NoTextException(string message) : Exception(message);
 
-    /// <summary>ImageMagick could not be set up in the worker (its configuration folder could not be written).</summary>
-    private sealed class SetupException(string message, Exception inner) : Exception(message, inner);
+    /// <summary>
+    /// What the worker needs from the machine is missing or could not be set up (ImageMagick's configuration folder could
+    /// not be written, Windows' Arial is missing): not the PDF's fault.
+    /// </summary>
+    internal sealed class SetupException(string message, Exception? inner) : Exception(message, inner);
+
+    /// <summary>The tool has nothing to do for this PDF (no blank page, no image): the file is skipped with the message.</summary>
+    internal sealed class SkipException(string message) : Exception(message);
 }
