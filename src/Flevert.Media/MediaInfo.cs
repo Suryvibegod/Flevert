@@ -6,15 +6,18 @@ namespace Flevert.Media;
 /// <summary>What ffprobe found in a file, as far as the media operations need it.</summary>
 /// <param name="Duration">Of the whole file; always more than zero once <see cref="MediaInfo.Parse"/> has accepted it.</param>
 /// <param name="Video">The picture to convert: the first video stream that is not cover art, if any.</param>
-/// <param name="Audio">Every audio stream, in file order; <see cref="MediaInfo.MainAudio"/> is the one converted alone.</param>
+/// <param name="Audio">Every audio stream, in file order; <see cref="MediaInfo.MainAudio"/> is the one converted.</param>
 /// <param name="Tags">The file's own metadata (title, artist, creation_time…), keys in lower case.</param>
 /// <param name="BitRate">Of the whole file in bits per second, when ffprobe knows it.</param>
+/// <param name="OtherStreams">Streams that are neither <paramref name="Video"/> nor sound: more video, cover art and
+/// thumbnails, subtitles, data (an iPhone's timed metadata), attachments.</param>
 public sealed record MediaInfo(
     TimeSpan Duration,
     VideoTrack? Video,
     IReadOnlyList<AudioTrack> Audio,
     IReadOnlyDictionary<string, string> Tags,
-    long? BitRate)
+    long? BitRate,
+    int OtherStreams = 0)
 {
     /// <summary>The longest file Flevert converts (docs/specs/media.md, "Bảo mật").</summary>
     public static readonly TimeSpan MaxDuration = TimeSpan.FromHours(12);
@@ -24,8 +27,11 @@ public sealed record MediaInfo(
 
     public const long MaxPixels = 8192L * 4320;
 
-    /// <summary>The default audio stream, or the first; <c>null</c> when the file has no sound.</summary>
-    public AudioTrack? MainAudio => Audio.FirstOrDefault(a => a.IsDefault) ?? (Audio.Count > 0 ? Audio[0] : null);
+    /// <summary>
+    /// The first audio stream, the one every operation converts (docs/specs/media.md: the first video stream and the first
+    /// audio stream); <c>null</c> when the file has no sound.
+    /// </summary>
+    public AudioTrack? MainAudio => Audio.Count > 0 ? Audio[0] : null;
 
     /// <summary>
     /// Reads ffprobe's <c>-print_format json -show_format -show_streams</c> output and refuses a file Flevert should not
@@ -52,6 +58,7 @@ public sealed record MediaInfo(
             var format = Property(root, "format");
             VideoTrack? video = null;
             var audio = new List<AudioTrack>();
+            var other = 0;
             var streamDuration = 0.0;
             if (Property(root, "streams") is { ValueKind: JsonValueKind.Array } streams)
             {
@@ -70,6 +77,9 @@ public sealed record MediaInfo(
                                 (int)(Number(stream, "sample_rate") ?? 0), (long?)Number(stream, "bit_rate"), Disposition(stream, "default"),
                                 Text(Property(stream, "tags"), "language"), ReadTags(Property(stream, "tags"))));
                             break;
+                        default:
+                            other++;
+                            break;
                     }
                 }
             }
@@ -83,7 +93,7 @@ public sealed record MediaInfo(
                 throw new MediaException(MediaException.TooLongMessage);
             if (video is { } v && (v.Width > MaxSide || v.Height > MaxSide || (long)v.Width * v.Height > MaxPixels))
                 throw new MediaException(MediaException.TooLargeVideoMessage);
-            return new MediaInfo(TimeSpan.FromSeconds(seconds), video, audio, ReadTags(Property(format, "tags")), (long?)Number(format, "bit_rate"));
+            return new MediaInfo(TimeSpan.FromSeconds(seconds), video, audio, ReadTags(Property(format, "tags")), (long?)Number(format, "bit_rate"), other);
         }
     }
 
@@ -95,7 +105,10 @@ public sealed record MediaInfo(
             throw new MediaException(MediaException.UnreadableMessage);
         var transfer = Text(stream, "color_transfer");
         return new VideoTrack((int)index, Text(stream, "codec_name") ?? "", width, height, Rotation(stream),
-            transfer is "smpte2084" or "arib-std-b67", Rate(Text(stream, "avg_frame_rate")) ?? Rate(Text(stream, "r_frame_rate")) ?? 0);
+            transfer is "smpte2084" or "arib-std-b67", Rate(Text(stream, "avg_frame_rate")) ?? Rate(Text(stream, "r_frame_rate")) ?? 0)
+        {
+            Tags = ReadTags(Property(stream, "tags")),
+        };
     }
 
     // The display matrix in the stream's side data (ffprobe 5 and later), or the old "rotate" tag: the angle the picture
@@ -165,6 +178,9 @@ public sealed record MediaInfo(
 /// <param name="FrameRate">Average frames per second; 0 when unknown.</param>
 public sealed record VideoTrack(int Index, string Codec, int Width, int Height, int Rotation, bool IsHdr, double FrameRate)
 {
+    /// <summary>The stream's own metadata, keys in lower case.</summary>
+    public IReadOnlyDictionary<string, string> Tags { get; init; } = new Dictionary<string, string>();
+
     private bool Sideways => Rotation is 90 or 270;
 
     /// <summary>The width as shown, once turned.</summary>

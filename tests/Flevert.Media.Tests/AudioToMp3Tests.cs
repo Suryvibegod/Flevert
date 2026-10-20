@@ -19,7 +19,7 @@ public sealed class AudioToMp3Tests : IDisposable
     {
         var op = Op();
 
-        Assert.Equal("Convert/MP3", op.MenuPath);
+        Assert.Equal("Convert to/MP3", op.MenuPath);
         Assert.Equal([".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".wma", ".aiff", ".aif"], op.Extensions);
         Assert.True(op.MaxParallel > 1);
         Assert.Contains(MediaOperations.All, all => all.Id == "audio.to-mp3");

@@ -33,12 +33,12 @@ public sealed class FfprobeTests : IDisposable
     }
 
     [Fact]
-    public async Task Lists_every_audio_stream_and_picks_the_default_one()
+    public async Task Lists_every_audio_stream_and_picks_the_first_one()
     {
         var info = await TestFfmpeg.Instance.ProbeAsync(await Fixtures.CopyAsync(Fixtures.TwoAudioMkvAsync(), _dir, "two.mkv"), CancellationToken.None);
 
         Assert.Equal(["opus", "vorbis"], info.Audio.Select(a => a.Codec));
-        Assert.Equal(("vorbis", "vie"), (info.MainAudio!.Codec, info.MainAudio.Language));
+        Assert.Equal(("opus", "eng"), (info.MainAudio!.Codec, info.MainAudio.Language));
     }
 
     [Theory]

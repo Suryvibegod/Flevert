@@ -28,7 +28,9 @@ public sealed class AudioConvertTests : IDisposable
     {
         var convert = MediaOperations.Create(TestFfmpeg.Instance).Where(op => op.Id.StartsWith("audio.", StringComparison.Ordinal)).ToList();
 
-        Assert.Equal(["Convert/MP3", "Convert/M4A", "Convert/WAV", "Convert/FLAC", "Convert/OGG", "Convert/Opus"], convert.Select(op => op.MenuPath));
+        Assert.Equal(
+            ["Convert to/MP3", "Convert to/M4A", "Convert to/WAV", "Convert to/FLAC", "Convert to/OGG", "Convert to/Opus"],
+            convert.Select(op => op.MenuPath));
         foreach (var extension in MediaJob.AudioExtensions)
         {
             var offered = convert.Where(op => op.Extensions.Contains(extension)).Select(op => op.Id[^4..].TrimStart('-')).ToList();
@@ -148,15 +150,15 @@ public sealed class AudioConvertTests : IDisposable
     }
 
     [Fact]
-    public async Task Extracting_from_a_video_with_several_sound_tracks_takes_the_default_one()
+    public async Task Extracting_from_a_video_with_several_sound_tracks_takes_the_first_one()
     {
         var input = await Fixtures.CopyAsync(Fixtures.TwoAudioMkvAsync(), _dir, "film.mkv");
 
         var output = await Op("video.extract-m4a").RunAsync(input, CancellationToken.None);
 
-        // The default track is the 44.1 kHz Vorbis one, encoded to AAC at its rate.
+        // The first track is the 48 kHz Opus one (not the one marked default), encoded to AAC at its rate.
         var info = await TestFfmpeg.Instance.ProbeAsync(output, CancellationToken.None);
-        Assert.Equal(("aac", 44100), (info.MainAudio!.Codec, info.MainAudio.SampleRate));
+        Assert.Equal(("aac", 48000), (info.MainAudio!.Codec, info.MainAudio.SampleRate));
         Assert.Equal(6, info.Duration.TotalSeconds, 1);
         Assert.Null(info.Video);
     }

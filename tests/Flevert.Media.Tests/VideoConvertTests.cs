@@ -3,7 +3,7 @@ using Flevert.Core;
 
 namespace Flevert.Media.Tests;
 
-/// <summary>Convert &gt; MP4, MOV, MKV, WEBM (docs/specs/media.md; success criterion 1).</summary>
+/// <summary>Convert to &gt; MP4, MOV, WEBM (docs/specs/media.md; success criterion 1).</summary>
 public sealed class VideoConvertTests : IDisposable
 {
     private readonly TempDir _dir = new();
@@ -18,19 +18,19 @@ public sealed class VideoConvertTests : IDisposable
         var convert = MediaOperations.Create(TestFfmpeg.Instance).OfType<IOperation>()
             .Where(op => op.Id.StartsWith("video.to-", StringComparison.Ordinal) && op.Id != "video.to-gif").ToList();
 
-        Assert.Equal(["Convert/MP4", "Convert/MOV", "Convert/MKV", "Convert/WEBM"], convert.Select(op => op.MenuPath));
+        // Not MKV: few people need it as an output; it stays a source (docs/specs/media.md).
+        Assert.Equal(["Convert to/MP4", "Convert to/MOV", "Convert to/WEBM"], convert.Select(op => op.MenuPath));
         Assert.All(convert, op => Assert.Equal(1, op.MaxParallel));
         Assert.DoesNotContain(".mp4", convert[0].Extensions);
         Assert.Contains(".m4v", convert[0].Extensions);
         Assert.DoesNotContain(".mov", convert[1].Extensions);
-        Assert.DoesNotContain(".mkv", convert[2].Extensions);
-        Assert.DoesNotContain(".webm", convert[3].Extensions);
+        Assert.DoesNotContain(".webm", convert[2].Extensions);
+        Assert.All(convert, op => Assert.Contains(".mkv", op.Extensions));
         Assert.All(convert, op => Assert.Equal(MediaJob.VideoExtensions.Length - 1, op.Extensions.Count));
     }
 
     [Theory]
     [InlineData("video.to-mov", ".mov", "mov,mp4,m4a,3gp,3g2,mj2", "h264", "aac")]
-    [InlineData("video.to-mkv", ".mkv", "matroska,webm", "h264", "aac")]
     [InlineData("video.to-webm", ".webm", "matroska,webm", "vp9", "opus")]
     public async Task A_clip_converts_to_each_type_at_its_size_and_length(string id, string extension, string format, string videoCodec, string audioCodec)
     {
@@ -79,16 +79,27 @@ public sealed class VideoConvertTests : IDisposable
     }
 
     [Fact]
-    public async Task Every_sound_stream_is_kept_with_its_language()
+    public async Task Only_the_first_video_and_the_first_sound_stream_are_kept_with_its_language()
     {
         var input = await Fixtures.CopyAsync(Fixtures.TwoAudioMkvAsync(), _dir, "film.mkv");
 
         var output = await Op("video.to-mp4").RunAsync(input, CancellationToken.None);
 
         var probe = await Probe(output);
-        Assert.Equal(["h264", "aac", "aac"], probe.Streams.Select(s => s.Codec));
-        Assert.Equal(["eng", "vie"], probe.Streams.Skip(1).Select(s => s.Language));
+        Assert.Equal(["h264", "aac"], probe.Streams.Select(s => s.Codec));
+        Assert.Equal("eng", probe.Streams[1].Language);
         Assert.Equal(6, probe.Duration, 1);
+    }
+
+    [WindowsFact]
+    public async Task The_notification_says_when_other_sound_tracks_were_left_out()
+    {
+        var input = await Fixtures.CopyAsync(Fixtures.TwoAudioMkvAsync(), _dir, "film.mkv");
+        using var logs = new TempDir();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op("video.to-mp4"), [input], null, CancellationToken.None);
+
+        Assert.Equal("Only the first of its 2 sound tracks was kept.", Assert.Single(outcome.Results).Note);
     }
 
     [Fact]
@@ -100,7 +111,7 @@ public sealed class VideoConvertTests : IDisposable
         await TestFfmpeg.RunRawAsync("-i", await Fixtures.WavAsync(), "-c:a", "aac", "-f", "mp4", audioOnly);
 
         var output = await Op("video.to-mp4").RunAsync(silent, CancellationToken.None);
-        var e = await Assert.ThrowsAsync<MediaException>(() => Op("video.to-mkv").RunAsync(audioOnly, CancellationToken.None));
+        var e = await Assert.ThrowsAsync<MediaException>(() => Op("video.to-mov").RunAsync(audioOnly, CancellationToken.None));
 
         Assert.Equal(["h264"], (await Probe(output)).Streams.Select(s => s.Codec));
         Assert.Equal(MediaException.NoVideoMessage, e.Message);
@@ -112,7 +123,7 @@ public sealed class VideoConvertTests : IDisposable
         var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mp4");
         var reports = new List<int>();
 
-        await Op("video.to-mkv").RunAsync(input, new SyncProgress(report => reports.Add(report.Position)), CancellationToken.None);
+        await Op("video.to-mov").RunAsync(input, new SyncProgress(report => reports.Add(report.Position)), CancellationToken.None);
 
         Assert.Equal(100, reports[^1]);
         Assert.Equal(reports.Order(), reports);

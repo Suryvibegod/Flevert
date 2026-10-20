@@ -13,31 +13,37 @@ public sealed class MediaMenuTests
 
     [Theory]
     [InlineData(".m4v")]
+    [InlineData(".mkv")]
     [InlineData(".avi")]
     [InlineData(".wmv")]
     [InlineData(".3gp")]
     [InlineData(".mts")]
     [InlineData(".m2ts")]
-    public void A_video_gets_convert_compress_and_extract_audio_in_exactly_16_entries(string extension)
+    public void A_video_gets_compress_first_then_convert_extract_audio_and_remove_hidden_info_in_16_entries(string extension)
     {
-        Assert.Equal(["Convert", "Compress", "Extract audio"], Labels($@"Flevert.Menu{extension}\shell"));
-        Assert.Equal(["MP4", "MOV", "MKV", "WEBM", "GIF"], Labels($@"Flevert.Menu{extension}\Convert\shell"));
-        Assert.Equal(["Light", "Balanced", "Strong", "Under 10 MB", "Under 25 MB", "Under 100 MB"], Labels($@"Flevert.Menu{extension}\Compress\shell"));
+        // docs/specs/media.md, "Menu": the first user story (too heavy to send) comes first; privacy on its own.
+        Assert.Equal(["Compress", "Convert to", "Extract audio", "Remove hidden info"], Labels($@"Flevert.Menu{extension}\shell"));
+        Assert.Equal(
+            ["Light (best quality)", "Balanced", "Strong (smallest)", "Under 10 MB", "Under 25 MB", "Under 100 MB"],
+            Labels($@"Flevert.Menu{extension}\Compress\shell"));
+        Assert.Equal(["MP4", "MOV", "WEBM", "GIF"], Labels($@"Flevert.Menu{extension}\Convert to\shell"));
         Assert.Equal(["MP3", "M4A"], Labels($@"Flevert.Menu{extension}\Extract audio\shell"));
         Assert.Equal(16, CountEntries($@"Flevert.Menu{extension}\shell"));
+        Assert.Equal(
+            [$"\"{Exe}\" run video.strip-metadata \"%1\""],
+            _registry.Children($@"Flevert.Menu{extension}\shell").Select(verb => _registry.GetValue($@"{verb}\command", "")).OfType<string>());
     }
 
     [Theory]
     [InlineData(".mp4", "MP4")]
     [InlineData(".mov", "MOV")]
-    [InlineData(".mkv", "MKV")]
     [InlineData(".webm", "WEBM")]
     public void A_video_of_a_type_flevert_writes_is_not_offered_its_own_type(string extension, string own)
     {
-        var convert = Labels($@"Flevert.Menu{extension}\Convert\shell");
+        var convert = Labels($@"Flevert.Menu{extension}\Convert to\shell");
 
         Assert.DoesNotContain(own, convert);
-        Assert.Equal(4, convert.Length);
+        Assert.Equal(3, convert.Length);
         Assert.Equal(15, CountEntries($@"Flevert.Menu{extension}\shell"));
     }
 
@@ -47,13 +53,13 @@ public sealed class MediaMenuTests
     [InlineData(".m4a", new[] { "MP3", "WAV", "FLAC", "OGG", "Opus" })]
     [InlineData(".aac", new[] { "MP3", "M4A", "WAV", "FLAC", "OGG", "Opus" })]
     [InlineData(".wma", new[] { "MP3", "M4A", "WAV", "FLAC", "OGG", "Opus" })]
-    public void An_audio_file_gets_convert_with_every_other_type(string extension, string[] targets)
+    public void An_audio_file_gets_convert_to_with_every_other_type(string extension, string[] targets)
     {
-        Assert.Equal(["Convert"], Labels($@"Flevert.Menu{extension}\shell"));
-        Assert.Equal(targets, Labels($@"Flevert.Menu{extension}\Convert\shell"));
+        Assert.Equal(["Convert to"], Labels($@"Flevert.Menu{extension}\shell"));
+        Assert.Equal(targets, Labels($@"Flevert.Menu{extension}\Convert to\shell"));
         Assert.Equal(
             [.. targets.Select(target => $"\"{Exe}\" run audio.to-{target.ToLowerInvariant()} \"%1\"")],
-            _registry.Children($@"Flevert.Menu{extension}\Convert\shell").Select(verb => _registry.GetValue($@"{verb}\command", "")));
+            _registry.Children($@"Flevert.Menu{extension}\Convert to\shell").Select(verb => _registry.GetValue($@"{verb}\command", "")));
     }
 
     [Fact]

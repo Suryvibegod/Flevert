@@ -56,7 +56,7 @@ internal sealed class AudioFormat
 }
 
 /// <summary>
-/// <c>Convert &gt; MP3</c> (and M4A, WAV, FLAC, OGG, Opus) for an audio file, and <c>Extract audio &gt; MP3</c> (and M4A)
+/// <c>Convert to &gt; MP3</c> (and M4A, WAV, FLAC, OGG, Opus) for an audio file, and <c>Extract audio &gt; MP3</c> (and M4A)
 /// for a video: writes the main sound of the input as <c>&lt;name&gt;.&lt;ext&gt;</c> beside it, with the file's own tags
 /// but none that say where it was recorded. A type is never offered for a file already of that type.
 /// </summary>
@@ -73,7 +73,7 @@ public sealed class AudioConvert : IOperation
         _fromVideo = fromVideo;
         var name = format.Label.ToLowerInvariant();
         Id = fromVideo ? $"video.extract-{name}" : $"audio.to-{name}";
-        MenuPath = fromVideo ? $"Extract audio/{format.Label}" : $"Convert/{format.Label}";
+        MenuPath = fromVideo ? $"Extract audio/{format.Label}" : $"Convert to/{format.Label}";
         Extensions = fromVideo
             ? MediaJob.VideoExtensions
             : [.. MediaJob.AudioExtensions.Where(extension => extension != format.Extension)];
@@ -93,7 +93,10 @@ public sealed class AudioConvert : IOperation
     public async Task<string> RunAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
     {
         var info = await _ffmpeg.ProbeAsync(inputPath, ct).ConfigureAwait(false);
-        var audio = info.MainAudio ?? throw new MediaException(_fromVideo ? MediaException.NoSoundToExtractMessage : MediaException.NoSoundMessage);
+        // From a video, say so when other sound tracks are left out (they may be other languages).
+        var audio = (_fromVideo ? VideoEncoding.FirstAudio(info) : info.Audio) is [var first, ..]
+            ? first
+            : throw new MediaException(_fromVideo ? MediaException.NoSoundToExtractMessage : MediaException.NoSoundMessage);
         var estimate = MediaJob.Bytes(info.Duration, _format.BitsPerSecond(audio));
         var desired = MediaJob.Beside(inputPath, _format.Extension);
         MediaJob.RequireSpace(desired, estimate);

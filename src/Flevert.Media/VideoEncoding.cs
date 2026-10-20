@@ -1,4 +1,5 @@
 using System.Globalization;
+using Flevert.Core;
 
 namespace Flevert.Media;
 
@@ -55,7 +56,18 @@ internal static class VideoEncoding
         return ["-vf", string.Join(',', filters)];
     }
 
-    /// <summary>The picture, then the main sound or every sound stream, by their index in the input.</summary>
+    /// <summary>
+    /// The sound an output carries: the file's first audio stream, or none (docs/specs/media.md). The notification says
+    /// when others were left out, since they may be other languages.
+    /// </summary>
+    public static IReadOnlyList<AudioTrack> FirstAudio(MediaInfo info)
+    {
+        if (info.Audio.Count > 1)
+            OutputNote.Add(string.Create(CultureInfo.InvariantCulture, $"Only the first of its {info.Audio.Count} sound tracks was kept."));
+        return info.MainAudio is { } first ? [first] : [];
+    }
+
+    /// <summary>The picture, then the sound, by their index in the input.</summary>
     public static string[] Maps(MediaInfo info, IReadOnlyList<AudioTrack> audio) =>
         ["-map", $"0:{info.Video!.Index}", .. audio.SelectMany(track => (string[])["-map", $"0:{track.Index}"])];
 

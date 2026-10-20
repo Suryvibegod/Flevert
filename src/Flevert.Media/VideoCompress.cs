@@ -4,14 +4,16 @@ using Flevert.Core;
 namespace Flevert.Media;
 
 /// <summary>A level of <c>Compress</c>: H.264 constant quality, the sound's bitrate, and how large the picture may stay.</summary>
-internal sealed record CompressLevel(string Label, int Crf, int AudioKbps, int? MaxShortSide = null)
+/// <param name="Name">For the operation's id: <c>video.compress-light</c>.</param>
+/// <param name="Label">As the menu shows it, saying what it does (docs/specs/media.md, "Menu").</param>
+internal sealed record CompressLevel(string Name, string Label, int Crf, int AudioKbps, int? MaxShortSide = null)
 {
-    public static CompressLevel Light { get; } = new("Light", 23, 128);
+    public static CompressLevel Light { get; } = new("light", "Light (best quality)", 23, 128);
 
-    public static CompressLevel Balanced { get; } = new("Balanced", 28, 96);
+    public static CompressLevel Balanced { get; } = new("balanced", "Balanced", 28, 96);
 
     /// <summary>Also at most 720p: past that, quality 32 shows its blocks more than a smaller picture would.</summary>
-    public static CompressLevel Strong { get; } = new("Strong", 32, 64, MaxShortSide: 720);
+    public static CompressLevel Strong { get; } = new("strong", "Strong (smallest)", 32, 64, MaxShortSide: 720);
 
     public static IReadOnlyList<CompressLevel> All { get; } = [Light, Balanced, Strong];
 }
@@ -32,7 +34,7 @@ public sealed class VideoCompress : IOperation
     {
         _level = level;
         _ffmpeg = ffmpeg;
-        Id = $"video.compress-{level.Label.ToLowerInvariant()}";
+        Id = $"video.compress-{level.Name}";
         MenuPath = $"Compress/{level.Label}";
     }
 
@@ -50,7 +52,7 @@ public sealed class VideoCompress : IOperation
     {
         var info = await _ffmpeg.ProbeAsync(inputPath, ct).ConfigureAwait(false);
         var video = info.Video ?? throw new MediaException(MediaException.NoVideoMessage);
-        IReadOnlyList<AudioTrack> audio = info.MainAudio is { } main ? [main] : [];
+        var audio = VideoEncoding.FirstAudio(info);
         var size = VideoEncoding.OutputSize(video, _level.MaxShortSide);
         // At most the original: anything larger is thrown away.
         var inputBytes = new FileInfo(inputPath).Length;
@@ -67,8 +69,10 @@ public sealed class VideoCompress : IOperation
             await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", info.Duration, MediaJob.MaxOutputBytes(inputPath, estimate),
                 MediaJob.Percent(progress), token).ConfigureAwait(false);
             // Thrown before the output is committed: WriteAtomicallyAsync deletes the temporary file.
-            if (new FileInfo(temp).Length >= inputBytes)
+            var outputBytes = new FileInfo(temp).Length;
+            if (outputBytes >= inputBytes)
                 throw new OperationSkippedException(NotSmallerMessage);
+            OutputNote.AddSizes(inputBytes, outputBytes);
         }, ct).ConfigureAwait(false);
     }
 }
@@ -162,7 +166,7 @@ public sealed class VideoCompressUnder : IOperation
         var video = info.Video ?? throw new MediaException(MediaException.NoVideoMessage);
         if (new FileInfo(inputPath).Length < LimitBytes)
             throw new OperationSkippedException(AlreadyUnderMessage);
-        IReadOnlyList<AudioTrack> audio = info.MainAudio is { } main ? [main] : [];
+        var audio = VideoEncoding.FirstAudio(info);
         var budget = Plan(LimitBytes, info.Duration, Math.Min(video.DisplayWidth, video.DisplayHeight), audio.Count > 0)
             ?? throw new MediaException(TooLongMessage);
         var size = VideoEncoding.OutputSize(video, budget.MaxShortSide);
@@ -195,8 +199,11 @@ public sealed class VideoCompressUnder : IOperation
                     {
                         await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", info.Duration, LimitBytes, MediaJob.Percent(progress, 0.5, 1), token)
                             .ConfigureAwait(false);
-                        if (new FileInfo(temp).Length < LimitBytes)
+                        if (new FileInfo(temp).Length is var written && written < LimitBytes)
+                        {
+                            OutputNote.AddSizes(new FileInfo(inputPath).Length, written);
                             return;
+                        }
                     }
                     catch (MediaException e) when (e.Message == MediaException.TooBigOutputMessage)
                     {

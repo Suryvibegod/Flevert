@@ -17,7 +17,7 @@ public sealed class VideoToGifTests : IDisposable
     {
         var convert = MediaOperations.Create(TestFfmpeg.Instance).Where(op => op.Id.StartsWith("video.to-", StringComparison.Ordinal)).ToList();
 
-        Assert.Equal("Convert/GIF", convert[^1].MenuPath);
+        Assert.Equal("Convert to/GIF", convert[^1].MenuPath);
         Assert.Equal(MediaJob.VideoExtensions, Op().Extensions);
         Assert.DoesNotContain(".gif", MediaOperations.Create(TestFfmpeg.Instance).SelectMany(op => op.Extensions));
     }

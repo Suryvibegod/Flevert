@@ -81,17 +81,28 @@ public sealed class MediaInfoTests
     }
 
     [Fact]
-    public void The_default_audio_stream_is_the_main_one_and_the_first_otherwise()
+    public void The_first_audio_stream_is_the_main_one_even_when_another_is_marked_default()
     {
+        // docs/specs/media.md: the first video stream and the first audio stream.
         var marked = MediaInfo.Parse(Json(
             """{ "index": 0, "codec_type": "audio", "codec_name": "opus", "disposition": { "default": 0 } }""",
             """{ "index": 1, "codec_type": "audio", "codec_name": "vorbis", "disposition": { "default": 1 } }"""));
-        var unmarked = MediaInfo.Parse(Json(
-            """{ "index": 0, "codec_type": "audio", "codec_name": "opus" }""",
-            """{ "index": 1, "codec_type": "audio", "codec_name": "vorbis" }"""));
 
-        Assert.Equal(1, marked.MainAudio!.Index);
-        Assert.Equal(0, unmarked.MainAudio!.Index);
+        Assert.Equal(0, marked.MainAudio!.Index);
+    }
+
+    [Fact]
+    public void Streams_that_are_neither_the_video_nor_sound_are_counted()
+    {
+        var info = MediaInfo.Parse(Json(
+            """{ "index": 0, "codec_type": "video", "codec_name": "h264", "width": 64, "height": 64, "tags": { "LOCATION": "+1+2/" } }""",
+            """{ "index": 1, "codec_type": "video", "codec_name": "mjpeg", "width": 64, "height": 64, "disposition": { "attached_pic": 1 } }""",
+            """{ "index": 2, "codec_type": "data", "codec_name": "none", "tags": { "handler_name": "Core Media Metadata" } }""",
+            """{ "index": 3, "codec_type": "subtitle", "codec_name": "mov_text" }""",
+            """{ "index": 4, "codec_type": "attachment", "codec_name": "ttf" }"""));
+
+        Assert.Equal(4, info.OtherStreams);
+        Assert.Equal("+1+2/", info.Video!.Tags["location"]);
     }
 
     [Fact]

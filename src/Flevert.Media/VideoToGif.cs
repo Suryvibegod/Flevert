@@ -4,7 +4,7 @@ using Flevert.Core;
 namespace Flevert.Media;
 
 /// <summary>
-/// <c>Convert &gt; GIF</c>: writes <c>&lt;name&gt;.gif</c> beside the video, at most 480 pixels on its long side and 12
+/// <c>Convert to &gt; GIF</c>: writes <c>&lt;name&gt;.gif</c> beside the video, at most 480 pixels on its long side and 12
 /// frames a second, with a palette made for this video (docs/specs/media.md). A GIF of a long video would be huge, so
 /// only the first 30 seconds are converted, and the notification says so.
 /// </summary>
@@ -30,7 +30,7 @@ public sealed class VideoToGif : IOperation
 
     public string Id => "video.to-gif";
 
-    public string MenuPath => "Convert/GIF";
+    public string MenuPath => "Convert to/GIF";
 
     public IReadOnlyCollection<string> Extensions => MediaJob.VideoExtensions;
 

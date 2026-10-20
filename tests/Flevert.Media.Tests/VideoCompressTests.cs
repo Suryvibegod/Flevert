@@ -18,7 +18,8 @@ public sealed class VideoCompressTests : IDisposable
         var compress = MediaOperations.Create(TestFfmpeg.Instance).OfType<IOperation>().Where(op => op.MenuPath.StartsWith("Compress/", StringComparison.Ordinal)).ToList();
 
         Assert.Equal(
-            ["Compress/Light", "Compress/Balanced", "Compress/Strong", "Compress/Under 10 MB", "Compress/Under 25 MB", "Compress/Under 100 MB"],
+            ["Compress/Light (best quality)", "Compress/Balanced", "Compress/Strong (smallest)", "Compress/Under 10 MB", "Compress/Under 25 MB",
+                "Compress/Under 100 MB"],
             compress.Select(op => op.MenuPath));
         Assert.Equal(
             ["video.compress-light", "video.compress-balanced", "video.compress-strong", "video.compress-under-10mb", "video.compress-under-25mb",
@@ -53,6 +54,20 @@ public sealed class VideoCompressTests : IDisposable
         var probe = await Probe(strong);
         Assert.Equal((1280, 720), (probe.Streams[0].Width, probe.Streams[0].Height));
         Assert.Equal(10, probe.Duration, 1);
+    }
+
+    [WindowsFact]
+    public async Task The_notification_names_the_new_size_and_the_old_one()
+    {
+        // docs/specs/media.md: "Done: clip (under 25 MB).mp4 (24.3 MB, was 412 MB)".
+        var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mp4");
+        using var logs = new TempDir();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op("video.compress-light"), [input], null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.Equal(new SizeChange(new FileInfo(input).Length, new FileInfo(result.Output!).Length), result.Sizes);
+        Assert.StartsWith("Done: clip (compressed).mp4 (", BatchSummary.Describe(outcome, logs.Path).Text, StringComparison.Ordinal);
     }
 
     [Fact]

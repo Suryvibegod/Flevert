@@ -12,8 +12,6 @@ internal sealed record VideoFormat(string Label, string Extension, string Muxer,
 
     public static VideoFormat Mov { get; } = new("MOV", ".mov", "mov", [.. H264Aac, "-movflags", "+faststart"]);
 
-    public static VideoFormat Mkv { get; } = new("MKV", ".mkv", "matroska", H264Aac);
-
     /// <summary>
     /// VP9 at constant quality 32 and Opus 128 kbit/s. <c>-cpu-used 4</c>: 1.8 times real time for 1080p on 4 cores,
     /// 27 % faster than 2 for a file 3 % larger (measured 2026-10-20); still about twice as slow as x264, so its passes
@@ -23,12 +21,13 @@ internal sealed record VideoFormat(string Label, string Extension, string Muxer,
         ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", "-c:a", "libopus", "-b:a", "128k"],
         Slowness: 2 * Ffmpeg.DefaultSlowness);
 
-    public static IReadOnlyList<VideoFormat> All { get; } = [Mp4, Mov, Mkv, Webm];
+    // Not MKV: few people need it as an output (docs/specs/media.md); it stays a source.
+    public static IReadOnlyList<VideoFormat> All { get; } = [Mp4, Mov, Webm];
 }
 
 /// <summary>
-/// <c>Convert &gt; MP4</c> (and MOV, MKV, WEBM): writes the video as <c>&lt;name&gt;.&lt;ext&gt;</c> beside it, at its
-/// own size and frame rate, upright, in SDR, with every sound stream and the file's own tags but none that say where it
+/// <c>Convert to &gt; MP4</c> (and MOV, WEBM): writes the video as <c>&lt;name&gt;.&lt;ext&gt;</c> beside it, at its own
+/// size and frame rate, upright, in SDR, with its first sound stream and the file's own tags but none that say where it
 /// was filmed. Not offered for a file already of that type.
 /// </summary>
 public sealed class VideoConvert : IOperation
@@ -41,7 +40,7 @@ public sealed class VideoConvert : IOperation
         _format = format;
         _ffmpeg = ffmpeg;
         Id = $"video.to-{format.Label.ToLowerInvariant()}";
-        MenuPath = $"Convert/{format.Label}";
+        MenuPath = $"Convert to/{format.Label}";
         Extensions = [.. MediaJob.VideoExtensions.Where(extension => extension != format.Extension)];
     }
 
@@ -60,13 +59,14 @@ public sealed class VideoConvert : IOperation
     {
         var info = await _ffmpeg.ProbeAsync(inputPath, ct).ConfigureAwait(false);
         var video = info.Video ?? throw new MediaException(MediaException.NoVideoMessage);
+        var audio = VideoEncoding.FirstAudio(info);
         var size = VideoEncoding.OutputSize(video);
-        var estimate = VideoEncoding.EstimateBytes(info, size, 192, info.Audio.Count);
+        var estimate = VideoEncoding.EstimateBytes(info, size, 192, audio.Count);
         var desired = MediaJob.Beside(inputPath, _format.Extension);
         MediaJob.RequireSpace(desired, estimate);
         string[] options =
         [
-            .. VideoEncoding.Maps(info, info.Audio), .. MediaJob.MetadataOptions(info, info.Audio),
+            .. VideoEncoding.Maps(info, audio), .. MediaJob.MetadataOptions(info, audio),
             .. VideoEncoding.Filters(video, size), .. _format.Codecs,
         ];
         return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _ffmpeg.EncodeAsync(
