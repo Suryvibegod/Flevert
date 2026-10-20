@@ -1,3 +1,5 @@
+using Flevert.Core;
+
 namespace Flevert.Pdf.Tests;
 
 public sealed class QpdfTests : IDisposable
@@ -74,6 +76,30 @@ public sealed class QpdfTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(
             () => Qpdf.NextToApp.TransformAsync(input, _dir.Combine("out.pdf"), [option], CancellationToken.None));
         Assert.False(File.Exists(_dir.Combine("out.pdf")));
+    }
+
+    [Fact]
+    public async Task An_option_naming_a_file_of_options_is_refused()
+    {
+        // qpdf reads "@file" as more arguments from that file, which would reach qpdf unchecked.
+        var input = _dir.Combine("in.pdf");
+        File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
+        var options = _dir.File("options.txt", "--rotate=+90:1-z\n");
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => Qpdf.NextToApp.TransformAsync(input, _dir.Combine("out.pdf"), ["@" + options], CancellationToken.None));
+        Assert.False(File.Exists(_dir.Combine("out.pdf")));
+    }
+
+    [Fact]
+    public void A_long_qpdf_message_is_cut_without_splitting_a_character()
+    {
+        // The last 2 000 UTF-16 units are kept; here they would begin with the second half of the emoji.
+        var stderr = "x😀" + new string('e', 1_999);
+
+        var detail = Qpdf.Detail(new ExternalToolResult(2, "", stderr, false, false));
+
+        Assert.Equal("…" + new string('e', 1_999), detail);
     }
 
     [Fact]

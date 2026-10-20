@@ -75,6 +75,9 @@ public sealed class Qpdf
         // The options stay on the command line, where qpdf's C runtime would expand them as wildcards.
         if (commandLine.FirstOrDefault(option => option.AsSpan().ContainsAny('*', '?')) is { } wild)
             throw new ArgumentException($"qpdf would expand the wildcard in the option {wild}.", nameof(options));
+        // qpdf reads "@file" as more arguments from that file, which nothing here would have checked.
+        if (commandLine.FirstOrDefault(option => option.StartsWith('@')) is { } file)
+            throw new ArgumentException($"qpdf would read the option {file} as a file of options.", nameof(options));
         // qpdf has no end-of-options marker ("--" is not one): a relative path such as "-x.pdf" would be an option.
         RequireArgumentLine(inputPath, nameof(inputPath));
         RequireArgumentLine(outputPath, nameof(outputPath));
@@ -164,12 +167,18 @@ public sealed class Qpdf
 
     // qpdf's error is the last line of stderr. ExternalTool keeps the first megabyte, so the end of what it kept is
     // the error itself, or, after a megabyte of warnings, the last warnings kept.
-    private static string Detail(ExternalToolResult run)
+    internal static string Detail(ExternalToolResult run)
     {
         var text = run.StandardError.Trim();
         if (text.Length == 0)
             text = string.Create(CultureInfo.InvariantCulture, $"no message, exit code {run.ExitCode}");
-        return text.Length <= MaxDetailChars ? text : "…" + text[^MaxDetailChars..];
+        if (text.Length <= MaxDetailChars)
+            return text;
+        var start = text.Length - MaxDetailChars;
+        // Never the second half of a character outside the BMP (an emoji in a file name, say) without its first.
+        if (char.IsLowSurrogate(text[start]))
+            start++;
+        return "…" + text[start..];
     }
 }
 
