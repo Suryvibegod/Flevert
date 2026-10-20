@@ -29,26 +29,13 @@ public static class PdfOperations
     ];
 }
 
-/// <summary>The tools of the PDF tools window as operations: what <c>More PDF tools…</c> runs, and <c>flevert.exe run</c>.</summary>
+/// <summary>The tools of the PDF tools window as operations: what <c>More PDF tools…</c> runs.</summary>
 public static class PdfToolCatalog
 {
     /// <summary>The operation of a tool with the options chosen.</summary>
     public static IOperation Create(PdfToolChoice choice)
     {
         ArgumentNullException.ThrowIfNull(choice);
-        return PdfTools.Create(choice.Tool.OperationId, choice.Options, Qpdf.NextToApp);
-    }
-
-    /// <summary>
-    /// Every tool with its default options, except those <paramref name="present"/> already holds: run by
-    /// <c>flevert.exe run &lt;id&gt;</c>, without a window (docs/specs/pdf.md, v0.2.2). A tool that needs text typed in
-    /// (the watermark) fails clearly then.
-    /// </summary>
-    public static IEnumerable<IOperation> WithDefaults(IEnumerable<IMenuOperation> present)
-    {
-        var ids = present.Select(op => op.Id).ToHashSet(StringComparer.Ordinal);
-        return PdfTools.All
-            .Where(tool => !ids.Contains(tool.OperationId))
-            .Select(tool => Create(new PdfToolChoice(tool, tool.Options.ToDictionary(o => o.Key, o => o.Default, StringComparer.Ordinal))));
+        return PdfTools.Create(choice.Tool.OperationId, choice.Options);
     }
 }

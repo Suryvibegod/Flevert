@@ -10,8 +10,8 @@ public interface IMenuOperation
     string Id { get; }
 
     /// <summary>
-    /// Menu location below the Flevert entry; <c>/</c> separates submenus, e.g. <c>Convert to/PNG</c>. Empty for an
-    /// operation that is not in the menu (a PDF tool the PDF tools window runs, or <c>flevert.exe run</c>).
+    /// Menu location below the Flevert entry; <c>/</c> separates submenus, e.g. <c>Convert/PNG</c>. Empty for an
+    /// operation that is not in the menu and runs only by its id (the PDF tools of v0.2.2, which their window runs).
     /// </summary>
     string MenuPath { get; }
 

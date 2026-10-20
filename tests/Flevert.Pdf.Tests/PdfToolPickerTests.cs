@@ -119,6 +119,16 @@ public sealed class PdfToolPickerTests : IDisposable
     }
 
     [Theory]
+    [InlineData("bottom-center", "Bottom center")]
+    [InlineData("top-right", "Top right")]
+    [InlineData("1 / N", "1 / N")]
+    [InlineData("Page 1 of N", "Page 1 of N")]
+    public void Choices_written_as_keys_read_as_words(string value, string shown)
+    {
+        Assert.Equal(shown, PdfToolPicker.ChoiceText(value));
+    }
+
+    [Theory]
     [InlineData(1, "1 PDF selected")]
     [InlineData(3, "3 PDFs selected")]
     [InlineData(100, "100 PDFs selected")]

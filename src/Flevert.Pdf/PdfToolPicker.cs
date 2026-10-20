@@ -51,6 +51,22 @@ public sealed class PdfToolPicker
     public static string SelectedLine(int files) =>
         files == 1 ? "1 PDF selected" : string.Create(CultureInfo.InvariantCulture, $"{Math.Max(files, 0)} PDFs selected");
 
+    // Fluent names drawn with another icon: stamp exists only as a thin 32 px outline, too faint at these sizes.
+    private static readonly Dictionary<string, string> Instead = new(StringComparer.Ordinal) { ["stamp"] = "draw_text" };
+
+    /// <summary>The icon file (assets/menu, without .ico) the window draws for a tool's Fluent icon name.</summary>
+    public static string IconFile(string fluentName) => Instead.GetValueOrDefault(fluentName, fluentName);
+
+    /// <summary>How the window shows a choice: a value written as a key ("bottom-center") reads "Bottom center".</summary>
+    public static string ChoiceText(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if (value.Length == 0 || !value.All(c => char.IsAsciiLetterLower(c) || c == '-'))
+            return value;
+        var words = value.Replace('-', ' ');
+        return char.ToUpperInvariant(words[0]) + words[1..];
+    }
+
     public void Select(string operationId) =>
         Selected = Tools.FirstOrDefault(t => t.OperationId == operationId)
             ?? throw new ArgumentException($"No PDF tool '{operationId}'.", nameof(operationId));

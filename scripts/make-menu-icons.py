@@ -46,16 +46,17 @@ ICONS = [
     ("shield", "color"),                   # Remove hidden info
     ("document_pdf", "filled"),            # Combine into PDF
     ("toolbox", "color"),                  # More PDF tools…
-    # The PDF tools window.
+    # The PDF tools window: the names PdfTools.All gives (Add watermark's "stamp" exists only as a thin 32 px outline,
+    # so the window draws draw_text for it).
     ("document_dismiss", "filled"),        # Remove blank pages
-    ("document_one_page_columns", "filled"),  # 2 pages per sheet
+    ("layout_column_two", "filled"),       # 2 pages per sheet
     ("grid", "filled"),                    # 4 pages per sheet
-    ("document_fit", "filled"),            # Fit pages to A4
-    ("arrow_split", "filled"),             # Split into parts under N MB
+    ("page_fit", "filled"),                # Fit pages to A4
+    ("cut", "filled"),                     # Split into parts under 10 MB / 25 MB
     ("draw_text", "filled"),               # Add watermark
-    ("document_page_bottom_center", "filled"),  # Add page numbers
+    ("document_page_number", "filled"),    # Add page numbers
     ("layer", "filled"),                   # Flatten forms and comments
-    ("document_text_extract", "filled"),   # Extract text
+    ("document_text", "color"),            # Extract text
     ("image_multiple", "filled"),          # Extract images
     ("document", "color"),                 # any tool whose icon is not here
 ]
@@ -108,28 +109,32 @@ SOURCES = {
     "assets/Document Dismiss/SVG/ic_fluent_document_dismiss_20_filled.svg": "1d639333daa53062f9eaa01801668985dfd89bff2fa81211633b9df208c62771",
     "assets/Document Dismiss/SVG/ic_fluent_document_dismiss_24_filled.svg": "02f5a3afd815de60ea99505ea3ee5f2a2977f5b4633c7eac757a7120f9f7e464",
     "assets/Document Dismiss/SVG/ic_fluent_document_dismiss_48_filled.svg": "edca35d09d683e4e3db412663a816dd74dd45a4d1dfeb8960ca1a418e8a699ae",
-    "assets/Document One Page Columns/SVG/ic_fluent_document_one_page_columns_20_filled.svg": "5bd5356c7643b0fd42adc6d8d9769926cf406b81e21179825901b444ada45221",
-    "assets/Document One Page Columns/SVG/ic_fluent_document_one_page_columns_24_filled.svg": "bb96adcbc71e1c13f484537f1c73bdfecc2447ae0d52df343f4a61ad145bb4c5",
+    "assets/Layout Column Two/SVG/ic_fluent_layout_column_two_16_filled.svg": "ade4f475de6f98cfd28d0b3cd7fc2985c4a308ff0a11d899452b3ed17e73db7e",
+    "assets/Layout Column Two/SVG/ic_fluent_layout_column_two_20_filled.svg": "664f6866af3d1dd15c07c2966a43cbc90b1e855edbf91b5f0966dcfca8fb37dd",
+    "assets/Layout Column Two/SVG/ic_fluent_layout_column_two_24_filled.svg": "225e80dad188509a0c685b2b572c8c62df56bd4a558b7bbfe0175f0baf041352",
+    "assets/Layout Column Two/SVG/ic_fluent_layout_column_two_32_filled.svg": "9b446fa7596540e7768d7f43f24f05ffab400d0087eb57f0319653a468c45c4f",
     "assets/Grid/SVG/ic_fluent_grid_16_filled.svg": "0c6f587cf8b463a79dbddeb2218f1aad870a4a5ec8e3856779942326c8cf77dd",
     "assets/Grid/SVG/ic_fluent_grid_20_filled.svg": "f89f679798e60fc3ea13a42e1ec70e6cdb65958b8a84d73819a22257d75c1bf3",
     "assets/Grid/SVG/ic_fluent_grid_24_filled.svg": "ca423fb466fa08a32a38ad28ab689bd25d3809b70cdecb719bdf0c052bc843dd",
-    "assets/Document Fit/SVG/ic_fluent_document_fit_16_filled.svg": "86a1f8ca44f83e483233d656206bddf11e500c1081fa7fcf8a6aec6e86133b4c",
-    "assets/Document Fit/SVG/ic_fluent_document_fit_20_filled.svg": "d8bc7c8367e42bc52c2a67ef1bbd819e77d4a0883a1f8f0fb10fab297e038eb4",
-    "assets/Document Fit/SVG/ic_fluent_document_fit_24_filled.svg": "bd38eb6ff95b1434dee90c334c5919dada2140181fad2718877fff03300f6cc2",
-    "assets/Arrow Split/SVG/ic_fluent_arrow_split_16_filled.svg": "3560fec50e14f063dc6b4871bf3958a8f7503c318883ccce273a96222240d98d",
-    "assets/Arrow Split/SVG/ic_fluent_arrow_split_20_filled.svg": "db71e2dbb15f681e35c4ef5b999f39a9e4f6bc741d2e8577271bcd9731c5d765",
-    "assets/Arrow Split/SVG/ic_fluent_arrow_split_24_filled.svg": "b9568e92dff49fa711c1ce52de926bbb19a317a551f6491a30c6875d7bf8d83c",
+    "assets/Page Fit/SVG/ic_fluent_page_fit_16_filled.svg": "1f5321bd8333f1a3a68f4a9bdc14f591aacbd25518fe842366b58995fb461be5",
+    "assets/Page Fit/SVG/ic_fluent_page_fit_20_filled.svg": "4f6ceeb1876ec03a97dd2cfe7597e95a178f4fe2e7137969912e069ff0c2832e",
+    "assets/Page Fit/SVG/ic_fluent_page_fit_24_filled.svg": "880fb8fab27cf7054d3ad2f00fdc44a0d43cc148f19dc2757d211bfd82fabde1",
+    "assets/Cut/SVG/ic_fluent_cut_16_filled.svg": "ddf1445eca88e4773f72caff078d2785ec559c477a1c71f8a25e9149ff7a6460",
+    "assets/Cut/SVG/ic_fluent_cut_20_filled.svg": "f42086cf93be33b80e74e4e0c07098d37c3bf635a63e838e01aa36a51d112d12",
+    "assets/Cut/SVG/ic_fluent_cut_24_filled.svg": "0d6d056dd75f9a4531d7463324bb9f682f5f1cbb1aee7f477aa75dacd6313f29",
+    "assets/Cut/SVG/ic_fluent_cut_32_filled.svg": "ba256df467c57a59ec751c053e8994566c395b2e5c1bcc92253ed19f97776765",
+    "assets/Cut/SVG/ic_fluent_cut_48_filled.svg": "e07b7a9a3ce84c246bfaeaad15284b016b92045763af20a75d725460e6af502d",
     "assets/Draw Text/SVG/ic_fluent_draw_text_20_filled.svg": "ab34cc4410f3962918e3318607e6bd561a74bc0cd2a4d0c6881c9a675f724a2e",
     "assets/Draw Text/SVG/ic_fluent_draw_text_24_filled.svg": "cccf2b3c8fd95799ea777cbb46abb6c42c0f2610f3509f97007c087d7b81c5e7",
-    "assets/Document Page Bottom Center/SVG/ic_fluent_document_page_bottom_center_20_filled.svg": "b4f5a728386c2a001125afab63bfd25cc19b52f0abafebde3dba313a9b9ceb54",
-    "assets/Document Page Bottom Center/SVG/ic_fluent_document_page_bottom_center_24_filled.svg": "7b4e01a30fb88531cb42fe2ad1db2da8a1990e32615236061bc79c2de1b13c93",
+    "assets/Document Page Number/SVG/ic_fluent_document_page_number_20_filled.svg": "33af33242c1e213179531744894af8a3a1cd2a9547b2e6b33dff68c2be01c222",
+    "assets/Document Page Number/SVG/ic_fluent_document_page_number_24_filled.svg": "1c50cc1a8f3cfd3e92a5b96bbcbd2331844e0e29b80867396df483bc8eb59190",
     "assets/Layer/SVG/ic_fluent_layer_20_filled.svg": "e49594a1aec88b5ccde1e75423971691c7fcaac8fbb9aede0ccbc94957db2162",
     "assets/Layer/SVG/ic_fluent_layer_24_filled.svg": "fd4ccc33686ae06945c60d238347140eff9e8a7ab06737083f7a73412fe4084f",
-    "assets/Document Text Extract/SVG/ic_fluent_document_text_extract_16_filled.svg": "91f998985468d115772dd6a8aa157d145c9ff49959dbe36bfc56b608bd946121",
-    "assets/Document Text Extract/SVG/ic_fluent_document_text_extract_20_filled.svg": "e6aba92e560aa870f7ccc596754fb59269dd4e946cb8da6a812399899cc7b2a8",
-    "assets/Document Text Extract/SVG/ic_fluent_document_text_extract_24_filled.svg": "a5ad84a0ff17747e7c7ac8da4db333f679a9c5b46c75db000f0b63aa8f473093",
-    "assets/Document Text Extract/SVG/ic_fluent_document_text_extract_32_filled.svg": "1aa8520b26efb658d57082799641cd2ae0d2ed4d125d55b616b2fdfe9d565910",
-    "assets/Document Text Extract/SVG/ic_fluent_document_text_extract_48_filled.svg": "fd4b62ebee780f30d64caa15ee17445f7b5b96ef05dc512cb1038c63a58aa377",
+    "assets/Document Text/SVG/ic_fluent_document_text_16_color.svg": "a00ac30babd468d547d210350a3cec81b6602092c019a9ec3368ad2ecd29b1cc",
+    "assets/Document Text/SVG/ic_fluent_document_text_20_color.svg": "9df57509806ec890591a494edecb96860bacc64eb7c471f292d143c56eeb83a1",
+    "assets/Document Text/SVG/ic_fluent_document_text_24_color.svg": "6c6654a8db202201af9d8709f841dacd27ab74001655601bdb8e9314feb97374",
+    "assets/Document Text/SVG/ic_fluent_document_text_32_color.svg": "64e3d2e0006b5789b896d0c04432414ec2a959916436740ea8667f81871722ac",
+    "assets/Document Text/SVG/ic_fluent_document_text_48_color.svg": "a0f5e47363db1434001dbdebba42c73617d2e4089759ed0db55a7bf839f79446",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_16_filled.svg": "fe5ebb1e154264b9736ce4a23754d9fcd4e19b8df4a4e3369a9c45d7f1438b88",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_20_filled.svg": "102f8a7e476ed0c49dbb28ac9837546ce4a64cdb78957c963db70ca7af773291",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_24_filled.svg": "095e0446adef1be2e40b0bb79548109398e45d478fbaed2e6d07e52c6cd8d717",

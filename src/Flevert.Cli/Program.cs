@@ -42,7 +42,8 @@ internal static class Program
         if (command is PdfWorkerCommand)
             return PdfRenderWorker.Run(Console.OpenStandardInput(), Console.OpenStandardOutput());
 
-        var catalog = new OperationCatalog([.. MenuOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
+        // The PDF tools have no menu path: the menu installer leaves them out, and run finds them by id.
+        var catalog = new OperationCatalog([.. MenuOperations.All, .. PdfTools.Operations, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);

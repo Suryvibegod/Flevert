@@ -5,13 +5,14 @@ using Flevert.Image;
 namespace Flevert.Pdf;
 
 /// <summary>
-/// Every image and PDF operation, in menu order: what flevert.exe lists and installs, with the PDF tools the window runs
-/// (not in the menu). An image's menu reads Convert to, Compress, Remove hidden info, Combine into PDF (docs/specs/pdf.md,
-/// v0.2.2, "Menu ảnh": removing GPS before sending a photo is an everyday task, joining photos into a PDF less so).
+/// Every image and PDF operation, in menu order: what flevert.exe lists and installs (the PDF tools of the window are in
+/// <see cref="PdfTools.Operations"/>). An image's menu reads Convert to, Compress, Remove hidden info, Combine into PDF
+/// (docs/specs/pdf.md, v0.2.2, "Menu ảnh": removing GPS before sending a photo is an everyday task, joining photos into
+/// a PDF less so).
 /// </summary>
 public static class MenuOperations
 {
-    public static IReadOnlyList<IMenuOperation> All { get; } = Everything();
+    public static IReadOnlyList<IMenuOperation> All { get; } = [.. ImageOperations.All, new ImagesToPdf(), .. PdfOperations.All];
 
     /// <summary>
     /// The icon and group of each entry at the top of the menu (docs/specs/pdf.md, v0.2.2, "Icon"): a separator goes
@@ -30,11 +31,4 @@ public static class MenuOperations
         ["Combine into PDF"] = new("document_pdf", 2),
         ["More PDF tools…"] = new("toolbox", 3),
     };
-
-    private static List<IMenuOperation> Everything()
-    {
-        List<IMenuOperation> operations = [.. ImageOperations.All, new ImagesToPdf(), .. PdfOperations.All];
-        operations.AddRange(PdfToolCatalog.WithDefaults(operations));
-        return operations;
-    }
 }

@@ -45,11 +45,11 @@ public sealed class PdfMenuTests
         foreach (var tool in PdfTools.All)
         {
             Assert.DoesNotContain(tool.OperationId, inMenu);
-            Assert.Single(MenuOperations.All, op => op.Id == tool.OperationId);
+            Assert.Single(Catalog, op => op.Id == tool.OperationId);
         }
 
         Assert.Contains("pdf.extract-text", PdfTools.All.Select(t => t.OperationId));
-        Assert.Equal(MenuOperations.All.Count, MenuOperations.All.Select(op => op.Id).Distinct().Count());
+        Assert.Equal(Catalog.Count, Catalog.Select(op => op.Id).Distinct().Count());
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public sealed class PdfMenuTests
     {
         // The build copies assets/menu/*.ico into icons\ beside flevert.exe, and the installer packs that folder.
         var icons = Path.Combine(Path.GetDirectoryName(TestPdf.FlevertExe)!, MenuInstaller.IconsFolder);
-        foreach (var name in MenuOperations.Looks.Values.Select(look => look.Icon).Concat(PdfTools.All.Select(tool => tool.Icon)).Append("document"))
+        foreach (var name in MenuOperations.Looks.Values.Select(look => look.Icon).Concat(PdfTools.All.Select(tool => PdfToolPicker.IconFile(tool.Icon))).Append("document"))
             Assert.True(File.Exists(Path.Combine(icons, name + ".ico")), $"{name}.ico is not in assets/menu");
     }
 
@@ -138,6 +138,9 @@ public sealed class PdfMenuTests
         Assert.Equal(16, CountEntries(@"Flevert.Menu.jpg\shell"));
         Assert.Equal(16, CountEntries(@"Flevert.Menu.heic\shell"));
     }
+
+    // What flevert.exe can run (Program): the menu's operations and the PDF tools.
+    private static List<IMenuOperation> Catalog => [.. MenuOperations.All, .. PdfTools.Operations];
 
     private static string Id(string command) => command[$"\"{Exe}\" run ".Length..].Split(' ')[0];
 

@@ -73,7 +73,7 @@ internal static class MenuIcons
     /// when there is no such icon; <c>null</c> when there is none at all (a development build without icons).</summary>
     public static Bitmap? Load(string name, int size)
     {
-        foreach (var candidate in new[] { name, Fallback })
+        foreach (var candidate in new[] { PdfToolPicker.IconFile(name), Fallback })
         {
             // Names come from Flevert's own tool list; anything else is not a file name.
             if (candidate.Length == 0 || !candidate.All(c => char.IsAsciiLetterLower(c) || char.IsAsciiDigit(c) || c == '_'))
@@ -314,12 +314,13 @@ internal sealed class PdfToolsForm : Form
             if (option.Kind == PdfToolOptionKind.Choice)
             {
                 var combo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = fieldWidth, AccessibleName = option.Label.TrimEnd(':', ' ') };
-                combo.Items.AddRange([.. option.Choices]);
-                combo.SelectedItem = _picker.Value(option);
+                // Shown as words, kept as the values the tool takes, by position.
+                combo.Items.AddRange([.. option.Choices.Select(PdfToolPicker.ChoiceText)]);
+                combo.SelectedIndex = option.Choices.ToList().IndexOf(_picker.Value(option));
                 combo.SelectedIndexChanged += (_, _) =>
                 {
-                    if (combo.SelectedItem is string value)
-                        _picker.Set(option.Key, value);
+                    if (combo.SelectedIndex >= 0)
+                        _picker.Set(option.Key, option.Choices[combo.SelectedIndex]);
                 };
                 field = combo;
             }
