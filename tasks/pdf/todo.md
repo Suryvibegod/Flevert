@@ -467,3 +467,5 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 | Junction bên trong thư mục Flevert cũ (DelTree) | Info | Chấp nhận | Chỉ chính user tạo được; DelTree của Inno không đi theo link |
 | Balloon `Failed:` với tên file dài cắt mất đường dẫn log | Nit | Chấp nhận | Bấm balloon vẫn mở log |
 | Nit tài liệu: chú thích redirect, máy của maintainer, `ConvertAnything` trong ADR, tên setup trong spec installer, SignPath "has been requested", HANDOFF "latest", docs test-installer với Flevert, khóa `/PieceInfo` của script fixture, dòng trống thừa | Nit/Should | Hợp lệ | Xong |
+
+Soát lại phần sửa (một reviewer gộp): không còn Critical/High/Required. Should: menu Flevert hỏng thì Flevert được giữ nhưng gỡ Flevert không dọn nó → xong: gỡ cài đặt cũng xóa menu và thư mục Flevert (cùng điều kiện an toàn). Nit: lời ADR-0009 về bước 3 → xong; thông báo merge quá 2 000 trang không nêu file, thiếu test cho đếm lại và guard → mở (v0.2.1).

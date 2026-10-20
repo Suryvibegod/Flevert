@@ -605,4 +605,7 @@ begin
   RunFlevert('uninstall-menu', Started, Code, Reason);
   RunFlevert('classic-menu off', Started, Code, Reason);
   SweepRegistry;
+  // A Flevert that setup kept because Flevert's menu failed (CurStepChanged) has no entry of its own in Installed apps.
+  SweepMenu('{#OldName}');
+  RemoveFlevert;
 end;
