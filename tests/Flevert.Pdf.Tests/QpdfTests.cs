@@ -40,6 +40,34 @@ public sealed class QpdfTests : IDisposable
     }
 
     [Fact]
+    public async Task A_password_check_that_takes_too_long_in_a_merge_names_the_pdf_it_was_about()
+    {
+        // The merge fails on the locked PDF, and the check of whether it needs a password then runs out of time.
+        var good = _dir.Combine("good.pdf");
+        var locked = _dir.Combine("locked.pdf");
+        TestPdf.WriteWidths(good, 100);
+        File.Copy(TestPdf.Fixture("password-protected.pdf"), locked);
+        var qpdf = new Qpdf(Qpdf.NextToApp.ExePath) { PasswordProbeTimeout = TimeSpan.FromTicks(1) };
+
+        var ex = await Assert.ThrowsAsync<BatchInputException>(() => qpdf.MergeAsync([good, locked], _dir.Combine("out.pdf"), CancellationToken.None));
+
+        Assert.Equal(locked, ex.InputPath);
+        Assert.Equal(PdfError.TooSlow, Assert.IsType<PdfException>(ex.InnerException).Error);
+    }
+
+    [Fact]
+    public async Task A_run_with_a_password_refuses_to_stream_qpdfs_output()
+    {
+        // Each line would reach the callback before the password could be taken out of it.
+        var input = _dir.Combine("in.pdf");
+        TestPdf.WriteWidths(input, 100);
+        var secret = new Qpdf.Secret(TestPasswords.Make("hunter2"), [], ["--password="], []);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Qpdf.NextToApp.RunWithLinesAsync(
+            ["--show-pages"], [input], TimeSpan.FromMinutes(1), 1UL << 30, CancellationToken.None, secret, _ => { }));
+    }
+
+    [Fact]
     public async Task An_exit_code_qpdf_never_gives_fails_as_a_crash_rather_than_with_qpdfs_numbers()
     {
         // qpdf exits with 0, 2 or 3; anything else is a crash, or a kill. whoami.exe stands in for such a qpdf: it refuses

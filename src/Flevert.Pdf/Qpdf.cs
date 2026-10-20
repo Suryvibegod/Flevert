@@ -304,7 +304,7 @@ public sealed class Qpdf
     /// <see cref="Prefixes"/> followed by the password (<c>--password=…</c>), then <see cref="After"/>. The password goes
     /// from its characters straight into the bytes qpdf reads, and those bytes are zeroed once qpdf has exited.
     /// </summary>
-    private sealed record Secret(PdfPassword Password, string[] Before, string[] Prefixes, string[] After);
+    internal sealed record Secret(PdfPassword Password, string[] Before, string[] Prefixes, string[] After);
 
     /// <summary>What stands in for qpdf's message when it holds the password (qpdf repeats an argument it does not
     /// recognize), so the message never reaches an exception, the log or a notification.</summary>
@@ -402,7 +402,18 @@ public sealed class Qpdf
         // If it names none, each input is asked about a password.
         foreach (var input in named is null ? inputs : [named])
         {
-            if (await RequiresPasswordAsync(input, maxMemory, ct, opening).ConfigureAwait(false))
+            bool needsPassword;
+            try
+            {
+                needsPassword = await RequiresPasswordAsync(input, maxMemory, ct, opening).ConfigureAwait(false);
+            }
+            catch (PdfException e)
+            {
+                // Too slow, or too much memory, for that input alone: among several, it is the one to name.
+                throw ForInput(inputs, input, e);
+            }
+
+            if (needsPassword)
             {
                 throw ForInput(inputs, input, opening is null
                     ? new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage)
@@ -424,6 +435,9 @@ public sealed class Qpdf
 
     /// <summary>A timeout instead of <see cref="TimeoutFor"/>, for tests.</summary>
     internal TimeSpan? Timeout { get; init; }
+
+    /// <summary>A timeout instead of the minute the password check after a failure gets, for tests.</summary>
+    internal TimeSpan? PasswordProbeTimeout { get; init; }
 
     internal const string ToolFailedMessage =
         "Flevert's PDF tool stopped on this PDF without finishing: the PDF may be damaged, or made to crash PDF tools.";
@@ -459,11 +473,12 @@ public sealed class Qpdf
     private async Task<bool> RequiresPasswordAsync(string inputPath, ulong maxMemory, CancellationToken ct, PdfPassword? password = null)
     {
         var secret = password is null ? null : new Secret(password, [], ["--password="], []);
-        var probe = await RunWithLinesAsync(["--requires-password"], [inputPath], ProbeTimeout, maxMemory, ct, secret).ConfigureAwait(false);
+        var probe = await RunWithLinesAsync(["--requires-password"], [inputPath], PasswordProbeTimeout ?? ProbeTimeout, maxMemory, ct, secret)
+            .ConfigureAwait(false);
         return probe.ExitCode == ExitPasswordRequired;
     }
 
-    private async Task<ExternalToolResult> RunWithLinesAsync(
+    internal async Task<ExternalToolResult> RunWithLinesAsync(
         string[] options, string[] paths, TimeSpan timeout, ulong maxMemory, CancellationToken ct, Secret? secret = null,
         Action<string>? outputLine = null)
     {

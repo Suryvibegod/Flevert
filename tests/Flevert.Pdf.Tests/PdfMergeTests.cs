@@ -198,6 +198,60 @@ public sealed class PdfMergeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_merge_past_the_page_limit_after_an_input_changed_is_refused_in_the_words_of_a_merge()
+    {
+        // 1 000 + 1 000 pages pass the count; then b.pdf changes (a file on a share, say) to 1 500 pages before qpdf
+        // reads it again. The merged PDF would have 2 500 pages: it is counted again and refused, and nothing is kept.
+        string[] inputs = [Pdf("a.pdf", Enumerable.Repeat(100, 1_000).ToArray()), Pdf("b.pdf", Enumerable.Repeat(200, 1_000).ToArray())];
+        var op = new PdfMerge(Qpdf.NextToApp)
+        {
+            AfterCounting = input =>
+            {
+                if (input == inputs[1])
+                    WriteWidths(input, Enumerable.Repeat(200, 1_500).ToArray());
+                return Task.CompletedTask;
+            },
+        };
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => op.RunAsync(inputs, null, CancellationToken.None));
+
+        Assert.Equal(PdfError.TooManyPages, ex.Error);
+        Assert.Equal("Together these PDFs have more than 2000 pages; Flevert makes PDFs of at most 2000.", ex.Message);
+        Assert.Equal(["a.pdf", "b.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
+    public async Task A_pdf_that_cannot_be_read_for_the_signature_check_is_named()
+    {
+        string[] inputs = [Pdf("a.pdf", 100), Pdf("b.pdf", 200)];
+        // Once its pages are counted, b.pdf is held by another program that lets nobody read it.
+        FileStream? held = null;
+        var op = new PdfMerge(Qpdf.NextToApp)
+        {
+            AfterCounting = input =>
+            {
+                if (input == inputs[1])
+                    held = new FileStream(input, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return Task.CompletedTask;
+            },
+        };
+
+        try
+        {
+            var ex = await Assert.ThrowsAsync<BatchInputException>(() => op.RunAsync(inputs, null, CancellationToken.None));
+
+            Assert.Equal(inputs[1], ex.InputPath);
+            Assert.IsType<IOException>(ex.InnerException, exactMatch: false);
+        }
+        finally
+        {
+            held?.Dispose();
+        }
+
+        Assert.Equal(["a.pdf", "b.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
     public async Task Works_on_pdfs_whose_folder_and_names_are_not_ascii_or_are_past_260_characters()
     {
         var folder = @"\\?\" + _dir.Path;
