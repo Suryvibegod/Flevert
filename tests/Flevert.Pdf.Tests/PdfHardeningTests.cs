@@ -124,6 +124,7 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         [("many-objects", "pdf.split-10mb")] = Ok, // 16 MB, but its one page alone is small
         [("bomb-image", "pdf.extract-images")] = Ok,
         [("bomb-image", "pdf.remove-blank-pages")] = Skipped, // its image of zeros draws a black page
+        [("signed", "pdf.remove-blank-pages")] = Skipped, // its signature field is an annotation, which keeps its page
     };
 
     // Remove metadata reads every object of the PDF twice, as qpdf's JSON and back (MetadataRemoval): real work that grows

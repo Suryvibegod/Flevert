@@ -40,6 +40,9 @@ internal static class PdfToolsWorker
     /// <summary>A square with more than this many dark pixels in a thousand holds a mark: 1.5%.</summary>
     internal const int MaxDarkPerThousand = 15;
 
+    /// <summary>The smallest square, in pixels: an 8 x 8 square needs one dark pixel to pass 1.5%.</summary>
+    private const double MinTilePixels = 8;
+
     /// <summary>A4 in points, portrait.</summary>
     internal const double A4Width = 595.28;
     internal const double A4Height = 841.89;
@@ -132,7 +135,8 @@ internal static class PdfToolsWorker
         var (left, top, right, bottom) = width > 2 * margin && height > 2 * margin
             ? (margin, margin, width - margin, height - margin)
             : (0, 0, width, height);
-        var tile = dpi * BlankTileCentimetres / 2.54;
+        // A page so large it is drawn at a fraction of a pixel per centimetre: squares of a few pixels, not of a fraction.
+        var tile = Math.Max(MinTilePixels, dpi * BlankTileCentimetres / 2.54);
         // Squares of about a centimetre that share out the area exactly: none is a sliver whose one speck counts for much.
         var columns = Math.Max(1, (int)Math.Round((right - left) / tile));
         var rows = Math.Max(1, (int)Math.Round((bottom - top) / tile));
