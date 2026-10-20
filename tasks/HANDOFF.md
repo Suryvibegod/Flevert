@@ -39,15 +39,43 @@ https://github.com/Suryvibegod/Flevert/releases/tag/v0.1.0 (latest, immutable). 
 
 Người dùng cần tự làm: bật 2FA cho tài khoản GitHub; tạo API key VirusTotal mới (key cũ đã nằm trong lịch sử chat); nếu muốn, báo dương tính giả cho DeepInstinct. Hai PR Dependabot (#1 Test SDK 18, #2 xunit runner 4) chờ xem xét theo RELEASING.
 
-## Sau v0.1.0
+## Việc đang làm: v0.2 (pdf), cập nhật 2026-10-20
 
-- Nhắc người dùng nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview, viết bài giới thiệu.
-- **v0.2 (pdf): đang làm.** Plan: [pdf/plan.md](pdf/plan.md) (Open Questions đã trả lời, đã kiểm qpdf/pdfium bản chính thức); việc tiếp theo là task chưa xong đầu tiên trong [pdf/todo.md](pdf/todo.md), bắt đầu T1 (fetch-deps).
+Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task: [pdf/todo.md](pdf/todo.md). Spec: [docs/specs/pdf.md](../docs/specs/pdf.md). ADR mới: 0007 (tiến độ trong file, output thư mục, N→1), 0008 (pdfium + qpdf, deps ghim hash).
+
+**Đã xong và đã gộp vào `main`** (mỗi task có test viết trước, thấy đỏ rồi mới xanh; build, format, ba project test xanh):
+- T1 `scripts/fetch-deps.ps1` + `scripts/deps.json` (pdfium chromium/8100, qpdf 12.4.2, giấy phép; ghim SHA256; CI/release/setup-dev gọi).
+- T2 `ExternalTool` (tiến trình con an toàn, job object kill-on-close, stdin, giới hạn output, timeout/hủy).
+- T3 `Qpdf` + `pdf.rotate-right/left/180` + menu `.pdf`; Flevert.Cli tham chiếu Flevert.Pdf.
+- T5 `IBatchOperation` (N→1, thứ tự tự nhiên `StrCmpLogicalW`, ghim cả lô) + `dev.join`.
+- T7 `OutputPath.WriteDirectoryAtomicallyAsync` (1→N) + tiến độ trong file ("page 37 of 200") + `dev.split`.
+- T9 `PdfDocument` (pdfium P/Invoke, khóa toàn cục, giới hạn 2 000 trang / 2 GB / 10 000 px).
+- T10 `pdf.to-jpg`, `pdf.to-png` (đã có trong menu PDF: Convert > JPG pages / PNG pages).
+
+**Đang làm dở:** T11a (phần nền của ảnh → PDF): `JpegSegments` (bỏ EXIF/XMP/IPTC/COM khỏi JPEG không giải mã lại) đã commit; `PdfBuilder` (tạo PDF bằng pdfium) dở. Nhánh trên GitHub: **`wip/t11a-images-to-pdf`**. Đọc message commit `wip:` mới nhất của nhánh để biết test nào đỏ, việc còn lại; xong thì gộp vào `main` (cherry-pick, lịch sử thẳng) và xóa nhánh.
+
+**Việc tiếp theo, theo thứ tự:**
+1. Hoàn thành T11a trên nhánh trên, rồi T11 (thao tác `pdf.from-images`, menu ảnh `Combine into PDF`, dùng `IBatchOperation`).
+2. **Review ba góc bối cảnh trống (code-reviewer, security-auditor, doubt) cho T1–T10 chưa chạy**: chạy trước khi làm tiếp quá xa, reconcile vào bảng trong `pdf/todo.md` (quy trình bắt buộc).
+3. T4 đóng gói qpdf + pdfium vào bộ cài **kèm notices**. Từ T3, `dotnet publish` đã chép qpdf/pdfium vào thư mục publish nên **không được build bộ cài phát hành trước khi xong T4** (thiếu giấy phép).
+4. T6 merge, T8 split, T12 strip-metadata, T13 compress, T14 protect/unlock (đọc ghi chú: đường dẫn đã đi qua stdin `@-`, mật khẩu phải chung luồng đó), T15–T17 (tùy chọn), T18 hardening, T19 nâng cấp từ 0.1.0, T20 docs + `/ship` + phát hành theo RELEASING.
+
+**Cách làm đã dùng (nhanh, người dùng cho phép sinh agent thoải mái):** việc độc lập giao cho agent `general-purpose` với `isolation: worktree` (mỗi agent một worktree trong `.claude/worktrees/`, đã gitignore), prompt yêu cầu đọc CLAUDE.md, plan, todo, TDD đỏ→xanh, danh tính commit Suryvibegod, không push; agent xong thì cherry-pick commit của nó lên `main`, chạy lại ba project test, rồi xóa worktree và nhánh. Hai việc cùng sửa runner/Program.cs thì làm lần lượt.
+
+**Ghi chú kỹ thuật cho phiên sau:**
+- qpdf tự mở rộng ký tự đại diện trong đối số dòng lệnh (làm hỏng `\\?\` đường dẫn dài): đường dẫn đưa cho qpdf qua stdin `@-`; tùy chọn có `*`/`?` bị từ chối.
+- Một lần chạy cả bộ Image test, `FramesTests.An_animation_whose_expanded_frames_exceed_the_area_limit_is_refused_before_expanding` đỏ khi máy bận, chạy lại riêng xanh 2/2: theo dõi, nếu lặp lại thì điều tra (debugging-and-error-recovery).
+- `AGENTS.md` ở gốc repo là file người dùng tạo cho Codex, **chưa commit**, không đụng tới.
+- Các agent chạy thử UI có thể bật cửa sổ Flevert trên màn hình: báo người dùng trước.
+
+## Sau v0.2
+
+- Nhắc người dùng: bật 2FA GitHub, tạo API key VirusTotal mới, nộp đơn SignPath Foundation (https://signpath.org/apply), đặt ảnh social preview. Hai PR Dependabot (#1 Test SDK 18, #2 xunit runner 4) chờ xem xét theo RELEASING.
 - v0.3 (media): sau v0.2; quyết GPL hay LGPL ffmpeg (spec, Open Question 1) ở bước Plan.
 
 ## Dựng máy mới
 
-Người dùng (chủ repo) chỉ clone repo, mở Claude Code trong thư mục repo rồi gõ "làm tiếp đi". [CLAUDE.md](../CLAUDE.md) chỉ Claude chạy `scripts/setup-dev.ps1`: cài .NET 10 SDK cho riêng user nếu thiếu, nhắc cài/đăng nhập GitHub CLI; **chỉ trên máy chủ repo** (gh đăng nhập tài khoản ID 79949229) mới cài Inno Setup, đặt danh tính commit, sửa rule git rewrite hỏng, cài plugin agent-skills; rồi build và chạy test từng project. Các việc phát hành (tag, publish) chỉ chủ repo làm. Plugin cài giữa phiên chỉ nạp sau khi khởi động lại hoặc `/reload-plugins`; trong lúc đó đọc skill từ `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/`.
+Người dùng (chủ repo) chỉ clone repo, mở Claude Code trong thư mục repo rồi gõ "làm tiếp đi". Setup tải luôn pdfium/qpdf vào `deps/` (cần mạng; build Flevert.Pdf báo lỗi rõ nếu thiếu). [CLAUDE.md](../CLAUDE.md) chỉ Claude chạy `scripts/setup-dev.ps1`: cài .NET 10 SDK cho riêng user nếu thiếu, nhắc cài/đăng nhập GitHub CLI; **chỉ trên máy chủ repo** (gh đăng nhập tài khoản ID 79949229) mới cài Inno Setup, đặt danh tính commit, sửa rule git rewrite hỏng, cài plugin agent-skills; rồi build và chạy test từng project. Các việc phát hành (tag, publish) chỉ chủ repo làm. Plugin cài giữa phiên chỉ nạp sau khi khởi động lại hoặc `/reload-plugins`; trong lúc đó đọc skill từ `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/`.
 
 Lưu ý môi trường (đã gặp):
 - SDK cài cho riêng user: shell mở trước khi chạy setup không có `dotnet` trong PATH; đặt `$env:Path = "$env:LOCALAPPDATA\Microsoft\dotnet;$env:Path"; $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"`.
