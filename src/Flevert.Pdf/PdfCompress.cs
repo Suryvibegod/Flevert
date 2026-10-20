@@ -27,6 +27,11 @@ namespace Flevert.Pdf;
 /// which takes the time of reading and writing the file. The result says it was compressed only in part.
 /// </para>
 /// <para>
+/// A PDF qpdf had to repair is checked to open with the pages counted in the input (<see cref="PdfRepair"/>). qpdf 12.4.2
+/// writes no /Root for a PDF it found without cross-reference table or trailer, and cannot read such a file back when its
+/// objects are in object streams; that one is written again without object streams, its streams still compressed.
+/// </para>
+/// <para>
 /// Like every operation that writes a PDF, at most <see cref="PdfDocument.MaxPages"/> pages (counted first, walking the
 /// page tree), and a signed PDF gets a note that its signature is not valid in the output.
 /// </para>
@@ -38,10 +43,12 @@ public sealed class PdfCompress : IOperation
     /// <summary>The note on a PDF compressed without decoding its streams.</summary>
     internal const string PartlyNote = "Flevert compressed this PDF only in part: compressing it fully took too long.";
 
-    private static readonly string[] Options =
-        ["--object-streams=generate", "--compress-streams=y", "--recompress-flate", "--compression-level=9"];
+    private const string ObjectStreams = "--object-streams=generate";
+    private const string NoObjectStreams = "--object-streams=disable";
 
-    private static readonly string[] WithoutDecoding = [Qpdf.KeepStreamsAsTheyAre, "--object-streams=generate"];
+    private static readonly string[] Options = [ObjectStreams, "--compress-streams=y", "--recompress-flate", "--compression-level=9"];
+
+    private static readonly string[] WithoutDecoding = [Qpdf.KeepStreamsAsTheyAre, ObjectStreams];
 
     private readonly Qpdf _qpdf;
 
@@ -83,6 +90,15 @@ public sealed class PdfCompress : IOperation
                 // qpdf has exited; it writes its output anew, over what the stopped run left.
                 repaired = await _qpdf.TransformAsync(inputPath, temp, WithoutDecoding, token).ConfigureAwait(false);
                 partly = true;
+            }
+
+            // qpdf 12.4.2 writes no /Root for some PDFs it repaired, and then cannot find their catalog again inside object
+            // streams (PdfRepair): the same run without them, streams still compressed, gives a copy that opens.
+            if (repaired && await PdfRepair.CountWrittenAsync(_qpdf, temp, token).ConfigureAwait(false) is null)
+            {
+                var options = partly ? WithoutDecoding : Options;
+                await _qpdf.TransformAsync(inputPath, temp, [.. options.Select(o => o == ObjectStreams ? NoObjectStreams : o)], token,
+                    partly ? null : FullRunTimeoutFor(length)).ConfigureAwait(false);
             }
 
             await PdfRepair.CheckAsync(_qpdf, repaired, pages, temp, token).ConfigureAwait(false);

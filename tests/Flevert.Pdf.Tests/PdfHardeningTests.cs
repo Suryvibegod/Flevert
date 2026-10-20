@@ -34,9 +34,8 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         var memory = nameof(PdfError.NeedsTooMuchMemory);
         var encryption = nameof(PdfError.UnsupportedEncryption);
         var damaged = nameof(PdfError.DamagedPage);
-        // Compress packs the objects of a PDF without a trailer into object streams, and qpdf then cannot read its own
-        // output (PdfRepair). A small PDF gets no smaller, and is skipped unless qpdf repaired it (cycle-self-reference).
-        var repair = nameof(PdfError.RepairFailed);
+        // Compress: a small PDF gets no smaller, and is skipped unless qpdf repaired it (cycle-self-reference, and the two
+        // without a trailer, which it writes without object streams: PdfCompress).
         // fixture: rotate, split, merge, to-png and to-jpg (the worker), compress, remove metadata, protect
         (string Fixture, string Rotate, string Split, string Merge, string Render, string Compress, string Strip, string Protect)[] table =
         [
@@ -57,8 +56,8 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
             ("page-zero", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
             ("page-inverted", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
             ("xref-wrong-offsets", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
-            ("xref-missing", Ok, Ok, Ok, notPdf, repair, Ok, Ok),
-            ("truncated", Ok, Ok, Ok, notPdf, repair, Ok, Ok),
+            ("xref-missing", Ok, Ok, Ok, notPdf, Ok, Ok, Ok),
+            ("truncated", Ok, Ok, Ok, notPdf, Ok, Ok, Ok),
             ("startxref-past-end", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
             ("not-pdf-png", notPdf, notPdf, notPdf, notPdf, notPdf, notPdf, notPdf),
             ("not-pdf-zip", notPdf, notPdf, notPdf, notPdf, notPdf, notPdf, notPdf),

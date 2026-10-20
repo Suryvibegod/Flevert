@@ -116,6 +116,30 @@ public sealed class PdfCompressTests : IDisposable
         await AssertValid(result.Output!);
     }
 
+    [Theory]
+    [InlineData("xref-missing")]
+    [InlineData("truncated")]
+    public async Task A_pdf_without_cross_reference_table_or_trailer_is_repaired_into_a_copy_that_opens(string fixture)
+    {
+        // qpdf 12.4.2 repairs these but writes no /Root when it packs them into object streams (PdfRepair): Compress
+        // writes them again without object streams, still compressing their streams.
+        var damaged = MaliciousPdf.Write(fixture, _dir.Combine("hỏng.pdf"));
+        var pages = await Qpdf.NextToApp.CountPagesAsync(damaged, CancellationToken.None);
+        using var logs = new TempDir();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op(), [damaged], null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal(PdfRepair.RepairedNote, result.Note);
+        Assert.Equal(pages, await Qpdf.NextToApp.CountPagesAsync(result.Output!, CancellationToken.None));
+        // Its trailer still has no /Root (qpdf --check calls it damaged), which readers repair as qpdf and pdfium do.
+        using var pdf = PdfDocument.Open(result.Output!);
+        Assert.Equal(pages, pdf.PageCount);
+        for (var page = 0; page < pages; page++)
+            pdf.Render(page, 72);
+    }
+
     [Fact]
     public async Task The_runner_reports_an_already_compact_pdf_as_skipped_not_failed()
     {

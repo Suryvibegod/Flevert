@@ -29,19 +29,25 @@ internal static class PdfRepair
     {
         if (!repaired)
             return;
-        int written;
-        try
-        {
-            written = await qpdf.CountPagesAsync(outputPath, ct).ConfigureAwait(false);
-        }
-        catch (PdfException e) when (e.Error == PdfError.NotPdf)
-        {
-            throw new PdfException(PdfError.RepairFailed, UnreadableMessage, e);
-        }
+        var written = await CountWrittenAsync(qpdf, outputPath, ct).ConfigureAwait(false)
+            ?? throw new PdfException(PdfError.RepairFailed, UnreadableMessage);
 
         if (written != pages)
             throw new PdfException(PdfError.RepairFailed, MissingPagesMessage);
         OutputNote.Add(RepairedNote);
+    }
+
+    /// <summary>The pages qpdf counts in the output it wrote, or <c>null</c> when it cannot read that output.</summary>
+    public static async Task<int?> CountWrittenAsync(Qpdf qpdf, string outputPath, CancellationToken ct)
+    {
+        try
+        {
+            return await qpdf.CountPagesAsync(outputPath, ct).ConfigureAwait(false);
+        }
+        catch (PdfException e) when (e.Error == PdfError.NotPdf)
+        {
+            return null;
+        }
     }
 
     /// <summary>The note alone, for an output whose pages cannot be counted again (an encrypted one) or are counted already.</summary>
