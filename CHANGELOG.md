@@ -4,6 +4,18 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+Video and audio: convert, compress to a size that goes through e-mail, and take the sound out of a video, on your PC.
+
+### Added
+
+- Right-click a video (`.mp4`, `.mov`, `.m4v`, `.mkv`, `.webm`, `.avi`, `.wmv`, `.3gp`, `.mts`, `.m2ts`) and choose **Flevert**:
+  - **Convert** to MP4, MOV or MKV (H.264 and AAC, which play everywhere), WEBM (VP9 and Opus), or GIF (at most 480 pixels and the first 30 seconds). Phone videos come out upright, and iPhone HDR videos keep their colours.
+  - **Compress**: Light, Balanced or Strong, or **Under 10 MB**, **Under 25 MB** or **Under 100 MB**, which are always smaller than that size, or say the video is too long to fit.
+  - **Extract audio** as MP3 or M4A (an AAC sound is copied as it is).
+- Right-click an audio file (`.mp3`, `.wav`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.opus`, `.wma`, `.aiff`, `.aif`) and choose **Flevert > Convert** to MP3, M4A, WAV, FLAC, OGG or Opus.
+- Video and audio keep their title, artist and recording date, never the place they were recorded. The progress window shows how far the current file is, as a percentage.
+- The installer includes ffmpeg, which is free software under the GNU GPL: each release has its complete source as `ffmpeg-source-<build>.tar` beside the setup.
+
 ## [0.2.0] - 2026-10-20
 
 PDFs: turn photos into one, and convert, merge, split, rotate, compress or password-protect PDF files.

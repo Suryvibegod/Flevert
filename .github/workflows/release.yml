@@ -130,8 +130,17 @@ jobs:
         with:
           subject-path: installer/Flevert-Setup-*.exe
 
+  ffmpeg-source:
+    # The complete corresponding source of the bundled ffmpeg (GPL v3, section 6), attached beside the installer that
+    # carries it; the job also stops the release if installer/notices/ffmpeg lacks a licence the build's libraries carry.
+    uses: ./.github/workflows/ffmpeg-source.yml
+    with:
+      keep-source: true
+    permissions:
+      contents: read
+
   release:
-    needs: attest
+    needs: [attest, ffmpeg-source]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -144,6 +153,10 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: installer
+          path: installer
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ffmpeg-source
           path: installer
       - name: Write the release notes
         # This version's CHANGELOG section, then how to check the download before "Run anyway" (unsigned build).
@@ -163,6 +176,10 @@ jobs:
              \`\`\`
              gh attestation verify Flevert-Setup-$version.exe --repo $GITHUB_REPOSITORY --signer-workflow $GITHUB_REPOSITORY/.github/workflows/release.yml --source-ref refs/tags/$TAG --source-digest $GITHUB_SHA --deny-self-hosted-runners
              \`\`\`
+
+          ## Source of the bundled ffmpeg
+
+          Flevert runs ffmpeg, which is free software under the GNU GPL version 3, as a separate program. \`$(ls installer/ffmpeg-source-*.tar | xargs -n1 basename)\` below is its complete corresponding source: FFmpeg, every library built into it, and the scripts that built it.
           EOF
           cat notes.md
       - name: Draft the release

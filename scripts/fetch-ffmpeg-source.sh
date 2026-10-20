@@ -1,0 +1,149 @@
+#!/bin/bash
+# Writes the complete corresponding source of the ffmpeg build Flevert ships (GPL v3, section 6), and the licence files
+# of every library built into it, from the pins under "ffmpegSource" in scripts/deps.json. docs/adr/0009-ffmpeg-gpl-build.md.
+#
+#   scripts/fetch-ffmpeg-source.sh <output folder>
+#
+# Linux, with bash, git, jq, xz, tar and Docker: the release workflow runs it on ubuntu-latest, a maintainer on WSL. It
+# builds BtbN's tooling image from the pinned commit of BtbN's repository and runs, in it, BtbN's own download.sh: the
+# script BtbN fills its build cache with, so every library is fetched exactly as the build fetched it (git commits, SVN
+# revisions, submodules, vendored Rust crates). Nothing is taken from a moving tag.
+#
+# Writes into <output folder>, which must not exist:
+#   ffmpeg-source-<tag>.tar   FFmpeg at its commit, BtbN's build scripts and patches at theirs, one tar.xz per library
+#                             the build enables, and README.txt saying how they fit together
+#   licences/<stage>-<file>   the licence files of FFmpeg and of each library, named after its stage in scripts.d, for
+#                             installer/notices/ffmpeg (copy them there and commit; scripts/write-notices.ps1 puts them
+#                             in THIRD-PARTY-NOTICES.txt under those names)
+#   licences-missing.txt      the libraries with no licence file at their top, whose terms a person writes out there
+set -euo pipefail
+shopt -s nullglob
+
+if [[ $# -ne 1 ]]; then
+    echo "Usage: $0 <output folder>" >&2
+    exit 2
+fi
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+OUT="$1"
+if [[ -e "$OUT" ]]; then
+    echo "$OUT exists: give a new folder." >&2
+    exit 2
+fi
+
+pin() { jq -er ".ffmpegSource.$1" "$ROOT/scripts/deps.json"; }
+TAG="$(pin tag)"
+BUILDS="$(pin builds)"
+BUILDS_COMMIT="$(pin buildsCommit)"
+TARGET="$(pin target)"
+VARIANT="$(pin variant)"
+ADDIN="$(pin addin)"
+FFMPEG="$(pin ffmpeg)"
+FFMPEG_COMMIT="$(pin ffmpegCommit)"
+FFMPEG_VERSION="$(pin ffmpegVersion)"
+
+WORK="$(mktemp -d)"
+trap 'rm -rf -- "$WORK"' EXIT
+mkdir -p "$OUT/licences" "$WORK/source/libraries"
+
+# A shallow fetch of exactly one commit, which must be the one asked for: a server cannot hand over another.
+fetch_commit() { # <repository> <commit> <folder>
+    git init -q "$3"
+    git -C "$3" fetch -q --depth=1 "$1" "$2"
+    local fetched
+    fetched="$(git -C "$3" rev-parse FETCH_HEAD)"
+    if [[ "$fetched" != "$2" ]]; then
+        echo "$1 gave $fetched for $2." >&2
+        exit 1
+    fi
+    git -C "$3" -c advice.detachedHead=false checkout -q FETCH_HEAD
+}
+
+echo "BtbN/FFmpeg-Builds at $BUILDS_COMMIT ($TAG)"
+fetch_commit "$BUILDS" "$BUILDS_COMMIT" "$WORK/builds"
+git -C "$WORK/builds" archive --format=tar --prefix=FFmpeg-Builds/ HEAD | xz -T0 > "$WORK/source/FFmpeg-Builds-$BUILDS_COMMIT.tar.xz"
+
+echo "FFmpeg at $FFMPEG_COMMIT ($FFMPEG_VERSION)"
+fetch_commit "$FFMPEG" "$FFMPEG_COMMIT" "$WORK/ffmpeg"
+git -C "$WORK/ffmpeg" archive --format=tar --prefix=ffmpeg/ HEAD | xz -T0 > "$WORK/source/ffmpeg-$FFMPEG_VERSION.tar.xz"
+for file in COPYING.GPLv3 COPYING.GPLv2 COPYING.LGPLv3 COPYING.LGPLv2.1 LICENSE.md; do
+    cp "$WORK/ffmpeg/$file" "$OUT/licences/ffmpeg-$file"
+done
+
+# The tooling image of that commit, under the name download.sh looks for (util/vars.sh: REGISTRY_OVERRIDE and
+# GITHUB_REPOSITORY choose it), so no image is pulled by a moving tag.
+export REGISTRY_OVERRIDE=flevert.local GITHUB_REPOSITORY=btbn-pinned
+docker build -q -t "flevert.local/btbn-pinned/base:latest" "$WORK/builds/images/base" > /dev/null
+echo "Running BtbN's download.sh"
+(cd "$WORK/builds" && ./download.sh > "$WORK/download.log" 2>&1) || { tail -n 50 "$WORK/download.log" >&2; exit 1; }
+
+# The stages the asset's build enables, as BtbN's generate.sh decides it: each script's ffbuild_enabled, for this target,
+# variant and addin. download.sh fetched every stage of every target; only these are part of the build.
+STAGES="$(cd "$WORK/builds" && bash -c '
+    set -e
+    source util/vars.sh "$1" "$2" "$3" > /dev/null
+    for STAGE in scripts.d/*.sh scripts.d/*/*.sh; do
+        (
+            SELF="$STAGE"
+            STAGENAME="$(basename "$STAGE" | sed "s/.sh$//")"
+            source util/dl_functions.sh
+            source "$STAGE"
+            ffbuild_enabled || exit 0
+            if [[ -n "$(ffbuild_dockerdl)" ]]; then echo "$STAGENAME"; fi
+        )
+    done' stages "$TARGET" "$VARIANT" "$ADDIN")"
+
+missing=()
+for STAGE in $STAGES; do
+    archive="$WORK/builds/.cache/downloads/$STAGE.tar.xz"
+    if [[ ! -e "$archive" ]]; then
+        echo "download.sh wrote nothing for $STAGE." >&2
+        exit 1
+    fi
+    cp -L "$archive" "$WORK/source/libraries/$STAGE.tar.xz"
+    # Licence files at the top of the library or one folder down (stages that fetch into a named folder), never from
+    # its history or its tests.
+    mapfile -t licences < <(tar -tJf "$archive" | grep -iE '^(\./)?([^/]+/)?(COPYING|COPYRIGHT|LICEN[CS]E|NOTICE|UNLICENSE)[^/]*$' \
+        | grep -v '/\.git/' || true)
+    if [[ ${#licences[@]} -eq 0 ]]; then
+        # Some keep their licence only in their source files' headers (nv-codec-headers): a person reads those.
+        missing+=("$STAGE")
+        continue
+    fi
+    mkdir -p "$WORK/licence/$STAGE"
+    tar -xJf "$archive" -C "$WORK/licence/$STAGE" "${licences[@]}"
+    for licence in "${licences[@]}"; do
+        # Flattened: lame/COPYING of stage 50-libmp3lame becomes 50-libmp3lame-lame-COPYING.
+        cp "$WORK/licence/$STAGE/$licence" "$OUT/licences/$STAGE-$(sed 's|^\./||; s|/|-|g' <<< "$licence")"
+    done
+done
+
+cat > "$WORK/source/README.txt" <<EOF
+The complete corresponding source of the ffmpeg build in Flevert (ffmpeg\\ in its install folder):
+$(jq -r '.items[] | select(.name == "ffmpeg") | .url' "$ROOT/scripts/deps.json")
+
+FFmpeg-Builds-$BUILDS_COMMIT.tar.xz
+    BtbN's build scripts and patches at the commit of release $TAG, which built that asset:
+    ./build.sh $TARGET $VARIANT $ADDIN
+ffmpeg-$FFMPEG_VERSION.tar.xz
+    FFmpeg at commit $FFMPEG_COMMIT, the source build.sh compiles.
+libraries/<stage>.tar.xz
+    Each library the build enables, as BtbN's download.sh fetched it for that stage of scripts.d. build.sh reads them
+    from .cache/downloads/<stage>.tar.xz.
+
+Written by scripts/fetch-ffmpeg-source.sh in Flevert's repository: https://github.com/Suryvibegod/Flevert
+EOF
+
+if [[ ${#missing[@]} -gt 0 ]]; then
+    printf '%s\n' "${missing[@]}" > "$OUT/licences-missing.txt"
+    echo "No licence file at the top of: ${missing[*]} (listed in $OUT/licences-missing.txt): write out their terms by hand." >&2
+fi
+
+tar -cf "$OUT/ffmpeg-source-$TAG.tar" -C "$WORK/source" .
+size=$(stat -c %s "$OUT/ffmpeg-source-$TAG.tar")
+echo "$OUT/ffmpeg-source-$TAG.tar: $((size / 1000000)) MB, $(wc -w <<< "$STAGES") libraries"
+# GitHub refuses a release asset of 2 GiB or more.
+if (( size >= 2 * 1024 * 1024 * 1024 )); then
+    echo "Too large for one GitHub release asset." >&2
+    exit 1
+fi

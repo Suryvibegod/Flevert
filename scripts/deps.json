@@ -69,6 +69,18 @@
         "bin/avutil-60.dll", "bin/swresample-6.dll", "bin/swscale-9.dll", "LICENSE.txt"]
     }
   ],
+  "ffmpegSource": {
+    "comment": "What scripts/fetch-ffmpeg-source.sh needs to write the complete corresponding source of the ffmpeg build above (GPL v3): the commit of BtbN's build scripts behind the release tag, the target, variant and addin of the asset, and the FFmpeg commit its name ends in. Change these with the ffmpeg item. docs/adr/0009-ffmpeg-gpl-build.md",
+    "tag": "autobuild-2026-09-30-13-08",
+    "builds": "https://github.com/BtbN/FFmpeg-Builds",
+    "buildsCommit": "6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b",
+    "target": "win64",
+    "variant": "gpl-shared",
+    "addin": "8.1",
+    "ffmpeg": "https://github.com/FFmpeg/FFmpeg",
+    "ffmpegCommit": "29e619e767cde9045a75c29bc9a8278ae7b3a98b",
+    "ffmpegVersion": "n8.1.3-9-g29e619e767"
+  },
   "notices": [
     {
       "title": "PDFium chromium/8100, as built by bblanchon/pdfium-binaries",
@@ -106,8 +118,8 @@
       "title": "FFmpeg 8.1.3 (n8.1.3-9-g29e619e767), as built by BtbN/FFmpeg-Builds (autobuild-2026-09-30-13-08, win64-gpl-shared)",
       "files": ["ffmpeg\\ffmpeg.exe", "ffmpeg\\ffprobe.exe", "ffmpeg\\avcodec-62.dll", "ffmpeg\\avdevice-62.dll", "ffmpeg\\avfilter-11.dll",
         "ffmpeg\\avformat-62.dll", "ffmpeg\\avutil-60.dll", "ffmpeg\\swresample-6.dll", "ffmpeg\\swscale-9.dll"],
-      "note": "FFmpeg runs as a separate program. It and the libraries built into it are distributed under the GNU General Public License version 3; every Flevert release publishes their complete corresponding source as ffmpeg-source-autobuild-2026-09-30-13-08.zip.",
-      "licences": ["deps/ffmpeg/LICENSE.txt"]
+      "note": "FFmpeg runs as a separate program. It and the libraries built into it are distributed under the GNU General Public License version 3; every Flevert release publishes their complete corresponding source as ffmpeg-source-autobuild-2026-09-30-13-08.tar. The licences of FFmpeg and of each library follow, named after the stage of BtbN's build scripts that builds it.",
+      "licences": ["deps/ffmpeg/LICENSE.txt", "installer/notices/ffmpeg/*"]
     }
   ]
 }
