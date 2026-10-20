@@ -8,7 +8,7 @@ is sharp at every DPI. Also writes the Fluent licence beside them (THIRD-PARTY-N
 
 Usage, from the repository root, in a throw-away virtual environment outside the repository:
     python -m venv %TEMP%\flevert-icons
-    %TEMP%\flevert-icons\Scripts\python -m pip install resvg-py==0.5.0 pillow==13.0.0
+    %TEMP%\flevert-icons\Scripts\python -m pip install --require-hashes --only-binary=:all: -r scripts/make-menu-icons.requirements.txt
     %TEMP%\flevert-icons\Scripts\python -I scripts/make-menu-icons.py
 """
 import hashlib
@@ -52,7 +52,7 @@ ICONS = [
     ("draw_text", "filled"),               # Add watermark…
     ("layout_column_two", "filled"),       # Print layout
     ("page_fit", "filled"),                # Fit pages to A4
-    ("layer", "filled"),                   # Flatten forms and comments
+    ("layer", "filled"),                   # Lock filled forms
     ("cut", "filled"),                     # Split by size
     ("image_multiple", "filled"),          # Extract images
 ]
