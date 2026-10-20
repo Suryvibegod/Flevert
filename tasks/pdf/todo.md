@@ -345,7 +345,9 @@ Ba reviewer bối cảnh trống, chỉ đọc, trên nhánh `t11a` (JpegSegment
 ### Checkpoint 4
 - [ ] Review ba góc cho T12–T14 (trọng tâm: mật khẩu); reconcile
 
-## Giai đoạn 5: tùy chọn (bỏ được nếu không kịp)
+## Giai đoạn 5: tùy chọn → chuyển sang v0.2.1
+
+Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; làm ở v0.2.1, dùng lại tính năng có sẵn của qpdf/pdfium và thư viện mở giấy phép hợp MIT (CLAUDE.md, "Reuse before writing").
 
 ### T15: Spike compress-sharing
 - [ ] Thử trên 3 PDF scan (sinh): thay ảnh bằng pdfium, lưu, qpdf nén → nhỏ hơn ≥ 40%, render vẫn đọc được; ghi kết quả; quyết làm hay bỏ

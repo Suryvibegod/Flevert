@@ -51,3 +51,7 @@ Rủi ro cao làm sớm: T2 (tiến trình con, hủy, job object), T5 (đổi r
 ## Phạm vi mỗi task
 
 Mỗi task: test trước (thấy đỏ), code, chạy thật (bản build + menu khi có menu), `dotnet format`, commit nguyên tử. Review ba góc sau mỗi giai đoạn (checkpoint), không chỉ cuối cùng. Chi tiết và tiêu chí nghiệm thu: [todo.md](todo.md).
+
+## Phạm vi phát hành (2026-10-21)
+
+v0.2.0 gồm T1–T14, T18–T20 (và các nhóm sửa review). T15–T17 (compress-sharing, reverse, repair, extract-text, extract-images) chuyển sang v0.2.1 theo đề xuất được người dùng duyệt, để phát hành sớm hơn.

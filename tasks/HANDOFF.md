@@ -58,8 +58,10 @@ Review ba góc cho T1–T10 đã chạy (bảng "Review vòng 1" trong [pdf/todo
 
 **Việc tiếp theo, theo thứ tự:**
 1. Đang làm (agent): T12 strip-metadata + T13 compress, T14 protect/unlock + hộp thoại mật khẩu. T9b (pdfium trong tiến trình `flevert.exe pdf-worker`, ADR-0008 mục "Reading untrusted PDFs in a worker") đã xong.
-2. T4 (phần còn lại sau F4: check-location, `test-installer.ps1`), T17b còn: kiểm tay chọn lẫn JPG + HEIC trong Explorer thật, README bảng menu; T15–T17 tùy chọn; T18 hardening; T19 nâng cấp từ 0.1.0.
+2. T4 (phần còn lại sau F4: check-location, `test-installer.ps1`), T17b còn: kiểm tay chọn lẫn JPG + HEIC trong Explorer thật, README bảng menu; T18 hardening; T19 nâng cấp từ 0.1.0.
 3. Trước T20: verify một lần (chạy thật + ba review + reconcile + quét thông tin cá nhân), rồi phát hành theo đúng từng bước của RELEASING (dọn repo, xóa dấu vết bàn giao).
+
+**Đã quyết (2026-10-21):** v0.2 phát hành không kèm T15–T17 (nén ảnh scan, đảo trang, sửa PDF, rút chữ/ảnh): chuyển sang v0.2.1. Kiểm cuối trước phát hành chỉ xét thay đổi từ `v0.1.0` (RELEASING bước 4).
 
 **Đã quyết (2026-10-21):** chấp nhận license Visual Studio Community; Flevert giữ 3 DLL MSVC runtime qpdf dùng (ADR-0008 Consequences).
 
