@@ -4,7 +4,9 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-PDFs: turn photos into one, and convert, merge, split, rotate, compress or password-protect PDF files.
+## [0.2.0] - 2026-10-20
+
+PDFs: turn photos into one, and convert, merge, split, rotate, compress or password-protect PDF files. Flevert is now called **Flevert**: setup moves a Flevert 0.1.0 install over, choices included.
 
 ### Added
 
@@ -35,6 +37,8 @@ PDFs: turn photos into one, and convert, merge, split, rotate, compress or passw
 
 - The TIFF issue listed for 0.1.0 remains: Flevert still bundles ImageMagick 7.1.2-33 ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity).
 - Releases are still not code-signed, so Windows Smart App Control may block them (see the README).
+- On slow PCs, very heavy scanned pages (JPEG 2000 or JBIG2) may be refused as taking too long to convert to pictures.
+- Rotate, merge and split make a new PDF, so a digital signature in the original is not valid in the result: Flevert says so when it happens.
 
 ## [0.1.0] - 2026-10-20
 
@@ -63,5 +67,6 @@ The first release: pictures, and an installer.
 - A specially crafted TIFF file can make the bundled ImageMagick 7.1.2-33 overflow its stack ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity): Flevert then closes, and the rest of that batch is not converted. No code runs. It will be fixed by updating once a Magick.NET release includes ImageMagick 7.1.2-34.
 - Windows Smart App Control may block this unsigned release (see the README).
 
-[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Suryvibegod/Flevert/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Suryvibegod/Flevert/releases/tag/v0.1.0
