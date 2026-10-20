@@ -28,7 +28,8 @@ internal static partial class MediaJob
 
     /// <summary>
     /// The options that replace the input's metadata by the tags Flevert keeps: no GPS, no chapters, the main audio's
-    /// language when the file names one.
+    /// language when the file names one. A tag the file does not have is taken from <paramref name="audio"/>, as Ogg and
+    /// Opus files keep theirs on the stream; written as the file's tags, every muxer puts them where its players look.
     /// </summary>
     public static IEnumerable<string> MetadataOptions(MediaInfo info, AudioTrack? audio)
     {
@@ -39,7 +40,9 @@ internal static partial class MediaJob
         foreach (var name in KeptTags)
         {
             // A value is one argument, never parsed by a shell; a null character would end it early, so it is left out.
-            if (!info.Tags.TryGetValue(name, out var value) || value.Length == 0 || value.Contains('\0', StringComparison.Ordinal))
+            if (!info.Tags.TryGetValue(name, out var value) && audio?.Tags.TryGetValue(name, out value) != true)
+                continue;
+            if (value is not { Length: > 0 } || value.Contains('\0', StringComparison.Ordinal))
                 continue;
             yield return "-metadata";
             yield return $"{name}={Cut(value)}";

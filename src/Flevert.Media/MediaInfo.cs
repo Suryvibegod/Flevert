@@ -68,7 +68,7 @@ public sealed record MediaInfo(
                         case "audio":
                             audio.Add(new AudioTrack((int)index, Text(stream, "codec_name") ?? "", (int)(Integer(stream, "channels") ?? 0),
                                 (int)(Number(stream, "sample_rate") ?? 0), (long?)Number(stream, "bit_rate"), Disposition(stream, "default"),
-                                Text(Property(stream, "tags"), "language")));
+                                Text(Property(stream, "tags"), "language"), ReadTags(Property(stream, "tags"))));
                             break;
                     }
                 }
@@ -174,4 +174,6 @@ public sealed record VideoTrack(int Index, string Codec, int Width, int Height, 
 }
 
 /// <param name="Language">The ISO 639-2 code the file gives, such as <c>vie</c>, if any.</param>
-public sealed record AudioTrack(int Index, string Codec, int Channels, int SampleRate, long? BitRate, bool IsDefault, string? Language);
+/// <param name="Tags">The stream's own metadata, keys in lower case: where Ogg, Opus and Vorbis files keep a song's title and artist.</param>
+public sealed record AudioTrack(
+    int Index, string Codec, int Channels, int SampleRate, long? BitRate, bool IsDefault, string? Language, IReadOnlyDictionary<string, string> Tags);

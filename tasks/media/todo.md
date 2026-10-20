@@ -21,8 +21,9 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 - Đã làm: `AudioConvert` (chung cho Convert audio và Extract audio, theo `AudioFormat`), `MediaJob` (tên output, metadata cho phép, `-fs`, đĩa trống, %). 10 test (`AudioToMp3Tests`); đối chứng âm: bỏ `MetadataOptions` thì test GPS đỏ (muxer MP3 ghi `location` thành ID3 TXXX). Giới hạn output: spec ghi ≤ 4 × input + 100 MB, nhưng MP3 ngắn → WAV hợp lệ lớn gấp ~10 lần, nên lấy max với 2 × cỡ ước lượng theo thời lượng; output chạm `-fs` (ffmpeg dừng và vẫn thoát 0) là lỗi, không phải file cụt. Bỏ chapter (`-map_chapters -1`). `FlevertExeTests` (chạy `flevert.exe run audio.to-mp3` thật; ffmpeg `BelowNormal`; giết `flevert.exe` → ffmpeg chết ≤ 3 s): **cần kiểm trên Windows**, bỏ qua trên Linux.
 
 ## T3: audio còn lại + extract
-- [ ] `audio.to-m4a/-wav/-flac/-ogg/-opus`, không đề xuất đích trùng nguồn; M4A từ AAC chép luồng
-- [ ] `video.extract-mp3/-m4a` (M4A chép luồng AAC, hash luồng trùng)
+- [x] `audio.to-m4a/-wav/-flac/-ogg/-opus`, không đề xuất đích trùng nguồn; M4A từ AAC chép luồng
+- [x] `video.extract-mp3/-m4a` (M4A chép luồng AAC, hash luồng trùng)
+- Đã làm: 23 test (`AudioConvertTests`): mỗi đích từ WAV (codec, thời lượng ±0,1 s, title), mọi đuôi nguồn đọc được qua whitelist demuxer (mp3, aac ADTS, m4a, flac, ogg, opus, wma/asf, aiff, aif), AAC → M4A và Extract M4A không mã hóa lại (MD5 của âm thanh giải mã trùng; MD5 gói khác nhau giữa ADTS và MP4 nên không dùng được), 5.1 → MP3 stereo, MKV hai audio lấy luồng default. Phát hiện: Ogg/Opus giữ tag trên luồng chứ không trên file, nên `AudioTrack.Tags` được đọc và dùng khi file không có tag đó (vẫn qua danh sách cho phép: GPS trên luồng cũng bị bỏ, có test). WAV > 4 GB: `-rf64 auto`.
 
 ## T4: video.to-mp4/mov/mkv/webm
 - [ ] H.264 CRF 20 `medium` `yuv420p` + AAC 192k, `+faststart`; xoay; HDR → SDR; bỏ GPS; MOV/MKV như MP4; WEBM VP9 + Opus

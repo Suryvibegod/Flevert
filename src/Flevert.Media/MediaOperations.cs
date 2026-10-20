@@ -12,6 +12,8 @@ public static class MediaOperations
 
     internal static IReadOnlyList<IMenuOperation> Create(Ffmpeg ffmpeg) =>
     [
-        new AudioConvert(AudioFormat.Mp3, ffmpeg),
+        new AudioConvert(AudioFormat.Mp3, ffmpeg, fromVideo: true),
+        new AudioConvert(AudioFormat.M4a, ffmpeg, fromVideo: true),
+        .. AudioFormat.All.Select(format => new AudioConvert(format, ffmpeg)),
     ];
 }
