@@ -70,7 +70,7 @@ Ba audit (cấu trúc/vệ sinh repo, quy trình phát hành, quyền riêng tư
 - [x] Tag `v0.1.0` → bản nháp → kiểm theo RELEASING: SHA256 `aa85392b…92e3` khớp; attestation đúng tag + commit `d429924`, runner GitHub (đối chứng commit sai: thất bại); `test-installer.ps1` trên file tải về PASS 9/9; runtime 10.0.13 (mới nhất, 13/10)
 - [x] Ảnh iPhone dọc có GPS: thay bằng test tự động (`PhonePortraitTests`, mọi thao tác); README dùng ảnh động minh họa thay cho ảnh chụp menu
 - [x] Quét: Defender sạch; VirusTotal 1/73 (DeepInstinct, học máy, nhãn chung "MALICIOUS"; mọi engine lớn sạch): dương tính giả thường gặp với bộ cài chưa ký, ghi minh bạch trong release notes
-- [x] Publish 2026-10-20 (người dùng ủy quyền): https://github.com/Suryvibegod/Flevert/releases/tag/v0.1.0, latest, immutable
+- [x] Kiểm phát hành 0.1.0 đạt (2026-10-20). Bản đầu tiên tải được trên GitHub Releases là 0.2.0.
 
 ## Sau v0.1.0 (test-engineer đề xuất)
 

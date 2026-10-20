@@ -10,8 +10,6 @@
 #define AppUrl "https://github.com/Suryvibegod/Flevert"
 ; Held by every running flevert.exe (AppMutex.cs).
 #define AppMutexName "Flevert.App"
-; Flevert was called Flevert until 0.2.0 (ADR-0009): setup waits for a running Flevert too, and moves its install over.
-#define OldName "Flevert"
 #ifndef SourceDir
   #define SourceDir "..\artifacts\publish"
 #endif
@@ -60,7 +58,7 @@ UninstallDisplayIcon={app}\{#AppExe}
 ; While flevert.exe runs, Setup and Uninstall ask to wait (OK) or give up (Cancel); with /SUPPRESSMSGBOXES they give up. A per-user
 ; uninstaller cannot remove files in use, and they would stay behind with no uninstaller left. Restart Manager only
 ; matters for a flevert.exe that could not open the mutex.
-AppMutex={#AppMutexName},{#OldName}.App
+AppMutex={#AppMutexName}
 CloseApplications=yes
 RestartApplications=no
 ; Tells Explorer the menu changed, also when only the uninstall safety net below could clean up.
@@ -242,9 +240,7 @@ begin
     Log('Ignoring /UPDATECHECK=' + Choice + ': only 0 and 1 are understood.');
     Choice := '';
   end;
-  // Flevert's file when Flevert has none yet (ADR-0009), so its "don't check" survives the rename.
-  if (Choice = '') and (LoadStringFromFile(ExpandConstant('{localappdata}\{#AppName}\update\state.json'), State) or
-    LoadStringFromFile(ExpandConstant('{localappdata}\{#OldName}\update\state.json'), State)) then
+  if (Choice = '') and LoadStringFromFile(ExpandConstant('{localappdata}\{#AppName}\update\state.json'), State) then
   begin
     if Pos('"enabled":false', State) > 0 then
       Choice := '0'
@@ -446,71 +442,6 @@ begin
     Result := LocationProblem(App);
 end;
 
-// Removes the menu keys flevert.exe install-menu writes for an app called Name. Mirrors MenuInstaller.Uninstall (with
-// WindowsRegistry's pruning of empty parents); InstallerScriptTests keeps the key names in step with the C# code.
-procedure SweepMenu(const Name: String);
-var
-  Names: TArrayOfString;
-  I: Integer;
-  Ext: String;
-begin
-  if RegGetSubkeyNames(HKCU, Classes + '\SystemFileAssociations', Names) then
-    for I := 0 to GetArrayLength(Names) - 1 do
-    begin
-      Ext := Classes + '\SystemFileAssociations\' + Names[I];
-      if RegKeyExists(HKCU, Ext + '\shell\' + Name) then
-      begin
-        RegDeleteKeyIncludingSubkeys(HKCU, Ext + '\shell\' + Name);
-        RegDeleteKeyIfEmpty(HKCU, Ext + '\shell');
-        RegDeleteKeyIfEmpty(HKCU, Ext);
-      end;
-    end;
-
-  if RegGetSubkeyNames(HKCU, Classes, Names) then
-    for I := 0 to GetArrayLength(Names) - 1 do
-      if Pos(Lowercase(Name + '.Menu'), Lowercase(Names[I])) = 1 then
-        RegDeleteKeyIncludingSubkeys(HKCU, Classes + '\' + Names[I]);
-end;
-
-// Flevert 0.1.0 (ADR-0009): the same AppId makes this an upgrade, but its menu, classic-menu marker, app data and
-// program folder carry the old name. Its classic-menu key becomes Flevert's before classic-menu on/off look at it; a key
-// without Flevert's marker is the user's own and stays as it is.
-procedure HandOverClassicMenu;
-begin
-  if RegValueExists(HKCU, ClassicMenuKey, '{#OldName}') then
-  begin
-    RegWriteStringValue(HKCU, ClassicMenuKey, ClassicMenuMarker, '1');
-    RegDeleteValue(HKCU, ClassicMenuKey, '{#OldName}');
-  end;
-end;
-
-// Deletes Dir with what it holds, unless Dir or a folder above it is a link: it could then be someone else's folder.
-procedure DeleteOldFolder(const Dir: String);
-begin
-  if DirExists(Dir) and (LinkOnPath(Dir) = '') then
-    if not DelTree(Dir, True, True, True) then
-      Log('Could not delete ' + Dir);
-end;
-
-// Once Flevert is in place, and Flevert's menu is gone: the app-data subfolders Flevert wrote (by name, as its
-// uninstaller would), and its program folder only when it holds Flevert's own program and uninstaller, never a folder
-// of that name someone else made.
-procedure RemoveFlevert;
-var
-  OldData, OldApp: String;
-begin
-  OldData := ExpandConstant('{localappdata}\{#OldName}');
-  DeleteOldFolder(OldData + '\logs');
-  DeleteOldFolder(OldData + '\pipes');
-  DeleteOldFolder(OldData + '\magick');
-  DeleteOldFolder(OldData + '\update');
-  if DirExists(OldData) and (LinkOnPath(OldData) = '') then
-    RemoveDir(OldData);
-  OldApp := ExpandConstant('{userpf}\{#OldName}');
-  if FileExists(OldApp + '\flevert.exe') and FileExists(OldApp + '\unins000.exe') then
-    DeleteOldFolder(OldApp);
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Started, MenuAdded: Boolean;
@@ -519,17 +450,12 @@ var
 begin
   if CurStep <> ssPostInstall then
     Exit;
-  HandOverClassicMenu;
   MenuAdded := RunFlevert('install-menu', Started, Code, Reason);
   if not MenuAdded then
   begin
     MenuFailed := True;
     ReportFailure('adding the right-click menu', Started, Code, Reason);
-  end
-  else
-    // Right away, so no new Flevert conversion starts from its menu and holds files RemoveFlevert deletes. A Flevert
-    // whose menu works stays when Flevert's could not be added (Smart App Control, say): running setup again moves it.
-    SweepMenu('{#OldName}');
+  end;
   // Applied both ways, so unticking it on an upgrade undoes it; off only ever removes the key flevert.exe created. Not
   // switched on without a menu to show: it would change every app's menu for nothing.
   if not ClassicMenuChosen then
@@ -546,8 +472,6 @@ begin
   else if not RunFlevert('update-check off', Started, Code, Reason) then
     ReportFailure('turning off the check for new versions (run "flevert.exe update-check off" in ' +
       ExpandConstant('{app}') + ' to try again)', Started, Code, Reason);
-  if MenuAdded then
-    RemoveFlevert;
 end;
 
 function GetCustomSetupExitCode: Integer;
@@ -586,10 +510,31 @@ end;
 
 // Safety net for uninstall: removes what flevert.exe uninstall-menu and classic-menu off would, in case flevert.exe cannot run
 // (blocked, damaged or deleted). A menu left pointing at a deleted flevert.exe is the worst thing to leave behind.
-// Mirrors ClassicMenu.Off for the classic menu; harmless when they already ran.
+// Mirrors MenuInstaller.Uninstall (with WindowsRegistry's pruning of empty parents) and ClassicMenu.Off; harmless when
+// they already ran. InstallerScriptTests keeps the key names in step with the C# code.
 procedure SweepRegistry;
+var
+  Names: TArrayOfString;
+  I: Integer;
+  Ext: String;
 begin
-  SweepMenu('{#AppName}');
+  if RegGetSubkeyNames(HKCU, Classes + '\SystemFileAssociations', Names) then
+    for I := 0 to GetArrayLength(Names) - 1 do
+    begin
+      Ext := Classes + '\SystemFileAssociations\' + Names[I];
+      if RegKeyExists(HKCU, Ext + '\shell\{#AppName}') then
+      begin
+        RegDeleteKeyIncludingSubkeys(HKCU, Ext + '\shell\{#AppName}');
+        RegDeleteKeyIfEmpty(HKCU, Ext + '\shell');
+        RegDeleteKeyIfEmpty(HKCU, Ext);
+      end;
+    end;
+
+  if RegGetSubkeyNames(HKCU, Classes, Names) then
+    for I := 0 to GetArrayLength(Names) - 1 do
+      if Pos(Lowercase('{#AppName}.Menu'), Lowercase(Names[I])) = 1 then
+        RegDeleteKeyIncludingSubkeys(HKCU, Classes + '\' + Names[I]);
+
   if RegValueExists(HKCU, ClassicMenuKey, ClassicMenuMarker) then
     RegDeleteKeyIncludingSubkeys(HKCU, ClassicMenuKey);
 end;
@@ -605,7 +550,4 @@ begin
   RunFlevert('uninstall-menu', Started, Code, Reason);
   RunFlevert('classic-menu off', Started, Code, Reason);
   SweepRegistry;
-  // A Flevert that setup kept because Flevert's menu failed (CurStepChanged) has no entry of its own in Installed apps.
-  SweepMenu('{#OldName}');
-  RemoveFlevert;
 end;

@@ -5,7 +5,9 @@ downloads it from its GitHub release, or copies the file given with -Path, into 
 and Administrators can change, and checks its SHA256 against the pin below before anyone runs it. Prints the path of
 the checked copy; the caller deletes its folder.
 
-After each release, pin that release's setup here (its URL and the SHA256 in its SHA256SUMS.txt).
+After each release, pin that release's setup here (its version and the SHA256 in its SHA256SUMS.txt). Until the
+first release is pinned there is nothing to upgrade from: -IsPinned prints False and test-installer.ps1 skips its upgrade
+scenario.
 
 .PARAMETER Path
 A copy downloaded earlier (no network). It is copied and checked like a download.
@@ -15,21 +17,33 @@ The folder to create for the copy; it must not exist yet. Defaults to a new fold
 
 .PARAMETER Sha256
 The expected hash; defaults to the pin. Tests pass their own file's.
+
+.PARAMETER Version
+The previous release's version; defaults to the pin.
+
+.PARAMETER IsPinned
+Only prints whether a previous release is pinned (True or False).
 #>
 param(
     [string]$Path,
     [string]$Destination,
-    [string]$Sha256
+    [string]$Sha256,
+    [string]$Version,
+    [switch]$IsPinned
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # the progress bar makes Invoke-WebRequest many times slower
 
-$version = '0.1.0'
-# 0.1.0 was released as Flevert (ADR-0009), and its setup keeps that name.
-$url = "https://github.com/Suryvibegod/Flevert/releases/download/v$version/Flevert-Setup-$version.exe"
-if (-not $Sha256) { $Sha256 = 'aa85392b25b34aed58d6bc9f1e514d8feed38cb0f28b86c5901a91f396bf92e3' }
+# The pin: none yet (0.2.0 is the first release).
+$pinnedVersion = ''
+$pinnedSha256 = ''
+if ($IsPinned) { return [bool]($pinnedVersion -and $pinnedSha256) }
+if (-not $Version) { $Version = $pinnedVersion }
+if (-not $Sha256) { $Sha256 = $pinnedSha256 }
+if (-not $Version -or -not $Sha256) { throw 'No previous release is pinned yet; pin one in get-previous-setup.ps1 after it is published.' }
+$url = "https://github.com/Suryvibegod/Flevert/releases/download/v$Version/Flevert-Setup-$Version.exe"
 if (-not $Destination) { $Destination = Join-Path ([IO.Path]::GetTempPath()) "flevert-previous-setup-$([guid]::NewGuid())" }
 # .NET resolves relative paths against its own current folder, not PowerShell's.
 $Destination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Destination)
@@ -65,13 +79,13 @@ function New-PrivateFolder([string]$Folder) {
 }
 
 New-PrivateFolder $Destination
-$setup = Join-Path $Destination "Flevert-Setup-$version.exe"
+$setup = Join-Path $Destination "Flevert-Setup-$Version.exe"
 try {
     if ($Path) { Copy-Item -LiteralPath $Path $setup }
     else { Invoke-WebRequest $url -OutFile $setup -UseBasicParsing }
     $actual = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $Sha256.ToLowerInvariant()) {
-        throw "SHA256 mismatch for the Flevert $version setup: expected $Sha256, got $actual. It was not kept."
+        throw "SHA256 mismatch for the Flevert $Version setup: expected $Sha256, got $actual. It was not kept."
     }
 }
 catch {

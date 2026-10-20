@@ -17,15 +17,15 @@ public sealed class PreviousSetupScriptTests : IDisposable
     [Fact]
     public void A_setup_with_the_pinned_hash_is_copied_into_a_new_private_folder()
     {
-        var given = _dir.File("Flevert-Setup-0.1.0.exe", "pretend setup");
+        var given = _dir.File("Flevert-Setup-1.0.0.exe", "pretend setup");
         var destination = _dir.Combine("previous");
 
         var run = Get(given, destination, Sha256(given));
 
         Assert.True(run.ExitCode == 0, run.Output);
-        var copy = Path.Combine(destination, "Flevert-Setup-0.1.0.exe");
+        var copy = Path.Combine(destination, "Flevert-Setup-1.0.0.exe");
         // Windows PowerShell prints in the console's code page, which mangles the test folder's Vietnamese name.
-        Assert.EndsWith(@"\previous\Flevert-Setup-0.1.0.exe", run.Output.Trim().Split('\n')[^1].Trim(), StringComparison.Ordinal);
+        Assert.EndsWith(@"\previous\Flevert-Setup-1.0.0.exe", run.Output.Trim().Split('\n')[^1].Trim(), StringComparison.Ordinal);
         Assert.Equal("pretend setup", File.ReadAllText(copy));
         var acl = new DirectoryInfo(destination).GetAccessControl();
         Assert.True(acl.AreAccessRulesProtected, "the folder inherits entries from %TEMP%");
@@ -37,11 +37,11 @@ public sealed class PreviousSetupScriptTests : IDisposable
     [Fact]
     public void A_setup_whose_hash_differs_is_refused_and_nothing_is_left()
     {
-        var given = _dir.File("Flevert-Setup-0.1.0.exe", "something else");
+        var given = _dir.File("Flevert-Setup-1.0.0.exe", "something else");
         var destination = _dir.Combine("previous");
 
-        // The real pin: no file of this test has it.
-        var run = Get(given, destination);
+        // The hash of other content than the file's.
+        var run = Get(given, destination, Convert.ToHexStringLower(SHA256.HashData("pretend setup"u8)));
 
         Assert.NotEqual(0, run.ExitCode);
         Assert.Contains("SHA256", run.Output, StringComparison.Ordinal);
@@ -52,7 +52,7 @@ public sealed class PreviousSetupScriptTests : IDisposable
     public void A_destination_that_exists_already_is_refused_and_left_alone()
     {
         // Someone else's folder could hold a planted file, or let them swap the setup after the check.
-        var given = _dir.File("Flevert-Setup-0.1.0.exe", "pretend setup");
+        var given = _dir.File("Flevert-Setup-1.0.0.exe", "pretend setup");
         var destination = Directory.CreateDirectory(_dir.Combine("previous")).FullName;
         File.WriteAllText(Path.Combine(destination, "theirs.txt"), "not ours");
 
@@ -60,12 +60,28 @@ public sealed class PreviousSetupScriptTests : IDisposable
 
         Assert.NotEqual(0, run.ExitCode);
         Assert.Equal("not ours", File.ReadAllText(Path.Combine(destination, "theirs.txt")));
-        Assert.False(File.Exists(Path.Combine(destination, "Flevert-Setup-0.1.0.exe")));
+        Assert.False(File.Exists(Path.Combine(destination, "Flevert-Setup-1.0.0.exe")));
+    }
+
+    [Fact]
+    public void Without_a_pinned_release_nothing_is_fetched_and_the_upgrade_scenario_is_told_so()
+    {
+        // 0.2.0 is the first release: until one is pinned, there is nothing to upgrade from.
+        var given = _dir.File("Flevert-Setup-1.0.0.exe", "pretend setup");
+        var destination = _dir.Combine("previous");
+
+        var run = PowerShellScript.Run("get-previous-setup.ps1", ["-Path", given, "-Destination", destination]);
+        var pinned = PowerShellScript.Run("get-previous-setup.ps1", ["-IsPinned"]);
+
+        Assert.NotEqual(0, run.ExitCode);
+        Assert.Contains("No previous release is pinned yet", run.Output, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(destination));
+        Assert.Equal("False", pinned.Output.Trim());
     }
 
     private static string Sha256(string path) => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));
 
     private static (int ExitCode, string Output) Get(string path, string destination, string? sha256 = null) =>
         PowerShellScript.Run("get-previous-setup.ps1",
-            ["-Path", path, "-Destination", destination, .. sha256 is null ? Array.Empty<string>() : ["-Sha256", sha256]]);
+            ["-Path", path, "-Destination", destination, "-Version", "1.0.0", .. sha256 is null ? Array.Empty<string>() : ["-Sha256", sha256]]);
 }

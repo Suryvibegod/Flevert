@@ -6,7 +6,7 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [0.2.0] - 2026-10-20
 
-PDFs: turn photos into one, and convert, merge, split, rotate, compress or password-protect PDF files. Flevert is now called **Flevert**: setup moves a Flevert 0.1.0 install over, choices included.
+PDFs: turn photos into one, and convert, merge, split, rotate, compress or password-protect PDF files.
 
 ### Added
 
@@ -68,5 +68,4 @@ The first release: pictures, and an installer.
 - Windows Smart App Control may block this unsigned release (see the README).
 
 [Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/Suryvibegod/Flevert/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/Suryvibegod/Flevert/releases/tag/v0.1.0
+[0.2.0]: https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.0

@@ -32,7 +32,7 @@ iPhone photos to JPG, smaller files, copies without GPS, photos into one PDF. Fr
 2. Run it (no administrator rights needed). Flevert is not code-signed yet, so Windows says **Windows protected your PC**: [check your download](docs/install.md#check-your-download) if you like, then click **More info** and **Run anyway**. No such button? See [Smart App Control](#smart-app-control).
 3. Right-click a picture or a PDF and choose **Flevert**. On Windows 11 it is under **Show more options**, unless you chose the classic menu in setup.
 
-For Windows 10 (1809 or later) and 11, 64-bit. Flevert was called Flevert until version 0.2.0: installing Flevert over Flevert moves it over, settings included.
+For Windows 10 (1809 or later) and 11, 64-bit.
 
 ## The menu
 

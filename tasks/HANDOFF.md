@@ -28,18 +28,18 @@ Mỗi task: viết code cùng test (TDD khi rẻ), build + format + ba project t
 | core | Xong, review nhiều vòng ([todo.md](todo.md)). Chạy song song nhiều file trong một lô ([perf/todo.md](perf/todo.md)). Báo bản mới từ GitHub Releases ([update/todo.md](update/todo.md), ADR-0006). |
 | image | Xong ([image/todo.md](image/todo.md), ADR-0004). Ngân sách bộ nhớ chung khi chạy song song. |
 | installer (v0.1) | Xong, review 5 vòng ([installer/todo.md](installer/todo.md)); menu cổ điển kiểm tay đạt (ADR-0005); trang "New versions" (`/UPDATECHECK`). |
-| pdf (v0.2) | Xong, phát hành 0.2.0 ([pdf/todo.md](pdf/todo.md), ADR-0007, ADR-0008). Đổi tên Flevert → Flevert (ADR-0009). |
+| pdf (v0.2) | Xong, phát hành 0.2.0 ([pdf/todo.md](pdf/todo.md), ADR-0007, ADR-0008). |
 | media (v0.3) | Spec đã chốt: [docs/specs/media.md](../docs/specs/media.md). Chưa có plan/code. |
 
-Test đầu-cuối installer: `scripts/test-installer.ps1` (10 kịch bản, gồm nâng cấp từ Flevert 0.1.0; chạy tay trên máy thật, `%LOCALAPPDATA%\Flevert` phải không tồn tại). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` + [docs/RELEASING.md](../docs/RELEASING.md).
+Test đầu-cuối installer: `scripts/test-installer.ps1` (10 kịch bản; kịch bản nâng cấp chạy khi `get-previous-setup.ps1` đã ghim một bản trước; chạy tay trên máy thật, `%LOCALAPPDATA%\Flevert` phải không tồn tại). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` + [docs/RELEASING.md](../docs/RELEASING.md).
 
-## v0.1.0 đã phát hành (2026-10-20)
+## v0.1.0 (2026-10-20)
 
-https://github.com/Suryvibegod/Flevert/releases/tag/v0.1.0 (immutable). Kết quả kiểm: [release/todo.md](release/todo.md).
+Module core, image, installer xong và qua kiểm phát hành ([release/todo.md](release/todo.md)). Bản đầu tiên tải được trên GitHub Releases là 0.2.0.
 
 ## v0.2.0 (pdf): đã xong
 
-Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile: [pdf/todo.md](pdf/todo.md). Spec: [docs/specs/pdf.md](../docs/specs/pdf.md). ADR: 0007 (tiến độ trong file, output thư mục, N→1), 0008 (pdfium + qpdf, deps ghim hash), 0009 (đổi tên Flevert, chuyển cài đặt Flevert 0.1.0).
+Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile: [pdf/todo.md](pdf/todo.md). Spec: [docs/specs/pdf.md](../docs/specs/pdf.md). ADR: 0007 (tiến độ trong file, output thư mục, N→1), 0008 (pdfium + qpdf, deps ghim hash).
 
 Đã quyết: T15–T17 (nén ảnh scan, đảo trang, sửa PDF, rút chữ/ảnh) chuyển sang v0.2.1. Chấp nhận license Visual Studio Community: Flevert giữ 3 DLL MSVC runtime qpdf dùng.
 
@@ -52,7 +52,6 @@ Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile
 - Test Pdf khởi động `flevert.exe pdf-worker` nằm chung collection xUnit `WorkerProcesses`; lớp test mới nào khởi động worker cũng phải vào collection đó.
 - Smart App Control chặn ngẫu nhiên DLL vừa build (test tiến trình thoát `0xE0434352`, hoặc `0x800711C7`): build lại với `-p:SourceRevisionId=<chuỗi mới>`, không đổi mã nguồn.
 - Sau khi `scripts/deps.json` đổi: chạy lại `scripts/fetch-deps.ps1`.
-- Không bao giờ tạo lại repo tên `Flevert` dưới tài khoản: bản 0.1.0 đã cài hỏi bản mới qua đường dẫn cũ, GitHub chuyển hướng nó sang Flevert (ADR-0009).
 
 ## Sau v0.2
 

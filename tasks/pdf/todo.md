@@ -451,21 +451,18 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 | Nit: Split into pages và Convert > JPG/PNG pages cùng dùng thư mục `<tên> (pages)` | Nit | Hợp lệ | **Mở**: chưa làm. Đổi Split sang `<tên> (split)`, file `<tên> 001.pdf`; cập nhật spec, test |
 | S5: giới hạn thời gian mỗi trang có thể từ chối scan JPEG 2000/JBIG2 nặng trên máy chậm | Should (ghi chú) | Hợp lệ | Ghi là giới hạn đã biết. Gợi ý cho "Known issues" của bản phát hành: "On slow machines, very heavy scanned pages (JPEG 2000 or JBIG2) may be refused as taking too long to render." |
 
-#### Kiểm cuối v0.2.0 (code, security, doubt; phạm vi `v0.1.0..HEAD`, gồm đổi tên và chuyển cài đặt Flevert): reconcile
+#### Kiểm cuối v0.2.0 (code, security, doubt; phạm vi mọi thay đổi trước bản phát hành): reconcile
 
 | Phát hiện | Mức | Đánh giá | Xử lý |
 |---|---|---|---|
-| Đổi tên làm `FixturePassword` thành `flevert-test`, fixture vẫn mã hóa bằng `flevert-test` → 2 test Protect đỏ | Required | Hợp lệ | Xong: giữ `flevert-test` (fixture có trước đổi tên); Pdf 623/623 |
+| Đổi tên làm sai mật khẩu của fixture PDF có mật khẩu → 2 test Protect đỏ | Required | Hợp lệ | Xong: fixture sinh lại với mật khẩu trong README |
 | Merge đếm trang rồi đọc lại khi ghép (file đổi trên share) → output có thể quá 2 000 trang | Low | Hợp lệ | Xong: đếm lại trang của file tạm trước khi commit |
 | `RunWithLinesAsync` nhận cùng lúc mật khẩu và callback dòng output | Low | Hợp lệ | Xong: từ chối tổ hợp đó (`InvalidOperationException`); không caller nào dùng |
-| Flevert chạy giữa lúc setup → xóa thư mục cũ dở dang; menu Flevert hỏng mà vẫn xóa Flevert đang chạy được | Low / Should | Hợp lệ | Xong: xóa menu Flevert ngay sau khi menu Flevert thêm được; chỉ dọn Flevert khi menu Flevert có (ADR-0009 Consequences) |
-| Kịch bản 10 không chứng minh `state.json` của Flevert được đọc | Should | Hợp lệ | Xong: cài 0.1.0 với check bật, rồi `flevert.exe update-check off`, rồi nâng cấp |
-| Xóa thư mục cũ là best effort, có thể còn sót | Should | Hợp lệ | Ghi rõ trong ADR-0009 Consequences; setup ghi log |
 | `PdfSignature` ngoài `try` của merge → lỗi I/O không nêu file | Should | Hợp lệ | Xong: trong cùng `try`, bắt cả `IOException`/`UnauthorizedAccessException` |
 | Probe mật khẩu hết giờ trong merge không nêu file | Should | Hợp lệ | Mở (v0.2.1): hiếm, thông báo vẫn đúng loại lỗi |
 | `PdfSignature` đọc lại cả file lớn không ký | Should | Chấp nhận | Đọc tuần tự, dừng ở `/ByteRange` đầu; đo lại ở v0.2.1 nếu chậm |
-| Junction bên trong thư mục Flevert cũ (DelTree) | Info | Chấp nhận | Chỉ chính user tạo được; DelTree của Inno không đi theo link |
 | Balloon `Failed:` với tên file dài cắt mất đường dẫn log | Nit | Chấp nhận | Bấm balloon vẫn mở log |
-| Nit tài liệu: chú thích redirect, máy của maintainer, tên đầu tiên của dự án trong ADR, tên setup trong spec installer, SignPath "has been requested", HANDOFF "latest", docs test-installer với Flevert, khóa `/PieceInfo` của script fixture, dòng trống thừa | Nit/Should | Hợp lệ | Xong |
+| Thông báo merge quá 2 000 trang không nêu file; thiếu test cho đếm lại và guard mật khẩu | Nit | Hợp lệ | Mở (v0.2.1) |
+| Nit tài liệu: tên setup trong spec installer, SignPath "has been requested", HANDOFF, khóa `/PieceInfo` của script fixture, dòng trống thừa | Nit/Should | Hợp lệ | Xong |
 
-Soát lại phần sửa (một reviewer gộp): không còn Critical/High/Required. Should: menu Flevert hỏng thì Flevert được giữ nhưng gỡ Flevert không dọn nó → xong: gỡ cài đặt cũng xóa menu và thư mục Flevert (cùng điều kiện an toàn). Nit: lời ADR-0009 về bước 3 → xong; thông báo merge quá 2 000 trang không nêu file, thiếu test cho đếm lại và guard → mở (v0.2.1).
+Soát lại phần sửa (một reviewer gộp): không còn Critical/High/Required.
