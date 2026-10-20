@@ -165,6 +165,32 @@ public sealed class PdfRotateTests : IDisposable
     }
 
     [Fact]
+    public async Task Works_on_a_pdf_whose_folder_and_name_hold_characters_outside_the_bmp()
+    {
+        // Review SA-I6: an emoji is a surrogate pair in UTF-16 and four bytes in the UTF-8 qpdf reads. Decoys whose
+        // names differ only there, with the emoji replaced by one or two U+FFFD as a lossy conversion would, show qpdf
+        // opened this file: the output is rotations.pdf rotated, not three-colours.pdf.
+        var folder = _dir.Combine("Chuyến đi \U0001F34A Đà Lạt");
+        var decoyFolder = _dir.Combine("Chuyến đi �� Đà Lạt");
+        Directory.CreateDirectory(folder);
+        Directory.CreateDirectory(decoyFolder);
+        var input = Path.Combine(folder, "Hóa đơn \U0001F9FE.pdf");
+        File.Copy(Fixture("rotations.pdf"), input);
+        File.Copy(Fixture("three-colours.pdf"), Path.Combine(folder, "Hóa đơn �.pdf"));
+        File.Copy(Fixture("three-colours.pdf"), Path.Combine(folder, "Hóa đơn ��.pdf"));
+        File.Copy(Fixture("three-colours.pdf"), Path.Combine(decoyFolder, "Hóa đơn \U0001F9FE.pdf"));
+        File.Copy(Fixture("three-colours.pdf"), Path.Combine(decoyFolder, "Hóa đơn ��.pdf"));
+
+        var output = await Op("pdf.rotate-right").RunAsync(input, CancellationToken.None);
+
+        Assert.Equal(Path.Combine(folder, "Hóa đơn \U0001F9FE (rotated).pdf"), output);
+        using var pdf = PdfDocument.Open(output);
+        Assert.Equal([Corner.TopRight, Corner.BottomRight, Corner.BottomLeft, Corner.TopLeft],
+            Enumerable.Range(0, pdf.PageCount).Select(page => MarkCorner(pdf, page)));
+        Assert.Equal(["Hóa đơn \U0001F9FE.pdf", "Hóa đơn ��.pdf"], FileNames(decoyFolder));
+    }
+
+    [Fact]
     public async Task A_name_with_a_lone_surrogate_is_refused_rather_than_opening_another_file()
     {
         // NTFS names are UTF-16 and may hold a lone surrogate, which UTF-8 cannot carry. Replaced by U+FFFD, the path
