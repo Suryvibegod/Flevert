@@ -10,7 +10,27 @@ namespace Flevert.Core;
 /// <summary>What a tool run by <see cref="ExternalTool"/> left behind.</summary>
 /// <param name="StandardOutputTruncated">More than <see cref="ExternalTool.MaxCapturedBytes"/> was written; the rest was discarded.</param>
 public sealed record ExternalToolResult(
-    int ExitCode, string StandardOutput, string StandardError, bool StandardOutputTruncated, bool StandardErrorTruncated);
+    int ExitCode, string StandardOutput, string StandardError, bool StandardOutputTruncated, bool StandardErrorTruncated)
+{
+    /// <summary>
+    /// The tool asked for more memory than <see cref="ExternalToolLimits.MaxMemoryBytes"/> and was refused. It may have
+    /// crashed, failed, or carried on without that memory, so its exit code and output cannot be trusted, success
+    /// included.
+    /// </summary>
+    public bool MemoryLimitExceeded { get; init; }
+}
+
+/// <summary>What the job of a run lets the tool do; nothing is limited by default.</summary>
+public sealed record ExternalToolLimits
+{
+    /// <summary>The most memory the tool may commit. Past it an allocation fails, and the result says so.</summary>
+    public ulong? MaxMemoryBytes { get; init; }
+
+    /// <summary>
+    /// The tool cannot start other processes: Windows refuses the start. Only for tools that never need to, such as qpdf.
+    /// </summary>
+    public bool SingleProcess { get; init; }
+}
 
 /// <summary>
 /// Runs a separate program (qpdf) so that whatever it does, Flevert stays in control: no shell ever sees the arguments,
@@ -26,10 +46,16 @@ public static partial class ExternalTool
     // pipes then, and the caller is not kept waiting for it.
     private static readonly TimeSpan DrainAfterKill = TimeSpan.FromSeconds(1);
 
+    private const int JobObjectAssociateCompletionPortInformationClass = 7;
     private const int JobObjectExtendedLimitInformationClass = 9;
+    private const uint JobObjectLimitActiveProcess = 0x00000008;
+    private const uint JobObjectLimitProcessMemory = 0x00000100;
     private const uint JobObjectLimitKillOnJobClose = 0x00002000;
     // A crashing tool ends at once instead of waiting on a Windows Error Reporting dialog until the timeout.
     private const uint JobObjectLimitDieOnUnhandledException = 0x00000400;
+    // winnt.h: posted when a process in the job is refused memory past its limit.
+    private const uint JobObjectMsgProcessMemoryLimit = 9;
+    private const nint InvalidHandleValue = -1;
 
     /// <summary>
     /// Starts <paramref name="toolPath"/> with <paramref name="arguments"/>, writes <paramref name="standardInput"/> to it
@@ -40,6 +66,7 @@ public static partial class ExternalTool
     /// <param name="timeout">After this, the tool and its children are killed and <see cref="TimeoutException"/> is thrown.</param>
     /// <param name="standardInput">Bytes for the tool's stdin, such as a password; not kept after the call.</param>
     /// <param name="workingDirectory">Absolute, existing folder; the tool's own folder when <c>null</c>.</param>
+    /// <param name="limits">Memory and process limits for the tool's job; none when <c>null</c>.</param>
     /// <exception cref="OperationCanceledException">Cancelled; the tool and its children were killed first.</exception>
     public static Task<ExternalToolResult> RunAsync(
         string toolPath,
@@ -47,18 +74,20 @@ public static partial class ExternalTool
         TimeSpan timeout,
         ReadOnlyMemory<byte> standardInput = default,
         string? workingDirectory = null,
+        ExternalToolLimits? limits = null,
         CancellationToken cancellationToken = default) =>
-        RunAsync(toolPath, arguments, timeout, standardInput, workingDirectory, afterStart: null, cancellationToken);
+        RunAsync(toolPath, arguments, timeout, null, standardInput, workingDirectory, limits, cancellationToken);
 
     /// <param name="afterStart">For tests: runs after the tool has started and before it is put in its job.</param>
     internal static async Task<ExternalToolResult> RunAsync(
         string toolPath,
         IEnumerable<string> arguments,
         TimeSpan timeout,
-        ReadOnlyMemory<byte> standardInput,
-        string? workingDirectory,
         Action<Process>? afterStart,
-        CancellationToken cancellationToken)
+        ReadOnlyMemory<byte> standardInput = default,
+        string? workingDirectory = null,
+        ExternalToolLimits? limits = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
@@ -79,7 +108,8 @@ public static partial class ExternalTool
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
 
-        using var job = CreateKillOnCloseJob();
+        using var memoryReports = limits?.MaxMemoryBytes is null ? null : CreateCompletionPort();
+        using var job = CreateJob(limits, memoryReports);
         using var process = Process.Start(start) ?? throw new InvalidOperationException($"{toolPath} did not start.");
         afterStart?.Invoke(process);
         try
@@ -119,7 +149,10 @@ public static partial class ExternalTool
             var (stdout, stdoutTruncated) = await output.WaitAsync(stop.Token).ConfigureAwait(false);
             var (stderr, stderrTruncated) = await error.WaitAsync(stop.Token).ConfigureAwait(false);
             await input.WaitAsync(stop.Token).ConfigureAwait(false);
-            return new ExternalToolResult(process.ExitCode, stdout, stderr, stdoutTruncated, stderrTruncated);
+            return new ExternalToolResult(process.ExitCode, stdout, stderr, stdoutTruncated, stderrTruncated)
+            {
+                MemoryLimitExceeded = ReportsMemoryLimit(memoryReports),
+            };
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
@@ -238,28 +271,84 @@ public static partial class ExternalTool
     /// A job whose processes all die when its last handle closes, which Windows does when flevert.exe exits or crashes.
     /// The handle is not inheritable, so the tool cannot keep its own job alive.
     /// </summary>
-    internal static SafeHandle CreateKillOnCloseJob()
+    internal static SafeHandle CreateKillOnCloseJob() => CreateJob(limits: null, memoryReports: null);
+
+    /// <summary>
+    /// <see cref="CreateKillOnCloseJob"/> with <paramref name="limits"/> on top. Windows reports a refused allocation
+    /// only as a message to a completion port associated with the job, so <paramref name="memoryReports"/> is required
+    /// with a memory limit.
+    /// </summary>
+    private static SafeKernelHandle CreateJob(ExternalToolLimits? limits, SafeHandle? memoryReports)
     {
         var job = CreateJobObjectW(0, null);
         if (job.IsInvalid)
             throw new Win32Exception(Marshal.GetLastPInvokeError());
 
-        var limits = new JobObjectExtendedLimitInformation
+        try
         {
-            BasicLimitInformation = new JobObjectBasicLimitInformation
+            if (memoryReports is not null)
             {
-                LimitFlags = JobObjectLimitKillOnJobClose | JobObjectLimitDieOnUnhandledException,
-            },
-        };
-        if (!SetInformationJobObject(job, JobObjectExtendedLimitInformationClass, ref limits,
-                (uint)Unsafe.SizeOf<JobObjectExtendedLimitInformation>()))
+                // Associated before any process joins, as the documentation advises, so no message is missed.
+                var port = new JobObjectAssociateCompletionPort { CompletionPort = memoryReports.DangerousGetHandle() };
+                if (!SetInformationJobObject(job, JobObjectAssociateCompletionPortInformationClass, ref port,
+                        (uint)Unsafe.SizeOf<JobObjectAssociateCompletionPort>()))
+                    throw new Win32Exception(Marshal.GetLastPInvokeError());
+            }
+
+            var info = new JobObjectExtendedLimitInformation
+            {
+                BasicLimitInformation = new JobObjectBasicLimitInformation
+                {
+                    LimitFlags = JobObjectLimitKillOnJobClose | JobObjectLimitDieOnUnhandledException,
+                },
+            };
+            if (limits?.MaxMemoryBytes is { } maxMemory)
+            {
+                ArgumentOutOfRangeException.ThrowIfZero(maxMemory, nameof(limits));
+                info.BasicLimitInformation.LimitFlags |= JobObjectLimitProcessMemory;
+                info.ProcessMemoryLimit = checked((nuint)maxMemory);
+            }
+
+            if (limits?.SingleProcess == true)
+            {
+                // The console host Windows starts for the tool joins its job too, and is not refused (checked with qpdf
+                // 200 times, 2026-10-20).
+                info.BasicLimitInformation.LimitFlags |= JobObjectLimitActiveProcess;
+                info.BasicLimitInformation.ActiveProcessLimit = 1;
+            }
+
+            if (!SetInformationJobObject(job, JobObjectExtendedLimitInformationClass, ref info,
+                    (uint)Unsafe.SizeOf<JobObjectExtendedLimitInformation>()))
+                throw new Win32Exception(Marshal.GetLastPInvokeError());
+        }
+        catch
         {
-            var error = Marshal.GetLastPInvokeError();
             job.Dispose();
-            throw new Win32Exception(error);
+            throw;
         }
 
         return job;
+    }
+
+    private static SafeKernelHandle CreateCompletionPort()
+    {
+        var port = CreateIoCompletionPort(InvalidHandleValue, 0, 0, 1);
+        return port.IsInvalid ? throw new Win32Exception(Marshal.GetLastPInvokeError()) : port;
+    }
+
+    /// <summary>
+    /// Whether the job reported a refused allocation. Windows sends the report when the allocation fails, while the tool
+    /// still runs, so once it has exited the report is already queued. The documentation calls these reports best effort
+    /// ("delivery to the completion port is not guaranteed"); the port of a job holds a handful of messages at most.
+    /// </summary>
+    private static bool ReportsMemoryLimit(SafeHandle? memoryReports)
+    {
+        if (memoryReports is null)
+            return false;
+        var exceeded = false;
+        while (GetQueuedCompletionStatus(memoryReports, out var message, out _, out _, 0))
+            exceeded |= message == JobObjectMsgProcessMemoryLimit;
+        return exceeded;
     }
 
     /// <summary>
@@ -289,6 +378,13 @@ public static partial class ExternalTool
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct JobObjectAssociateCompletionPort
+    {
+        public nint CompletionKey;
+        public nint CompletionPort;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct IoCounters
     {
         public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount;
@@ -306,9 +402,10 @@ public static partial class ExternalTool
         public nuint PeakJobMemoryUsed;
     }
 
-    private sealed class SafeJobHandle : SafeHandleZeroOrMinusOneIsInvalid
+    /// <summary>A job or a completion port.</summary>
+    private sealed class SafeKernelHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
-        public SafeJobHandle()
+        public SafeKernelHandle()
             : base(ownsHandle: true)
         {
         }
@@ -317,12 +414,25 @@ public static partial class ExternalTool
     }
 
     [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-    private static partial SafeJobHandle CreateJobObjectW(nint securityAttributes, string? name);
+    private static partial SafeKernelHandle CreateJobObjectW(nint securityAttributes, string? name);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SetInformationJobObject(
         SafeHandle job, int infoClass, ref JobObjectExtendedLimitInformation info, uint length);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetInformationJobObject(
+        SafeHandle job, int infoClass, ref JobObjectAssociateCompletionPort info, uint length);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial SafeKernelHandle CreateIoCompletionPort(nint fileHandle, nint existingPort, nuint key, uint threads);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetQueuedCompletionStatus(
+        SafeHandle port, out uint message, out nuint key, out nint overlapped, uint milliseconds);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

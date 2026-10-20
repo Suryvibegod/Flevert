@@ -153,8 +153,8 @@ public sealed class ExternalToolTests : IDisposable
     {
         // A fast tool can finish between Process.Start and AssignProcessToJobObject, which then fails with "Access is
         // denied" (checked 2026-10-20). The seam waits for the exit, so the test never depends on that race.
-        var result = await ExternalTool.RunAsync(Cmd, ["/c", "echo done& exit 7"], Generous, default, null,
-            afterStart: process => process.WaitForExit(), CancellationToken.None);
+        var result = await ExternalTool.RunAsync(Cmd, ["/c", "echo done& exit 7"], Generous,
+            afterStart: process => process.WaitForExit());
 
         Assert.Equal(7, result.ExitCode);
         Assert.Equal("done", result.StandardOutput.Trim());
@@ -167,8 +167,8 @@ public sealed class ExternalToolTests : IDisposable
         // it), so each run would leak two pipe handles until a garbage collection.
         StreamReader? stdout = null, stderr = null;
 
-        await ExternalTool.RunAsync(Cmd, ["/c", "echo out& echo err 1>&2"], Generous, default, null,
-            afterStart: process => (stdout, stderr) = (process.StandardOutput, process.StandardError), CancellationToken.None);
+        await ExternalTool.RunAsync(Cmd, ["/c", "echo out& echo err 1>&2"], Generous,
+            afterStart: process => (stdout, stderr) = (process.StandardOutput, process.StandardError));
 
         Assert.False(stdout!.BaseStream.CanRead, "stdout is still open");
         Assert.False(stderr!.BaseStream.CanRead, "stderr is still open");
@@ -180,10 +180,45 @@ public sealed class ExternalToolTests : IDisposable
         // Writing 5 MB to a tool that has exited fails: the pipe must still be closed, not left to the finalizer.
         StreamWriter? stdin = null;
 
-        await ExternalTool.RunAsync(Cmd, ["/c", "exit 3"], Generous, new byte[5 * 1024 * 1024], null,
-            afterStart: process => stdin = process.StandardInput, CancellationToken.None);
+        await ExternalTool.RunAsync(Cmd, ["/c", "exit 3"], Generous,
+            afterStart: process => stdin = process.StandardInput, standardInput: new byte[5 * 1024 * 1024]);
 
         Assert.False(stdin!.BaseStream.CanWrite, "stdin is still open");
+    }
+
+    [Fact]
+    public async Task A_tool_refused_memory_past_its_limit_is_reported_as_over_the_limit()
+    {
+        // Windows PowerShell (on every Windows, the CI runner included) asks for 500 MB at once. Under the limit the
+        // allocation fails and the tool decides what to do about it, so only the job can tell what happened.
+        string[] allocate =
+            ["-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference = 'Stop'; $b = [byte[]]::new(500MB); $b[-1] = 1; 'allocated'"];
+
+        var limited = await ExternalTool.RunAsync(PowerShell, allocate, Generous,
+            limits: new ExternalToolLimits { MaxMemoryBytes = 200 * 1024 * 1024 });
+        var free = await ExternalTool.RunAsync(PowerShell, allocate, Generous);
+
+        Assert.True(limited.MemoryLimitExceeded, "the run under the limit was not reported");
+        Assert.DoesNotContain("allocated", limited.StandardOutput, StringComparison.Ordinal);
+        // Control: the same allocation without a limit succeeds, and nothing is reported.
+        Assert.Equal("allocated", free.StandardOutput.Trim());
+        Assert.False(free.MemoryLimitExceeded);
+    }
+
+    [Fact]
+    public async Task A_tool_limited_to_one_process_cannot_start_another()
+    {
+        // ping prints the address it pings in every display language.
+        string[] pingOnce = ["/c", Ping, "-n", "1", "127.0.0.1"];
+
+        var limited = await ExternalTool.RunAsync(Cmd, pingOnce, Generous, limits: new ExternalToolLimits { SingleProcess = true });
+        var free = await ExternalTool.RunAsync(Cmd, pingOnce, Generous);
+
+        Assert.NotEqual(0, limited.ExitCode);
+        Assert.DoesNotContain("127.0.0.1", limited.StandardOutput, StringComparison.Ordinal);
+        // Control: without the limit cmd starts ping.
+        Assert.Equal(0, free.ExitCode);
+        Assert.Contains("127.0.0.1", free.StandardOutput, StringComparison.Ordinal);
     }
 
     [Fact]
