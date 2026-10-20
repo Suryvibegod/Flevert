@@ -18,17 +18,197 @@ public static class Batch
     internal const byte Accepted = 1;
     internal const byte Full = 2;
     internal const byte Refused = 3;
+
+    /// <summary>A joining leader's answer to a sender that belongs to another selection or to a batch already closed.</summary>
+    internal const byte Late = 4;
+
     internal static readonly TimeSpan IoTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan JoinDeadline = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// How long a process of a joining operation keeps trying to hand its files over. Under load the one pipe served a
+    /// sender every 170-250 ms, so 100 senders took about 25 s; working alone instead would write a partial output.
+    /// </summary>
+    private static readonly TimeSpan OneOutputJoinDeadline = TimeSpan.FromSeconds(60);
+
+    /// <summary>The operation id of the batch that gathers a joining operation's late files to report them left out.</summary>
+    private const string LeftOutSuffix = "#late";
+
     private const int MaxPayloadBytes = 1 << 20;
 
     /// <returns>A leader that yields every file to process, or <c>null</c> when a running leader took these files.</returns>
-    public static async Task<BatchLeader?> LeadOrJoinAsync(
-        string operationId, IReadOnlyList<string> files, TimeSpan idle, CancellationToken ct)
+    public static Task<BatchLeader?> LeadOrJoinAsync(string operationId, IReadOnlyList<string> files, TimeSpan idle, CancellationToken ct) =>
+        LeadOrJoinAsync(operationId, files, idle, JoinDeadline, ct);
+
+    /// <summary>
+    /// For an operation that joins every file of the batch into one output (ADR-0007, part 2). Never works alone: a file
+    /// that cannot reach its batch, or arrives after it closed, is gathered with the other late files of the operation
+    /// into a leader whose <see cref="BatchLeader.LeavesOut"/> is set, which reports them left out instead of writing a
+    /// second, partial output.
+    /// </summary>
+    /// <returns>A leader, or <c>null</c> when a running leader took these files.</returns>
+    public static Task<BatchLeader?> LeadOrJoinOneOutputAsync(string operationId, IReadOnlyList<string> files, TimeSpan idle, CancellationToken ct) =>
+        LeadOrJoinOneOutputAsync(operationId, files, idle, ProcessStamp.Self, ProcessCensus.Take, ct);
+
+    /// <param name="self">This process; tests running several "processes" in one stand in for each.</param>
+    internal static async Task<BatchLeader?> LeadOrJoinOneOutputAsync(
+        string operationId, IReadOnlyList<string> files, TimeSpan idle, ProcessStamp self,
+        Func<string, IReadOnlyList<Sighting>> census, CancellationToken ct)
     {
         var deadline = Stopwatch.StartNew();
         var rotatedAfterRefusal = false;
-        while (deadline.Elapsed < JoinDeadline)
+        while (deadline.Elapsed < OneOutputJoinDeadline)
+        {
+            string key, name;
+            try
+            {
+                key = ReadOrCreateSecret(SecretPath(operationId));
+                name = PipeName(operationId, key);
+            }
+#pragma warning disable CA1031 // Without a key these files cannot reach their batch: report them, never join them alone.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+                return await LeaveOutAsync(operationId, files, idle, self, ct).ConfigureAwait(false);
+            }
+
+            if (TryCreateServer(name, out var foreignOwner) is { } server)
+            {
+                // Read only now: a closing leader writes the record before it lets go of the pipe name, so whoever gets
+                // the name after the close sees it.
+                var record = ReadRecord(operationId);
+                switch (JoinRecord.Classify(self, record, DateTime.UtcNow, s => s.IsRunning))
+                {
+                    case Arrival.AlreadyDelivered:
+                        await server.DisposeAsync().ConfigureAwait(false);
+                        return null;
+                    case Arrival.Late:
+                        await server.DisposeAsync().ConfigureAwait(false);
+                        return await LeaveOutAsync(operationId, files, idle, self, ct).ConfigureAwait(false);
+                }
+
+                var gate = new JoinGate(self, record?.LatestClose, () => census(operationId));
+                WriteRecord(operationId, new JoinRecord(Open: true, self, record?.LatestClose, []), self, onlyOverOwn: false);
+                return BatchLeader.Start(() => CreateServer(name), server, files, idle,
+                    onClosed: () => TryRotateSecret(operationId, key), gate,
+                    beforeClose: () => WriteRecord(operationId, new JoinRecord(Open: false, self, DateTime.UtcNow, gate.Members), self, onlyOverOwn: true));
+            }
+
+            var result = foreignOwner
+                ? SendResult.Refused
+                : await TrySendAsync(name, files, Remaining(deadline, OneOutputJoinDeadline), ct).ConfigureAwait(false);
+            switch (result)
+            {
+                case SendResult.Delivered:
+                    return null;
+                case SendResult.Refused when !rotatedAfterRefusal:
+                    rotatedAfterRefusal = true;
+                    TryRotateSecret(operationId, key);
+                    continue;
+                case SendResult.Refused or SendResult.Full or SendResult.Late:
+                    return await LeaveOutAsync(operationId, files, idle, self, ct).ConfigureAwait(false);
+                default:
+                    continue;
+            }
+        }
+
+        return await LeaveOutAsync(operationId, files, idle, self, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Hands late files to the operation's left-out batch, whose leader reports them all in one notification, and which
+    /// works alone (reporting its own files) if it cannot be reached.
+    /// </summary>
+    private static async Task<BatchLeader?> LeaveOutAsync(
+        string operationId, IReadOnlyList<string> files, TimeSpan idle, ProcessStamp self, CancellationToken ct)
+    {
+        if (ReadRecord(operationId)?.Members.Contains(self) == true)
+            return null; // delivered to the last batch; only its acknowledgement was lost
+        var leader = await LeadOrJoinAsync(operationId + LeftOutSuffix, files, idle, OneOutputJoinDeadline, ct).ConfigureAwait(false);
+        leader?.MarkLeavingOut();
+        return leader;
+    }
+
+    internal static string RecordPath(string operationId) =>
+        Path.Combine(AppData.Root, AppData.PipesFolder, $"{operationId}.{Scope.Value}.join");
+
+    /// <returns>The record, or <c>null</c> when there is none or it cannot be read: it only refines who is late.</returns>
+    internal static JoinRecord? ReadRecord(string operationId)
+    {
+        var path = RecordPath(operationId);
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                // Delete sharing lets a leader replace the record while dozens of processes read it.
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream);
+                return JoinRecord.Parse(reader.ReadToEnd());
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < 20)
+            {
+                Thread.Sleep(5 * attempt);
+            }
+#pragma warning disable CA1031 // Best effort, like the key: an unreadable record must not stop a batch.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <param name="onlyOverOwn">Leave the record alone if another running leader has opened a batch since (after a
+    /// split): it will write its own close, later than this one.</param>
+    private static void WriteRecord(string operationId, JoinRecord record, ProcessStamp self, bool onlyOverOwn)
+    {
+        var path = RecordPath(operationId);
+        try
+        {
+            if (onlyOverOwn && ReadRecord(operationId) is { Open: true } current && current.Leader != self && current.Leader.IsRunning)
+                return;
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var temp = $"{path}.{Guid.NewGuid():N}.tmp";
+            File.WriteAllText(temp, record.Format());
+            try
+            {
+                var timer = Stopwatch.StartNew();
+                for (var attempt = 1; ; attempt++)
+                {
+                    try
+                    {
+                        File.Move(temp, path, overwrite: true);
+                        return;
+                    }
+                    // A reader without delete sharing (an older process, an antivirus scan) blocks the rename for a moment.
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && timer.Elapsed < TimeSpan.FromSeconds(2))
+                    {
+                        Thread.Sleep(Math.Min(5 * attempt, 50));
+                    }
+                }
+            }
+            finally
+            {
+                File.Delete(temp);
+            }
+        }
+#pragma warning disable CA1031 // Best effort: without the record, late files are not recognised, as before.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+        }
+    }
+
+    private static async Task<BatchLeader?> LeadOrJoinAsync(
+        string operationId, IReadOnlyList<string> files, TimeSpan idle, TimeSpan joinDeadline, CancellationToken ct)
+    {
+        var deadline = Stopwatch.StartNew();
+        var rotatedAfterRefusal = false;
+        while (deadline.Elapsed < joinDeadline)
         {
             string key, name;
             try
@@ -50,17 +230,18 @@ public static class Batch
 
             var result = foreignOwner
                 ? SendResult.Refused
-                : await TrySendAsync(name, files, Remaining(deadline), ct).ConfigureAwait(false);
+                : await TrySendAsync(name, files, Remaining(deadline, joinDeadline), ct).ConfigureAwait(false);
             switch (result)
             {
                 case SendResult.Delivered:
                     return null;
-                case SendResult.Refused when !rotatedAfterRefusal:
-                    // Someone else holds or answers this name: move the operation to a fresh name once, then retry.
+                case SendResult.Refused or SendResult.Full when !rotatedAfterRefusal:
+                    // Someone else holds or answers this name, or the batch is full: move the operation to a fresh name
+                    // once, then retry.
                     rotatedAfterRefusal = true;
                     TryRotateSecret(operationId, key);
                     continue;
-                case SendResult.Refused:
+                case SendResult.Refused or SendResult.Full:
                     return BatchLeader.Alone(files);
                 default:
                     continue; // the leader closed or was busy; try to lead
@@ -131,7 +312,7 @@ public static class Batch
         return new string(MemoryMarshal.Cast<byte, char>(payload)).Split('\0', StringSplitOptions.RemoveEmptyEntries);
     }
 
-    private enum SendResult { Delivered, Retry, Refused }
+    private enum SendResult { Delivered, Retry, Refused, Full, Late }
 
     private static string PipeName(string operationId, string key)
     {
@@ -164,9 +345,9 @@ public static class Batch
         }
     }
 
-    private static TimeSpan Remaining(Stopwatch deadline)
+    private static TimeSpan Remaining(Stopwatch deadline, TimeSpan joinDeadline)
     {
-        var left = JoinDeadline - deadline.Elapsed;
+        var left = joinDeadline - deadline.Elapsed;
         return left < IoTimeout ? (left > TimeSpan.Zero ? left : TimeSpan.FromMilliseconds(1)) : IoTimeout;
     }
 
@@ -193,7 +374,9 @@ public static class Batch
                 return reply[0] switch
                 {
                     Accepted => SendResult.Delivered,
-                    Full or Refused => SendResult.Refused,
+                    Full => SendResult.Full,
+                    Refused => SendResult.Refused,
+                    Late => SendResult.Late,
                     _ => SendResult.Retry,
                 };
             }
@@ -282,6 +465,7 @@ public sealed class BatchLeader : IAsyncDisposable
     // A fast operation can drain the queue before slower-starting processes connect; keep the batch open at least this long.
     private static readonly TimeSpan MinimumLifetime = TimeSpan.FromSeconds(1.5);
     private static readonly TimeSpan ReplaceBackoff = TimeSpan.FromMilliseconds(20);
+    private static readonly TimeSpan HoldRecheck = TimeSpan.FromMilliseconds(250);
 
     private readonly Channel<string> _queue = Channel.CreateUnbounded<string>();
     private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
@@ -289,15 +473,17 @@ public sealed class BatchLeader : IAsyncDisposable
     private readonly Stopwatch _age = Stopwatch.StartNew();
     private readonly Task _listener;
     private readonly Func<uint, bool> _isTrusted;
+    private readonly JoinGate? _gate;
     private bool _busy;
     private int _running;
     private int _disposed;
 
     private BatchLeader(
         Func<NamedPipeServerStream>? createServer, NamedPipeServerStream? server, IReadOnlyList<string> files, TimeSpan idle,
-        Action? onClosed, Func<uint, bool>? isTrusted = null)
+        Action? onClosed, Func<uint, bool>? isTrusted = null, JoinGate? gate = null, Action? beforeClose = null)
     {
         _isTrusted = isTrusted ?? PipePeer.IsTrusted;
+        _gate = gate;
         foreach (var file in files)
             TryEnqueue(file);
 
@@ -308,12 +494,26 @@ public sealed class BatchLeader : IAsyncDisposable
         }
         else
         {
-            _listener = Task.Run(() => ListenAsync(createServer, server, idle, onClosed));
+            _listener = Task.Run(() => ListenAsync(createServer, server, idle, onClosed, beforeClose));
         }
     }
 
     /// <summary>Distinct files queued but not yet handed to the consumer.</summary>
     public int Pending => _queue.Reader.Count;
+
+    /// <summary>
+    /// The files are late for a joining operation (<see cref="Batch.LeadOrJoinOneOutputAsync"/>): they arrived after their
+    /// batch closed or could not reach it. Report them left out; never join them.
+    /// </summary>
+    public bool LeavesOut { get; private set; }
+
+    /// <summary>
+    /// For a joining batch, once <see cref="ReadAllAsync"/> has ended: the files of processes of this selection that
+    /// ended without handing them over. The join must not go ahead without them.
+    /// </summary>
+    public IReadOnlyList<string> Missing => _gate?.Missing() ?? [];
+
+    internal void MarkLeavingOut() => LeavesOut = true;
 
     /// <summary>
     /// How many files the consumer is still converting. A consumer that runs several files at once asks for the next one
@@ -334,6 +534,14 @@ public sealed class BatchLeader : IAsyncDisposable
         Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle,
         Action onClosed, Func<uint, bool> isTrusted) =>
         new(createServer, server, files, idle, onClosed, isTrusted);
+
+    /// <param name="gate">Decides which senders belong to this joining batch and holds it open for those still starting.</param>
+    /// <param name="beforeClose">Runs as the batch closes, before <paramref name="onClosed"/> and also when the pipe name
+    /// was lost, while no one else can have taken the name after the close.</param>
+    internal static BatchLeader Start(
+        Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle,
+        Action onClosed, JoinGate gate, Action beforeClose) =>
+        new(createServer, server, files, idle, onClosed, gate: gate, beforeClose: beforeClose);
 
     internal static BatchLeader Alone(IReadOnlyList<string> files) => new(null, null, files, TimeSpan.Zero, null);
 
@@ -404,7 +612,8 @@ public sealed class BatchLeader : IAsyncDisposable
     // them. A parallel consumer reports a taken file as running before it asks for the next, so it stays visible after.
     private bool IsIdle => _queue.Reader.Count == 0 && !Volatile.Read(ref _busy) && Volatile.Read(ref _running) == 0;
 
-    private async Task ListenAsync(Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed)
+    private async Task ListenAsync(
+        Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed, Action? beforeClose)
     {
         var ct = _stop.Token;
         // Restarted only when a trusted sender delivered paths, measured from the end of that exchange: connections that
@@ -417,12 +626,21 @@ public sealed class BatchLeader : IAsyncDisposable
             while (!ct.IsCancellationRequested)
             {
                 // Checked after every connection too, so clients that keep connecting cannot hold the batch open.
+                var held = false;
                 if (sinceActivity.Elapsed >= idle && _age.Elapsed >= MinimumLifetime && IsIdle)
-                    break;
+                {
+                    // A joining batch also waits for processes of its selection that are still starting up (Explorer has
+                    // created them all, but under load one can take many seconds to start), up to a limit.
+                    if (_gate is null || sinceActivity.Elapsed >= JoinGate.HoldLimit || !_gate.ExpectsMore())
+                        break;
+                    held = true;
+                }
 
                 connecting ??= server.WaitForConnectionAsync(ct);
                 var wait = idle - sinceActivity.Elapsed;
-                if (wait < ReplaceBackoff)
+                if (held)
+                    wait = HoldRecheck;
+                else if (wait < ReplaceBackoff)
                     wait = IsIdle ? ReplaceBackoff : idle; // while a long conversion runs, check once per window
 
                 if (await Task.WhenAny(connecting, Task.Delay(wait, ct)).ConfigureAwait(false) != connecting)
@@ -436,7 +654,7 @@ public sealed class BatchLeader : IAsyncDisposable
                     if (ct.IsCancellationRequested)
                         break;
                     // A client vanished before the connection completed; the instance cannot be trusted to recover.
-                    if (await TryReplaceAsync(server, createServer).ConfigureAwait(false) is not { } replacement)
+                    if (await TryReplaceAsync(server, createServer, ct).ConfigureAwait(false) is not { } replacement)
                     {
                         nameLost = true;
                         break;
@@ -463,7 +681,7 @@ public sealed class BatchLeader : IAsyncDisposable
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or IOException)
                 {
-                    if (await TryReplaceAsync(server, createServer).ConfigureAwait(false) is not { } replacement)
+                    if (await TryReplaceAsync(server, createServer, ct).ConfigureAwait(false) is not { } replacement)
                     {
                         nameLost = true;
                         break;
@@ -486,6 +704,16 @@ public sealed class BatchLeader : IAsyncDisposable
             // a newer batch using the same key: rotating would send its followers elsewhere.
             try
             {
+                beforeClose?.Invoke();
+            }
+#pragma warning disable CA1031 // Closing must always finish; the record is best effort.
+            catch (Exception)
+#pragma warning restore CA1031
+            {
+            }
+
+            try
+            {
                 if (!nameLost)
                     onClosed?.Invoke();
             }
@@ -503,16 +731,25 @@ public sealed class BatchLeader : IAsyncDisposable
     }
 
     /// <returns>A new instance, or <c>null</c> when the name was taken while it was free (another process or account).</returns>
-    private static async Task<NamedPipeServerStream?> TryReplaceAsync(NamedPipeServerStream server, Func<NamedPipeServerStream> createServer)
+    private async Task<NamedPipeServerStream?> TryReplaceAsync(
+        NamedPipeServerStream server, Func<NamedPipeServerStream> createServer, CancellationToken ct)
     {
         await server.DisposeAsync().ConfigureAwait(false);
-        try
+        // A joining batch tries for a while: a process of its own selection that took the free name gives it back at once
+        // (it finds this batch still open and is late), and ending early here would leave a partial output.
+        for (var attempt = 1; ; attempt++)
         {
-            return createServer();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return null;
+            try
+            {
+                return createServer();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (_gate is null || attempt >= 20 || ct.IsCancellationRequested)
+                    return null;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100), CancellationToken.None).ConfigureAwait(false);
         }
     }
 
@@ -522,7 +759,8 @@ public sealed class BatchLeader : IAsyncDisposable
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(Batch.IoTimeout);
 
-        if (!_isTrusted(PipePeer.ClientProcessId(server)))
+        var client = PipePeer.ClientProcessId(server);
+        if (!_isTrusted(client))
         {
             // Read (and drop) the request first: senders write before they read, and on this unbuffered pipe a reply
             // written now would wait for a reader that is itself waiting for its own write to be read.
@@ -532,6 +770,15 @@ public sealed class BatchLeader : IAsyncDisposable
         }
 
         var files = await Batch.ReadPathsAsync(server, timeout.Token).ConfigureAwait(false);
+        var sender = _gate is null ? null : ProcessStamp.Of(client);
+        if (_gate is not null && !_gate.Admits(sender))
+        {
+            // Another selection, or a batch that has closed: its sender reports its files left out. Not a delivery, so
+            // it does not keep this batch open.
+            await server.WriteAsync(new[] { Batch.Late }, timeout.Token).ConfigureAwait(false);
+            return false;
+        }
+
         if (!HasRoomFor(files))
         {
             // Refuse the whole message so its sender processes those files itself; never ack what will not be processed.
@@ -542,6 +789,8 @@ public sealed class BatchLeader : IAsyncDisposable
         // Queue before acking: if the reply is lost the sender retries and the duplicate is dropped; no file is lost.
         foreach (var file in files)
             TryEnqueue(file);
+        if (sender is { } member)
+            _gate!.Accept(member); // before the reply, so a sender whose reply is lost is still known as delivered
         await server.WriteAsync(new[] { Batch.Accepted }, timeout.Token).ConfigureAwait(false);
         await server.FlushAsync(timeout.Token).ConfigureAwait(false);
 

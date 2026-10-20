@@ -51,8 +51,11 @@ public sealed class Runner(RunLog log)
     /// and runs <paramref name="operation"/> once, holding every pin until it finishes. One file that cannot be used fails
     /// the whole output, and the result names it. ADR-0007, part 2.
     /// </summary>
+    /// <param name="missing">Read once <paramref name="files"/> has ended: files of this selection that never arrived
+    /// (their process ended first, <see cref="BatchLeader.Missing"/>). Any of them fails the whole output.</param>
     public async Task<BatchOutcome> RunAsync(
-        IBatchOperation operation, IAsyncEnumerable<string> files, IProgress<BatchProgress>? progress, CancellationToken ct)
+        IBatchOperation operation, IAsyncEnumerable<string> files, IProgress<BatchProgress>? progress, CancellationToken ct,
+        Func<IReadOnlyList<string>>? missing = null)
     {
         var timer = Stopwatch.StartNew();
         var received = new List<string>();
@@ -72,6 +75,15 @@ public sealed class Runner(RunLog log)
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             return Cancelled(operation, received.FirstOrDefault() ?? "(batch)", timer);
+        }
+
+        if (missing?.Invoke() is { Count: > 0 } lost)
+        {
+            // Joining without them would write an output that looks complete. ADR-0007, part 2.
+            return Failed(operation, [.. lost.Select(f => (f, "never reached Flevert: its process ended before handing it over"))],
+                timer, (name, others) => others == 0
+                    ? $"{name} never reached Flevert, so nothing was joined. Select the files again."
+                    : $"{name} and {others} more {Files(others)} never reached Flevert, so nothing was joined. Select the files again.");
         }
 
         if (received.Count == 0)
@@ -114,6 +126,46 @@ public sealed class Runner(RunLog log)
             foreach (var pin in pins)
                 pin.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Reports every file of <paramref name="files"/> left out of a join without opening any: they reached Flevert after
+    /// their batch had closed, came from another selection while a batch was collecting, or could not reach their batch
+    /// (<see cref="BatchLeader.LeavesOut"/>). One failed result names the first in natural order. ADR-0007, part 2.
+    /// </summary>
+    public async Task<BatchOutcome> LeaveOutAsync(IBatchOperation operation, IAsyncEnumerable<string> files, CancellationToken ct)
+    {
+        var timer = Stopwatch.StartNew();
+        var late = new List<string>();
+        try
+        {
+            await foreach (var file in files.WithCancellation(ct).ConfigureAwait(false))
+            {
+                if (!late.Contains(file, StringComparer.Ordinal))
+                    late.Add(file);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+
+        if (late.Count == 0)
+            return Cancelled(operation, "(batch)", timer);
+        return Failed(operation, [.. late.Select(f => (f, "left out: it arrived after its batch had closed, or from another selection while one was being collected"))],
+            timer, (name, others) => others == 0
+                ? $"{name} was left out: it arrived while Flevert was joining other files. Select the files again."
+                : $"{name} and {others} more {Files(others)} were left out: they arrived while Flevert was joining other files. Select the files again.");
+    }
+
+    private static string Files(int n) => n == 1 ? "file" : "files";
+
+    /// <param name="message">The notification's text from the first file's name and how many others there are.</param>
+    private BatchOutcome Failed(IMenuOperation operation, List<(string File, string Reason)> files, Stopwatch timer, Func<string, int, string> message)
+    {
+        foreach (var (file, reason) in files)
+            log.Write(operation.Id, new FileResult(file, null, reason), timer.Elapsed);
+        var first = files.Select(f => f.File).OrderBy(f => f, NaturalOrder.PathComparer).First();
+        return new BatchOutcome([new FileResult(first, null, message(Path.GetFileName(first), files.Count - 1))], 1) { OneOutput = true };
     }
 
     // How long a cancelled join may take to stop and delete its temporary output before it is abandoned (and its inputs

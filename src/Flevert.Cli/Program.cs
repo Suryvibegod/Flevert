@@ -17,8 +17,10 @@ internal static class Program
     // FLEVERT_BATCH_IDLE_MS is for integration tests on a loaded machine, like FLEVERT_LOG_DIR.
     private static readonly TimeSpan BatchIdleWindow = TimeSpan.FromMilliseconds(
         int.TryParse(Environment.GetEnvironmentVariable("FLEVERT_BATCH_IDLE_MS"), out var ms) ? Math.Clamp(ms, 100, 10_000) : 400);
-    // At least this for an operation that joins the batch into one output (still widened by FLEVERT_BATCH_IDLE_MS).
-    private static readonly TimeSpan JoinIdleWindow = TimeSpan.FromSeconds(1);
+    // At least this for an operation that joins the batch into one output (still widened by FLEVERT_BATCH_IDLE_MS). Its
+    // leader also waits for every process of the selection it can see; this covers the gaps between Explorer starting
+    // them (0.5 s at most, measured under load). ADR-0007, part 2.
+    private static readonly TimeSpan JoinIdleWindow = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan LogRetention = TimeSpan.FromDays(7);
     // Up to what the operation allows, leaving one core for the machine and the progress window; beyond 8 the gain is
     // small and memory grows. docs/specs/core.md, "Xử lý song song trong một lô".
@@ -165,7 +167,9 @@ internal static class Program
         // A late file splits a joined batch into two outputs, not just two notifications: wait a little longer. ADR-0007.
         var idle = operation is IBatchOperation && BatchIdleWindow < JoinIdleWindow ? JoinIdleWindow : BatchIdleWindow;
         // No synchronization context exists yet, so blocking here cannot deadlock. Followers exit without loading WinForms.
-        var leader = Batch.LeadOrJoinAsync(run.OperationId, inputs, idle, CancellationToken.None).GetAwaiter().GetResult();
+        var leader = (operation is IBatchOperation
+            ? Batch.LeadOrJoinOneOutputAsync(run.OperationId, inputs, idle, CancellationToken.None)
+            : Batch.LeadOrJoinAsync(run.OperationId, inputs, idle, CancellationToken.None)).GetAwaiter().GetResult();
         if (leader is null)
             return Ok;
 
@@ -177,8 +181,10 @@ internal static class Program
             var runner = new Runner(log);
             Func<IProgress<BatchProgress>?, CancellationToken, Task<BatchOutcome>> batch = operation switch
             {
+                // Files that came too late for their batch: one notification for all of them, and no second output.
+                IBatchOperation join when leader.LeavesOut => (_, ct) => runner.LeaveOutAsync(join, leader.ReadAllAsync(ct), ct),
                 // Collects the whole batch first, so the leader closes once no file has arrived for the idle window.
-                IBatchOperation join => (progress, ct) => runner.RunAsync(join, leader.ReadAllAsync(ct), progress, ct),
+                IBatchOperation join => (progress, ct) => runner.RunAsync(join, leader.ReadAllAsync(ct), progress, ct, () => leader.Missing),
                 IOperation each => (progress, ct) => runner.RunAsync(
                     each, leader.ReadAllAsync(ct), () => leader.Pending, progress, ct, MaxParallelFor(each), count =>
                     {

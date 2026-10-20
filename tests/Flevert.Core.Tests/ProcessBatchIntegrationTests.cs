@@ -417,10 +417,11 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         Assert.Equal("Page 50 of 50", (await File.ReadAllTextAsync(_dir.Combine(@"Báo cáo 1 (pages)\Báo cáo 1 50.txt"))).TrimEnd());
     }
 
+    // The tests of joining operations below run at the product's windows: no FLEVERT_BATCH_IDLE_MS.
+
     [Fact]
     public async Task Twelve_processes_of_a_joining_operation_give_one_file_in_natural_order()
     {
-        _idleWindowMs = "3000"; // one batch even when the test machine is busy (see _idleWindowMs)
         var files = Enumerable.Range(1, 12).Select(i => _dir.File($"ảnh {i}.txt", $"ảnh {i}\r\n")).ToList();
         int[] startOrder = [7, 12, 1, 10, 3, 2, 11, 5, 9, 4, 8, 6]; // Explorer's order is not the names' order
 
@@ -434,6 +435,107 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
             Directory.GetFileSystemEntries(_dir.Path).Select(Path.GetFileName).Order(StringComparer.Ordinal));
         Assert.Equal(string.Concat(Enumerable.Range(1, 12).Select(i => $"ảnh {i}\r\n")), await File.ReadAllTextAsync(output));
         Assert.Single(LoggedProcessIds());
+    }
+
+    [Fact]
+    public async Task A_hundred_processes_of_a_joining_operation_give_one_file()
+    {
+        // The most Explorer starts for one menu click. Under load, 100 processes used to give 39 to 65 outputs: followers
+        // waiting for the one pipe gave up after 10 s and joined their file alone.
+        var files = Enumerable.Range(1, 100).Select(i => _dir.File($"IMG_{i:D4}.txt", $"{i}\r\n")).ToList();
+
+        var processes = files.OrderBy(_ => Random.Shared.Next()).Select(f => StartFlevert("dev.join", f)).ToList();
+        await ExitAllOk(processes, TimeSpan.FromMinutes(3));
+
+        Assert.Equal([.. files.Select(f => Path.GetFileName(f)).Append("IMG_0001 (+99).txt").Order(StringComparer.Ordinal)], _dir.FileNames());
+        Assert.Equal(string.Concat(Enumerable.Range(1, 100).Select(i => $"{i}\r\n")), await File.ReadAllTextAsync(_dir.Combine("IMG_0001 (+99).txt")));
+    }
+
+    [Fact]
+    public async Task A_process_of_the_selection_that_is_slow_to_start_is_waited_for()
+    {
+        // Explorer created it with the others, but it runs only after the idle window has long passed (as when 100
+        // processes start at once on a busy machine). It used to lead a second batch: a second, partial output.
+        var files = Enumerable.Range(1, 4).Select(i => _dir.File($"{i}.txt", $"{i}\r\n")).ToList();
+        using var slow = SuspendedFlevert("dev.join", files[0]);
+        var others = files.Skip(1).Select(f => StartFlevert("dev.join", f)).ToList();
+
+        await Task.Delay(TimeSpan.FromSeconds(6));
+        slow.Resume();
+        await ExitAllOk([.. others, slow.Process]);
+
+        Assert.Equal(["1 (+3).txt", "1.txt", "2.txt", "3.txt", "4.txt"], _dir.FileNames());
+        Assert.Equal("1\r\n2\r\n3\r\n4\r\n", await File.ReadAllTextAsync(_dir.Combine("1 (+3).txt")));
+    }
+
+    [Fact]
+    public async Task A_process_created_before_its_batch_closed_that_runs_after_it_is_left_out_with_no_second_output()
+    {
+        var files = Enumerable.Range(1, 3).Select(i => _dir.File($"{i}.txt", $"{i}\r\n")).ToList();
+        var first = files.Take(2).Select(f => StartFlevert("dev.join", f)).ToList();
+        // Created after a pause long enough to look like another selection, so the leader does not wait for it.
+        await Task.Delay(TimeSpan.FromSeconds(2.6));
+        using var straggler = SuspendedFlevert("dev.join", files[2]);
+        await ExitAllOk(first);
+
+        straggler.Resume();
+        await straggler.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+
+        Assert.Equal(ExitCodes.Failed, straggler.Process.ExitCode);
+        Assert.Equal(["1 (+1).txt", "1.txt", "2.txt", "3.txt"], _dir.FileNames());
+        Assert.Contains(LogLines(), line =>
+            line.Contains("\t" + files[2] + "\tfailed\t", StringComparison.Ordinal) && line.Contains("\tleft out:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_selection_made_while_another_batch_of_the_operation_collects_is_left_out_not_merged_into_it()
+    {
+        var a = Enumerable.Range(1, 3).Select(i => _dir.File($"a {i}.txt", $"a{i}\r\n")).ToList();
+        var b = Enumerable.Range(1, 2).Select(i => _dir.File($"b {i}.txt", $"b{i}\r\n")).ToList();
+        var first = a.Select(f => StartFlevert("dev.join", f)).ToList();
+        // The user picks other files and chooses the same command while the first batch still waits for stragglers.
+        await Task.Delay(TimeSpan.FromSeconds(2.6));
+        var second = b.Select(f => StartFlevert("dev.join", f)).ToList();
+        await Task.WhenAll(first.Concat(second).Select(p => p.WaitForExitAsync())).WaitAsync(TimeSpan.FromSeconds(90));
+
+        Assert.All(first, p => Assert.Equal(0, p.ExitCode));
+        Assert.Equal([0, 1], second.Select(p => p.ExitCode).Order()); // one notification for the whole second selection
+        Assert.Equal("a1\r\na2\r\na3\r\n", await File.ReadAllTextAsync(_dir.Combine("a 1 (+2).txt")));
+        Assert.Equal(["a 1 (+2).txt", "a 1.txt", "a 2.txt", "a 3.txt", "b 1.txt", "b 2.txt"], _dir.FileNames());
+        Assert.All(b, file => Assert.Contains(LogLines(), line =>
+            line.Contains("\t" + file + "\tfailed\t", StringComparison.Ordinal) && line.Contains("\tleft out:", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task A_process_of_the_selection_that_ends_before_handing_over_its_file_fails_the_join_and_is_named()
+    {
+        // Killed, or Windows could not start it (100 processes can exhaust the desktop heap): joining the rest would give
+        // an output that looks complete.
+        var files = Enumerable.Range(1, 3).Select(i => _dir.File($"{i}.txt", $"{i}\r\n")).ToList();
+        var doomed = SuspendedFlevert("dev.join", files[1]);
+        var others = new[] { files[0], files[2] }.Select(f => StartFlevert("dev.join", f)).ToList();
+        await Task.Delay(TimeSpan.FromSeconds(4));
+        doomed.Process.Kill();
+        doomed.Dispose();
+        await Task.WhenAll(others.Select(p => p.WaitForExitAsync())).WaitAsync(TimeSpan.FromSeconds(60));
+
+        Assert.Equal([0, 1], others.Select(p => p.ExitCode).Order());
+        Assert.Equal(["1.txt", "2.txt", "3.txt"], _dir.FileNames());
+        Assert.Contains(LogLines(), line =>
+            line.Contains("\t" + files[1] + "\tfailed\t", StringComparison.Ordinal) && line.Contains("\tnever reached Flevert", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Two_joins_run_one_after_the_other_both_write_their_output()
+    {
+        // As a script does: the second starts as soon as the first has exited.
+        var a = new[] { _dir.File("a 1.txt"), _dir.File("a 2.txt") };
+        var b = new[] { _dir.File("b 1.txt"), _dir.File("b 2.txt") };
+
+        await ExitAllOk([.. a.Select(f => StartFlevert("dev.join", f))]);
+        await ExitAllOk([.. b.Select(f => StartFlevert("dev.join", f))]);
+
+        Assert.Equal(["a 1 (+1).txt", "a 1.txt", "a 2.txt", "b 1 (+1).txt", "b 1.txt", "b 2.txt"], _dir.FileNames());
     }
 
     [Fact]
@@ -467,7 +569,6 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     public async Task A_joining_batch_with_a_file_it_cannot_use_writes_nothing_and_only_its_leader_exits_with_failure()
     {
         // Exit codes as docs/specs/core.md has them: the leader reports the batch, the others exit 0 once delivered.
-        _idleWindowMs = "3000";
         var files = new[] { _dir.File("1.txt"), _dir.File("2.md"), _dir.File("3.txt") };
 
         var processes = files.Select(f => StartFlevert("dev.join", f)).ToList();
@@ -516,12 +617,87 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
         return Process.Start(start)!;
     }
 
+    /// <summary>
+    /// flevert.exe created but not yet running, as Explorer leaves a process that a busy machine is slow to start: its
+    /// creation time and command line already exist.
+    /// </summary>
+    private SuspendedProcess SuspendedFlevert(string operation, string file)
+    {
+        var environment = Environment.GetEnvironmentVariables().Cast<System.Collections.DictionaryEntry>()
+            .ToDictionary(e => (string)e.Key, e => (string?)e.Value ?? "", StringComparer.OrdinalIgnoreCase);
+        environment["FLEVERT_LOG_DIR"] = _logs.Path;
+        environment["FLEVERT_HEADLESS"] = "1";
+        var block = string.Concat(environment.OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase).Select(e => $"{e.Key}={e.Value}\0")) + "\0";
+        var commandLine = $"\"{FlevertExe}\" run {operation} \"{file}\"";
+
+        const uint CreateSuspended = 0x4, CreateUnicodeEnvironment = 0x400;
+        var startup = new StartupInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<StartupInfo>() };
+        Assert.True(CreateProcessW(null, commandLine, 0, 0, false, CreateSuspended | CreateUnicodeEnvironment, block, _dir.Path,
+            ref startup, out var info), $"CreateProcess failed: {System.Runtime.InteropServices.Marshal.GetLastPInvokeError()}");
+        CloseHandle(info.Process);
+        return new SuspendedProcess(Process.GetProcessById(info.ProcessId), info.Thread);
+    }
+
+    private sealed class SuspendedProcess(Process process, nint thread) : IDisposable
+    {
+        private nint _thread = thread;
+        private bool _resumed;
+
+        public Process Process { get; } = process;
+
+        public void Resume()
+        {
+            Assert.NotEqual(uint.MaxValue, ResumeThread(_thread));
+            _resumed = true;
+        }
+
+        public void Dispose()
+        {
+            if (_thread != 0)
+                CloseHandle(_thread);
+            _thread = 0;
+            if (!_resumed && !Process.HasExited)
+                Process.Kill(); // never resumed: do not leave it behind
+        }
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private struct StartupInfo
+    {
+        public int Size;
+        public nint Reserved, Desktop, Title;
+        public int X, Y, XSize, YSize, XCountChars, YCountChars, FillAttribute, Flags;
+        public short ShowWindow, Reserved2;
+        public nint Reserved3, StdInput, StdOutput, StdError;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct ProcessInformation
+    {
+        public nint Process, Thread;
+        public int ProcessId, ThreadId;
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern bool CreateProcessW(string? application, string commandLine, nint processAttributes, nint threadAttributes,
+        bool inheritHandles, uint flags, string environment, string currentDirectory, ref StartupInfo startup, out ProcessInformation info);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint ResumeThread(nint thread);
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(nint handle);
+
+    private string[] LogLines() => [.. Directory.GetFiles(_logs.Path, "flevert-*.log").SelectMany(File.ReadAllLines)];
+
     /// <summary>Every process must exit with 0 within 30 s; stragglers are killed so a hang fails instead of stalling.</summary>
-    private static async Task ExitAllOk(IReadOnlyList<Process> processes)
+    private static Task ExitAllOk(IReadOnlyList<Process> processes) => ExitAllOk(processes, TimeSpan.FromSeconds(30));
+
+    private static async Task ExitAllOk(IReadOnlyList<Process> processes, TimeSpan timeout)
     {
         try
         {
-            await Task.WhenAll(processes.Select(p => p.WaitForExitAsync())).WaitAsync(TimeSpan.FromSeconds(30));
+            await Task.WhenAll(processes.Select(p => p.WaitForExitAsync())).WaitAsync(timeout);
             Assert.All(processes, p => Assert.Equal(0, p.ExitCode));
         }
         finally
