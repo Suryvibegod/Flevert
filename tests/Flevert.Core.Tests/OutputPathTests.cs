@@ -635,6 +635,31 @@ public sealed class OutputPathTests : IDisposable
         Assert.Equal(["sub"], EntryNames(handed!));
     }
 
+    // What the cleanup has to leave (someone else's folder inside, a file it could not delete) must not stay hidden beside
+    // the input, where the user would never find it.
+    [Fact]
+    public async Task WriteDirectoryAtomically_shows_a_temporary_folder_the_cleanup_could_not_remove()
+    {
+        File.SetAttributes(_dir.Path, File.GetAttributes(_dir.Path) & ~FileAttributes.NotContentIndexed);
+        string? handed = null;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => OutputPath.WriteDirectoryAtomicallyAsync(
+            _dir.Combine("a (pages)"),
+            async (temp, ct) =>
+            {
+                handed = temp;
+                await WritePages(1)(temp, ct);
+                Directory.CreateDirectory(Path.Combine(temp, "sub"));
+                await File.WriteAllTextAsync(Path.Combine(temp, "sub", "deep.txt"), "theirs", ct);
+                throw new InvalidOperationException("boom");
+            },
+            CancellationToken.None));
+
+        var left = File.GetAttributes(handed!);
+        Assert.False(left.HasFlag(FileAttributes.Hidden), $"{left}");
+        Assert.False(left.HasFlag(FileAttributes.NotContentIndexed), $"{left}");
+    }
+
     // Guard: the folder is now created, held, renamed and deleted through Win32 calls rather than .NET's path APIs.
     [Fact]
     public async Task WriteDirectoryAtomically_handles_paths_longer_than_260_characters()

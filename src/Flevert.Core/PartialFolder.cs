@@ -221,8 +221,9 @@ internal sealed partial class PartialFolder : IDisposable
                 CloseAnchor();
             }
 
-            // A folder that still has something in it stays; a link is removed itself.
-            DeleteByHandle(_folder);
+            // A folder that still has something in it stays, and is shown so the user finds it; a link is removed itself.
+            if (!DeleteByHandle(_folder) && !IsLink(_folder))
+                Unhide();
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
@@ -355,7 +356,8 @@ internal sealed partial class PartialFolder : IDisposable
 
     private static string? FinalPath(SafeFileHandle handle, uint flags)
     {
-        // A path fits in MAX_PATH*... but a resolved long path can be longer; grow once if the first buffer was too small.
+        // 1024 characters cover almost every path; a resolved long path can be longer (up to 32 767), so grow once to the
+        // length the first call asked for.
         var buffer = new char[1024];
         var length = GetFinalPathNameByHandleW(handle, buffer, (uint)buffer.Length, flags);
         if (length >= buffer.Length)
