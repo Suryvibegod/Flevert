@@ -49,18 +49,21 @@ internal static class Fixtures
         File.Delete(plain);
     });
 
-    /// <summary>4 s of 1280 × 720 HEVC 10-bit tagged as HDR10 (BT.2020, PQ), as an iPhone's HDR video is.</summary>
+    /// <summary>
+    /// 4 s of 1280 × 720 HEVC 10-bit tagged as HDR10 (BT.2020, PQ), as an iPhone's HDR video is. The frames carry the tags
+    /// (<c>setparams</c>): ffmpeg 8 writes those, and ignores <c>-color_trc</c> given to an encoder fed untagged frames.
+    /// </summary>
     public static Task<string> HdrMovAsync() => Make("hdr.mov", path => RunRawAsync(
         "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=4", "-f", "lavfi", "-i", "sine=frequency=550:sample_rate=48000:duration=4",
-        "-c:v", "libx265", "-preset", "ultrafast", "-pix_fmt", "yuv420p10le", "-x265-params", "log-level=error",
-        "-color_primaries", "bt2020", "-color_trc", "smpte2084", "-colorspace", "bt2020nc", "-tag:v", "hvc1",
+        "-vf", "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc",
+        "-c:v", "libx265", "-preset", "ultrafast", "-pix_fmt", "yuv420p10le", "-x265-params", "log-level=error", "-tag:v", "hvc1",
         "-c:a", "aac", "-ac", "2", "-f", "mov", path));
 
     /// <summary>4 s of 1280 × 720 HEVC 10-bit tagged as HLG (BT.2020, ARIB STD-B67), as iPhones record HDR.</summary>
     public static Task<string> HlgMovAsync() => Make("hlg.mov", path => RunRawAsync(
         "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=4", "-f", "lavfi", "-i", "sine=frequency=550:sample_rate=48000:duration=4",
-        "-c:v", "libx265", "-preset", "ultrafast", "-pix_fmt", "yuv420p10le", "-x265-params", "log-level=error",
-        "-color_primaries", "bt2020", "-color_trc", "arib-std-b67", "-colorspace", "bt2020nc", "-tag:v", "hvc1",
+        "-vf", "setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc",
+        "-c:v", "libx265", "-preset", "ultrafast", "-pix_fmt", "yuv420p10le", "-x265-params", "log-level=error", "-tag:v", "hvc1",
         "-c:a", "aac", "-ac", "2", "-f", "mov", path));
 
     /// <summary>6 s of 320 × 240 VP9 in MKV with two audio streams: English Opus, then Vietnamese Vorbis marked default.</summary>

@@ -193,9 +193,9 @@ public sealed class Ffmpeg
     /// <summary>
     /// The longest one pass may take: <paramref name="slowness"/> times the duration, plus a minute. Six by default
     /// (docs/specs/media.md: a slow machine encodes 1080p with preset medium at 1–2 times real time); VP9 is slower.
+    /// Never more than two days: a crafted header (12 hours of 8K) would otherwise wait for weeks (RC-5).
     /// </summary>
     public static TimeSpan TimeoutFor(TimeSpan duration, double slowness = DefaultSlowness) =>
-        // Never more than two days: a crafted header (12 hours of 8K) would otherwise wait for weeks (RC-5).
         TimeSpan.FromTicks(Math.Min((duration * slowness + TimeSpan.FromMinutes(1)).Ticks, MaxTimeout.Ticks));
 
     internal static readonly TimeSpan MaxTimeout = TimeSpan.FromDays(2);
