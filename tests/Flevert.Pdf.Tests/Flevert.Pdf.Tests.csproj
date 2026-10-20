@@ -27,6 +27,9 @@
     <None Include="fixtures\**" CopyToOutputDirectory="PreserveNewest" />
     <!-- The phone portrait with GPS of the image tests (its README tells how it was made), shared rather than copied. -->
     <None Include="..\Flevert.Image.Tests\fixtures\portrait-gps.heic" Link="fixtures\portrait-gps.heic" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Multi-page TIFFs as scanners write them (same README), for images to PDF. -->
+    <None Include="..\Flevert.Image.Tests\fixtures\pages-with-thumbnails.tif" Link="fixtures\pages-with-thumbnails.tif" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Flevert.Image.Tests\fixtures\mixed-g4-colour.tif" Link="fixtures\mixed-g4-colour.tif" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

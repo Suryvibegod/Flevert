@@ -268,28 +268,33 @@ internal sealed class PdfBuilder : IDisposable
     {
         ObjectDisposedException.ThrowIf(_document.IsClosed, this);
         if (PageCount >= MaxPages)
-        {
-            throw new PdfException(PdfError.TooManyPages, string.Create(CultureInfo.InvariantCulture,
-                $"A PDF made by Flevert has at most {MaxPages} pages."));
-        }
-
+            throw TooManyPagesError(MaxPages);
         if (_contentBytes + bytes > _maxContentBytes)
-        {
-            var most = _maxContentBytes >= 1 << 20
-                ? string.Create(CultureInfo.InvariantCulture, $"{_maxContentBytes >> 20} MB")
-                : string.Create(CultureInfo.InvariantCulture, $"{_maxContentBytes} bytes");
-            throw new PdfException(PdfError.TooLarge, $"Together the images are too large for one PDF: Flevert puts at most {most} of images in one.");
-        }
+            throw TooMuchContentError(_maxContentBytes);
     }
 
     private void ThrowIfTooManyPixels(int width, int height)
     {
         if ((long)width * height > _maxImagePixels)
-        {
-            throw new PdfException(PdfError.TooLarge, string.Create(CultureInfo.InvariantCulture,
-                $"The image is {width} x {height} pixels; a PDF page made by Flevert holds at most {_maxImagePixels}."));
-        }
+            throw TooManyPixelsError(width, height, _maxImagePixels);
     }
+
+    /// <summary>The error for a document past <paramref name="maxPages"/> pages, also for a batch refused before building.</summary>
+    internal static PdfException TooManyPagesError(int maxPages) => new(PdfError.TooManyPages,
+        string.Create(CultureInfo.InvariantCulture, $"A PDF made by Flevert has at most {maxPages} pages."));
+
+    /// <summary>The error for images that together pass <paramref name="maxContentBytes"/>.</summary>
+    internal static PdfException TooMuchContentError(long maxContentBytes)
+    {
+        var most = maxContentBytes >= 1 << 20
+            ? string.Create(CultureInfo.InvariantCulture, $"{maxContentBytes >> 20} MB")
+            : string.Create(CultureInfo.InvariantCulture, $"{maxContentBytes} bytes");
+        return new PdfException(PdfError.TooLarge, $"Together the images are too large for one PDF: Flevert puts at most {most} of images in one.");
+    }
+
+    /// <summary>The error for an image of more than <paramref name="maxImagePixels"/> pixels.</summary>
+    internal static PdfException TooManyPixelsError(long width, long height, long maxImagePixels) => new(PdfError.TooLarge,
+        string.Create(CultureInfo.InvariantCulture, $"The image is {width} x {height} pixels; a PDF page made by Flevert holds at most {maxImagePixels}."));
 
     // Call while holding the gate. The caller destroys the object unless a page took it.
     private nint NewImage()
