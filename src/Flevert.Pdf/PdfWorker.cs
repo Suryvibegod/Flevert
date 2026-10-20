@@ -100,7 +100,7 @@ public sealed class PdfWorker
         ExternalToolResult run;
         try
         {
-            run = await ExternalTool.RunAsync(ExePath, [Command], RunTimeout, request, limits: limits,
+            run = await ExternalTool.RunAsync(ExePath, [Command], RunTimeout, request, limits: limits, environment: WorkerEnvironment(),
                 standardOutputLine: session.OnLine, cancellationToken: session.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested && session.Stalled)
@@ -126,6 +126,24 @@ public sealed class PdfWorker
         }
 
         return total;
+    }
+
+    /// <summary>
+    /// The changes to the environment the worker inherits from flevert.exe (ADR-0008): every <c>MAGICK_*</c> variable,
+    /// which steers the ImageMagick inside it (resource limits, temporary folder, where it loads configuration and
+    /// modules from; the worker sets its own up), and every <c>FLEVERT_*</c> one, switches for tests, are removed. The
+    /// rest stays, .NET's own variables included.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string?> WorkerEnvironment()
+    {
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in System.Environment.GetEnvironmentVariables().Keys.OfType<string>())
+        {
+            if (name.StartsWith("MAGICK_", StringComparison.OrdinalIgnoreCase) || name.StartsWith("FLEVERT_", StringComparison.OrdinalIgnoreCase))
+                environment[name] = null;
+        }
+
+        return environment;
     }
 
     private void RequireExe()
