@@ -32,7 +32,7 @@ $classicKey = "$classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"
 $heic = Join-Path $root 'tests\Flevert.Image.Tests\fixtures\gradient-320x240.heic'
 $rotationsPdf = Join-Path $root 'tests\Flevert.Pdf.Tests\fixtures\rotations.pdf'
 # Every folder flevert.exe writes under app data (AppData.Subfolders); the uninstaller deletes exactly these.
-$appDataFolders = 'logs', 'pipes', 'magick', 'update'
+$appDataFolders = 'logs', 'pipes', 'magick', 'update', 'media'
 # Each "notices" entry of deps.json: files from deps\ the installer ships, with the title their licences carry.
 $bundled = @(([IO.File]::ReadAllText((Join-Path $root 'scripts\deps.json')) | ConvertFrom-Json).notices)
 $bundledFiles = @($bundled | ForEach-Object { $_.files } | Sort-Object -Unique)

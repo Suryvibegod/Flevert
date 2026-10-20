@@ -98,12 +98,14 @@ Source: "{#SourceDir}\Magick.Native-*.dll"; DestDir: "{code:InstallFolder}"; Fla
 Type: files; Name: "{app}\mscordaccore_amd64_amd64_*.dll"
 
 [UninstallDelete]
-; What flevert.exe writes under %LOCALAPPDATA%\Flevert: logs, batch keys and the ImageMagick policy. Named one by one,
+; What flevert.exe writes under %LOCALAPPDATA%\Flevert: logs, batch keys, the ImageMagick policy, the update check and
+; x264's statistics between two passes. Named one by one,
 ; so files someone else keeps in a folder of the same name survive.
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\logs"
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\pipes"
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\magick"
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\update"
+Type: filesandordirs; Name: "{localappdata}\{#AppName}\media"
 Type: dirifempty; Name: "{localappdata}\{#AppName}"
 ; Inno removes only folders it created; this also removes an empty install folder that existed before.
 Type: dirifempty; Name: "{app}"
