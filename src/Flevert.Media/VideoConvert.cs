@@ -3,7 +3,8 @@ using Flevert.Core;
 namespace Flevert.Media;
 
 /// <summary>A video file type Flevert writes with Convert (docs/specs/media.md, table of operations).</summary>
-internal sealed record VideoFormat(string Label, string Extension, string Muxer, string[] Codecs, double Slowness = Ffmpeg.DefaultSlowness)
+/// <param name="Slowness">How much slower than x264 its encoder is, for the timeout (<see cref="VideoEncoding.Slowness"/>).</param>
+internal sealed record VideoFormat(string Label, string Extension, string Muxer, string[] Codecs, double Slowness = 1)
 {
     // +faststart moves the index to the front, so a player or a browser starts before the whole file has arrived.
     private static readonly string[] H264Aac = [.. VideoEncoding.H264(20), .. VideoEncoding.Aac(192)];
@@ -19,7 +20,7 @@ internal sealed record VideoFormat(string Label, string Extension, string Muxer,
     /// </summary>
     public static VideoFormat Webm { get; } = new("WEBM", ".webm", "webm",
         ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", "-c:a", "libopus", "-b:a", "128k"],
-        Slowness: 2 * Ffmpeg.DefaultSlowness);
+        Slowness: 2);
 
     // Not MKV: few people need it as an output (docs/specs/media.md); it stays a source.
     public static IReadOnlyList<VideoFormat> All { get; } = [Mp4, Mov, Webm];
@@ -67,10 +68,10 @@ public sealed class VideoConvert : IOperation
         string[] options =
         [
             .. VideoEncoding.Maps(info, audio), .. MediaJob.MetadataOptions(info, audio),
-            .. VideoEncoding.Filters(video, size), .. _format.Codecs,
+            .. VideoEncoding.Filters(video, size), .. VideoEncoding.FrameTimes, .. _format.Codecs,
         ];
         return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _ffmpeg.EncodeAsync(
-            inputPath, options, temp, _format.Muxer, info.Duration, MediaJob.MaxOutputBytes(inputPath, estimate), MediaJob.Percent(progress), token,
-            _format.Slowness), ct).ConfigureAwait(false);
+            inputPath, options, temp, _format.Muxer, info.Duration, MediaJob.MaxOutputBytes(inputPath, estimate, desired), MediaJob.Percent(progress), token,
+            VideoEncoding.Slowness(video, _format.Slowness)), ct).ConfigureAwait(false);
     }
 }

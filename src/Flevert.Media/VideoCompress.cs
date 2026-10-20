@@ -62,12 +62,12 @@ public sealed class VideoCompress : IOperation
         string[] options =
         [
             .. VideoEncoding.Maps(info, audio), .. MediaJob.MetadataOptions(info, audio), .. VideoEncoding.Filters(video, size),
-            .. VideoEncoding.H264(_level.Crf), .. VideoEncoding.Aac(_level.AudioKbps), "-movflags", "+faststart",
+            .. VideoEncoding.FrameTimes, .. VideoEncoding.H264(_level.Crf), .. VideoEncoding.Aac(_level.AudioKbps), "-movflags", "+faststart",
         ];
         return await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
         {
-            await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", info.Duration, MediaJob.MaxOutputBytes(inputPath, estimate),
-                MediaJob.Percent(progress), token).ConfigureAwait(false);
+            await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", info.Duration, MediaJob.MaxOutputBytes(inputPath, estimate, desired),
+                MediaJob.Percent(progress), token, VideoEncoding.Slowness(video)).ConfigureAwait(false);
             // Thrown before the output is committed: WriteAtomicallyAsync deletes the temporary file.
             var outputBytes = new FileInfo(temp).Length;
             if (outputBytes >= inputBytes)
@@ -99,6 +99,7 @@ public sealed class VideoCompressUnder : IOperation
     {
         _megabytes = megabytes;
         _ffmpeg = ffmpeg;
+        LimitBytes = megabytes * Megabyte;
         Id = string.Create(CultureInfo.InvariantCulture, $"video.compress-under-{megabytes}mb");
         MenuPath = string.Create(CultureInfo.InvariantCulture, $"Compress/Under {megabytes} MB");
     }
@@ -117,7 +118,8 @@ public sealed class VideoCompressUnder : IOperation
     // A run's folder outlives it only when flevert.exe was killed; none runs for a day.
     private static readonly TimeSpan StaleAfter = TimeSpan.FromDays(1);
 
-    private long LimitBytes => _megabytes * Megabyte;
+    /// <summary>The size the output must stay under: the menu's megabytes; smaller in tests.</summary>
+    internal long LimitBytes { get; init; }
 
     internal string AlreadyUnderMessage => string.Create(CultureInfo.InvariantCulture, $"This video is already under {_megabytes} MB.");
 
@@ -174,15 +176,20 @@ public sealed class VideoCompressUnder : IOperation
         MediaJob.RequireSpace(desired, LimitBytes);
         DeleteStaleRuns();
         var passes = Path.Combine(PassFolderRoot, Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(passes);
-        MediaJob.RequireSpace(passes, StatisticsBytes(info, size));
+        var slowness = VideoEncoding.Slowness(video);
         try
         {
+            Directory.CreateDirectory(passes);
+            MediaJob.RequireSpace(passes, StatisticsBytes(info, size));
             var log = Path.Combine(passes, "x264");
-            string[] picture = [.. VideoEncoding.Filters(video, size), "-c:v", "libx264", "-preset", "medium", "-passlogfile", log];
+            // The same frames in both passes (FrameTimes), or the statistics of the first do not fit the second.
+            string[] picture =
+                [.. VideoEncoding.Filters(video, size), .. VideoEncoding.FrameTimes, "-c:v", "libx264", "-preset", "medium", "-passlogfile", log];
             // The first pass only measures the picture: no sound, nothing written.
             await _ffmpeg.EncodeAsync(inputPath, ["-map", $"0:{video.Index}", .. picture, "-b:v", Kbps(budget.VideoKbps), "-pass", "1"], null, "null",
-                info.Duration, 0, MediaJob.Percent(progress, 0, 0.5), ct).ConfigureAwait(false);
+                info.Duration, 0, MediaJob.Percent(progress, 0, 0.5), ct, slowness).ConfigureAwait(false);
+            // One for every attempt, so a retry does not take the bar back from 100 % to 50 %.
+            var secondHalf = MediaJob.Percent(progress, 0.5, 1);
             return await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
             {
                 var videoKbps = (double)budget.VideoKbps;
@@ -197,7 +204,7 @@ public sealed class VideoCompressUnder : IOperation
                     // -fs at the limit: an output that reaches it is too large anyway (EncodeAsync reports it).
                     try
                     {
-                        await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", info.Duration, LimitBytes, MediaJob.Percent(progress, 0.5, 1), token)
+                        await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", info.Duration, LimitBytes, secondHalf, token, slowness)
                             .ConfigureAwait(false);
                         if (new FileInfo(temp).Length is var written && written < LimitBytes)
                         {

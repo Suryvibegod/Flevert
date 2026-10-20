@@ -51,6 +51,13 @@ internal static partial class MediaJob
             yield return $"{name}={Cut(value)}";
         }
 
+        foreach (var option in LanguageOptions(audio))
+            yield return option;
+    }
+
+    /// <summary>The language of each sound stream written, in output order, when the file names one in ISO 639-2.</summary>
+    public static IEnumerable<string> LanguageOptions(IReadOnlyList<AudioTrack> audio)
+    {
         for (var i = 0; i < audio.Count; i++)
         {
             if (audio[i].Language is { } language && Language().IsMatch(language) && language != "und")
@@ -69,7 +76,7 @@ internal static partial class MediaJob
         return value[..end];
     }
 
-    [GeneratedRegex("^[a-z]{3}$")]
+    [GeneratedRegex(@"^[a-z]{3}\z")]
     private static partial Regex Language();
 
     /// <summary>
@@ -77,8 +84,15 @@ internal static partial class MediaJob
     /// "Bảo mật"), or twice the size expected from the duration if more, since a short MP3 legitimately becomes a WAV
     /// ten times its size. A file that decodes to far more than it claims stops there instead of filling the disk.
     /// </summary>
-    public static long MaxOutputBytes(string inputPath, long estimatedBytes) =>
-        Math.Max(4 * new FileInfo(inputPath).Length + 100 * Megabyte, 2 * estimatedBytes);
+    /// <remarks>
+    /// Never more than the room on the output's disk past <see cref="SpareBytes"/>: an output that would need more fails
+    /// there instead of filling the disk for every other program (SEC-1).
+    /// </remarks>
+    public static long MaxOutputBytes(string inputPath, long estimatedBytes, string outputPath)
+    {
+        var limit = Math.Max(4 * new FileInfo(inputPath).Length + 100 * Megabyte, 2 * estimatedBytes);
+        return FreeBytes(outputPath) is { } free ? Math.Clamp(free - SpareBytes, Megabyte, limit) : limit;
+    }
 
     /// <summary>The size of <paramref name="duration"/> at <paramref name="bitsPerSecond"/>.</summary>
     public static long Bytes(TimeSpan duration, long bitsPerSecond) => (long)(duration.TotalSeconds * bitsPerSecond / 8);
@@ -87,19 +101,22 @@ internal static partial class MediaJob
     /// <exception cref="MediaException">Not enough room.</exception>
     public static void RequireSpace(string outputPath, long estimatedBytes)
     {
-        long free;
+        if (FreeBytes(outputPath) is { } free && free < estimatedBytes + SpareBytes)
+            throw new MediaException(MediaException.NotEnoughSpaceMessage(estimatedBytes + SpareBytes));
+    }
+
+    // The room on the disk of a path, or null: a network share has no drive letter, and Windows reports a full disk there
+    // when ffmpeg writes.
+    private static long? FreeBytes(string path)
+    {
         try
         {
-            free = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(outputPath))!).AvailableFreeSpace;
+            return new DriveInfo(Path.GetPathRoot(Path.GetFullPath(path))!).AvailableFreeSpace;
         }
         catch (Exception e) when (e is ArgumentException or IOException or UnauthorizedAccessException)
         {
-            // A network share has no drive letter: Windows reports a full disk there when ffmpeg writes.
-            return;
+            return null;
         }
-
-        if (free < estimatedBytes + SpareBytes)
-            throw new MediaException(MediaException.NotEnoughSpaceMessage(estimatedBytes + SpareBytes));
     }
 
     /// <summary>

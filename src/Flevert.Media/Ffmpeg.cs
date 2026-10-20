@@ -57,8 +57,12 @@ public sealed class Ffmpeg
         ExternalTool.RunAsync(toolPath, arguments, timeout, limits: Limits, environment: ToolEnvironment(),
             standardOutputLine: standardOutputLine, cancellationToken: ct);
 
-    /// <summary>The most memory one ffmpeg or ffprobe may commit (docs/specs/media.md, "Engine").</summary>
-    internal const ulong MaxMemoryBytes = 2UL << 30;
+    /// <summary>
+    /// The most memory one ffmpeg or ffprobe may commit. docs/specs/media.md asked for 2 GB, but x264 at preset medium
+    /// takes about that for 4K at 60 frames a second, an iPhone's usual setting, before the HDR tone map: 3 s of it peaked
+    /// at 2.2 GB in SDR and 2.5 GB in HLG on 4 cores (2026-10-20), and x264 runs more frame threads on more cores.
+    /// </summary>
+    internal const ulong MaxMemoryBytes = 4UL << 30;
 
     // ffmpeg uses every core for a video: below normal, so the machine stays responsive while it runs for minutes. Neither
     // tool starts a process of its own, so neither may.
@@ -133,11 +137,12 @@ public sealed class Ffmpeg
         IProgress<double>? progress, CancellationToken ct, double slowness = DefaultSlowness)
     {
         RequireTool(FfmpegPath);
-        // -n: never overwrite (the temporary output does not exist yet); -progress: key=value lines on stdout.
+        // -n: never overwrite (the temporary output does not exist yet); -progress: key=value lines on stdout. -t before
+        // the operation's options, which may shorten it (GIF).
         string[] arguments =
         [
             "-hide_banner", "-nostdin", "-nostats", "-v", "error", "-n", "-progress", "pipe:1",
-            .. InputOptions(inputPath), .. options,
+            .. InputOptions(inputPath), "-t", MaxSeconds(duration), .. options,
             .. outputPath is null ? (string[])["-f", format, "-"] : ["-fs", maxOutputBytes.ToString(CultureInfo.InvariantCulture), "-f", format, FileUrl(outputPath)],
         ];
         var reader = new ProgressReader(duration, progress);
@@ -160,6 +165,15 @@ public sealed class Ffmpeg
                 new FfmpegException("ffmpeg", run.ExitCode, written.Exists ? "the output reached its size limit" : "no output was written"));
         }
     }
+
+    /// <summary>
+    /// How much of the input an output may hold (<c>-t</c>): the duration ffprobe read, which a file can understate (a
+    /// FLAC's header can say 2 s for an hour of sound), plus half and 10 s, since a VBR MP3 without a header only has an
+    /// estimate. Past it ffmpeg stops, so neither the output, nor x264's statistics, nor the time can grow with what the
+    /// file hides beyond what was checked (security review, SEC-1).
+    /// </summary>
+    internal static string MaxSeconds(TimeSpan duration) =>
+        (duration.TotalSeconds * 1.5 + 10).ToString("0.###", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// The longest one pass may take: <paramref name="slowness"/> times the duration, plus a minute. Six by default

@@ -110,6 +110,75 @@ public sealed class VideoCompressTests : IDisposable
     }
 
     [Fact]
+    public async Task A_phone_video_of_variable_frame_rate_fits_with_every_frame_and_its_times()
+    {
+        // Without the same frame-time mode in both passes the second pass added frames the first never saw, and with
+        // ffmpeg 6.1 it hung (code review, CR-3).
+        var input = await Fixtures.CopyAsync(Fixtures.VariableRateClipAsync(), _dir, "screen.mp4");
+        var limit = new FileInfo(input).Length / 3;
+
+        var output = await Under(10, _dir.Combine("passes"), limit).RunAsync(input, CancellationToken.None).WaitAsync(TimeSpan.FromMinutes(2));
+
+        Assert.True(new FileInfo(output).Length < limit, $"{new FileInfo(output).Length} of {limit} bytes");
+        Assert.Equal(108, await Frames(output));
+    }
+
+    [Fact]
+    public async Task An_output_still_too_large_is_encoded_again_lower_twice_at_most()
+    {
+        var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mp4");
+        var limit = new FileInfo(input).Length / 3;
+        var rates = new List<string>();
+        // The first two second passes come out at the limit (as if x264 overshot); the third as x264 made it.
+        var overshoot = Overshooting(limit, rates, times: 2);
+
+        var output = await Under(10, _dir.Combine("passes"), limit, overshoot).RunAsync(input, CancellationToken.None);
+
+        Assert.True(new FileInfo(output).Length < limit);
+        Assert.Equal(3, rates.Count);
+        var kbps = rates.Select(rate => int.Parse(rate.TrimEnd('k'), System.Globalization.CultureInfo.InvariantCulture)).ToList();
+        Assert.Equal([kbps[0], (int)(kbps[0] * 0.9), (int)(kbps[0] * 0.9 * 0.9)], kbps);
+    }
+
+    [Fact]
+    public async Task An_output_that_never_fits_fails_after_two_retries_and_nothing_is_written()
+    {
+        var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mp4");
+        var limit = new FileInfo(input).Length / 3;
+        var rates = new List<string>();
+        var op = Under(10, _dir.Combine("passes"), limit, Overshooting(limit, rates, times: int.MaxValue));
+
+        var e = await Assert.ThrowsAsync<MediaException>(() => op.RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(op.CouldNotFitMessage, e.Message);
+        Assert.Equal(3, rates.Count);
+        Assert.Equal(["clip.mp4"], Directory.GetFiles(_dir.Path).Select(Path.GetFileName));
+    }
+
+    // TestFfmpeg, but the first second passes write an output of exactly the limit, which EncodeAsync refuses as reached.
+    private static Ffmpeg Overshooting(long limit, List<string> rates, int times) =>
+        new(TestFfmpeg.Instance.FfmpegPath, TestFfmpeg.Instance.FfprobePath, async (tool, arguments, timeout, line, ct) =>
+        {
+            var run = await TestFfmpeg.Instance.Run(tool, arguments, timeout, line, ct);
+            var at = arguments.ToList().IndexOf("-pass");
+            if (at >= 0 && arguments[at + 1] == "2")
+            {
+                rates.Add(arguments[arguments.ToList().IndexOf("-b:v") + 1]);
+                if (rates.Count <= times)
+                {
+                    await using var output = File.OpenWrite(arguments[^1]["file:".Length..]);
+                    output.SetLength(limit);
+                }
+            }
+
+            return run;
+        });
+
+    private static async Task<int> Frames(string path) => int.Parse(
+        (await TestFfmpeg.ProbeRawAsync("-count_frames", "-select_streams", "v:0", "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", path)).Trim(),
+        System.Globalization.CultureInfo.InvariantCulture);
+
+    [Fact]
     public async Task Twenty_minutes_cannot_fit_under_10_mb_and_nothing_is_written()
     {
         // A tiny picture and 211 MB of PCM sound: written in a moment, far over 10 MB, 20 minutes long.
@@ -170,5 +239,6 @@ public sealed class VideoCompressTests : IDisposable
         Assert.Equal(36_000L * ((120 * 68 * 2) + 200), VideoCompressUnder.StatisticsBytes(info, (1920, 1080)));
     }
 
-    private static VideoCompressUnder Under(int megabytes, string passes) => new(megabytes, TestFfmpeg.Instance) { PassFolderRoot = passes };
+    private static VideoCompressUnder Under(int megabytes, string passes, long? limitBytes = null, Ffmpeg? ffmpeg = null) =>
+        new(megabytes, ffmpeg ?? TestFfmpeg.Instance) { PassFolderRoot = passes, LimitBytes = limitBytes ?? megabytes * 1_000_000L };
 }

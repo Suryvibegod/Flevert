@@ -25,6 +25,14 @@ internal static class Fixtures
         "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", "-metadata", "title=Small", "-f", "mp4", path));
 
     /// <summary>
+    /// 6 s of 640 × 360 H.264 + AAC whose frames come at uneven times, as phones and screen recordings write them: 6 of
+    /// every 10 frames of a 30 fps source are kept with their own times (108 frames).
+    /// </summary>
+    public static Task<string> VariableRateClipAsync() => Make("variable-rate.mp4", path => RunRawAsync(
+        "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30:duration=6", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=6",
+        "-vf", "select='lt(mod(n\\,10)\\,6)'", "-fps_mode", "vfr", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-ac", "2", "-f", "mp4", path));
+
+    /// <summary>
     /// As a phone records it upright: 4 s of 640 × 360 pixels stored sideways, turned 90° by the display matrix, in MOV,
     /// with the place it was filmed (Apple's key and the plain one) and a creation date.
     /// </summary>
@@ -46,6 +54,13 @@ internal static class Fixtures
         "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=4", "-f", "lavfi", "-i", "sine=frequency=550:sample_rate=48000:duration=4",
         "-c:v", "libx265", "-preset", "ultrafast", "-pix_fmt", "yuv420p10le", "-x265-params", "log-level=error",
         "-color_primaries", "bt2020", "-color_trc", "smpte2084", "-colorspace", "bt2020nc", "-tag:v", "hvc1",
+        "-c:a", "aac", "-ac", "2", "-f", "mov", path));
+
+    /// <summary>4 s of 1280 × 720 HEVC 10-bit tagged as HLG (BT.2020, ARIB STD-B67), as iPhones record HDR.</summary>
+    public static Task<string> HlgMovAsync() => Make("hlg.mov", path => RunRawAsync(
+        "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=4", "-f", "lavfi", "-i", "sine=frequency=550:sample_rate=48000:duration=4",
+        "-c:v", "libx265", "-preset", "ultrafast", "-pix_fmt", "yuv420p10le", "-x265-params", "log-level=error",
+        "-color_primaries", "bt2020", "-color_trc", "arib-std-b67", "-colorspace", "bt2020nc", "-tag:v", "hvc1",
         "-c:a", "aac", "-ac", "2", "-f", "mov", path));
 
     /// <summary>6 s of 320 × 240 VP9 in MKV with two audio streams: English Opus, then Vietnamese Vorbis marked default.</summary>

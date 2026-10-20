@@ -67,6 +67,26 @@ internal static class VideoEncoding
         return info.MainAudio is { } first ? [first] : [];
     }
 
+    /// <summary>
+    /// Each frame keeps its own time, as the input has it. Without it ffmpeg chooses by the output's container: as it is
+    /// for x264's first pass (no container), constant frame rate for MP4, so a phone's variable frame rate gets frames
+    /// added in the second pass that the first never saw, and with ffmpeg 6.1 that second pass hung (code review, CR-3).
+    /// </summary>
+    public static readonly string[] FrameTimes = ["-fps_mode", "passthrough"];
+
+    /// <summary>
+    /// How many times the duration a pass of <paramref name="video"/> at <paramref name="size"/> may take: six for 1080p
+    /// at 30 frames a second (docs/specs/media.md), more for more pixels a second (4K at 60 is eight times as many), twice
+    /// that for HDR, which is tone mapped in floating point, and <paramref name="factor"/> times that for a slower encoder.
+    /// A timeout only stops a run that is stuck; Cancel stops the others.
+    /// </summary>
+    public static double Slowness(VideoTrack video, double factor = 1)
+    {
+        var fps = video.FrameRate is > 0 and < 240 ? video.FrameRate : 30;
+        var pixelRate = (double)video.Width * video.Height * fps / (1920.0 * 1080 * 30);
+        return Ffmpeg.DefaultSlowness * factor * Math.Max(1, pixelRate) * (video.IsHdr ? 2 : 1);
+    }
+
     /// <summary>The picture, then the sound, by their index in the input.</summary>
     public static string[] Maps(MediaInfo info, IReadOnlyList<AudioTrack> audio) =>
         ["-map", $"0:{info.Video!.Index}", .. audio.SelectMany(track => (string[])["-map", $"0:{track.Index}"])];

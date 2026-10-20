@@ -21,7 +21,7 @@ public sealed class VideoStripMetadataTests : IDisposable
     }
 
     [Fact]
-    public async Task A_phone_video_loses_where_it_was_filmed_and_keeps_its_date_its_rotation_and_every_byte_of_picture_and_sound()
+    public async Task A_phone_video_loses_where_it_was_filmed_and_keeps_its_date_its_rotation_its_pictures_and_its_sound()
     {
         var input = await Fixtures.CopyAsync(Fixtures.PhoneMovAsync(), _dir, "IMG_0042.MOV");
 
@@ -37,8 +37,39 @@ public sealed class VideoStripMetadataTests : IDisposable
         // Not re-encoded, so still stored sideways and turned upright by the display matrix, as the original.
         var info = await TestFfmpeg.Instance.ProbeAsync(output, CancellationToken.None);
         Assert.Equal((640, 360, 360, 640), (info.Video!.Width, info.Video.Height, info.Video.DisplayWidth, info.Video.DisplayHeight));
-        Assert.Equal(await PacketsHash(input, "v"), await PacketsHash(output, "v"));
+        // H.264 loses its SEI messages, so its packets differ, but every picture decodes the same; the sound is copied byte
+        // for byte.
+        Assert.Equal(await PicturesHash(input), await PicturesHash(output));
         Assert.Equal(await PacketsHash(input, "a"), await PacketsHash(output, "a"));
+    }
+
+    [Fact]
+    public async Task What_an_encoder_or_a_camcorder_writes_into_h264_itself_is_removed()
+    {
+        // x264 signs every stream it writes with an SEI message ("x264 - core … options: …"); AVCHD camcorders keep the
+        // camera, the time and the place in the same kind of message (security review, SEC-2).
+        var input = _dir.Combine("camcorder.m2ts");
+        await TestFfmpeg.RunRawAsync("-i", await Fixtures.SmallClipAsync(), "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "ac3",
+            "-mpegts_m2ts_mode", "1", "-f", "mpegts", input);
+        Assert.Contains("x264 - core", System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(input)), StringComparison.Ordinal);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.DoesNotContain("x264 - core", System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(output)), StringComparison.Ordinal);
+        Assert.Equal("mpegts", (await Probe(output)).Format);
+        Assert.Equal(await PicturesHash(input), await PicturesHash(output));
+    }
+
+    [Fact]
+    public async Task The_first_sound_track_is_kept_with_its_language()
+    {
+        var input = await Fixtures.CopyAsync(Fixtures.TwoAudioMkvAsync(), _dir, "film.mkv");
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        var probe = await Probe(output);
+        Assert.Equal(["vp9", "opus"], probe.Streams.Select(s => s.Codec));
+        Assert.Equal("eng", probe.Streams[1].Language);
     }
 
     [Fact]
@@ -56,31 +87,39 @@ public sealed class VideoStripMetadataTests : IDisposable
 
         var probe = await Probe(output);
         Assert.Equal(["vp9", "opus"], probe.Streams.Select(s => s.Codec));
+        // VP9 has no SEI: its packets are copied byte for byte.
         Assert.Equal(await PacketsHash(input, "v"), await PacketsHash(output, "v"));
     }
 
     [Fact]
-    public async Task A_video_with_nothing_hidden_is_skipped_and_nothing_is_written()
+    public async Task A_video_known_to_hide_nothing_is_skipped_and_nothing_is_written()
     {
-        var input = _dir.Combine("clean.mp4");
-        await TestFfmpeg.RunRawAsync("-i", await Fixtures.SmallClipAsync(), "-map_metadata", "-1", "-c", "copy", "-f", "mp4", input);
+        // VP9 in WEBM with no tags but what Matroska writes itself; an MP4 or an H.264 stream always gets its copy (DD-9).
+        var input = _dir.Combine("clean.webm");
+        await TestFfmpeg.RunRawAsync("-i", await Fixtures.TwoAudioMkvAsync(), "-map", "0:v", "-map", "0:a:0", "-map_metadata", "-1", "-c", "copy",
+            "-f", "webm", input);
 
         var e = await Assert.ThrowsAsync<OperationSkippedException>(() => Op().RunAsync(input, CancellationToken.None));
 
         Assert.Equal(VideoStripMetadata.NothingToRemoveMessage, e.Message);
-        Assert.Equal(["clean.mp4"], Directory.GetFiles(_dir.Path).Select(Path.GetFileName));
+        Assert.Equal(["clean.webm"], Directory.GetFiles(_dir.Path).Select(Path.GetFileName));
     }
 
     [Theory]
     [InlineData(".mp4", "mp4", "mov,mp4,m4a,3gp,3g2,mj2")]
     [InlineData(".webm", "webm", "matroska,webm")]
     [InlineData(".avi", "avi", "avi")]
+    [InlineData(".wmv", "asf", "asf")]
+    [InlineData(".3gp", "3gp", "mov,mp4,m4a,3gp,3g2,mj2")]
     public async Task Each_container_is_written_again_as_itself(string extension, string muxer, string format)
     {
         var input = _dir.Combine("clip" + extension);
-        string[] codecs = extension == ".webm"
-            ? ["-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-c:a", "libopus"]
-            : ["-c:v", "libx264", "-preset", "ultrafast", "-c:a", extension == ".avi" ? "libmp3lame" : "aac"];
+        string[] codecs = extension switch
+        {
+            ".webm" => ["-c:v", "libvpx-vp9", "-deadline", "realtime", "-cpu-used", "8", "-c:a", "libopus"],
+            ".wmv" => ["-c:v", "wmv2", "-c:a", "wmav2"],
+            _ => ["-c:v", "libx264", "-preset", "ultrafast", "-c:a", extension == ".avi" ? "libmp3lame" : "aac"],
+        };
         await TestFfmpeg.RunRawAsync(["-i", await Fixtures.SmallClipAsync(), .. codecs, "-metadata", "title=Secret place", "-f", muxer, input]);
 
         var output = await Op().RunAsync(input, CancellationToken.None);
@@ -88,18 +127,37 @@ public sealed class VideoStripMetadataTests : IDisposable
         var probe = await Probe(output);
         Assert.Equal(format, probe.Format);
         Assert.DoesNotContain("Secret place", await TestFfmpeg.ProbeRawAsync("-show_format", "-show_streams", "-of", "json", output), StringComparison.Ordinal);
-        Assert.Equal(await PacketsHash(input, "v"), await PacketsHash(output, "v"));
+        Assert.Equal(await PicturesHash(input), await PicturesHash(output));
     }
 
     [Theory]
-    [InlineData("""{ "streams": [ { "index": 0, "codec_type": "video", "width": 64, "height": 64, "tags": { "language": "und", "handler_name": "VideoHandler", "vendor_id": "[0][0][0][0]" } } ], "format": { "duration": "1", "tags": { "major_brand": "isom", "minor_version": "512", "compatible_brands": "isomiso2avc1mp41", "encoder": "Lavf61.7.100", "creation_time": "2026-01-01T00:00:00Z" } } }""", false)]
-    [InlineData("""{ "streams": [ { "index": 0, "codec_type": "video", "width": 64, "height": 64 } ], "format": { "duration": "1", "tags": { "com.apple.quicktime.model": "iPhone 16" } } }""", true)]
-    [InlineData("""{ "streams": [ { "index": 0, "codec_type": "video", "width": 64, "height": 64, "tags": { "location": "+1+2/" } } ], "format": { "duration": "1" } }""", true)]
-    [InlineData("""{ "streams": [ { "index": 0, "codec_type": "video", "width": 64, "height": 64 }, { "index": 1, "codec_type": "data" } ], "format": { "duration": "1" } }""", true)]
-    [InlineData("""{ "streams": [ { "index": 0, "codec_type": "video", "width": 64, "height": 64 }, { "index": 1, "codec_type": "audio", "tags": { "title": "Commentary" } } ], "format": { "duration": "1" } }""", true)]
-    public void Hidden_info_is_any_tag_a_container_does_not_write_itself_or_a_stream_left_out(string json, bool hidden)
+    [InlineData(".webm", "vp9", """{ "major_brand": "isom", "encoder": "Lavf61.7.100", "creation_time": "2026-01-01T00:00:00Z" }""", """{ "language": "und", "handler_name": "VideoHandler" }""", "", false)]
+    [InlineData(".webm", "vp9", """{ "com.apple.quicktime.model": "iPhone 16" }""", "{}", "", true)]
+    [InlineData(".webm", "vp9", "{}", """{ "location": "+1+2/" }""", "", true)]
+    [InlineData(".webm", "vp9", "{}", "{}", """, { "index": 1, "codec_type": "data" }""", true)]
+    [InlineData(".webm", "vp9", "{}", "{}", """, { "index": 1, "codec_type": "audio" }, { "index": 2, "codec_type": "audio" }""", true)]
+    [InlineData(".mkv", "h264", "{}", "{}", "", true)] // SEI
+    [InlineData(".mp4", "hevc", "{}", "{}", "", true)] // XMP, makers' boxes
+    [InlineData(".mts", "mpeg2video", "{}", "{}", "", true)] // AVCHD
+    public void Hidden_info_is_a_tag_a_container_does_not_write_itself_a_stream_left_out_or_a_place_ffprobe_cannot_see(
+        string extension, string codec, string formatTags, string videoTags, string more, bool hidden)
     {
-        Assert.Equal(hidden, VideoStripMetadata.HasHiddenInfo(MediaInfo.Parse(json)));
+        var info = MediaInfo.Parse($$"""
+            { "streams": [ { "index": 0, "codec_type": "video", "codec_name": "{{codec}}", "width": 64, "height": 64, "tags": {{videoTags}} }{{more}} ],
+              "format": { "duration": "1", "tags": {{formatTags}} } }
+            """);
+
+        Assert.Equal(hidden, VideoStripMetadata.MayHoldHiddenInfo(info, extension));
+    }
+
+    // The MD5 of the decoded pictures: equal when nothing that shows was changed.
+    private async Task<string> PicturesHash(string path)
+    {
+        var output = _dir.Combine(Guid.NewGuid().ToString("N") + ".md5");
+        await TestFfmpeg.RunRawAsync("-i", path, "-map", "0:v:0", "-f", "md5", output);
+        var hash = (await File.ReadAllTextAsync(output)).Trim();
+        File.Delete(output);
+        return hash;
     }
 
     // The MD5 of a stream's packets as stored: equal only when they were copied, not encoded again.

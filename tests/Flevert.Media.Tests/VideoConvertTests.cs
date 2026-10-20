@@ -68,9 +68,24 @@ public sealed class VideoConvertTests : IDisposable
     }
 
     [Fact]
-    public async Task An_hdr_video_is_tone_mapped_to_8_bit_bt709()
+    public async Task A_video_of_variable_frame_rate_keeps_its_frames_rather_than_gaining_copies()
     {
-        var input = await Fixtures.CopyAsync(Fixtures.HdrMovAsync(), _dir, "hdr.mov");
+        var input = await Fixtures.CopyAsync(Fixtures.VariableRateClipAsync(), _dir, "screen.mp4");
+
+        var output = await Op("video.to-mov").RunAsync(input, CancellationToken.None);
+
+        var frames = await TestFfmpeg.ProbeRawAsync("-count_frames", "-select_streams", "v:0", "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", output);
+        Assert.Equal("108", frames.Trim());
+    }
+
+    [Theory]
+    [InlineData("pq")]
+    [InlineData("hlg")]
+    public async Task An_hdr_video_is_tone_mapped_to_8_bit_bt709(string transfer)
+    {
+        // HDR10 (PQ) as cameras write it, HLG as iPhones record it. Only the tags are checked here; how the colours look
+        // is checked by eye on a real iPhone video (docs/specs/media.md, criterion 1).
+        var input = await Fixtures.CopyAsync(transfer == "pq" ? Fixtures.HdrMovAsync() : Fixtures.HlgMovAsync(), _dir, "hdr.mov");
 
         var output = await Op("video.to-mp4").RunAsync(input, CancellationToken.None);
 

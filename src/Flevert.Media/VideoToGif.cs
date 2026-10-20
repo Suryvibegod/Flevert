@@ -58,11 +58,13 @@ public sealed class VideoToGif : IOperation
         filters.Add(Palette);
         string[] options =
         [
-            "-map", $"0:{video.Index}", "-map_metadata", "-1", "-map_chapters", "-1", .. cut ? (string[])["-t", "30"] : [],
+            "-map", $"0:{video.Index}", "-map_metadata", "-1", "-map_chapters", "-1",
+            .. cut ? (string[])["-t", MaxDuration.TotalSeconds.ToString(CultureInfo.InvariantCulture)] : [],
             "-vf", string.Join(',', filters), "-loop", "0",
         ];
         var output = await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _ffmpeg.EncodeAsync(
-            inputPath, options, temp, "gif", duration, MediaJob.MaxOutputBytes(inputPath, estimate), MediaJob.Percent(progress), token), ct)
+            inputPath, options, temp, "gif", duration, MediaJob.MaxOutputBytes(inputPath, estimate, desired), MediaJob.Percent(progress), token,
+            VideoEncoding.Slowness(video)), ct)
             .ConfigureAwait(false);
         if (cut)
             OutputNote.Add(FirstSecondsNote);

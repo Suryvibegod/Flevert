@@ -151,6 +151,28 @@ public sealed class MaliciousMediaTests : IDisposable
     }
 
     [Fact]
+    public async Task A_file_holding_far_more_than_its_header_claims_stops_soon_after_the_claimed_length()
+    {
+        // A FLAC whose STREAMINFO says 2 s over 60 s of sound: ffprobe reads 2 s, which the space check and the size
+        // limit are computed from (security review, SEC-1). ffmpeg stops at 1.5 times that plus 10 s.
+        var input = _dir.Combine("short.flac");
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100:duration=60", "-c:a", "flac", "-f", "flac", input);
+        var bytes = await File.ReadAllBytesAsync(input);
+        // "fLaC", a block header, then STREAMINFO: 10 bytes of block and frame sizes, then 64 bits of sample rate (20),
+        // channels - 1 (3), bits - 1 (5) and the total number of samples (36).
+        var packed = System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(bytes.AsSpan(18));
+        packed = (packed & ~((1UL << 36) - 1)) | (44100UL * 2);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt64BigEndian(bytes.AsSpan(18), packed);
+        await File.WriteAllBytesAsync(input, bytes);
+        Assert.Equal(2, (await TestFfmpeg.Instance.ProbeAsync(input, CancellationToken.None)).Duration.TotalSeconds, 1);
+
+        var output = await Op("audio.to-wav").RunAsync(input, CancellationToken.None);
+
+        var seconds = (await TestFfmpeg.Instance.ProbeAsync(output, CancellationToken.None)).Duration.TotalSeconds;
+        Assert.InRange(seconds, 12, 13.1);
+    }
+
+    [Fact]
     public async Task A_video_damaged_in_the_middle_converts_or_fails_clearly_within_10_seconds()
     {
         var input = _dir.Combine("damaged.mkv");
