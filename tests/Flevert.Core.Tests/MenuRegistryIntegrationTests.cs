@@ -30,6 +30,27 @@ public sealed class MenuRegistryIntegrationTests : IDisposable
         Assert.DoesNotContain(AllKeyPaths(TestRoot), k => k.Contains("Flevert", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public void A_separator_is_written_as_the_dword_explorer_reads()
+    {
+        var looks = new Dictionary<string, MenuEntryLook> { ["Dev"] = new("toolbox", 1), ["Other"] = new("toolbox", 2) };
+
+        new MenuInstaller(_registry, @"C:\flevert.exe").Install([new DevCopy(), new OtherOp()], looks);
+
+        using var second = Registry.CurrentUser.OpenSubKey($@"{TestRoot}\Flevert.Menu.txt\shell\001");
+        Assert.NotNull(second);
+        Assert.Equal(RegistryValueKind.DWord, second.GetValueKind("CommandFlags"));
+        Assert.Equal(0x20, second.GetValue("CommandFlags"));
+    }
+
+    private sealed class OtherOp : IOperation
+    {
+        public string Id => "dev.other";
+        public string MenuPath => "Other";
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+        public Task<string> RunAsync(string inputPath, CancellationToken ct) => throw new NotSupportedException();
+    }
+
     private static IEnumerable<string> AllKeyPaths(string path)
     {
         using var key = Registry.CurrentUser.OpenSubKey(path);

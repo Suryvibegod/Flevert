@@ -62,6 +62,81 @@ public sealed class MenuTests
     }
 
     [Fact]
+    public void Entries_at_the_top_get_their_icon_from_the_icons_folder_beside_flevert_and_formats_get_none()
+    {
+        var looks = new Dictionary<string, MenuEntryLook> { ["Convert to"] = new("arrow_swap", 1), ["Remove hidden info"] = new("shield", 1) };
+        new MenuInstaller(_registry, Exe, iconExists: _ => true).Install(
+            [new FakeOp("image.to-png", "Convert to/PNG", ".jpg"), new FakeOp("image.strip", "Remove hidden info", ".jpg")], looks);
+
+        var top = _registry.KeysUnder(@"Flevert.Menu.jpg\shell");
+        Assert.Equal(@"""C:\Program Files\Flevert\icons\arrow_swap.ico"",0", _registry.GetValue(top[0], "Icon"));
+        Assert.Equal(@"""C:\Program Files\Flevert\icons\shield.ico"",0", _registry.GetValue(top[1], "Icon"));
+        Assert.Null(_registry.GetValue(_registry.KeysUnder(@"Flevert.Menu.jpg\Convert to\shell").Single(), "Icon"));
+        // The Flevert entry itself keeps the icon of flevert.exe.
+        Assert.Equal($"\"{Exe}\",0", _registry.GetValue(@"SystemFileAssociations\.jpg\shell\Flevert", "Icon"));
+    }
+
+    [Fact]
+    public void An_icon_file_that_is_missing_leaves_its_entry_without_an_icon()
+    {
+        // A development build has no icons folder: the menu is still written, without icons.
+        var looks = new Dictionary<string, MenuEntryLook> { ["Convert to"] = new("arrow_swap", 1), ["Remove hidden info"] = new("shield", 1) };
+        new MenuInstaller(_registry, Exe, iconExists: path => path.EndsWith("shield.ico", StringComparison.Ordinal)).Install(
+            [new FakeOp("image.to-png", "Convert to/PNG", ".jpg"), new FakeOp("image.strip", "Remove hidden info", ".jpg")], looks);
+
+        var top = _registry.KeysUnder(@"Flevert.Menu.jpg\shell");
+        Assert.Null(_registry.GetValue(top[0], "Icon"));
+        Assert.NotNull(_registry.GetValue(top[1], "Icon"));
+    }
+
+    [Fact]
+    public void A_separator_goes_before_the_first_entry_of_each_new_group_only()
+    {
+        var looks = new Dictionary<string, MenuEntryLook>
+        {
+            ["Compress"] = new("arrow_minimize", 1),
+            ["Merge PDFs"] = new("merge", 1),
+            ["Protect with password"] = new("lock_closed", 2),
+            ["Remove password"] = new("lock_open", 2),
+            ["More PDF tools…"] = new("toolbox", 3),
+        };
+        new MenuInstaller(_registry, Exe, iconExists: _ => true).Install(
+            [
+                new FakeOp("pdf.compress", "Compress/Smaller, same quality", ".pdf"),
+                new FakeOp("pdf.merge", "Merge PDFs", ".pdf"),
+                new FakeOp("pdf.protect", "Protect with password", ".pdf"),
+                new FakeOp("pdf.unlock", "Remove password", ".pdf"),
+                new FakeOp("pdf.tools", "More PDF tools…", ".pdf"),
+            ], looks);
+
+        // ECF_SEPARATORBEFORE. Separators do not count toward the 16 entries Explorer shows (measured with MenuProbe).
+        Assert.Equal(
+            [null, null, "32", null, "32"],
+            _registry.KeysUnder(@"Flevert.Menu.pdf\shell").Select(verb => _registry.GetValue(verb, "CommandFlags")));
+    }
+
+    [Theory]
+    [InlineData(@"..\..\evil")]
+    [InlineData("Arrow Swap")]
+    [InlineData("")]
+    public void Rejects_icon_names_that_are_not_plain_fluent_names(string icon)
+    {
+        var looks = new Dictionary<string, MenuEntryLook> { ["Convert"] = new(icon, 1) };
+
+        Assert.Throws<ArgumentException>(() => new MenuInstaller(_registry, Exe).Install([new FakeOp("image.to-png", "Convert/PNG", ".jpg")], looks));
+    }
+
+    [Fact]
+    public void An_operation_without_a_menu_path_is_left_out_of_the_menu()
+    {
+        // A PDF tool the PDF tools window runs, or flevert.exe run, under its id.
+        Install(new FakeOp("pdf.flatten", "", ".pdf"), new FakeOp("pdf.merge", "Merge PDFs", ".pdf"));
+
+        Assert.Equal(["Merge PDFs"], _registry.KeysUnder(@"Flevert.Menu.pdf\shell").Select(k => _registry.GetValue(k, "MUIVerb")));
+        Assert.DoesNotContain(_registry.Snapshot().Values, v => v.Contains("pdf.flatten", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Operation_does_not_appear_for_extensions_it_does_not_support()
     {
         Install(new FakeOp("image.to-png", "Convert/PNG", ".jpg"), new DevCopy());

@@ -5,6 +5,9 @@ public interface IRegistry
 {
     void SetValue(string key, string name, string value);
 
+    /// <summary>Writes a REG_DWORD value, such as a verb's <c>CommandFlags</c>; <see cref="GetValue"/> reads it back in decimal.</summary>
+    void SetDword(string key, string name, int value);
+
     /// <summary>The value as a string, or null when the key or the value is missing.</summary>
     string? GetValue(string key, string name);
 

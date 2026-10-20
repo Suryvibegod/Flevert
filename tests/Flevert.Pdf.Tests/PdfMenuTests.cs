@@ -100,6 +100,9 @@ public sealed class PdfMenuTests
             values[name] = value;
         }
 
+        public void SetDword(string key, string name, int value) =>
+            SetValue(key, name, value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
         public string? GetValue(string key, string name) =>
             _keys.TryGetValue(key, out var values) && values.TryGetValue(name, out var value) ? value : null;
 

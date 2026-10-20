@@ -6,17 +6,39 @@ namespace Flevert.Core.Menu;
 /// Writes the classic right-click menu with ExtendedSubCommandsKey cascades, which work from HKCU without admin rights.
 /// See docs/adr/0001-registry-extendedsubcommandskey.md.
 /// </summary>
-public sealed partial class MenuInstaller(IRegistry registry, string exePath)
+/// <param name="iconExists">Whether an icon file is there; the real file system unless a test says otherwise. A missing
+/// icon (a development build without the icons folder) leaves its entry without one.</param>
+public sealed partial class MenuInstaller(IRegistry registry, string exePath, Func<string, bool>? iconExists = null)
 {
     internal const string Title = "Flevert";
     internal const string MenuKeyPrefix = Title + ".Menu";
     internal const string Associations = "SystemFileAssociations";
 
-    public void Install(IEnumerable<IMenuOperation> operations)
+    /// <summary>The folder beside flevert.exe that holds the menu icons, <c>&lt;name&gt;.ico</c> (the installer puts them there).</summary>
+    public const string IconsFolder = "icons";
+
+    // ECF_SEPARATORBEFORE. Measured with MenuProbe on Windows 11: separators do not count toward the 16 entries Explorer
+    // shows of a cascade (16 commands and 8 separators all shown; a 17th command dropped). docs/specs/pdf.md, v0.2.2.
+    private const int SeparatorBefore = 0x20;
+
+    private readonly Func<string, bool> _iconExists = iconExists ?? File.Exists;
+
+    /// <param name="looks">The icon and group of entries at the top of the menu, by label; an entry not listed has neither.
+    /// A separator goes between two entries of different groups.</param>
+    public void Install(IEnumerable<IMenuOperation> operations, IReadOnlyDictionary<string, MenuEntryLook>? looks = null)
     {
-        var ops = operations.ToList();
+        // An operation without a menu path is run from a window or by flevert.exe run, not from the menu.
+        var ops = operations.Where(op => op.MenuPath.Length > 0).ToList();
+        looks ??= new Dictionary<string, MenuEntryLook>();
         foreach (var op in ops)
             Validate(op);
+        foreach (var look in looks.Values)
+        {
+            // The name becomes part of a file path.
+            if (!IconName().IsMatch(look.Icon))
+                throw new ArgumentException($"Icon name '{look.Icon}' must match {IconName()}.", nameof(looks));
+        }
+
         foreach (var ext in ops.SelectMany(op => op.Extensions).Distinct(StringComparer.OrdinalIgnoreCase))
             MenuNode.Build(ops.Where(op => op.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase)));
 
@@ -31,7 +53,31 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath)
             registry.SetValue(entry, "ExtendedSubCommandsKey", menuKey);
             registry.SetValue(entry, "MultiSelectModel", "Player");
 
-            WriteMenu(menuKey, MenuNode.Build(ops.Where(op => op.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase))));
+            var nodes = MenuNode.Build(ops.Where(op => op.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase)));
+            WriteMenu(menuKey, nodes);
+            WriteLooks(menuKey, nodes, looks);
+        }
+    }
+
+    // Only the top of the menu: a format in Convert to (JPG, PNG…) has no icon of its own, which would only clutter a long list.
+    private void WriteLooks(string menuKey, IReadOnlyList<MenuNode> nodes, IReadOnlyDictionary<string, MenuEntryLook> looks)
+    {
+        int? previousGroup = null;
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var verb = $@"{menuKey}\shell\{i:D3}";
+            if (!looks.TryGetValue(nodes[i].Label, out var look))
+            {
+                previousGroup = null;
+                continue;
+            }
+
+            var icon = Path.Combine(Path.GetDirectoryName(exePath) ?? "", IconsFolder, look.Icon + ".ico");
+            if (_iconExists(icon))
+                registry.SetValue(verb, "Icon", $"\"{icon}\",0");
+            if (previousGroup is { } group && group != look.Group)
+                registry.SetDword(verb, "CommandFlags", SeparatorBefore);
+            previousGroup = look.Group;
         }
     }
 
@@ -98,6 +144,9 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath)
 
     [GeneratedRegex(@"^\.[a-z0-9]+$")]
     private static partial Regex Extension();
+
+    [GeneratedRegex("^[a-z0-9_]+$")]
+    private static partial Regex IconName();
 
     private sealed class MenuNode(string label)
     {

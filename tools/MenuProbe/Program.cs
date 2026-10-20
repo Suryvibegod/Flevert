@@ -88,7 +88,13 @@ static class Probe
                 var info = new MENUITEMINFO { cbSize = (uint)Marshal.SizeOf<MENUITEMINFO>(), fMask = 0x1 | 0x2 | 0x4 | 0x40 | 0x100, dwTypeData = buffer, cch = chars };
                 try
                 {
-                    if (!GetMenuItemInfo(hmenu, (uint)i, true, ref info) || (info.fType & 0x800) != 0) continue; // skip separators
+                    if (!GetMenuItemInfo(hmenu, (uint)i, true, ref info)) continue;
+                    if ((info.fType & 0x800) != 0)
+                    {
+                        // A separator (CommandFlags ECF_SEPARATORBEFORE/AFTER): shown, never invoked.
+                        visit(depth, "----", null);
+                        continue;
+                    }
                     label = (Marshal.PtrToStringUni(buffer) ?? "").Replace("&", "");
                 }
                 finally
