@@ -122,10 +122,10 @@ public sealed class PdfCompressSharingTests(ITestOutputHelper output) : IDisposa
 
         var result = await Op().RunAsync(input, CancellationToken.None);
 
-        // Flate packs the flat paper of this page well already: the gain is the JPEG at half the resolution.
+        // Lossless pixels of a noisy scan: the JPEG at half the resolution is a small part of them (measured 9.4 MB to 0.31 MB).
         var (before, after) = (new FileInfo(input).Length, new FileInfo(result).Length);
         output.WriteLine($"{before} → {after} bytes");
-        Assert.True(after < before * 0.6, $"{before} → {after} bytes");
+        Assert.True(after < before / 10, $"{before} → {after} bytes");
         Assert.True(MeanDifference(input, result, 0) <= 3);
     }
 
