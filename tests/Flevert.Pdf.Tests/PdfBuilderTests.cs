@@ -320,7 +320,7 @@ public sealed class PdfBuilderTests : IDisposable
     {
         using (var standard = new PdfBuilder())
             Assert.Equal(PdfDocument.MaxPages, standard.MaxPages); // what Flevert itself opens
-        using var builder = new PdfBuilder(maxPages: 2, maxBitmapPixels: PdfBuilder.MaxBitmapPixels);
+        using var builder = new PdfBuilder(maxPages: 2, maxImagePixels: PdfBuilder.MaxImagePixels);
         var bitmap = TransparentBitmap(4, 4);
         builder.AddBitmapPage(bitmap, 4, 4);
         builder.AddBitmapPage(bitmap, 4, 4);
@@ -334,13 +334,138 @@ public sealed class PdfBuilderTests : IDisposable
     [Fact]
     public void Refuses_a_bitmap_past_the_pixel_limit_and_a_buffer_of_the_wrong_size()
     {
-        Assert.Equal(100_000_000, PdfBuilder.MaxBitmapPixels);
-        using var builder = new PdfBuilder(maxPages: 10, maxBitmapPixels: 100);
+        Assert.Equal(100_000_000, PdfBuilder.MaxImagePixels);
+        using var builder = new PdfBuilder(maxPages: 10, maxImagePixels: 100);
 
         Assert.Equal(PdfError.TooLarge, Assert.Throws<PdfException>(() => builder.AddBitmapPage(new byte[20 * 10 * 4], 20, 10)).Error);
         Assert.Throws<ArgumentException>(() => builder.AddBitmapPage(new byte[(5 * 5 * 4) - 1], 5, 5));
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.AddBitmapPage([], 0, 5));
         Assert.Equal(0, builder.PageCount);
+    }
+
+    [Fact]
+    public void Refuses_a_jpeg_past_the_pixel_limit_before_pdfium_reads_it()
+    {
+        using var builder = new PdfBuilder(maxImagePixels: (96 * 64) - 1);
+        Assert.Equal(PdfError.TooLarge, Assert.Throws<PdfException>(() => builder.AddJpegPage(JpegSegments.Strip(TestJpeg.Make()))).Error);
+
+        // Not even a JPEG: the size it claims is refused before pdfium is given the bytes.
+        using var standard = new PdfBuilder();
+        var claimed = new JpegImage("not a jpeg at all"u8.ToArray(), 20_000, 10_000, 1);
+        Assert.Equal(PdfError.TooLarge, Assert.Throws<PdfException>(() => standard.AddJpegPage(claimed)).Error);
+        Assert.Equal(0, builder.PageCount + standard.PageCount);
+    }
+
+    [Fact]
+    public void Refuses_images_past_the_content_cap_and_keeps_the_pages_it_has()
+    {
+        // pdfium writes cross-reference offsets with %010d, so a PDF must stay under 2 GB; everything added is held in
+        // memory until saved. The cap counts the JPEG bytes and 3 bytes per bitmap pixel.
+        Assert.Equal(1536L * 1024 * 1024, PdfBuilder.MaxContentBytes);
+        var jpeg = JpegSegments.Strip(TestJpeg.Make());
+        var bitmap = TransparentBitmap(4, 4); // 48 bytes as BGR
+        using var builder = new PdfBuilder(maxContentBytes: (2L * jpeg.Bytes.Length) + 48);
+
+        // A JPEG pdfium refuses costs nothing.
+        var bad = new JpegImage(new byte[jpeg.Bytes.Length], 96, 64, 1);
+        Assert.Throws<InvalidDataException>(() => builder.AddJpegPage(bad));
+        builder.AddJpegPage(jpeg);
+        builder.AddBitmapPage(bitmap, 4, 4);
+        builder.AddJpegPage(jpeg); // exactly at the cap
+
+        Assert.Equal(PdfError.TooLarge, Assert.Throws<PdfException>(() => builder.AddBitmapPage(TransparentBitmap(1, 1), 1, 1)).Error);
+        Assert.Equal(PdfError.TooLarge, Assert.Throws<PdfException>(() => builder.AddJpegPage(jpeg)).Error);
+        Assert.Equal(3, builder.PageCount);
+        var path = _dir.Combine("at the cap.pdf");
+        using (var file = File.Create(path))
+            builder.Save(file);
+        using var pdf = PdfDocument.Open(path);
+        Assert.Equal(3, pdf.PageCount);
+    }
+
+    [Fact]
+    public void Refuses_more_jpeg_pages_than_the_limit_and_any_after_disposal()
+    {
+        var jpeg = JpegSegments.Strip(TestJpeg.Make());
+        using (var builder = new PdfBuilder(maxPages: 1))
+        {
+            builder.AddJpegPage(jpeg);
+            Assert.Equal(PdfError.TooManyPages, Assert.Throws<PdfException>(() => builder.AddJpegPage(jpeg)).Error);
+            Assert.Equal(1, builder.PageCount);
+        }
+
+        var disposed = new PdfBuilder();
+        disposed.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => disposed.AddJpegPage(jpeg));
+    }
+
+    [Fact]
+    public void A_page_whose_content_cannot_be_written_is_removed_again()
+    {
+        // pdfium never fails FPDFPage_GenerateContent with valid handles; the builder lets a test make it fail.
+        var calls = 0;
+        using var builder = new PdfBuilder
+        {
+            GenerateContent = page => ++calls == 2 ? 0 : PdfiumNative.FPDFPage_GenerateContent(page),
+        };
+        builder.AddJpegPage(JpegSegments.Strip(TestJpeg.Make()));
+
+        Assert.Throws<InvalidOperationException>(() => builder.AddBitmapPage(TransparentBitmap(8, 8), 8, 8));
+        Assert.Equal(1, builder.PageCount);
+        builder.AddBitmapPage(TransparentBitmap(200, 100), 200, 100, 72); // lands where the failed page was
+
+        var path = _dir.Combine("after a removed page.pdf");
+        using (var file = File.Create(path))
+            builder.Save(file);
+        using var pdf = PdfDocument.Open(path);
+        Assert.Equal(2, pdf.PageCount);
+        Assert.Equal(Colour.Red, At(pdf.Render(0, 150), 0.25, 0.25));
+        AssertSize(200, 100, pdf.GetPageSize(1));
+        var (exitCode, output) = Qpdf("--check", path);
+        Assert.True(exitCode == 0, output);
+        // What pdfium leaves where the page was: a null object, without the failed page's 8 x 8 image.
+        var text = TestJpeg.Latin1(File.ReadAllBytes(path));
+        Assert.Matches(@"\d+ 0 obj\s+null\s+endobj", text);
+        Assert.DoesNotContain("/Width 8/", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_document_every_builder_starts_from_is_valid_as_written()
+    {
+        // pdfium would quietly rebuild a wrong cross-reference table; qpdf says when it has to. Having no pages yet is
+        // the one thing qpdf may find wrong with it.
+        var path = _dir.Combine("empty.pdf");
+        File.WriteAllBytes(path, PdfBuilder.EmptyDocument);
+
+        var (_, output) = Qpdf("--check", path);
+
+        Assert.DoesNotContain("reconstruct", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("WARNING", output, StringComparison.OrdinalIgnoreCase);
+        var errors = output.Split('\n').Where(line => line.StartsWith("ERROR", StringComparison.Ordinal)).Select(line => line.Trim()).ToList();
+        Assert.Equal(["ERROR: file does not contain any pages"], errors);
+        Assert.Contains("PDF Version: 1.7", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_cmyk_jpeg_with_its_adobe_segment_renders_in_its_colours()
+    {
+        // pdfium gives every CMYK JPEG /Decode [1 0 1 0 1 0 1 0]: right for the inverted CMYK Adobe and libjpeg write.
+        var cmyk = JpegSegments.Strip(TestJpeg.Make(configure: image => image.ColorSpace = ColorSpace.CMYK));
+
+        var path = Build(builder => builder.AddJpegPage(cmyk));
+
+        using var pdf = PdfDocument.Open(path);
+        var page = pdf.Render(0, 150);
+        // pdfium shows CMYK as printed ink, not as the RGB ImageMagick converted from: CMYK red (0, 1, 1, 0) is
+        // (238, 29, 35) and CMYK blue (1, 1, 0, 0) is (46, 48, 146). Inverted, the blocks would show near black.
+        AssertNear((238, 29, 35), TestPdf.Pixel(page, page.Width / 4, page.Height / 4));
+        AssertNear((46, 48, 146), TestPdf.Pixel(page, page.Width * 3 / 4, page.Height * 3 / 4));
+    }
+
+    private static void AssertNear((int R, int G, int B) expected, (byte R, byte G, byte B, byte A) actual)
+    {
+        Assert.True(Math.Abs(expected.R - actual.R) <= 12 && Math.Abs(expected.G - actual.G) <= 12 && Math.Abs(expected.B - actual.B) <= 12,
+            $"expected about {expected}, got {actual}");
     }
 
     [Fact]

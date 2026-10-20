@@ -27,8 +27,17 @@ internal sealed class PdfBuilder : IDisposable
 
     public const double MaxDpi = 10_000;
 
-    /// <summary>100 MP per bitmap page: an A4 page at 600 DPI is 35 MP. Kept in memory as BGR until saved.</summary>
-    public const int MaxBitmapPixels = 100_000_000;
+    /// <summary>100 MP per page, JPEG or bitmap: an A4 page at 600 DPI is 35 MP.</summary>
+    public const int MaxImagePixels = 100_000_000;
+
+    /// <summary>
+    /// The most image data one document holds, counted as the JPEG bytes plus 3 bytes per bitmap pixel, all kept in
+    /// memory until <see cref="Save"/>. 1.5 GB, because pdfium writes cross-reference offsets with "%010d" (chromium/8100
+    /// CPDF_Creator): past 2 GB the file would be broken, and Flevert opens no PDF over 2 GB anyway. The other 512 MB
+    /// cover what the saved file adds to the images: Flate grows incompressible pixels by well under 1%, and each page's
+    /// dictionaries and content stream take a few hundred bytes.
+    /// </summary>
+    public const long MaxContentBytes = 1536L * 1024 * 1024;
 
     /// <summary>297 mm, the long side of A4, in points: a larger page is scaled down to it.</summary>
     public const double A4LongSide = 297 / 25.4 * PointsPerInch;
@@ -43,21 +52,22 @@ internal sealed class PdfBuilder : IDisposable
     /// holding only Producer. pdfium has no function to set Info and keeps a loaded document's own when it saves, while
     /// FPDF_CreateNewDocument writes CreationDate and Creator "PDFium". No /ID: pdfium draws a random one for each save.
     /// </summary>
-    private static readonly byte[] EmptyDocument = MakeEmptyDocument();
+    internal static readonly byte[] EmptyDocument = MakeEmptyDocument();
 
     private readonly DocumentHandle _document;
-    private readonly long _maxBitmapPixels;
+    private readonly long _maxImagePixels;
+    private readonly long _maxContentBytes;
+    private long _contentBytes; // changed only while holding the gate
 
-    /// <summary>A new, empty document, limited to <see cref="PdfDocument.MaxPages"/> pages: no more than Flevert opens.</summary>
-    public PdfBuilder()
-        : this(PdfDocument.MaxPages, MaxBitmapPixels)
-    {
-    }
-
-    internal unsafe PdfBuilder(int maxPages, long maxBitmapPixels)
+    /// <summary>
+    /// A new, empty document. The limits are <see cref="PdfDocument.MaxPages"/> pages (no more than Flevert opens),
+    /// <see cref="MaxImagePixels"/> per page and <see cref="MaxContentBytes"/> in all; tests make them smaller.
+    /// </summary>
+    public unsafe PdfBuilder(int maxPages = PdfDocument.MaxPages, long maxImagePixels = MaxImagePixels, long maxContentBytes = MaxContentBytes)
     {
         MaxPages = maxPages;
-        _maxBitmapPixels = maxBitmapPixels;
+        _maxImagePixels = maxImagePixels;
+        _maxContentBytes = maxContentBytes;
         lock (Pdfium.Gate)
         {
             Pdfium.EnsureInitialized();
@@ -89,6 +99,9 @@ internal sealed class PdfBuilder : IDisposable
 
     public int MaxPages { get; }
 
+    /// <summary>FPDFPage_GenerateContent; a test replaces it to reach the path that removes a page again.</summary>
+    internal Func<nint, int> GenerateContent { get; init; } = PdfiumNative.FPDFPage_GenerateContent;
+
     /// <summary>
     /// Adds a page showing <paramref name="jpeg"/>, its bytes embedded unchanged. <paramref name="dpi"/> is the image's
     /// own resolution, or null when it has none. Throws <see cref="InvalidDataException"/> when pdfium cannot read the
@@ -99,10 +112,11 @@ internal sealed class PdfBuilder : IDisposable
     public unsafe void AddJpegPage(JpegImage jpeg, double? dpi = null)
     {
         ArgumentNullException.ThrowIfNull(jpeg);
+        ThrowIfTooManyPixels(jpeg.Width, jpeg.Height);
         var size = PageSize(jpeg.Width, jpeg.Height, jpeg.Orientation, dpi);
         lock (Pdfium.Gate)
         {
-            ThrowIfFull();
+            ThrowIfFull(jpeg.Bytes.Length);
             var image = NewImage();
             try
             {
@@ -113,7 +127,7 @@ internal sealed class PdfBuilder : IDisposable
                 if (!loaded || !HoldsImage(image, jpeg.Width, jpeg.Height))
                     throw new InvalidDataException("The JPEG could not be read.");
 
-                AddPage(ref image, size, jpeg.Orientation);
+                AddPage(ref image, size, jpeg.Orientation, jpeg.Bytes.Length);
             }
             finally
             {
@@ -131,16 +145,12 @@ internal sealed class PdfBuilder : IDisposable
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
-        if ((long)width * height > _maxBitmapPixels)
-        {
-            throw new PdfException(PdfError.TooLarge, string.Create(CultureInfo.InvariantCulture,
-                $"The image is {width} x {height} pixels; a PDF page made by Flevert holds at most {_maxBitmapPixels}."));
-        }
-
+        ThrowIfTooManyPixels(width, height);
         if (bgra.Length != (long)width * height * 4)
             throw new ArgumentException("The pixels do not match the size given.", nameof(bgra));
+        var bytes = 3L * width * height; // what pdfium keeps of it: BGR, no padding
         lock (Pdfium.Gate)
-            ThrowIfFull(); // before the work below
+            ThrowIfFull(bytes); // before the work below
 
         var size = PageSize(width, height, 1, dpi);
         var stride = checked((width * 3) + 3) & ~3;
@@ -149,7 +159,7 @@ internal sealed class PdfBuilder : IDisposable
 
         lock (Pdfium.Gate)
         {
-            ThrowIfFull();
+            ThrowIfFull(bytes);
             var image = NewImage();
             try
             {
@@ -162,7 +172,7 @@ internal sealed class PdfBuilder : IDisposable
                         throw new InvalidOperationException("pdfium could not take the image.");
                 }
 
-                AddPage(ref image, size, orientation: 1);
+                AddPage(ref image, size, orientation: 1, bytes);
             }
             finally
             {
@@ -174,7 +184,8 @@ internal sealed class PdfBuilder : IDisposable
 
     /// <summary>
     /// Writes the whole document to <paramref name="stream"/>. An exception from the stream is rethrown as it was; the
-    /// builder stays usable.
+    /// builder stays usable. pdfium's lock is held for the whole write, so every other pdfium call in the process waits
+    /// for the stream (up to 1.5 GB to a slow disk): give it a local file.
     /// </summary>
     public unsafe void Save(Stream stream)
     {
@@ -200,8 +211,9 @@ internal sealed class PdfBuilder : IDisposable
     /// EXIF orientations 5 to 8, and scaled down, proportions kept, to <see cref="A4LongSide"/> on its long side.
     /// </summary>
     /// <remarks>
-    /// A4 rather than Letter: it is the larger of the two, so fewer pages shrink, and a page that fits A4's long side
-    /// prints on Letter with "fit to page" losing 6% at most.
+    /// A4 rather than Letter: its long side is the longer, so fewer pages shrink. Only the long side is bounded: a page
+    /// shaped like A4 prints on Letter with "fit to page" at 94% (792 / 841.89 pt), but a wider one shrinks more: a
+    /// square page of that side prints at 73% on Letter (612 / 841.89) and 71% on A4 (595.28 / 841.89).
     /// </remarks>
     internal static PdfPageSize PageSize(int pixelWidth, int pixelHeight, int orientation, double? dpi)
     {
@@ -245,14 +257,31 @@ internal sealed class PdfBuilder : IDisposable
         };
     }
 
-    // Call while holding the gate.
-    private void ThrowIfFull()
+    // Call while holding the gate, before pdfium copies anything: a page more, holding <paramref name="bytes"/> more.
+    private void ThrowIfFull(long bytes)
     {
         ObjectDisposedException.ThrowIf(_document.IsClosed, this);
         if (PageCount >= MaxPages)
         {
             throw new PdfException(PdfError.TooManyPages, string.Create(CultureInfo.InvariantCulture,
                 $"A PDF made by Flevert has at most {MaxPages} pages."));
+        }
+
+        if (_contentBytes + bytes > _maxContentBytes)
+        {
+            var most = _maxContentBytes >= 1 << 20
+                ? string.Create(CultureInfo.InvariantCulture, $"{_maxContentBytes >> 20} MB")
+                : string.Create(CultureInfo.InvariantCulture, $"{_maxContentBytes} bytes");
+            throw new PdfException(PdfError.TooLarge, $"Together the images are too large for one PDF: Flevert puts at most {most} of images in one.");
+        }
+    }
+
+    private void ThrowIfTooManyPixels(int width, int height)
+    {
+        if ((long)width * height > _maxImagePixels)
+        {
+            throw new PdfException(PdfError.TooLarge, string.Create(CultureInfo.InvariantCulture,
+                $"The image is {width} x {height} pixels; a PDF page made by Flevert holds at most {_maxImagePixels}."));
         }
     }
 
@@ -275,7 +304,7 @@ internal sealed class PdfBuilder : IDisposable
 
     // Call while holding the gate. Adds the page last, with the image on it; the page takes the image (zeroed here) or
     // pdfium frees it, and on failure the page is removed again, so the document never keeps half a page.
-    private void AddPage(ref nint image, PdfPageSize size, int orientation)
+    private void AddPage(ref nint image, PdfPageSize size, int orientation, long bytes)
     {
         var (a, b, c, d, e, f) = Matrix(size, orientation);
         if (PdfiumNative.FPDFImageObj_SetMatrix(image, a, b, c, d, e, f) == 0)
@@ -288,7 +317,7 @@ internal sealed class PdfBuilder : IDisposable
             var native = page.DangerousGetHandle();
             var inserted = PdfiumNative.FPDFPage_InsertObject(native, image) != 0;
             image = 0; // owned by the page now, or already freed by pdfium
-            added = inserted && PdfiumNative.FPDFPage_GenerateContent(native) != 0;
+            added = inserted && GenerateContent(native) != 0;
         }
 
         if (!added)
@@ -298,6 +327,7 @@ internal sealed class PdfBuilder : IDisposable
         }
 
         PageCount++;
+        _contentBytes += bytes;
     }
 
     // Offsets computed, not typed: pdfium would silently rebuild a wrong cross-reference table, hiding the mistake.
