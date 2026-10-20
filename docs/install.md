@@ -1,6 +1,6 @@
 # Installing and removing Flevert
 
-The short version is in the [README](../README.md#install). This page has the details: how to check a download, why setup can refuse its folder, and how to remove Flevert by hand.
+The short version is in the [README](../README.md#install). This page has the details: how to check a download, what to do when the menu is missing, why setup can refuse its folder, and how to remove Flevert by hand.
 
 ## Check your download
 
@@ -17,9 +17,18 @@ Flevert is not code-signed yet: a signing certificate costs money and this proje
 
 A matching hash alone does not prove where the file came from: anyone who replaced the file could replace the hash beside it. The provenance check shows that this repository's release workflow built the file from the version's tag on GitHub's own machines.
 
+## If the menu is missing
+
+- On Windows 11 the entry is under **Show more options** (or Shift+F10), unless you picked the classic menu in setup.
+- Explorer shows the entry for up to **100** selected files; select fewer.
+- If setup reported a problem with the menu, run it again. If the same problem comes back, [open an issue](https://github.com/Suryvibegod/Flevert/issues/new/choose) with its message.
+- If setup said the classic-menu key already exists in another form, another program changed that setting; Flevert leaves it alone and stays under **Show more options**.
+- Smart App Control can block setup or parts of Flevert, during setup or later; a work or school PC's policy against programs in the temporary folder can stop setup's check of the install folder. When this happens during setup, its message links to the [Smart App Control](../README.md#smart-app-control) section. Keep Smart App Control on; on a managed PC, ask your IT department.
+- Logs are in `%LOCALAPPDATA%\Flevert\logs` (kept 7 days). They contain file names and your Windows user name: replace anything private before posting them.
+
 ## Setup refused the install folder
 
-Flevert always installs into `%LOCALAPPDATA%\Programs\Flevert`, and only if no other Windows account can change that folder, any folder above it, or the files in it, and none of them is a junction or symbolic link to somewhere else. Otherwise another account could replace the program, and the next time you used the menu, their code would run as you. Setup checks this before it copies anything, so a refused setup leaves nothing to uninstall. Running setup again does not change the result.
+Flevert always installs into `%LOCALAPPDATA%\Programs\Flevert`, and only if no other Windows account can change that folder, any folder above it, or the files in it, and none of them is a junction or symbolic link to somewhere else. Otherwise another account could replace the program, and the next time you used the menu, their code would run as you. Setup checks this before it copies anything, so a refused setup leaves nothing to uninstall. If setup instead said Flevert was installed but the menu failed with this message, the files are there: see below. Running setup again does not change the result.
 
 It usually happens when:
 
@@ -31,7 +40,7 @@ Put the folder back where Windows keeps it with its default permissions (or dele
 
 ## Remove Flevert by hand
 
-Use this only if Windows blocks the uninstaller (Smart App Control can) or setup told you to. These PowerShell commands run nothing of Flevert's; they only delete what it created:
+The uninstaller in **Settings > Apps > Installed apps** removes the program, its menu, logs and settings, and the classic menu if setup turned it on; your converted files stay. Use the steps below only if Windows blocks the uninstaller (Smart App Control can) or setup told you to. These PowerShell commands run nothing of Flevert's; they only delete what it created:
 
 ```
 # The right-click menu

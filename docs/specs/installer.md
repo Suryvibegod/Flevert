@@ -73,7 +73,7 @@ Lúc `usUninstall` (trước khi xóa file), theo thứ tự:
 
 ### Ký mã và cảnh báo của Windows
 
-File chưa ký tải từ mạng: SmartScreen hiện "Windows protected your PC" → `More info` → `Run anyway`. Smart App Control (enforce) có thể chặn hẳn và không có nút bỏ qua. README ghi rõ cả hai, cách kiểm SHA256 và provenance, và khuyên **không** tắt Smart App Control. Bản phát hành chỉ build bằng workflow release (quyền đọc khi build/test, attestation provenance, job riêng có quyền ghi chỉ đính kèm vào release nháp). Chi tiết, rủi ro SignPath từ chối và các DLL bên thứ ba chưa ký: [ADR-0005](../adr/0005-inno-setup-unsigned-until-signpath.md).
+File chưa ký tải từ mạng: SmartScreen hiện "Windows protected your PC" → `More info` → `Run anyway`. Smart App Control (enforce) có thể chặn hẳn và không có nút bỏ qua. README ghi rõ cả hai và khuyên **không** tắt Smart App Control; cách kiểm SHA256 và provenance ở `docs/install.md` (README trỏ tới). Bản phát hành chỉ build bằng workflow release (quyền đọc khi build/test, attestation provenance, job riêng có quyền ghi chỉ đính kèm vào release nháp). Chi tiết, rủi ro SignPath từ chối và các DLL bên thứ ba chưa ký: [ADR-0005](../adr/0005-inno-setup-unsigned-until-signpath.md).
 
 ## Commands
 
