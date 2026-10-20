@@ -18,10 +18,11 @@ Tải pdfium và qpdf (cùng giấy phép của chúng) vào `deps/` theo một 
 
 ### T2: `ExternalTool` trong core
 Chạy công cụ ngoài an toàn: đường dẫn tuyệt đối, `ArgumentList`, stdin, đọc output có giới hạn, timeout, hủy giết cả cây, job object để con chết theo Flevert.
-- [ ] Trả mã thoát, stdout/stderr (tối đa 1 MB mỗi luồng, phần thừa bỏ); stdin là byte do caller đưa (cho mật khẩu), đóng ngay sau khi ghi
-- [ ] Hủy hoặc quá timeout → tiến trình và con của nó chết trong ≤ 2 s; tiến trình Flevert chết → con chết (job object `KILL_ON_JOB_CLOSE`)
-- [ ] Không bao giờ chạy qua shell; đường dẫn phải tuyệt đối và tồn tại
+- [x] Trả mã thoát, stdout/stderr (tối đa 1 MB mỗi luồng, phần thừa bỏ); stdin là byte do caller đưa (cho mật khẩu), đóng ngay sau khi ghi
+- [x] Hủy hoặc quá timeout → tiến trình và con của nó chết trong ≤ 2 s; tiến trình Flevert chết → con chết (job object `KILL_ON_JOB_CLOSE`)
+- [x] Không bao giờ chạy qua shell; đường dẫn phải tuyệt đối và tồn tại
 - Kiểm: test dùng `cmd.exe`/`ping` của hệ thống: echo stdin, output 5 MB bị cắt, timeout, hủy, cây con bị giết; giết Flevert test-host con → không còn tiến trình mồ côi
+- Đã làm: 18 test trong `ExternalToolTests` (≈1 s), đỏ với stub rồi xanh; thử đột biến (bỏ giết tiến trình sót, bỏ `KILL_ON_JOB_CLOSE`, đọc stdout trước stderr) thì test tương ứng đỏ. "Flevert chết" được kiểm bằng cách đóng handle job (Windows làm đúng việc đó khi tiến trình chết); kiểm bằng `flevert.exe` thật để lại cho T3, khi đã có thao tác gọi qpdf. Job theo từng lần gọi; khi tool thoát, thứ nó để lại cũng bị kết thúc. Gán vào job ngay sau `Process.Start` (không khởi động treo được qua `Process`), khe hở nhỏ được bù bằng `Kill(entireProcessTree)` khi hủy/timeout. Chỉ chạy `.exe` (`.bat`/`.cmd` đi qua cmd).
 - Phụ thuộc: không. File: `src/Flevert.Core/ExternalTool.cs`, `tests/Flevert.Core.Tests/ExternalToolTests.cs`. Cỡ: M
 
 ### T3: Lát đầu: xoay PDF (`pdf.rotate-right`/`-left`/`-180`)
