@@ -1,3 +1,4 @@
+using System.Text;
 using Flevert.Core;
 
 namespace Flevert.Pdf.Tests;
@@ -113,6 +114,40 @@ public sealed class QpdfTests : IDisposable
 
         Assert.Contains("could not write", ex.Message, StringComparison.Ordinal);
         Assert.Contains("No such file or directory", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Qpdf_may_use_one_gigabyte_of_memory()
+    {
+        // ADR-0008: 500 000 pages took qpdf 830 MB; four at once (MaxParallel) stay within 4 GB.
+        Assert.Equal(1UL << 30, Qpdf.DefaultMaxMemoryBytes);
+        Assert.Equal(Qpdf.DefaultMaxMemoryBytes, Qpdf.NextToApp.MaxMemoryBytes);
+    }
+
+    [Fact]
+    public async Task A_pdf_that_needs_more_memory_than_allowed_is_too_complex_even_when_qpdf_reports_success()
+    {
+        var input = _dir.Combine("in.pdf");
+        TestPdf.WriteWithLargeArray(input, 2_000_000);
+        const ulong limit = 64 * 1024 * 1024;
+        // What qpdf itself does when refused memory while parsing an object no page uses: it treats the object as null
+        // and exits with 3, "succeeded with warnings", having written an output that lacks it.
+        var direct = await ExternalTool.RunAsync(Qpdf.NextToApp.ExePath, ["--rotate=+90:1-z", "@-"], TimeSpan.FromSeconds(60),
+            Encoding.UTF8.GetBytes($"{input}\n{_dir.Combine("direct.pdf")}\n"), limits: new ExternalToolLimits { MaxMemoryBytes = limit });
+        Assert.Equal(3, direct.ExitCode);
+        Assert.True(direct.MemoryLimitExceeded);
+        File.Delete(_dir.Combine("direct.pdf"));
+
+        var limited = new PdfRotate(90, new Qpdf(Qpdf.NextToApp.ExePath) { MaxMemoryBytes = limit });
+        var ex = await Assert.ThrowsAsync<PdfException>(() => limited.RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.TooComplex, ex.Error);
+        Assert.StartsWith("This PDF is too complex", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(["in.pdf"], TestPdf.FileNames(_dir.Path));
+        // Control: within the default limit the same PDF rotates.
+        var output = await new PdfRotate(90, Qpdf.NextToApp).RunAsync(input, CancellationToken.None);
+        using var pdf = PdfDocument.Open(output);
+        Assert.Equal(new PdfPageSize(792, 612), pdf.GetPageSize(0));
     }
 
     [Fact]

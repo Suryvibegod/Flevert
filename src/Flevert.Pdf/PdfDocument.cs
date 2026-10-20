@@ -164,7 +164,7 @@ public sealed class PdfDocument : IDisposable
     internal static PdfException TooLargeError(long maxFileBytes) =>
         new(PdfError.TooLarge, $"This PDF is larger than {DescribeBytes(maxFileBytes)}, the most Flevert opens.");
 
-    private static string DescribeBytes(long bytes) =>
+    internal static string DescribeBytes(long bytes) =>
         bytes >= 1L << 30 && bytes % (1L << 30) == 0
             ? string.Create(CultureInfo.InvariantCulture, $"{bytes >> 30} GB")
             : string.Create(CultureInfo.InvariantCulture, $"{bytes} bytes");

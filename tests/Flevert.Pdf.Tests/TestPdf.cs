@@ -40,6 +40,35 @@ internal static class TestPdf
         File.WriteAllBytes(path, Encoding.ASCII.GetBytes(body.ToString()));
     }
 
+    /// <summary>
+    /// One blank page, and an object no page uses: an array of <paramref name="numbers"/> zeros the catalog points at.
+    /// Two million take qpdf 12.4.2 about 260 MB to parse, from a 4 MB file.
+    /// </summary>
+    public static void WriteWithLargeArray(string path, int numbers)
+    {
+        string[] objects =
+        [
+            "<< /Type /Catalog /Pages 2 0 R /Extra 4 0 R >>",
+            "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>",
+            "[" + new StringBuilder(numbers * 2).Insert(0, "0 ", numbers) + "]",
+        ];
+        var body = new StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>();
+        for (var i = 0; i < objects.Length; i++)
+        {
+            offsets.Add(body.Length);
+            body.Append(CultureInfo.InvariantCulture, $"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
+        }
+
+        var xref = body.Length;
+        body.Append(CultureInfo.InvariantCulture, $"xref\n0 {objects.Length + 1}\n0000000000 65535 f \n");
+        foreach (var offset in offsets)
+            body.Append(CultureInfo.InvariantCulture, $"{offset:D10} 00000 n \n");
+        body.Append(CultureInfo.InvariantCulture, $"trailer\n<< /Size {objects.Length + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+        File.WriteAllBytes(path, Encoding.ASCII.GetBytes(body.ToString()));
+    }
+
     /// <summary>The pixel at (x, y) as (red, green, blue, alpha).</summary>
     public static (byte R, byte G, byte B, byte A) Pixel(PdfBitmap bitmap, int x, int y)
     {

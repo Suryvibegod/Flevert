@@ -46,6 +46,9 @@ public enum PdfError
 
     /// <summary>The path holds a character qpdf cannot be given (a lone UTF-16 surrogate, legal in NTFS names).</summary>
     UnsupportedFileName,
+
+    /// <summary>Working on the PDF needs more memory than Flevert allows a PDF tool.</summary>
+    TooComplex,
 }
 
 /// <summary>A PDF Flevert cannot use, with a message for the user.</summary>

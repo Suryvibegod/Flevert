@@ -35,8 +35,8 @@ public sealed class PdfRotate : IOperation
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
 
     // Each file is its own qpdf process on one core, and the work is mostly reading and rewriting the file, so beyond a
-    // few at once the disk is the limit. qpdf's memory grows with the PDF and is outside MemoryBudget: four keeps a batch
-    // of large PDFs from taking the machine's memory.
+    // few at once the disk is the limit. qpdf's memory grows with the PDF and is outside MemoryBudget; each qpdf is capped
+    // at Qpdf.DefaultMaxMemoryBytes (1 GB), so four at once stay within 4 GB.
     public int MaxParallel => 4;
 
     public Task<string> RunAsync(string inputPath, CancellationToken ct)
