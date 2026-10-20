@@ -55,9 +55,10 @@ internal static class ToolPdf
 
     /// <summary>
     /// As <see cref="WriteFilledForm(string, string, bool)"/>, the field's appearance drawing <paramref name="drawn"/> (in
-    /// ASCII), or none when it is <c>null</c>: a form a viewer filled and drew, then marked for viewers to draw again.
+    /// ASCII), or none when it is <c>null</c>: a form a viewer filled and drew, then marked for viewers to draw again. The
+    /// field's flags are <paramref name="flags"/> (<c>/Ff</c>; 4096: several lines).
     /// </summary>
-    public static void WriteFilledForm(string path, string value, bool needAppearances, string? drawn)
+    public static void WriteFilledForm(string path, string value, bool needAppearances, string? drawn, int flags = 0)
     {
         var field = drawn is null ? "" : " /AP << /N 5 0 R >>";
         var fieldAppearance = Ascii($"/Tx BMC q BT /Helv 12 Tf 0 g 2 5 Td ({drawn}) Tj ET Q EMC");
@@ -69,7 +70,7 @@ internal static class ToolPdf
                 + (needAppearances ? " /NeedAppearances true" : "") + " >> >>"),
             Ascii("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
             Ascii("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << >> /Annots [4 0 R 7 0 R] >>"),
-            Ascii($"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V {text} /Rect [100 700 300 720] /P 3 0 R /F 4{field} /DA (/Helv 12 Tf 0 g) >>"),
+            Ascii($"<< /Type /Annot /Subtype /Widget /FT /Tx /Ff {flags} /T (name) /V {text} /Rect [100 700 300 720] /P 3 0 R /F 4{field} /DA (/Helv 12 Tf 0 g) >>"),
             Stream("/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 6 0 R >> >>", fieldAppearance),
             Ascii("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"),
             Ascii("<< /Type /Annot /Subtype /Square /Rect [100 400 200 500] /C [1 0 0] /F 4 /AP << /N 8 0 R >> >>"),

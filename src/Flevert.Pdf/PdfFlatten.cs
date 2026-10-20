@@ -23,7 +23,8 @@ namespace Flevert.Pdf;
 /// A form that asks viewers to draw its fields (<c>/NeedAppearances</c>) gets them drawn by qpdf first
 /// (<c>--generate-appearances</c>), but only when qpdf can draw every answer: it writes them in the single-byte encoding
 /// of the field's font, and a letter outside it (most Vietnamese ones) becomes "?". Flevert counts an answer qpdf can draw
-/// only when it is printable ASCII (<see cref="CanRedraw"/>), the one encoding qpdf always has. Otherwise the file fails
+/// only when it is printable ASCII (<see cref="CanRedraw"/>), the one encoding qpdf always has, in a field of one line
+/// (qpdf 12.4.2 draws a field of several lines on one line, cut at its edge). Otherwise the file fails
 /// rather than writing wrong or missing text (<see cref="CannotRedrawMessage"/>), even when the fields have drawings:
 /// in a form that asks viewers to draw them, those may be the blank form's, kept by the tool that filled it (pypdf,
 /// pdftk). A form that does not ask is locked as the PDF draws it, its text still text; an answer with no drawing at
@@ -43,6 +44,9 @@ public sealed class PdfFlatten : IOperation
     internal const string CannotRedrawMessage =
         "This form has answers Flevert cannot redraw: they have letters its PDF tool cannot write (such as Vietnamese ones), " +
         "and the PDF holds no drawing of them, so it was left as it is. Open the PDF in a PDF viewer, save it there, and try again.";
+
+    // A text field's flag (/Ff) for several lines: bit 13.
+    private const long MultiLine = 1 << 12;
 
     // A field's /Parent chain longer than this is a loop or a hostile PDF.
     private const int MaxFieldDepth = 32;
@@ -158,7 +162,7 @@ public sealed class PdfFlatten : IOperation
 
         public JsonObject Header { get; } = [];
 
-        private sealed record Field(string? Type, JsonNode? Value, string? Parent);
+        private sealed record Field(string? Type, JsonNode? Value, JsonNode? Flags, string? Parent);
 
         public static FormFacts Read(string describedPath, CancellationToken ct)
         {
@@ -190,7 +194,7 @@ public sealed class PdfFlatten : IOperation
                 if (entry["value"] is JsonObject && (dictionary.ContainsKey("/AcroForm") || dictionary.ContainsKey("/NeedAppearances")))
                     facts._holders[reference] = (JsonObject)dictionary.DeepClone();
                 if (dictionary.ContainsKey("/FT") || dictionary.ContainsKey("/V") || dictionary.ContainsKey("/Parent"))
-                    facts._fields[reference] = new Field(Text(dictionary["/FT"]), dictionary["/V"]?.DeepClone(), Text(dictionary["/Parent"]));
+                    facts._fields[reference] = new Field(Text(dictionary["/FT"]), dictionary["/V"]?.DeepClone(), dictionary["/Ff"]?.DeepClone(), Text(dictionary["/Parent"]));
                 if (Text(dictionary["/Subtype"]) == "/Widget")
                     facts._widgets.Add((reference, dictionary["/AP"] is { } appearance && (appearance is not JsonObject ap || ap.ContainsKey("/N"))));
             }, ct);
@@ -200,13 +204,13 @@ public sealed class PdfFlatten : IOperation
         public FlattenPlan Plan()
         {
             var (needAppearances, form) = Form();
-            var answers = _widgets.Select(widget => (Answer: Answer(widget.Key), widget.Drawn)).Where(widget => widget.Answer.Length > 0).ToList();
+            var answers = _widgets.Select(widget => (Answer: Answer(widget.Key, out var lines), Lines: lines, widget.Drawn)).Where(widget => widget.Answer.Length > 0).ToList();
             // A form that asks to be drawn is drawn again by qpdf, only when it can draw every answer. Its drawings may be
             // the blank form's (pypdf and pdftk fill a form by its answers and keep them): locked as drawn, an answer
             // would be gone.
             if (needAppearances)
             {
-                var redraw = answers.All(widget => widget.Answer.All(CanRedraw));
+                var redraw = answers.All(widget => !widget.Lines && widget.Answer.All(CanRedraw));
                 return new FlattenPlan(Redraw: redraw, Refuse: !redraw, Update: null);
             }
 
@@ -235,17 +239,21 @@ public sealed class PdfFlatten : IOperation
         }
 
         // The answers of a widget's field to draw: its text or choices, inherited through /Parent; none for other fields.
-        private string[] Answer(string widget)
+        // Several lines: a text field of several lines (flag bit 13), which qpdf draws on one line, cut at the field's edge.
+        private string[] Answer(string widget, out bool lines)
         {
             string? type = null;
             JsonNode? value = null;
+            JsonNode? flags = null;
             var seen = new HashSet<string>(StringComparer.Ordinal);
             for (var at = widget; at is not null && seen.Add(at) && seen.Count <= MaxFieldDepth && _fields.TryGetValue(at, out var field); at = field.Parent)
             {
                 type ??= field.Type;
                 value ??= field.Value;
+                flags ??= field.Flags;
             }
 
+            lines = type == "/Tx" && flags is JsonValue ff && ff.TryGetValue<long>(out var bits) && (bits & MultiLine) != 0;
             if (type is not ("/Tx" or "/Ch"))
                 return [];
             JsonNode?[] values = value is JsonArray array ? [.. array] : [value];

@@ -89,6 +89,20 @@ public sealed class PdfFlattenTests : IDisposable
     }
 
     [Fact]
+    public async Task A_field_of_several_lines_in_a_form_that_asks_to_be_drawn_fails_rather_than_being_cut()
+    {
+        // qpdf 12.4.2 draws a field of several lines as one line, cut at the field's edge (probe in tasks/pdf/todo.md).
+        var input = _dir.Combine("form.pdf");
+        ToolPdf.WriteFilledForm(input, "The quick brown fox jumps over the lazy dog and keeps running across the field until sunset",
+            needAppearances: true, drawn: null, flags: 4096);
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.CannotRedrawForm, ex.Error);
+        Assert.Equal(["form.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
     public void Answers_qpdf_can_and_cannot_draw_are_told_apart()
     {
         Assert.True(PdfFlatten.CanRedraw("Nguyen Van A, 12/3"));
