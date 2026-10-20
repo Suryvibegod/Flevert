@@ -256,6 +256,9 @@ try {
     Assert (@(MenuCommands '.pdf' | Where-Object { $_ -like '* run pdf.rotate-right *' }).Count -eq 1) 'the .pdf menu rotates PDFs'
     Assert (@(MenuCommands '.jpg' | Where-Object { $_ -like '* run pdf.from-images *' }).Count -eq 1) 'the .jpg menu combines pictures into a PDF'
     Assert ((Get-ItemProperty "$associations\.pdf\shell\Flevert.Tools" -ErrorAction SilentlyContinue).MUIVerb -eq 'Flevert: more PDF tools') 'PDFs have the second menu, Flevert: more PDF tools'
+    # Shown only with Shift + right-click (1.2.3): the usual menu has one Flevert line.
+    Assert ($null -ne (Get-ItemProperty "$associations\.pdf\shell\Flevert.Tools").PSObject.Properties['Extended']) 'the second PDF menu appears only with Shift'
+    Assert ($null -eq (Get-ItemProperty "$associations\.pdf\shell\Flevert").PSObject.Properties['Extended']) 'the Flevert menu appears without Shift'
     Assert (@(MenuCommands '.pdf.tools' | Where-Object { $_ -like '* run pdf.remove-blank-pages *' }).Count -eq 1) 'Flevert: more PDF tools removes blank pages'
     # Every entry at the top of both PDF menus has an icon, installed beside flevert.exe (docs/specs/pdf.md, v0.2.2).
     $icons = @(Get-ChildItem "$classes\Flevert.Menu.pdf\shell", "$classes\Flevert.Menu.pdf.tools\shell" | ForEach-Object { $_.GetValue('Icon') })

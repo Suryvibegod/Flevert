@@ -44,9 +44,11 @@ public class PdfToImagesTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void The_render_operations_list_offers_both_and_the_text()
+    public void The_convert_to_list_offers_jpg_and_text_and_png_is_in_the_shift_menu()
     {
-        Assert.Equal(["pdf.to-jpg", "pdf.to-png", "pdf.extract-text"], PdfRenderOperations.All.Select(op => op.Id));
+        // v1.2.3: PNG pictures of the pages moved to Flevert: more PDF tools (Convert to PNG images).
+        Assert.Equal(["pdf.to-jpg", "pdf.extract-text"], PdfRenderOperations.All.Select(op => op.Id));
+        Assert.Single(PdfToolMenu.All, op => op.Id == "pdf.to-png");
     }
 
     [Fact]

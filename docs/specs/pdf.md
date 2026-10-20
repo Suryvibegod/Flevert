@@ -366,6 +366,8 @@ Khảo sát 2026-10-20 trên `app/core` (khoảng 60 controller), đối chiếu
 
 ## Menu: sắp lại theo người dùng thật, có icon, thêm menu thứ hai "Flevert PDF tools" (bắt buộc ≤ 16 mục mỗi menu)
 
+> **Đã thay bởi v1.2.3** (cuối file): một dòng `Flevert` cho PDF; mục thứ hai đổi tên `Flevert: more PDF tools` và chỉ hiện khi giữ Shift; Add watermark… vào menu chính; PNG sang menu Shift.
+
 Người dùng duyệt (2026-10-20): v1.2.2 làm lại menu ảnh lẫn menu PDF.
 
 **Đổi thiết kế (người dùng 2026-10-20, sau khi đã duyệt bản có cửa sổ):** giữ Flevert **thuần chuột phải**, **không** có cửa sổ công cụ và không có mục `More PDF tools…`; các công cụ mới nằm trong **menu thứ hai `Flevert PDF tools`** của PDF, mỗi công cụ chạy thẳng từ menu với tùy chọn mặc định. Hộp thoại duy nhất là chữ của watermark. Bản cửa sổ (đã làm rồi bỏ) không còn trong code.

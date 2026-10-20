@@ -94,6 +94,7 @@ public sealed class PdfToolsTests
         Assert.Single(MenuOperations.All, op => op.Id == "pdf.watermark");
         // Extract text is Convert to > Text; flevert.exe's catalog (the menus' operations) has every id once.
         Assert.Contains(PdfRenderOperations.All, op => op.Id == "pdf.extract-text");
+        Assert.Empty(MenuOperations.All.GroupBy(op => op.Id).Where(ids => ids.Count() > 1).Select(ids => ids.Key));
         _ = new OperationCatalog([.. MenuOperations.All]);
     }
 
