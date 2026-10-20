@@ -69,6 +69,29 @@ public static class ImageFile
     /// </summary>
     public static ulong DecodedBytes(string path)
     {
+        using var frames = Ping(path);
+        ulong bytes = 0;
+        foreach (var frame in frames)
+            bytes = checked(bytes + DecodedBytes(frame));
+
+        return bytes;
+    }
+
+    /// <summary>The bytes of pixels one frame read by <see cref="Ping"/> takes once decoded (see <see cref="DecodedBytes(string)"/>).</summary>
+    public static ulong DecodedBytes(IMagickImage<byte> frame)
+    {
+        var canvas = frame.Page is { Width: > 0, Height: > 0 } page ? (ulong)page.Width * page.Height : 0;
+        var pixels = Math.Max((ulong)frame.Width * frame.Height, canvas);
+        return checked(pixels * Math.Max(4u, frame.ChannelCount + 1));
+    }
+
+    /// <summary>
+    /// The headers of the file's frames (ImageMagick's ping: sizes, density, orientation, attributes, no pixels), opened
+    /// and chosen the same safe way as <see cref="Read"/>.
+    /// </summary>
+    /// <param name="allFrames">False pings only the first frame or page.</param>
+    public static MagickImageCollection Ping(string path, bool allFrames = true)
+    {
         MagickSetup.EnsureInitialized();
         var format = FormatOf(Path.GetExtension(path));
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -76,18 +99,20 @@ public static class ImageFile
         stream.Position = 0;
 
         var settings = new MagickReadSettings { Format = format };
+        if (!allFrames)
+            settings.FrameCount = 1;
         settings.SetDefine(MagickFormat.Tiff, "ignore-layers", "true");
-        using var frames = new MagickImageCollection();
-        frames.Ping(stream, settings);
-        ulong bytes = 0;
-        foreach (var frame in frames)
+        var frames = new MagickImageCollection();
+        try
         {
-            var canvas = frame.Page is { Width: > 0, Height: > 0 } page ? (ulong)page.Width * page.Height : 0;
-            var pixels = Math.Max((ulong)frame.Width * frame.Height, canvas);
-            bytes = checked(bytes + (pixels * Math.Max(4u, frame.ChannelCount + 1)));
+            frames.Ping(stream, settings);
+            return frames;
         }
-
-        return bytes;
+        catch
+        {
+            frames.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
