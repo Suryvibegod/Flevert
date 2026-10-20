@@ -72,21 +72,20 @@ public sealed class PdfFlattenTests : IDisposable
         Assert.Equal(["Tờ khai.pdf"], FileNames(_dir.Path));
     }
 
-    [Fact]
-    public async Task A_vietnamese_answer_a_viewer_already_drew_is_locked_as_drawn_not_redrawn()
+    [Theory]
+    [InlineData("")]
+    [InlineData("Drawn by the viewer")]
+    public async Task A_vietnamese_answer_in_a_form_that_asks_to_be_drawn_fails_even_with_a_drawing(string drawn)
     {
-        // A viewer filled the form and drew the answer, and left the form asking viewers to draw it again.
-        var input = _dir.Combine("form.pdf");
-        ToolPdf.WriteFilledForm(input, "Nguyễn Văn Ă", needAppearances: true, drawn: "Drawn by the viewer");
+        // pypdf and pdftk fill a form by setting the answer and /NeedAppearances, and keep the blank form's drawing: locked
+        // as drawn, the answer would be gone. Flevert cannot tell that drawing from one a viewer made of the answer.
+        var input = _dir.Combine("Tờ khai.pdf");
+        ToolPdf.WriteFilledForm(input, "Nguyễn Văn A", needAppearances: true, drawn: drawn);
 
-        var output = await Op().RunAsync(input, CancellationToken.None);
+        var ex = await Assert.ThrowsAsync<PdfException>(() => Op().RunAsync(input, CancellationToken.None));
 
-        Assert.False(await HasForm(output));
-        Assert.DoesNotContain("/Annots", await QdfText(output), StringComparison.Ordinal);
-        using var pdf = PdfDocument.Open(output);
-        var text = pdf.GetText(0);
-        Assert.Contains("Drawn by the viewer", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("?", text, StringComparison.Ordinal);
+        Assert.Equal(PdfError.CannotRedrawForm, ex.Error);
+        Assert.Equal(["Tờ khai.pdf"], FileNames(_dir.Path));
     }
 
     [Fact]

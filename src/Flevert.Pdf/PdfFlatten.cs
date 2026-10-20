@@ -23,11 +23,11 @@ namespace Flevert.Pdf;
 /// A form that asks viewers to draw its fields (<c>/NeedAppearances</c>) gets them drawn by qpdf first
 /// (<c>--generate-appearances</c>), but only when qpdf can draw every answer: it writes them in the single-byte encoding
 /// of the field's font, and a letter outside it (most Vietnamese ones) becomes "?". Flevert counts an answer qpdf can draw
-/// only when it is printable ASCII (<see cref="CanRedraw"/>), the one encoding qpdf always has. Otherwise nothing is drawn
-/// again: <c>/NeedAppearances</c> is taken out of the form in the same qpdf run (<c>--update-from-json</c>), and the
-/// fields are locked as the PDF already draws them, their text still text. An answer with no drawing at all, which
-/// Flevert would have to draw, fails the file rather than writing wrong or missing text
-/// (<see cref="CannotRedrawMessage"/>).
+/// only when it is printable ASCII (<see cref="CanRedraw"/>), the one encoding qpdf always has. Otherwise the file fails
+/// rather than writing wrong or missing text (<see cref="CannotRedrawMessage"/>), even when the fields have drawings:
+/// in a form that asks viewers to draw them, those may be the blank form's, kept by the tool that filled it (pypdf,
+/// pdftk). A form that does not ask is locked as the PDF draws it, its text still text; an answer with no drawing at
+/// all, which Flevert would have to draw, fails the file too.
 /// </para>
 /// <para>
 /// What there is to flatten is read from qpdf's description of the PDF without stream data (as Remove metadata reads it):
@@ -201,9 +201,15 @@ public sealed class PdfFlatten : IOperation
         {
             var (needAppearances, form) = Form();
             var answers = _widgets.Select(widget => (Answer: Answer(widget.Key), widget.Drawn)).Where(widget => widget.Answer.Length > 0).ToList();
-            // qpdf draws every field again when the form asks for it; only when it can draw every answer.
-            if (needAppearances && answers.All(widget => widget.Answer.All(CanRedraw)))
-                return new FlattenPlan(Redraw: true, Refuse: false, Update: null);
+            // A form that asks to be drawn is drawn again by qpdf, only when it can draw every answer. Its drawings may be
+            // the blank form's (pypdf and pdftk fill a form by its answers and keep them): locked as drawn, an answer
+            // would be gone.
+            if (needAppearances)
+            {
+                var redraw = answers.All(widget => widget.Answer.All(CanRedraw));
+                return new FlattenPlan(Redraw: redraw, Refuse: !redraw, Update: null);
+            }
+
             // Locked as drawn: an answer without a drawing would be lost, or left as a field to fill.
             if (answers.Any(widget => !widget.Drawn))
                 return new FlattenPlan(Redraw: false, Refuse: true, Update: null);
