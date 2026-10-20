@@ -59,6 +59,46 @@ public sealed class PdfFlattenTests : IDisposable
     }
 
     [Fact]
+    public async Task A_vietnamese_answer_with_no_appearance_fails_rather_than_turning_into_question_marks()
+    {
+        // qpdf draws a field only in its font's single-byte encoding: "Nguy?n V?n ?" is what it would write.
+        var input = _dir.Combine("Tờ khai.pdf");
+        ToolPdf.WriteFilledForm(input, "Nguyễn Văn Ă", needAppearances: true);
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.CannotRedrawForm, ex.Error);
+        Assert.StartsWith("This form has answers Flevert cannot redraw", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(["Tờ khai.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
+    public async Task A_vietnamese_answer_a_viewer_already_drew_is_locked_as_drawn_not_redrawn()
+    {
+        // A viewer filled the form and drew the answer, and left the form asking viewers to draw it again.
+        var input = _dir.Combine("form.pdf");
+        ToolPdf.WriteFilledForm(input, "Nguyễn Văn Ă", needAppearances: true, drawn: "Drawn by the viewer");
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.False(await HasForm(output));
+        Assert.DoesNotContain("/Annots", await QdfText(output), StringComparison.Ordinal);
+        using var pdf = PdfDocument.Open(output);
+        var text = pdf.GetText(0);
+        Assert.Contains("Drawn by the viewer", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("?", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Answers_qpdf_can_and_cannot_draw_are_told_apart()
+    {
+        Assert.True(PdfFlatten.CanRedraw("Nguyen Van A, 12/3"));
+        Assert.False(PdfFlatten.CanRedraw("Nguyễn"));
+        Assert.False(PdfFlatten.CanRedraw("José"));
+        Assert.False(PdfFlatten.CanRedraw("line\nbreak"));
+    }
+
+    [Fact]
     public async Task A_pdf_without_forms_or_comments_is_skipped_and_nothing_is_written()
     {
         var input = _dir.Combine("plain.pdf");

@@ -267,10 +267,18 @@ public sealed partial class Qpdf
     /// <param name="jsonPath">Fully qualified; in a folder nobody else can change, since qpdf reads it as it is.</param>
     /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
     /// <exception cref="IOException">qpdf could not write <paramref name="outputPath"/>.</exception>
-    public async Task<bool> UpdateFromJsonAsync(string inputPath, string jsonPath, string outputPath, CancellationToken ct)
+    public Task<bool> UpdateFromJsonAsync(string inputPath, string jsonPath, string outputPath, CancellationToken ct) =>
+        UpdateFromJsonAsync(inputPath, jsonPath, outputPath, [], ct);
+
+    /// <summary>
+    /// As <see cref="UpdateFromJsonAsync(string, string, string, CancellationToken)"/>, with more options: qpdf applies the
+    /// update as it reads the input, before what the options do (<c>--flatten-annotations</c> sees the updated objects).
+    /// </summary>
+    public async Task<bool> UpdateFromJsonAsync(string inputPath, string jsonPath, string outputPath, IEnumerable<string> options, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(options);
         RequireArgumentLine(jsonPath, nameof(jsonPath));
-        var run = await RunCheckedAsync([KeepStreamsAsTheyAre], [inputPath], [UpdateFromJson + jsonPath, inputPath, outputPath], outputPath, ct)
+        var run = await RunCheckedAsync([KeepStreamsAsTheyAre, .. options], [inputPath], [UpdateFromJson + jsonPath, inputPath, outputPath], outputPath, ct)
             .ConfigureAwait(false);
         RequireOutput(run, outputPath);
         return Repaired(run);

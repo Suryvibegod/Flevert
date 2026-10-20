@@ -105,6 +105,9 @@ public enum PdfError
     /// <summary>qpdf repaired the PDF to read it, and what it wrote has other pages than the PDF was counted with, or does
     /// not open.</summary>
     RepairFailed,
+
+    /// <summary>A filled form field would have to be drawn again, and its answer has letters Flevert's PDF tool cannot draw.</summary>
+    CannotRedrawForm,
 }
 
 /// <summary>A PDF Flevert cannot use, with a message for the user.</summary>
