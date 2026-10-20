@@ -134,9 +134,6 @@ public sealed class PdfFlatten : IOperation
     /// </summary>
     internal static bool CanRedraw(string answer) => answer.All(c => c is >= ' ' and <= '~');
 
-    /// <summary>Whether qpdf's description at <paramref name="describedPath"/> holds a form field or an annotation with an appearance.</summary>
-    internal static bool HasSomethingToFlatten(string describedPath, CancellationToken ct) => FormFacts.Read(describedPath, ct).Something;
-
     // {"qpdf": [header, {"obj:N G R": {"value": dictionary}}]}: the one object that changes, named by its reference ("N G R").
     private static void WriteUpdate(string path, JsonObject header, string key, JsonObject value)
     {
