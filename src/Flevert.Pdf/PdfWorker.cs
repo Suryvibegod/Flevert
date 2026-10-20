@@ -240,7 +240,7 @@ public sealed class PdfWorker
     }
 
     /// <summary>What one run of the worker has said so far, and the watchdog that ends it when it stops saying anything.</summary>
-    private sealed class Session : IDisposable
+    internal sealed class Session : IDisposable
     {
         private readonly PdfWorker _worker;
         private readonly string _doing;
@@ -353,18 +353,17 @@ public sealed class PdfWorker
                         var encode = parts[2].Split(' ');
                         if (encode.Length != 2 || !IsHash(parts[1]) || _shrunkHashes.Contains(parts[1]))
                             throw new ProtocolException(line);
+                        var (width, height) = ImageSize(encode[0], encode[1], line);
                         _encoding = parts[1];
                         // Decoding and encoding grow with the pixels, as drawing a page does.
-                        Watch(_worker.StallWindow(Number(encode[0], 1, PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels),
-                            Number(encode[1], 1, PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels)));
+                        Watch(_worker.StallWindow(width, height));
                         return null;
                     case "image" when _encoding is not null && parts.Length == 3 && parts[1] == _encoding:
                         var image = parts[2].Split(' ');
                         if (image.Length != 3 || image[2] is not ("gray" or "rgb"))
                             throw new ProtocolException(line);
-                        _shrunk.Add(new PdfShrunkImage(parts[1], Path.Combine(ShrinkFolder!, parts[1] + ".jpg"),
-                            Number(image[0], 1, PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels),
-                            Number(image[1], 1, PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels), image[2] == "gray"));
+                        var (shrunkWidth, shrunkHeight) = ImageSize(image[0], image[1], line);
+                        _shrunk.Add(new PdfShrunkImage(parts[1], Path.Combine(ShrinkFolder!, parts[1] + ".jpg"), shrunkWidth, shrunkHeight, image[2] == "gray"));
                         _shrunkHashes.Add(parts[1]);
                         _encoding = null;
                         Watch(_worker.StallTimeout);
@@ -395,6 +394,14 @@ public sealed class PdfWorker
         }
 
         private void Watch(TimeSpan window) => _stall.CancelAfter(window);
+
+        // The pixel size of an image the worker decodes or wrote: at most MaxRenderPixels² in all, the most it decodes.
+        private static (int Width, int Height) ImageSize(string width, string height, string line)
+        {
+            const int MaxPixels = PdfDocument.MaxRenderPixels * PdfDocument.MaxRenderPixels;
+            var size = (Width: Number(width, 1, MaxPixels), Height: Number(height, 1, MaxPixels));
+            return (long)size.Width * size.Height <= MaxPixels ? size : throw new ProtocolException(line);
+        }
 
         // A SHA-256 as the worker writes it: 64 lower-case hexadecimal digits, which is also a safe file name.
         private static bool IsHash(string text) => text.Length == 64 && text.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f'));
@@ -459,7 +466,7 @@ public sealed class PdfWorker
     }
 
     /// <summary>A line from the worker that does not follow the protocol (<see cref="PdfRenderWorker"/>).</summary>
-    private sealed class ProtocolException(string line) : Exception($"The PDF worker wrote an unexpected line: {PdfRenderWorker.OneLine(line)}");
+    internal sealed class ProtocolException(string line) : Exception($"The PDF worker wrote an unexpected line: {PdfRenderWorker.OneLine(line)}");
 }
 
 /// <summary>How the PDF worker ended, for the log: its exit code and the end of what it wrote to standard error.</summary>
