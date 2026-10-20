@@ -22,7 +22,7 @@ iPhone photos to JPG, smaller files, copies without GPS, photos into one PDF. Fr
 - **Photos that fit**: compress them for chat and email, or to under 500 KB, 1 MB or 5 MB.
 - **Seven formats**: convert between JPG, PNG, WebP, AVIF, GIF, BMP and TIFF. Animations stay animated in GIF and WebP.
 - **No location in what you share**: remove GPS and camera details first.
-- **PDF tools**: photos into one PDF, pages into pictures, merge, split, rotate, compress, add or remove a password.
+- **PDF tools**: photos into one PDF, pages into pictures, merge, split, rotate, compress, add or remove a password, and more in one window: remove blank pages, watermark, page numbers, pages per sheet.
 - **Up to 100 files at once**, with one notification at the end.
 - **Originals untouched**: results are saved beside them and never overwrite a file.
 
@@ -40,11 +40,11 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 
 | Flevert > | You get |
 |---|---|
-| **Convert** > JPG, PNG, WEBP, AVIF, GIF, BMP, TIFF | `photo.jpg`, upright (no GIF for HEIC photos) |
-| **Compress** > Light, Balanced, Strong | `photo (compressed).jpg` |
+| **Convert to** > JPG, PNG, WebP, AVIF, GIF, BMP, TIFF | `photo.jpg`, upright (no GIF for HEIC photos) |
+| **Compress** > Light (best quality), Balanced, Strong (smallest) | `photo (compressed).jpg` |
 | **Compress** > Under 500 KB, 1 MB, 5 MB | `photo (under 1 MB).jpg`, the best quality that fits |
+| **Remove hidden info** | `photo (no metadata).jpg`, without GPS location, camera details, XMP or comments |
 | **Combine into PDF** | `photo (+3).pdf`: a page per picture, in name order, without GPS or camera details |
-| **Remove metadata** | `photo (no metadata).jpg`, without GPS, camera details, XMP or comments |
 
 <p align="center">
 <img src="assets/demo/combine.gif" width="720" alt="Four JPG photos, one of them in portrait, selected in Explorer; right-click, Flevert, Combine into PDF; one file IMG_2041 (+3).pdf appears beside them and a notification says Done: IMG_2041 (+3).pdf">
@@ -54,15 +54,15 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 
 | Flevert > | You get |
 |---|---|
-| **Convert** > JPG pages, PNG pages | a folder `report (pages)` with `report 001.jpg`, … |
-| **Convert** > Text | `report.txt`, the text of every page (scans have none: Flevert does not recognise text in pictures) |
+| **Compress** > Smaller, same quality | `report (compressed).pdf`, smaller with the same quality; also rewrites a slightly damaged PDF so that it opens |
+| **Compress** > Smallest, for sharing | `report (small).pdf`: pictures above 150 DPI brought down to 150 DPI, often a quarter to a half of the size, depending on the scan |
 | **Merge PDFs** | `report (merged).pdf`, in name order |
 | **Split into pages** | a folder `report (split)` with one PDF per page |
-| **Rotate** > 90° right, 90° left, 180° | `report (rotated).pdf` |
-| **Compress** > Lossless | `report (compressed).pdf`, smaller with the same quality; also rewrites a slightly damaged PDF so that it opens |
-| **Compress** > For sharing | `report (small).pdf`: pictures above 150 DPI brought down to 150 DPI, often a quarter to a half of the size, depending on the scan |
-| **Remove metadata** | `report (no metadata).pdf`, without author, dates, XMP, attachments or scripts |
+| **Convert to** > JPG images, PNG images | a folder `report (pages)` with `report 001.jpg`, … |
+| **Rotate** > Right 90°, Left 90°, 180° | `report (rotated).pdf` |
 | **Protect with password**, **Remove password** | `report (protected).pdf` (AES-256), `report (unlocked).pdf` |
+| **Remove hidden info** | `report (no metadata).pdf`, without author, dates, XMP, attachments or scripts |
+| **More PDF tools…** | a window with more tools, one choice for all the selected PDFs: remove blank pages, 2 or 4 pages per sheet, fit pages to A4, split into parts under 10 MB or 25 MB, add a watermark or page numbers, flatten forms and comments, extract the text (`report.txt`; scans have none: Flevert does not recognise text in pictures) or the images |
 
 PDFs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
 

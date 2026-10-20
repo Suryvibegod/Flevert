@@ -42,7 +42,7 @@ public sealed class PdfStripMetadataTests : IDisposable
     {
         var op = PdfOperations.All.OfType<IOperation>().Single(op => op.Id == "pdf.strip-metadata");
 
-        Assert.Equal("Remove metadata", op.MenuPath);
+        Assert.Equal("Remove hidden info", op.MenuPath);
         Assert.Equal([".pdf"], op.Extensions);
         // Two single-threaded qpdf runs one after the other per file, like the rotations.
         Assert.Equal(4, op.MaxParallel);

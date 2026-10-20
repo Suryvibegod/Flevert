@@ -15,7 +15,7 @@ public sealed class ImageConvertTests : IDisposable
     {
         var op = ToPng();
 
-        Assert.Equal("Convert/PNG", op.MenuPath);
+        Assert.Equal("Convert to/PNG", op.MenuPath);
         Assert.Equal(
             ImageFile.ReadableExtensions.Where(e => e != ".png").Order(StringComparer.Ordinal),
             op.Extensions.Order(StringComparer.Ordinal));

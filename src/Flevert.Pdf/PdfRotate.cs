@@ -19,8 +19,8 @@ public sealed class PdfRotate : IOperation
         ArgumentNullException.ThrowIfNull(qpdf);
         (Id, MenuPath) = degreesClockwise switch
         {
-            90 => ("pdf.rotate-right", "Rotate/90° right"),
-            270 => ("pdf.rotate-left", "Rotate/90° left"),
+            90 => ("pdf.rotate-right", "Rotate/Right 90°"),
+            270 => ("pdf.rotate-left", "Rotate/Left 90°"),
             180 => ("pdf.rotate-180", "Rotate/180°"),
             _ => throw new ArgumentOutOfRangeException(nameof(degreesClockwise), degreesClockwise, "Use 90, 180 or 270."),
         };

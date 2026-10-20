@@ -23,8 +23,8 @@ public sealed class PdfCompressSharingTests(ITestOutputHelper output) : IDisposa
     {
         var ops = PdfOperations.All.Select(op => (op.Id, op.MenuPath)).ToList();
 
-        Assert.Contains(("pdf.compress", "Compress/Lossless"), ops);
-        Assert.Contains(("pdf.compress-sharing", "Compress/For sharing"), ops);
+        Assert.Contains(("pdf.compress", "Compress/Smaller, same quality"), ops);
+        Assert.Contains(("pdf.compress-sharing", "Compress/Smallest, for sharing"), ops);
         Assert.Equal(ops.FindIndex(op => op.Id == "pdf.compress") + 1, ops.FindIndex(op => op.Id == "pdf.compress-sharing"));
         Assert.Equal(1, PdfOperations.All.OfType<PdfCompressSharing>().Single().MaxParallel);
     }

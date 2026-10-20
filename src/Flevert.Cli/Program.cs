@@ -95,7 +95,7 @@ internal static class Program
                 }
 
                 var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));
-                new MenuInstaller(new WindowsRegistry(), exe).Install(ops);
+                new MenuInstaller(new WindowsRegistry(), exe).Install(ops, MenuOperations.Looks);
                 ShellNotify.AssociationsChanged();
                 return Ok;
 
@@ -195,6 +195,15 @@ internal static class Program
             operation = asking = needsPassword.WithPrompt(passwords);
         }
 
+        // More PDF tools… asks once for the batch which tool to run; without windows it fails each file at once.
+        DialogPdfToolPrompt? toolPrompt = null;
+        PdfToolsOperation? choosing = null;
+        if (!headless && operation is PdfToolsOperation needsTool)
+        {
+            toolPrompt = new DialogPdfToolPrompt(PdfTools.All, new PdfToolSettings(PdfToolSettings.DefaultPath));
+            operation = choosing = needsTool.WithPrompt(toolPrompt);
+        }
+
         try
         {
             // Logs hold every path processed; keep the whole app-data folder private to this user, like the batch keys.
@@ -218,11 +227,12 @@ internal static class Program
             if (headless)
                 return batch(null, CancellationToken.None).GetAwaiter().GetResult().NoFailures ? Ok : SomeFilesFailed;
             // Alongside the batch, so it costs no time; asked about after the batch, if a newer version is out.
-            return BatchUi.Run(operation, leader.Pending, log, batch, UpdateOffer.Start(), passwords) ? Ok : SomeFilesFailed;
+            return BatchUi.Run(operation, leader.Pending, log, batch, UpdateOffer.Start(), (IBatchQuestion?)passwords ?? toolPrompt) ? Ok : SomeFilesFailed;
         }
         finally
         {
             asking?.Dispose(); // wipes the passwords it still holds
+            choosing?.Dispose();
             leader.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }

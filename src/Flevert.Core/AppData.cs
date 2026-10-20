@@ -11,8 +11,9 @@ public static class AppData
     public const string PipesFolder = "pipes";
     public const string MagickFolder = "magick";
     public const string UpdateFolder = "update";
+    public const string SettingsFolder = "settings";
 
-    public static IReadOnlyList<string> Subfolders { get; } = [LogsFolder, PipesFolder, MagickFolder, UpdateFolder];
+    public static IReadOnlyList<string> Subfolders { get; } = [LogsFolder, PipesFolder, MagickFolder, UpdateFolder, SettingsFolder];
 
     public static string Root { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), FolderName);

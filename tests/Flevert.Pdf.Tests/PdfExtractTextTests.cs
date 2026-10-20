@@ -17,14 +17,14 @@ public sealed class PdfExtractTextTests : IDisposable
     private static PdfExtractText Op() => new(TestPdf.Worker);
 
     [Fact]
-    public void It_is_convert_text_in_the_pdf_menu_after_the_pictures()
+    public void It_left_the_menu_for_the_pdf_tools_window_under_the_same_id()
     {
         var op = PdfOperations.All.OfType<PdfExtractText>().Single();
 
-        Assert.Equal(("pdf.extract-text", "Convert/Text"), (op.Id, op.MenuPath));
+        Assert.Equal(("pdf.extract-text", ""), (op.Id, op.MenuPath));
         Assert.Equal([".pdf"], op.Extensions);
         Assert.Equal(1, op.MaxParallel);
-        Assert.Equal(["Convert/JPG pages", "Convert/PNG pages", "Convert/Text"], PdfRenderOperations.All.Select(o => o.MenuPath));
+        Assert.Equal(["Convert to/JPG images", "Convert to/PNG images", ""], PdfRenderOperations.All.Select(o => o.MenuPath));
     }
 
     [Fact]

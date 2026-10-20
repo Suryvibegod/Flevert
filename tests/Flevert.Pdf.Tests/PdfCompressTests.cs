@@ -26,7 +26,7 @@ public sealed class PdfCompressTests : IDisposable
     {
         var op = Op();
 
-        Assert.Equal("Compress/Lossless", op.MenuPath);
+        Assert.Equal("Compress/Smaller, same quality", op.MenuPath);
         Assert.Equal([".pdf"], op.Extensions);
         Assert.Equal(4, op.MaxParallel);
     }

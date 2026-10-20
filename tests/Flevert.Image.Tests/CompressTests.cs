@@ -14,9 +14,9 @@ public sealed class CompressTests : IDisposable
     private static IOperation Op(string level) => ImageOperations.All.Single(op => op.Id == $"image.compress-{level}");
 
     [Theory]
-    [InlineData("light", "Compress/Light")]
+    [InlineData("light", "Compress/Light (best quality)")]
     [InlineData("balanced", "Compress/Balanced")]
-    [InlineData("strong", "Compress/Strong")]
+    [InlineData("strong", "Compress/Strong (smallest)")]
     public void Each_level_is_offered_for_every_readable_image(string level, string menuPath)
     {
         var op = Op(level);

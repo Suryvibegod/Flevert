@@ -21,34 +21,40 @@ internal sealed class BatchUi : ApplicationContext
     private bool _askingAboutUpdate;
     private bool _exitWhenChecked;
     private bool _checkAnswered; // set by the continuation itself: the task completes a moment before it runs
-    private bool _askingForPassword;
+    private bool _askingQuestion;
     private bool _revealWhenAnswered;
+    private bool _endQuietly;
 
     private BatchUi(IMenuOperation operation, int pending, RunLog log,
         Func<IProgress<BatchProgress>, CancellationToken, Task<BatchOutcome>> batch, Task<UpdateFound?> update,
-        DialogPasswordPrompt? passwords)
+        IBatchQuestion? question)
     {
         _update = update;
         _logFile = log.CurrentFile;
-        _form = new ProgressForm(operation.MenuPath.Replace('/', ' '), pending, _cancellation);
+        // An operation outside the menu (a PDF tool run by its id) is named by its id.
+        _form = new ProgressForm(operation.MenuPath.Length > 0 ? operation.MenuPath.Replace('/', ' ') : operation.Id, pending, _cancellation);
         _ = _form.Handle; // installs the WinForms synchronization context so Progress<T> reports on this thread
 
         Task<BatchOutcome>? work = null;
-        // While the password dialog is open the batch waits for it, and the progress window would only cover it: it
-        // waits too, then for as long again as a batch without questions would before it shows.
-        passwords?.Attach(SynchronizationContext.Current!, () => _form.Visible ? _form : null, asking =>
+        // While a question is open the batch waits for it, and the progress window would only cover it: it waits too,
+        // then for as long again as a batch without questions would before it shows.
+        question?.Attach(new BatchQuestionHost(SynchronizationContext.Current!, () => _form.Visible ? _form : null, asking =>
         {
-            _askingForPassword = asking;
+            _askingQuestion = asking;
             if (!asking && _revealWhenAnswered)
             {
                 _revealWhenAnswered = false;
                 RevealLater(work!);
             }
-        });
+        }, () =>
+        {
+            _endQuietly = true;
+            _cancellation.Cancel();
+        }, _form.Retitle));
         var progress = new Progress<BatchProgress>(report =>
         {
             _form.Report(report);
-            passwords?.Report(report);
+            question?.Report(report);
         });
         work = Task.Run(async () =>
         {
@@ -69,7 +75,7 @@ internal sealed class BatchUi : ApplicationContext
         work.ContinueWith(t => Finish(t.Result), TaskScheduler.FromCurrentSynchronizationContext());
     }
 
-    // Shows the progress window if the batch is still running after ShowProgressAfter, unless a password is being asked.
+    // Shows the progress window if the batch is still running after ShowProgressAfter, unless a question is being asked.
     private void RevealLater(Task<BatchOutcome> work)
     {
         var reveal = new System.Windows.Forms.Timer { Interval = (int)ShowProgressAfter.TotalMilliseconds };
@@ -78,7 +84,7 @@ internal sealed class BatchUi : ApplicationContext
             reveal.Dispose();
             if (work.IsCompleted)
                 return;
-            if (_askingForPassword)
+            if (_askingQuestion)
                 _revealWhenAnswered = true;
             else
                 _form.Show();
@@ -92,21 +98,32 @@ internal sealed class BatchUi : ApplicationContext
     /// <param name="batch">Runs the batch with the window's progress and Cancel: the runner over the leader's files, for
     /// either kind of operation.</param>
     /// <param name="update">The check for a new version started with the batch; asked about after it if it finds one in time.</param>
-    /// <param name="passwords">The prompt the operation asks for passwords, shown on this window's thread; <c>null</c>
-    /// when it asks none.</param>
+    /// <param name="question">What the operation asks in a window (passwords, the PDF tool), shown on this window's
+    /// thread; <c>null</c> when it asks nothing.</param>
     public static bool Run(IMenuOperation operation, int pending, RunLog log,
         Func<IProgress<BatchProgress>, CancellationToken, Task<BatchOutcome>> batch, Task<UpdateFound?> update,
-        DialogPasswordPrompt? passwords = null)
+        IBatchQuestion? question = null)
     {
         Application.EnableVisualStyles();
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
-        using var ui = new BatchUi(operation, pending, log, batch, update, passwords);
+        using var ui = new BatchUi(operation, pending, log, batch, update, question);
         Application.Run(ui);
         return ui.NoFailures;
     }
 
     private void Finish(BatchOutcome outcome)
     {
+        if (_endQuietly)
+        {
+            // Cancel in the PDF tools window: nothing was done, and that is what the user asked for. No notification,
+            // no update question; a success for whoever started flevert.exe.
+            NoFailures = true;
+            _form.Finishing = true;
+            _form.Close();
+            ExitThread();
+            return;
+        }
+
         // Scheduled first: whatever fails below, the process still exits. BalloonTipClosed is not raised when the system
         // suppresses the balloon (e.g. Focus Assist), so the timer is also the normal way out in that case.
         var exit = new System.Windows.Forms.Timer { Interval = (int)NotificationLifetime.TotalMilliseconds };

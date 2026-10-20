@@ -27,7 +27,13 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
         _ => "image.compress-strong",
     };
 
-    public string MenuPath => "Compress/" + level;
+    // Says what the level does for the user (docs/specs/pdf.md, v0.2.2); the id keeps the old name.
+    public string MenuPath => "Compress/" + level switch
+    {
+        CompressLevel.Light => "Light (best quality)",
+        CompressLevel.Balanced => "Balanced",
+        _ => "Strong (smallest)",
+    };
 
     public IReadOnlyCollection<string> Extensions { get; } = [.. ImageFile.ReadableExtensions];
 
@@ -84,7 +90,7 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
                     // An animated GIF is only re-optimised, never made lossier, so "already well compressed" would be false
                     // for a GIF that is simply too large to send. Say what would help.
                     if (target == MagickFormat.Gif && images.Count > 1)
-                        throw new InvalidOperationException("Compress cannot make this animated GIF meaningfully smaller; use Convert > WEBP for a much smaller animation.");
+                        throw new InvalidOperationException("Compress cannot make this animated GIF meaningfully smaller; use Convert to > WebP for a much smaller animation.");
                     throw new OperationSkippedException("The image is already well compressed: the result would be less than 5% smaller.");
                 }
             }, token), ct).ConfigureAwait(false);

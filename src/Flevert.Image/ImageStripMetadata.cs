@@ -4,7 +4,7 @@ using ImageMagick;
 namespace Flevert.Image;
 
 /// <summary>
-/// <c>Remove metadata</c>: a copy without EXIF (camera, GPS location), XMP, IPTC or comments, for sharing. The ICC
+/// <c>Remove hidden info</c>: a copy without EXIF (camera, GPS location), XMP, IPTC or comments, for sharing. The ICC
 /// profile stays because it changes how the colours look; the pixels are rotated first because the orientation tag is
 /// removed with the EXIF. The format is kept, except HEIC/HEIF, which become JPG.
 /// </summary>
@@ -12,7 +12,7 @@ public sealed class ImageStripMetadata : IOperation
 {
     public string Id => "image.strip-metadata";
 
-    public string MenuPath => "Remove metadata";
+    public string MenuPath => "Remove hidden info";
 
     public IReadOnlyCollection<string> Extensions { get; } = [.. ImageFile.ReadableExtensions];
 

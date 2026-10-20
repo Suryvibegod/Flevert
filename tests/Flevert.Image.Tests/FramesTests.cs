@@ -304,7 +304,7 @@ public sealed class FramesTests : IDisposable
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => Op("image.compress-strong").RunAsync(input, CancellationToken.None));
 
-        Assert.Contains("Convert > WEBP", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Convert to > WebP", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -3,13 +3,13 @@ using ImageMagick;
 
 namespace Flevert.Image;
 
-/// <summary><c>Convert/&lt;FORMAT&gt;</c>: writes the image in another format beside the original.</summary>
+/// <summary><c>Convert to/&lt;FORMAT&gt;</c>: writes the image in another format beside the original.</summary>
 /// <param name="quality">Encoder quality for lossy targets, or <c>null</c> for the encoder's default.</param>
 public sealed class ImageConvert(string extension, MagickFormat format, uint? quality = null) : IOperation
 {
     public string Id => $"image.to-{extension.TrimStart('.')}";
 
-    public string MenuPath => $"Convert/{extension.TrimStart('.').ToUpperInvariant()}";
+    public string MenuPath => "Convert to/" + (extension == ".webp" ? "WebP" : extension.TrimStart('.').ToUpperInvariant());
 
     // Not to its own format, and not a HEIC or HEIF photo to GIF: 256 colours ruin a photo, and that entry would be the
     // 17th of their menu, past the 16 Explorer shows (docs/specs/image.md).

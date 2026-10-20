@@ -155,7 +155,7 @@ public static class ImageFile
 
             image.Dispose();
             page.Dispose();
-            throw new InvalidOperationException("The TIFF has several pages and the result is a single image; use Remove metadata to keep every page.");
+            throw new InvalidOperationException("The TIFF has several pages and the result is a single image; use Remove hidden info to keep every page.");
         }
 
         return page ?? throw new InvalidOperationException("The TIFF holds only thumbnails.");

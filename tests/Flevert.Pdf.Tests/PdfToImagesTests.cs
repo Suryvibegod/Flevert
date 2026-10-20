@@ -33,8 +33,8 @@ public class PdfToImagesTests(ITestOutputHelper output)
         var jpg = new PdfToImages(PdfPageImageFormat.Jpeg);
         var png = new PdfToImages(PdfPageImageFormat.Png);
 
-        Assert.Equal(("pdf.to-jpg", "Convert/JPG pages"), (jpg.Id, jpg.MenuPath));
-        Assert.Equal(("pdf.to-png", "Convert/PNG pages"), (png.Id, png.MenuPath));
+        Assert.Equal(("pdf.to-jpg", "Convert to/JPG images"), (jpg.Id, jpg.MenuPath));
+        Assert.Equal(("pdf.to-png", "Convert to/PNG images"), (png.Id, png.MenuPath));
         Assert.Equal([".pdf"], jpg.Extensions);
         Assert.Equal([".pdf"], png.Extensions);
         // One worker at a time, each with its own memory cap (ADR-0008).
