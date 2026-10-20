@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Flevert.Core;
 
 public static class OutputPath
@@ -17,16 +19,21 @@ public static class OutputPath
     private static string ReserveDirectory(string desiredDirectory, string keepSuffix)
     {
         var name = Path.GetFileName(desiredDirectory);
-        return ReserveName(desiredDirectory, name[..^keepSuffix.Length], keepSuffix, "");
+        return ReserveName(desiredDirectory, name[..^keepSuffix.Length], keepSuffix, "", folder: true);
     }
 
     // "<stem><beforeCounter> (n)<afterCounter>", with only the stem shortened.
-    private static string ReserveName(string desiredPath, string stem, string beforeCounter, string afterCounter)
+    private static string ReserveName(string desiredPath, string stem, string beforeCounter, string afterCounter, bool folder = false)
     {
         var dir = Path.GetDirectoryName(desiredPath)!;
         for (var n = 0; n < MaxAttempts; n++)
         {
-            var candidate = Path.Combine(dir, FitName(stem, beforeCounter + (n == 0 ? "" : $" ({n})") + afterCounter));
+            var name = FitName(stem, beforeCounter + (n == 0 ? "" : $" ({n})") + afterCounter);
+            // Win32 drops a trailing dot or space from a path, and a shortened name can end in one; a folder is renamed
+            // through its handle, which would keep it and make a folder Explorer cannot open.
+            if (folder)
+                name = name.TrimEnd('.', ' ');
+            var candidate = Path.Combine(dir, name);
             if (!IsTaken(candidate))
                 return candidate;
         }
@@ -56,11 +63,16 @@ public static class OutputPath
     }
 
     /// <summary>
-    /// For an operation with many outputs (one file per page): <paramref name="write"/> fills an empty temporary folder
-    /// beside <paramref name="desiredDirectory"/>, which is then renamed once to the first free name, "name" or
-    /// "name (n)", by the rules of <see cref="Reserve"/>. An existing folder is never merged into or replaced. If the
-    /// write throws or is cancelled, the temporary folder and everything in it is deleted.
+    /// For an operation with many outputs (one file per page): <paramref name="write"/> fills a temporary folder beside
+    /// <paramref name="desiredDirectory"/>, which is then renamed once to the first free name, "name" or "name (n)", by
+    /// the rules of <see cref="Reserve"/>. An existing folder is never merged into or replaced. If the write throws or is
+    /// cancelled, the temporary folder and what the writer put in it is deleted.
     /// </summary>
+    /// <remarks>
+    /// The folder is held open until then, so nobody can rename or replace it (ADR-0007). It holds nothing but a hidden
+    /// <c>.flevert.lock</c> when handed over; the writer creates each file with <see cref="FileMode.CreateNew"/>, since
+    /// other accounts that can write beside the input can also add entries to it, and never makes subfolders.
+    /// </remarks>
     /// <returns>The folder created.</returns>
     public static Task<string> WriteDirectoryAtomicallyAsync(
         string desiredDirectory,
@@ -85,36 +97,63 @@ public static class OutputPath
         if (!Path.GetFileName(desiredDirectory).EndsWith(keepSuffix, StringComparison.Ordinal))
             throw new ArgumentException($"The folder name does not end with \"{keepSuffix}\".", nameof(keepSuffix));
 
+        desiredDirectory = Path.GetFullPath(desiredDirectory);
         var dir = Path.GetDirectoryName(desiredDirectory)!;
-        var temp = Path.Combine(dir, $".flevert-{Guid.NewGuid():N}.partial");
-        // CreateDirectory succeeds on an existing folder; a GUID name is never one, and an empty folder must be handed over.
-        Directory.CreateDirectory(temp);
-
+        using var folder = PartialFolder.Create(Path.Combine(dir, $".flevert-{Guid.NewGuid():N}.partial"));
+        var renamed = false;
         try
         {
-            await write(temp, ct).ConfigureAwait(false);
+            await write(folder.Path, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
-            return MoveToFreeName(temp, desiredDirectory, d => ReserveDirectory(d, keepSuffix), static (from, to) => Directory.Move(from, to));
+            var final = RenameToFreeName(folder, desiredDirectory, keepSuffix);
+            renamed = true;
+            // Emptied by someone else and turned into a junction after the anchor went: the junction is what was renamed.
+            // Only the link is removed, and nothing is handed back.
+            if (folder.IsLink())
+            {
+                folder.DeleteQuietly();
+                throw new IOException("The folder for the output was replaced by a link before it got its name.");
+            }
+
+            return final;
         }
         finally
         {
-            DeleteDirectoryQuietly(temp);
+            // Nothing is deleted by name after a rename: the temporary name is free then, and could be someone else's.
+            if (!renamed)
+                folder.DeleteQuietly();
         }
     }
 
-    private static string MoveToFreeName(string temp, string desiredPath) =>
-        MoveToFreeName(temp, desiredPath, Reserve, static (from, to) => File.Move(from, to, overwrite: false));
-
-    // Another process can claim the reserved name between Reserve and Move, so retry on collision. Neither move replaces
-    // what is already there: both fail with IOException when the name exists, as a file or as a folder.
-    private static string MoveToFreeName(string temp, string desiredPath, Func<string, string> reserve, Action<string, string> move)
+    // Another process can claim the reserved name between Reserve and the rename, so retry on collision. The rename never
+    // replaces what is already there: it fails when the name exists, as a file or as a folder.
+    private static string RenameToFreeName(PartialFolder folder, string desiredDirectory, string keepSuffix)
     {
         for (var attempt = 0; ; attempt++)
         {
-            var final = reserve(desiredPath);
+            var final = ReserveDirectory(desiredDirectory, keepSuffix);
+            // The rename takes the name as it is, where Win32 would read some names as something else (a device such as
+            // NUL on Windows 10): only a name that a path keeps unchanged is used.
+            var plain = @"C:\" + Path.GetFileName(final);
+            if (!string.Equals(Path.GetFullPath(plain), plain, StringComparison.Ordinal))
+                throw new IOException($"\"{Path.GetFileName(final)}\" cannot be used as a folder name.");
+            var error = folder.TryRenameTo(final);
+            if (error == 0)
+                return final;
+
+            if (!(IsTaken(final) && attempt < MaxAttempts))
+                throw new IOException($"The finished folder could not be named {Path.GetFileName(final)}: {new Win32Exception(error).Message}");
+        }
+    }
+
+    private static string MoveToFreeName(string temp, string desiredPath)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            var final = Reserve(desiredPath);
             try
             {
-                move(temp, final);
+                File.Move(temp, final, overwrite: false);
                 return final;
             }
             catch (IOException) when (IsTaken(final) && attempt < MaxAttempts)
@@ -159,35 +198,5 @@ public static class OutputPath
         try { File.Delete(path); }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
-    }
-
-    // Gone after a successful move (DirectoryNotFoundException).
-    private static void DeleteDirectoryQuietly(string path)
-    {
-        try { DeleteTree(path); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
-    }
-
-    // Not Directory.Delete(recursive): it calls DeleteVolumeMountPoint on a junction, which needs admin rights, and then
-    // throws with the folder left behind. A link inside is removed itself, never followed, so whatever it points to is kept.
-    private static void DeleteTree(string path)
-    {
-        foreach (var entry in new DirectoryInfo(path).EnumerateFileSystemInfos("*", new EnumerationOptions { AttributesToSkip = 0 }))
-        {
-            var isLink = entry.Attributes.HasFlag(FileAttributes.ReparsePoint);
-            if (entry is DirectoryInfo sub && !isLink)
-            {
-                DeleteTree(sub.FullName);
-                continue;
-            }
-
-            // DeleteFile refuses a read-only file; a link is left as it is, since setting attributes could reach its target.
-            if (!isLink && entry.Attributes.HasFlag(FileAttributes.ReadOnly))
-                entry.Attributes &= ~FileAttributes.ReadOnly;
-            entry.Delete(); // a directory link: RemoveDirectory on the link alone
-        }
-
-        Directory.Delete(path);
     }
 }

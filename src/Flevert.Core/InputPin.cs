@@ -77,7 +77,7 @@ internal static partial class InputPin
     }
 
     // Without the prefix CreateFileW is limited to MAX_PATH unless the machine opted in to long paths.
-    private static string ToExtendedPath(string path) => path switch
+    internal static string ToExtendedPath(string path) => path switch
     {
         _ when path.StartsWith(@"\\?\", StringComparison.Ordinal) => path,
         _ when path.StartsWith(@"\\", StringComparison.Ordinal) => @"\\?\UNC\" + path[2..],

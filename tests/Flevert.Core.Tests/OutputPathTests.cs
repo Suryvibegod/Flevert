@@ -147,21 +147,29 @@ public sealed class OutputPathTests : IDisposable
         Assert.Equal("someone else", await File.ReadAllTextAsync(_dir.Combine("out.txt")));
         Assert.Equal("mine", await File.ReadAllTextAsync(final));
     }
+
+    // An empty folder can be turned into a junction in place by anyone who can write to it; a hidden file held open without
+    // sharing keeps it from ever being empty, and is gone before the folder gets its name.
     [Fact]
-    public async Task WriteDirectoryAtomically_hands_over_an_empty_fixed_length_folder_beside_the_output()
+    public async Task WriteDirectoryAtomically_hands_over_a_fixed_length_folder_beside_the_output_holding_only_its_hidden_anchor()
     {
         string? handed = null;
+        string[]? entries = null;
+        var anchorHidden = false;
 
-        await OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("ảnh 1 (pages)"), (temp, ct) =>
+        var final = await OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("ảnh 1 (pages)"), (temp, ct) =>
         {
             handed = temp;
-            Assert.True(Directory.Exists(temp));
-            Assert.Empty(Directory.EnumerateFileSystemEntries(temp));
+            entries = EntryNames(temp);
+            anchorHidden = File.GetAttributes(Path.Combine(temp, PartialFolder.AnchorName)).HasFlag(FileAttributes.Hidden);
             return Task.CompletedTask;
         }, CancellationToken.None);
 
         Assert.Equal(_dir.Path, Path.GetDirectoryName(handed));
         Assert.Matches(@"^\.flevert-[0-9a-f]{32}\.partial$", Path.GetFileName(handed));
+        Assert.Equal([PartialFolder.AnchorName], entries!);
+        Assert.True(anchorHidden);
+        Assert.Empty(EntryNames(final));
     }
 
     [Fact]
@@ -249,8 +257,8 @@ public sealed class OutputPathTests : IDisposable
             async (temp, ct) =>
             {
                 await WritePages(2)(temp, ct);
+                // An empty folder is removed; one with files in it is left alone (see the test on folders found inside).
                 Directory.CreateDirectory(Path.Combine(temp, "sub"));
-                await File.WriteAllTextAsync(Path.Combine(temp, "sub", "deep.txt"), "half", ct);
                 throw new InvalidOperationException("boom");
             },
             CancellationToken.None));
@@ -338,6 +346,120 @@ public sealed class OutputPathTests : IDisposable
 
         Assert.Empty(EntryNames(_dir.Path));
         Assert.Equal("precious", await File.ReadAllTextAsync(precious));
+    }
+
+    // Another account with write access to the folder beside the input (a second NTFS drive gives Authenticated Users
+    // Modify by default) renames the temporary folder away and puts a junction to the victim's files under its name, then
+    // waits for a page to fail. A rename from another process is refused the same way as one from this process: sharing
+    // is checked per handle, whichever process holds it.
+    [Fact]
+    public async Task WriteDirectoryAtomically_cleanup_does_not_follow_a_junction_swapped_in_for_the_temporary_folder()
+    {
+        using var victim = new TempDir();
+        var precious = victim.File("keep.txt", "precious");
+        var movedAway = false;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => OutputPath.WriteDirectoryAtomicallyAsync(
+            _dir.Combine("a (pages)"),
+            async (temp, ct) =>
+            {
+                await WritePages(1)(temp, ct);
+                try
+                {
+                    Directory.Move(temp, temp + "-away");
+                    movedAway = true;
+                }
+                catch (IOException) { }
+                Junction.TryCreate(temp, victim.Path);
+                throw new InvalidOperationException("boom");
+            },
+            CancellationToken.None));
+
+        Assert.Equal("precious", await File.ReadAllTextAsync(precious));
+        Assert.False(movedAway, "the temporary folder could be renamed while it was being written");
+        Assert.Empty(EntryNames(_dir.Path));
+    }
+
+    // The same account cannot rename the folder, but it can open it for FILE_WRITE_ATTRIBUTES (not subject to sharing) and
+    // turn it into a junction in place, which only an empty folder allows: before the first page it is empty.
+    [Fact]
+    public async Task WriteDirectoryAtomically_cleanup_does_not_follow_the_temporary_folder_turned_into_a_junction()
+    {
+        using var victim = new TempDir();
+        var precious = victim.File("keep.txt", "precious");
+        var converted = -1;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => OutputPath.WriteDirectoryAtomicallyAsync(
+            _dir.Combine("a (pages)"),
+            async (temp, ct) =>
+            {
+                converted = Junction.TryConvert(temp, victim.Path);
+                await WritePages(1)(temp, ct);
+                throw new InvalidOperationException("boom");
+            },
+            CancellationToken.None));
+
+        Assert.Equal(["keep.txt"], EntryNames(victim.Path));
+        Assert.Equal("precious", await File.ReadAllTextAsync(precious));
+        Assert.NotEqual(0, converted);
+        Assert.Empty(EntryNames(_dir.Path));
+    }
+
+    [Fact]
+    public async Task WriteDirectoryAtomically_pages_cannot_be_redirected_by_turning_the_temporary_folder_into_a_junction()
+    {
+        using var victim = new TempDir();
+        victim.File("keep.txt", "precious");
+        var converted = -1;
+
+        var final = await OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
+        {
+            converted = Junction.TryConvert(temp, victim.Path);
+            await WritePages(2)(temp, ct);
+        }, CancellationToken.None);
+
+        Assert.Equal(["keep.txt"], EntryNames(victim.Path));
+        Assert.False(File.GetAttributes(final).HasFlag(FileAttributes.ReparsePoint), Junction.Describe(converted));
+        Assert.Equal(["1.txt", "2.txt"], EntryNames(final));
+    }
+
+    // Writers never make folders (PdfToImages, DevSplit), so a folder with something in it was put there by someone else,
+    // and going into it by path could be redirected the same way as the temporary folder itself.
+    [Fact]
+    public async Task WriteDirectoryAtomically_cleanup_never_goes_into_a_folder_it_finds_inside()
+    {
+        string? handed = null;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => OutputPath.WriteDirectoryAtomicallyAsync(
+            _dir.Combine("a (pages)"),
+            async (temp, ct) =>
+            {
+                handed = temp;
+                await WritePages(1)(temp, ct);
+                Directory.CreateDirectory(Path.Combine(temp, "sub"));
+                await File.WriteAllTextAsync(Path.Combine(temp, "sub", "deep.txt"), "theirs", ct);
+                throw new InvalidOperationException("boom");
+            },
+            CancellationToken.None));
+
+        Assert.Equal("theirs", await File.ReadAllTextAsync(Path.Combine(handed!, "sub", "deep.txt")));
+        Assert.Equal(["sub"], EntryNames(handed!));
+    }
+
+    // Guard: the folder is now created, held, renamed and deleted through Win32 calls rather than .NET's path APIs.
+    [Fact]
+    public async Task WriteDirectoryAtomically_handles_paths_longer_than_260_characters()
+    {
+        var deep = _dir.Path;
+        while (deep.Length < 300)
+            deep = Path.Combine(deep, "thư mục rất dài " + new string('x', 40));
+        Directory.CreateDirectory(Path.Combine(deep, "a (pages)"));
+
+        var final = await OutputPath.WriteDirectoryAtomicallyAsync(Path.Combine(deep, "a (pages)"), WritePages(2), CancellationToken.None);
+
+        Assert.Equal(Path.Combine(deep, "a (pages) (1)"), final);
+        Assert.Equal(["1.txt", "2.txt"], EntryNames(final));
+        Assert.Equal(["a (pages)", "a (pages) (1)"], EntryNames(deep));
     }
 
     private static Func<string, CancellationToken, Task> WritePages(int count) => async (folder, ct) =>
