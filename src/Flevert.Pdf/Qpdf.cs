@@ -179,7 +179,7 @@ public sealed class Qpdf
                 throw TooManyPagesError();
         }
 
-        await RunCheckedAsync(["--show-pages"], [inputPath], [inputPath], null, ct, OnLine).ConfigureAwait(false);
+        await RunCheckedAsync(["--show-pages"], [inputPath], [inputPath], null, ct, outputLine: OnLine).ConfigureAwait(false);
         return pages;
     }
 

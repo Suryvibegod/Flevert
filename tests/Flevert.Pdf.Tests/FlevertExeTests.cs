@@ -307,7 +307,7 @@ public sealed class FlevertExeTests : IDisposable
             try
             {
                 if (string.Equals(process.MainModule?.FileName, exePath, StringComparison.OrdinalIgnoreCase)
-                    && TestProcesses.CommandLine(process).Contains(argument, StringComparison.Ordinal))
+                    && TestProcesses.CommandLine(process)?.Contains(argument, StringComparison.Ordinal) == true)
                     return process;
             }
             catch (Exception e) when (e is Win32Exception or InvalidOperationException)
