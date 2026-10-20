@@ -56,6 +56,8 @@ public sealed class PdfException : Exception
 
     public PdfException(PdfError error, string message) : base(message) => Error = error;
 
+    public PdfException(PdfError error, string message, Exception innerException) : base(message, innerException) => Error = error;
+
     public PdfError Error { get; }
 
     /// <summary>The same words for every PDF operation, qpdf or pdfium (docs/specs/pdf.md).</summary>

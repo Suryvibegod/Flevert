@@ -76,8 +76,9 @@ Loại trừ: Ghostscript, iText, MuPDF (AGPL); PDFsharp **6.5 trở lên** (đ�
 3. **Tiến độ trong một file**: `IProgress<double>` cho thao tác dài (render 200 trang); cửa sổ tiến độ hiện "page 37 of 200".
 4. **Gọi tiến trình ngoài** (`ExternalTool`): đường dẫn tuyệt đối trong thư mục cài; `ArgumentList` (không ghép chuỗi); stdin cho dữ liệu nhạy cảm; stdout/stderr đọc giới hạn (1 MB); timeout cứng; Cancel giết cả cây tiến trình; job object để tiến trình con chết theo Flevert; kiểm hash của exe khi khởi động lần đầu sau cài? (**câu hỏi mở**, xem Boundaries).
 5. **Giới hạn tài nguyên**: tối đa 2 000 trang/file; trang render tối đa 10 000 px mỗi cạnh **sau khi nhân DPI** (trang lớn thì giảm DPI cho trang đó); bộ nhớ theo `MemoryBudget` hiện có; file PDF tối đa 2 GB.
-6. **pdfium không thread-safe**: mọi lời gọi pdfium qua một khóa toàn tiến trình; thao tác pdfium đặt `MaxParallel = 1`; qpdf chạy song song được (mỗi file một tiến trình), `MaxParallel` theo số nhân.
+6. **pdfium không thread-safe**: mọi lời gọi pdfium qua một khóa toàn tiến trình; thao tác pdfium đặt `MaxParallel = 1`; qpdf chạy song song được (mỗi file một tiến trình): `MaxParallel = 4` (runner còn giới hạn theo số nhân − 1). Mỗi qpdf một nhân, việc chủ yếu là đọc và ghi lại file nên quá vài tiến trình thì đĩa là giới hạn; bộ nhớ của qpdf tăng theo PDF và nằm ngoài `MemoryBudget` (quyết định ở T3).
 7. **Menu**: `.pdf` thêm vào danh sách đuôi; ảnh có thêm mục `Combine into PDF`. Thứ tự nhóm trong menu ảnh: Convert, Compress, Combine into PDF, Remove metadata.
+8. **Gọi qpdf** (đã kiểm với qpdf 12.4.2, T3): tùy chọn (hằng của Flevert) trên dòng lệnh, **hai đường dẫn qua stdin bằng `@-`** (mỗi dòng một đối số). Lý do: C runtime của qpdf mở rộng ký tự đại diện trong đối số dòng lệnh (`r*.pdf` thành nhiều file), nên dấu `?` của đường dẫn `\\?\…` (runner dùng cho đường dẫn dài hơn 260 ký tự) biến thành tên khác; dòng đọc từ `@-` giữ nguyên, và qpdf mở được `\\?\` dài, có Unicode. qpdf không có dấu kết thúc tùy chọn (`--` không phải), nên đường dẫn phải tuyệt đối (không bắt đầu bằng `-` hay `@`) và không chứa xuống dòng. Mã thoát: 0 xong; 3 (cảnh báo: qpdf đã sửa gì đó, ví dụ trang thiếu `/Resources` mà mọi trình xem vẫn mở) **tính là xong**, cảnh báo không hiện cho người dùng; 2 lỗi: hỏi lại `qpdf --requires-password` (mã thoát có tài liệu, chữ "invalid password" thì có thể đổi) → thông báo mật khẩu; stderr nhắc file output → lỗi ghi file; còn lại "This file is not a PDF, or it is damaged." (chi tiết của qpdf nằm trong log). Timeout: 2 phút + 1 giây mỗi MB. File > 2 GB bị từ chối trước khi chạy qpdf; giới hạn số trang cho thao tác qpdf để T18.
 
 ## Đóng gói và phát hành
 
@@ -117,15 +118,12 @@ docs/adr/0008-…               → pdfium + qpdf, không AGPL
 Như các module hiện có (xem `src/Flevert.Image`): thao tác là class nhỏ, không trạng thái, nhận đường dẫn đã ghim, ghi qua `OutputPath`; lỗi người dùng hiểu được là exception có message tiếng Anh ngắn.
 
 ```csharp
-internal sealed class PdfRotate(int degrees, Qpdf qpdf) : IOperation
+// src/Flevert.Pdf/PdfRotate.cs (rút gọn). Qpdf.TransformAsync đưa input và output cho qpdf qua stdin (@-), xem mục 8 ở trên.
+public Task<string> RunAsync(string inputPath, CancellationToken ct)
 {
-    public string Id => degrees switch { 90 => "pdf.rotate-right", 270 => "pdf.rotate-left", _ => "pdf.rotate-180" };
-    public string MenuPath => degrees switch { 90 => "Rotate/90° right", 270 => "Rotate/90° left", _ => "Rotate/180°" };
-    public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
-
-    public Task<string> RunAsync(string input, CancellationToken cancellationToken) =>
-        OutputPath.WriteAsync(input, " (rotated)", ".pdf", (output, ct) =>
-            qpdf.RunAsync(["--rotate=+" + degrees, "--", input, output], ct), cancellationToken);
+    var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + " (rotated).pdf");
+    var rotate = string.Create(CultureInfo.InvariantCulture, $"--rotate=+{_degrees}:1-z");
+    return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _qpdf.TransformAsync(inputPath, temp, [rotate], token), ct);
 }
 ```
 

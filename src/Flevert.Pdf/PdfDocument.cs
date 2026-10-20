@@ -54,7 +54,7 @@ public sealed class PdfDocument : IDisposable
         {
             var length = RandomAccess.GetLength(file);
             if (length > limits.MaxFileBytes)
-                throw new PdfException(PdfError.TooLarge, $"This PDF is larger than {DescribeBytes(limits.MaxFileBytes)}, the most Flevert opens.");
+                throw TooLargeError(limits.MaxFileBytes);
             source = new FileSource(file, length);
 
             lock (Pdfium.Gate)
@@ -155,8 +155,14 @@ public sealed class PdfDocument : IDisposable
         PdfiumNative.ErrPassword => new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage),
         PdfiumNative.ErrSecurity => new PdfException(PdfError.UnsupportedEncryption, "This PDF is protected by an encryption Flevert cannot open."),
         PdfiumNative.ErrFile => new PdfException(PdfError.Unreadable, "The PDF could not be read from disk."),
-        _ => new PdfException(PdfError.NotPdf, "This file is not a PDF, or it is damaged."),
+        _ => new PdfException(PdfError.NotPdf, NotPdfMessage),
     };
+
+    /// <summary>The same words from pdfium and qpdf for a file that does not open as a PDF.</summary>
+    internal const string NotPdfMessage = "This file is not a PDF, or it is damaged.";
+
+    internal static PdfException TooLargeError(long maxFileBytes) =>
+        new(PdfError.TooLarge, $"This PDF is larger than {DescribeBytes(maxFileBytes)}, the most Flevert opens.");
 
     private static string DescribeBytes(long bytes) =>
         bytes >= 1L << 30 && bytes % (1L << 30) == 0
