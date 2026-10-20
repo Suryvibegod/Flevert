@@ -228,9 +228,10 @@ Phiên trước chuyển máy giữa chừng (commit `wip:` chưa build, chưa c
 - Phụ thuộc: T2. Cỡ: M
 
 ### T6: `pdf.merge`
-- [ ] ≥ 2 PDF → `<tên đầu> (merged).pdf`, số trang bằng tổng, thứ tự tự nhiên; 1 PDF → lỗi rõ "Select at least two PDFs"
+- [x] ≥ 2 PDF → `<tên đầu> (merged).pdf`, số trang bằng tổng, thứ tự tự nhiên; 1 PDF → lỗi rõ "Select at least two PDFs"
 - Kiểm: test + chạy thật 3 PDF qua menu (MenuProbe invoke)
 - Phụ thuộc: T3, T5. Cỡ: S
+- Đã làm (2026-10-20, nhánh `worktree-agent-a6bc3f5cc6955a861`): `PdfMerge` (`IBatchOperation`) + `Qpdf.MergeAsync` (`--empty --pages <file>… -- <output>`, mọi đường dẫn và `--` qua `@-`). `Qpdf` gom phần chạy/kiểm lỗi vào `RunCheckedAsync` (dùng chung cho xoay, merge, đếm trang, split): giới hạn 2 GB, trần bộ nhớ và timeout theo **tổng** cỡ input; lỗi do một input → `BatchInputException` nêu nó (input lấy từ dòng lỗi cuối của qpdf, dạng `\\?\` nên không khớp nhầm; không nêu file nào → hỏi `--requires-password` từng file). Probe trước khi code (qpdf 12.4.2): `--` trong `@-` kết thúc `--pages` đúng; file có mật khẩu → mã 2 `qpdf: <path>: invalid password`; không phải PDF → mã 2, dòng cuối nêu file; cùng file hai lần → 2× trang (runner đã bỏ trùng). Test viết trước: `PdfMenuTests` đỏ ("Collections differ") trước khi đăng ký; `PdfMergeTests` 17 (đỏ: `NotImplementedException`) rồi xanh; `FlevertExeTests` 3 tiến trình thật khởi động 10, 1, 2 → `file 1 (merged).pdf` đúng thứ tự (đỏ trước). Đột biến: không tìm input trong lỗi → 2 test "not a PDF" đỏ; bỏ kiểm tổng cỡ → test "together larger" đỏ. Trần bộ nhớ theo tổng chỉ kiểm qua cùng biến `total` với giới hạn cỡ (test end-to-end cần > 300 MB input vì trần tối thiểu 1 GB). Chạy thật: 3 `flevert.exe run pdf.merge` headless (cửa sổ rảnh mặc định) → `Hóa đơn 1 (merged).pdf` 10 trang, cả ba mã 0; một PDF → mã 1, log "Select at least two PDFs to merge."; có file mật khẩu → chủ lô mã 1, log "b khóa.pdf: This PDF needs a password…", không output. MenuProbe (`install-menu --dev --allow-insecure-location`): `.pdf` → `Flevert > Convert | Merge PDFs | Split into pages | Rotate`; `invoke "Flevert/Merge PDFs"` với `scan 10`, `scan 1`, `scan 2` → `scan 1 (merged).pdf` 10 trang; đã `uninstall-menu`, không còn mục Flevert.
 
 ### T7: Output thư mục (1→N) và tiến độ trong file
 - [x] `OutputPath.WriteDirectoryAtomicallyAsync`: thư mục tạm, đổi tên một lần, tên trùng → ` (1)`; hủy → không còn thư mục dở
@@ -240,8 +241,10 @@ Phiên trước chuyển máy giữa chừng (commit `wip:` chưa build, chưa c
 - Phụ thuộc: T2. Cỡ: M
 
 ### T8: `pdf.split`
-- [ ] Thư mục `<tên> (pages)\<tên> 001.pdf…`, số chữ số đủ; mỗi file một trang
+- [x] Thư mục `<tên> (pages)\<tên> 001.pdf…`, số chữ số đủ; mỗi file một trang
 - Phụ thuộc: T3, T7. Cỡ: S
+- Đã làm (2026-10-20, cùng nhánh T6): `PdfSplit` (`IOperation`, `MaxParallel = 4`) + `Qpdf.CountPagesAsync` (`--show-npages`) + `Qpdf.SplitPagesAsync` (`--split-pages` ra `<thư mục>\%d.pdf`). Quyết định (spec mục "Split", ADR-0008): đếm trang trước (0 trang → `NoPages`; > 2 000 → `TooManyPages` trước khi ghi gì); PDF một trang vẫn ra thư mục một file; số chữ số max(3, số trang); tên trang cắt stem cho vừa 255, không cắt đôi surrogate. **Probe**: qpdf thay `%d` đầu tiên của cả đường dẫn output (thư mục `a%d` cạnh `a1` → trang 1 ghi vào `a1`) → đường dẫn có `%d` bị từ chối (`UnsupportedFileName`). qpdf ghi trang theo tên đoán được, xuyên qua link đặt sẵn → ghi vào thư mục con tạo kèm DACL riêng (user, SYSTEM, Admins), rồi **chép** từng trang sang tên cuối bằng `CreateNew` (probe: move giữ DACL riêng, chép nhận quyền của thư mục). Tiến độ "page N of M" bằng đếm file trong thư mục con 5 lần/giây (qpdf không báo tới khi thoát; `--verbose` chỉ ra stdout lúc cuối qua `ExternalTool`). Test viết trước: `PdfSplitTests` 21 (đỏ: `NotImplementedException`) rồi xanh; `FlevertExeTests` split qua `flevert.exe` thật. Đột biến: move thay chép → test quyền đỏ; bỏ kiểm `%d` → test `%d` đỏ; bỏ xử lý surrogate → test emoji đỏ. Hủy khi trang thứ hai xuất hiện (PDF 2 000 trang, qpdf ~2–3 s) → hủy sau ~0,3 s, không còn `.partial`. Chạy thật: `flevert.exe run pdf.split` headless → `Hóa đơn 2 (pages)` 4 file một trang; MenuProbe `invoke "Flevert/Split into pages"` → `scan 2 (pages)\scan 2 001.pdf`…`004.pdf`; đã `uninstall-menu`.
+- Còn: không có test end-to-end chứng minh qpdf không ghi xuyên link đặt sẵn (tạo symlink cần quyền/Developer Mode; thư mục con có tên ngẫu nhiên tạo trong thao tác); kiểm ở review trước T20.
 
 ### Checkpoint 2
 - [ ] Review ba góc cho T5–T8 (trọng tâm: runner, hủy, đặt tên); reconcile
