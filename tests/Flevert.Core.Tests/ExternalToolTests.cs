@@ -149,6 +149,18 @@ public sealed class ExternalToolTests : IDisposable
     }
 
     [Fact]
+    public async Task A_tool_that_exits_before_it_joins_its_job_still_returns_its_result()
+    {
+        // A fast tool can finish between Process.Start and AssignProcessToJobObject, which then fails with "Access is
+        // denied" (checked 2026-10-20). The seam waits for the exit, so the test never depends on that race.
+        var result = await ExternalTool.RunAsync(Cmd, ["/c", "echo done& exit 7"], Generous, default, null,
+            afterStart: process => process.WaitForExit(), CancellationToken.None);
+
+        Assert.Equal(7, result.ExitCode);
+        Assert.Equal("done", result.StandardOutput.Trim());
+    }
+
+    [Fact]
     public async Task Runs_in_the_tools_own_folder_by_default()
     {
         var result = await ExternalTool.RunAsync(Cmd, ["/c", "cd"], Generous);

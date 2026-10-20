@@ -41,13 +41,24 @@ public static partial class ExternalTool
     /// <param name="standardInput">Bytes for the tool's stdin, such as a password; not kept after the call.</param>
     /// <param name="workingDirectory">Absolute, existing folder; the tool's own folder when <c>null</c>.</param>
     /// <exception cref="OperationCanceledException">Cancelled; the tool and its children were killed first.</exception>
-    public static async Task<ExternalToolResult> RunAsync(
+    public static Task<ExternalToolResult> RunAsync(
         string toolPath,
         IEnumerable<string> arguments,
         TimeSpan timeout,
         ReadOnlyMemory<byte> standardInput = default,
         string? workingDirectory = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        RunAsync(toolPath, arguments, timeout, standardInput, workingDirectory, afterStart: null, cancellationToken);
+
+    /// <param name="afterStart">For tests: runs after the tool has started and before it is put in its job.</param>
+    internal static async Task<ExternalToolResult> RunAsync(
+        string toolPath,
+        IEnumerable<string> arguments,
+        TimeSpan timeout,
+        ReadOnlyMemory<byte> standardInput,
+        string? workingDirectory,
+        Action<Process>? afterStart,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
@@ -70,9 +81,15 @@ public static partial class ExternalTool
 
         using var job = CreateKillOnCloseJob();
         using var process = Process.Start(start) ?? throw new InvalidOperationException($"{toolPath} did not start.");
+        afterStart?.Invoke(process);
         try
         {
             AssignToJob(job, process);
+        }
+        catch (Win32Exception) when (process.HasExited)
+        {
+            // A fast tool can finish before it is put in the job, and Windows then refuses with "Access is denied". It
+            // has nothing left to limit or kill; whatever it started meanwhile is the gap described at AssignToJob.
         }
         catch (Win32Exception)
         {
