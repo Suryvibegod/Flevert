@@ -153,11 +153,36 @@ public sealed class Qpdf
         var limits = new ExternalToolLimits { MaxMemoryBytes = MaxMemoryBytes, SingleProcess = true };
         var run = await ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, limits: limits,
             environment: ToolEnvironment, cancellationToken: ct).ConfigureAwait(false);
-        // Refused memory, qpdf may crash, fail, or treat the object it was reading as null and still report success with
-        // warnings (exit code 3; all three seen with 12.4.2): its exit code says nothing then.
-        if (run.MemoryLimitExceeded)
-            throw new PdfException(PdfError.TooComplex, TooComplexMessage(MaxMemoryBytes), new QpdfException(run.ExitCode, Detail(run)));
+        if (Untrustworthy(run, MaxMemoryBytes) is { } error)
+            throw error;
         return run;
+    }
+
+    /// <summary>
+    /// The error for a run whose result cannot be trusted, whatever its exit code, or <c>null</c>. Refused memory, qpdf
+    /// may crash, fail, or treat the object or stream it was reading as null and still report success with warnings
+    /// (exit code 3; all three seen with 12.4.2).
+    /// </summary>
+    /// <remarks>
+    /// The job's report of a refused allocation is best effort, and a machine out of memory or an outer job refuses
+    /// without one, so qpdf's own words count too: it appends the exception's text after ": " (MSVC: "bad allocation";
+    /// libstdc++: "std::bad_alloc"), and no Windows file name in its messages can hold a ":". Only the first megabyte of
+    /// stderr is kept, so a success with more than that is not trusted either.
+    /// </remarks>
+    internal static PdfException? Untrustworthy(ExternalToolResult run, ulong maxMemoryBytes)
+    {
+        var refused = run.MemoryLimitExceeded
+            || run.StandardError.Contains(": bad allocation", StringComparison.OrdinalIgnoreCase)
+            || run.StandardError.Contains(": std::bad_alloc", StringComparison.OrdinalIgnoreCase);
+        if (refused)
+            return new PdfException(PdfError.TooComplex, TooComplexMessage(maxMemoryBytes), new QpdfException(run.ExitCode, Detail(run)));
+        if (run.StandardErrorTruncated && run.ExitCode is 0 or ExitWarnings)
+        {
+            return new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage,
+                new QpdfException(run.ExitCode, "more than a megabyte of warnings; the rest was not read. " + Detail(run)));
+        }
+
+        return null;
     }
 
     private static string TooComplexMessage(ulong maxMemoryBytes) =>

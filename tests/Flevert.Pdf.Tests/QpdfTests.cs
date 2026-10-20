@@ -116,6 +116,49 @@ public sealed class QpdfTests : IDisposable
         Assert.Contains("No such file or directory", ex.Message, StringComparison.Ordinal);
     }
 
+    private static ExternalToolResult Result(int exitCode, string stderr, bool stderrTruncated = false, bool overLimit = false) =>
+        new(exitCode, "", stderr, false, stderrTruncated) { MemoryLimitExceeded = overLimit };
+
+    [Theory]
+    // What qpdf 12.4.2 printed when refused memory: a 520 MB image stream under 1 GB, a 2-million-number array under 64 MB.
+    [InlineData(3, @"WARNING: \\?\C:\in.pdf (offset 277): error decoding stream data for object 4 0: bad allocation")]
+    [InlineData(3, @"WARNING: \\?\C:\in.pdf (object 4 0, offset 933447): treating object as null because of error during parsing: bad allocation")]
+    [InlineData(2, @"qpdf: \\?\C:\in.pdf: unable to find page tree" + "\n" + "WARNING: x: bad allocation")]
+    // libstdc++'s words for the same exception.
+    [InlineData(0, "qpdf: std::bad_alloc")]
+    public void A_refused_allocation_qpdf_reports_fails_the_run_even_without_the_jobs_message(int exitCode, string stderr)
+    {
+        // The job's message is best effort, and an outer job or a machine out of memory sends none at all.
+        var error = Qpdf.Untrustworthy(Result(exitCode, stderr), 1UL << 30);
+
+        Assert.Equal(PdfError.TooComplex, error?.Error);
+    }
+
+    [Fact]
+    public void The_jobs_message_alone_fails_the_run()
+    {
+        Assert.Equal(PdfError.TooComplex, Qpdf.Untrustworthy(Result(0, "", overLimit: true), 1UL << 30)?.Error);
+    }
+
+    [Fact]
+    public void A_success_whose_messages_were_cut_off_is_not_trusted()
+    {
+        // Only the first megabyte of stderr is kept: a refused allocation reported after it would go unseen.
+        var error = Qpdf.Untrustworthy(Result(3, new string('w', 100), stderrTruncated: true), 1UL << 30);
+
+        Assert.Equal(PdfError.NotPdf, error?.Error);
+    }
+
+    [Theory]
+    [InlineData(0, "")]
+    [InlineData(3, @"WARNING: \\?\C:\in.pdf, object 3 0 at offset 161: kid 0 (from 0) Resources is missing or invalid; repairing")]
+    // A file name cannot hold ":", so a name alone never reads as qpdf's message.
+    [InlineData(3, @"WARNING: \\?\C:\bad allocation\bad_alloc.pdf, object 3 0 at offset 161: Resources is missing or invalid; repairing")]
+    public void An_ordinary_run_is_trusted(int exitCode, string stderr)
+    {
+        Assert.Null(Qpdf.Untrustworthy(Result(exitCode, stderr), 1UL << 30));
+    }
+
     [Fact]
     public void Qpdf_may_use_one_gigabyte_of_memory()
     {
