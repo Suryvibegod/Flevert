@@ -475,30 +475,59 @@ public sealed class OutputPathTests : IDisposable
         Assert.Equal(["a (pages)"], EntryNames(_dir.Path));
     }
 
-    // Negative control for the test above: the wait is bounded, and giving up still leaves nothing behind.
+    // A full scan of a large page by an antivirus or a sync app holding it open can take several seconds: a short wait
+    // would still lose a long render at the very end.
     [Fact]
-    public async Task WriteDirectoryAtomically_gives_up_cleanly_when_a_file_stays_open_past_the_retry_window()
+    public async Task WriteDirectoryAtomically_waits_several_seconds_for_another_program_to_close_a_file()
+    {
+        Task? closed = null;
+
+        var final = await OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
+        {
+            await WritePages(2)(temp, ct);
+            var scanner = new FileStream(Path.Combine(temp, "1.txt"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            closed = Task.Run(async () =>
+            {
+                await Task.Delay(3000, CancellationToken.None);
+                await scanner.DisposeAsync();
+            }, CancellationToken.None);
+        }, CancellationToken.None);
+        await closed!;
+
+        Assert.Equal(_dir.Combine("a (pages)"), final);
+        Assert.Equal(["1.txt", "2.txt"], EntryNames(final));
+    }
+
+    // The wait is bounded. Giving up must not cost the pages: they are complete, only the name is missing, so the folder
+    // is kept, visible, and the error says where it is.
+    [Fact]
+    public async Task WriteDirectoryAtomically_keeps_the_pages_when_a_file_stays_open_past_the_retry_window()
     {
         FileStream? scanner = null;
+        var wait = TimeSpan.FromMilliseconds(300);
         var timer = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            await Assert.ThrowsAsync<IOException>(() => OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
+            var error = await Assert.ThrowsAsync<IOException>(() => OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), "", async (temp, ct) =>
             {
                 await WritePages(2)(temp, ct);
                 scanner = new FileStream(Path.Combine(temp, "1.txt"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            }, CancellationToken.None));
+            }, wait, CancellationToken.None));
             timer.Stop();
 
-            // Still open: a file deleted with POSIX semantics loses its name at once, so the folder can go too.
-            Assert.Empty(EntryNames(_dir.Path));
+            var kept = Assert.Single(EntryNames(_dir.Path));
+            Assert.Matches(@"^\.flevert-[0-9a-f]{32}\.partial$", kept);
+            Assert.Contains(kept, error.Message, StringComparison.Ordinal);
+            Assert.Equal(["1.txt", "2.txt"], EntryNames(_dir.Combine(kept)));
+            Assert.False(File.GetAttributes(_dir.Combine(kept)).HasFlag(FileAttributes.Hidden));
+            Assert.Contains("a (pages)", error.Message, StringComparison.Ordinal);
         }
         finally
         {
             scanner?.Dispose();
         }
 
-        Assert.InRange(timer.Elapsed, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(30));
+        Assert.True(timer.Elapsed >= wait, $"{timer.Elapsed}");
     }
 
     [Fact]

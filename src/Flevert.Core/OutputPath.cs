@@ -9,10 +9,11 @@ public static class OutputPath
     private const int ErrorAccessDenied = 5;
     private const int ErrorSharingViolation = 32;
 
-    // About 2 s in all: 25, 50, 100, 200, 400 ms, then 400 ms at a time.
-    private static readonly TimeSpan RenameWait = TimeSpan.FromSeconds(2);
+    // About 30 s in all: 25, 50, 100, 200, 400, 800 ms, then 1 s at a time. A scanner usually lets go within a second, but
+    // a full scan or an upload of a large page can take several; Cancel stops the wait at once.
+    private static readonly TimeSpan RenameWait = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan FirstRenamePause = TimeSpan.FromMilliseconds(25);
-    private static readonly TimeSpan MaxRenamePause = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan MaxRenamePause = TimeSpan.FromSeconds(1);
 
     /// <summary>
     /// Returns <paramref name="desiredPath"/> or the first free "name (n).ext" beside it. Anything with that name, file or
@@ -70,7 +71,9 @@ public static class OutputPath
     /// For an operation with many outputs (one file per page): <paramref name="write"/> fills a temporary folder beside
     /// <paramref name="desiredDirectory"/>, which is then renamed once to the first free name, "name" or "name (n)", by
     /// the rules of <see cref="Reserve"/>. An existing folder is never merged into or replaced. If the write throws or is
-    /// cancelled, the temporary folder and what the writer put in it is deleted.
+    /// cancelled, the temporary folder and what the writer put in it is deleted. If another program keeps a file in it open
+    /// for about 30 s after the write, the finished folder is kept, visible, under its temporary name, and the
+    /// <see cref="IOException"/> names it.
     /// </summary>
     /// <remarks>
     /// The folder is held open until then, so nobody can rename or replace it (ADR-0007). It holds nothing but a hidden
@@ -92,10 +95,19 @@ public static class OutputPath
     /// </param>
     /// <param name="write">Fills the temporary folder it is given.</param>
     /// <param name="ct">Stops the write; the temporary folder is then deleted.</param>
-    public static async Task<string> WriteDirectoryAtomicallyAsync(
+    public static Task<string> WriteDirectoryAtomicallyAsync(
         string desiredDirectory,
         string keepSuffix,
         Func<string, CancellationToken, Task> write,
+        CancellationToken ct) =>
+        WriteDirectoryAtomicallyAsync(desiredDirectory, keepSuffix, write, RenameWait, ct);
+
+    // renameWait: how long a rename refused because another program has a file inside open is retried (tests shorten it).
+    internal static async Task<string> WriteDirectoryAtomicallyAsync(
+        string desiredDirectory,
+        string keepSuffix,
+        Func<string, CancellationToken, Task> write,
+        TimeSpan renameWait,
         CancellationToken ct)
     {
         if (!Path.GetFileName(desiredDirectory).EndsWith(keepSuffix, StringComparison.Ordinal))
@@ -105,29 +117,30 @@ public static class OutputPath
         var dir = Path.GetDirectoryName(desiredDirectory)!;
         var leafName = Path.GetFileName(desiredDirectory);
         using var folder = PartialFolder.Create(Path.Combine(dir, $".flevert-{Guid.NewGuid():N}.partial"));
-        var renamed = false;
+        var keep = false;
         try
         {
             await write(folder.Path, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             folder.PrepareForRename();
-            var final = await RenameToFreeNameAsync(folder, leafName, keepSuffix, ct).ConfigureAwait(false);
-            renamed = true;
-            // Emptied by someone else and turned into a junction after the anchor went: the junction is what was renamed.
-            // Only the link is removed, and nothing is handed back.
+            var final = await RenameToFreeNameAsync(folder, leafName, keepSuffix, renameWait, ct).ConfigureAwait(false);
+            // Emptied by someone else and turned into a junction after the anchor went: the junction is what was renamed, or
+            // would be kept. The cleanup below removes only the link, through the handle, and nothing is handed back.
             if (folder.IsLink())
-            {
-                folder.DeleteQuietly();
                 throw new IOException("The folder for the output was replaced by a link before it got its name.");
-            }
 
+            keep = true;
             folder.Unhide();
-            return final;
+            // Still refused after the wait: the pages are complete, only the name is missing. Deleting them would throw a
+            // long render away for a scanner's sake, so the folder stays, visible, under its temporary name.
+            return final ?? throw new IOException(
+                $"Could not name the folder \"{leafName}\": another program (an antivirus scan, the search indexer or a sync app) kept a file in it open. The pages are kept in \"{Path.GetFileName(folder.Path)}\".");
         }
         finally
         {
-            // Nothing is deleted by name after a rename: the temporary name is free then, and could be someone else's.
-            if (!renamed)
+            // Never after a rename unless the folder became a link: DeleteQuietly then removes only the link, through the
+            // handle, never by name (the temporary name is free after a rename, and could be someone else's).
+            if (!keep)
                 folder.DeleteQuietly();
         }
     }
@@ -136,9 +149,10 @@ public static class OutputPath
     // replaces what is already there: it fails when the name exists, as a file or as a folder.
     //
     // A folder cannot be renamed while another program has a file in it open, whatever sharing it asked for (access
-    // denied): an antivirus scan, the search indexer, OneDrive or a thumbnailer, each for milliseconds to about a second.
-    // With the name free, the rename is retried for up to RenameWait before giving up, rather than losing every page.
-    private static async Task<string> RenameToFreeNameAsync(PartialFolder folder, string leafName, string keepSuffix, CancellationToken ct)
+    // denied): an antivirus scan, the search indexer, OneDrive or a thumbnailer, usually for milliseconds to a few seconds.
+    // With the name free, the rename is retried for up to renameWait; null when it is still refused after that.
+    private static async Task<string?> RenameToFreeNameAsync(
+        PartialFolder folder, string leafName, string keepSuffix, TimeSpan renameWait, CancellationToken ct)
     {
         // The real parent of the held folder, not a spelling the caller gave that a junction could still redirect.
         var parent = Path.GetDirectoryName(folder.Path)!;
@@ -159,9 +173,9 @@ public static class OutputPath
                 continue;
 
             var busy = error is ErrorAccessDenied or ErrorSharingViolation;
-            if (busy && waited < RenameWait)
+            if (busy && waited < renameWait)
             {
-                var delay = pause < RenameWait - waited ? pause : RenameWait - waited;
+                var delay = pause < renameWait - waited ? pause : renameWait - waited;
                 await Task.Delay(delay, ct).ConfigureAwait(false);
                 waited += delay;
                 pause *= 2;
@@ -170,9 +184,9 @@ public static class OutputPath
                 continue;
             }
 
-            throw new IOException(busy
-                ? $"The finished folder could not be named {Path.GetFileName(final)}: another program (an antivirus scan, the search indexer or a sync app) kept a file in it open. Try again."
-                : $"The finished folder could not be named {Path.GetFileName(final)}: {new Win32Exception(error).Message}");
+            if (busy)
+                return null;
+            throw new IOException($"The finished folder could not be named {Path.GetFileName(final)}: {new Win32Exception(error).Message}");
         }
     }
 
