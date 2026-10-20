@@ -55,6 +55,57 @@ public sealed class MaliciousMediaTests : IDisposable
     }
 
     [Theory]
+    [InlineData("holiday.mp4", "#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\nprivate.wav\n#EXT-X-ENDLIST\n")]
+    [InlineData("holiday.mkv", "ffconcat version 1.0\nfile private.wav\n")]
+    [InlineData("holiday.webm", "ffconcat version 1.0\nfile 'file:private.wav'\n")]
+    public async Task A_playlist_naming_another_local_recording_is_refused_and_nothing_of_it_is_written(string name, string content)
+    {
+        // The known way to make ffmpeg leak a local file: a list that names it, so it lands in the video the user sends
+        // on (success criterion 14). Here it is a recording ffmpeg reads: without the demuxer whitelist the concat list of
+        // a plain name converts it. ffmpeg's own checks also stop the other two (an HLS playlist not named .m3u8, a URL in
+        // a concat list); the whitelist does not rely on them.
+        await Fixtures.CopyAsync(Fixtures.WavAsync(), _dir, "private.wav");
+        var input = _dir.File(name, content);
+
+        foreach (var id in (string[])["video.to-mp4", "video.extract-mp3", "video.strip-metadata"])
+            Assert.Equal(MediaException.UnreadableMessage, (await Refused(id, input, keep: "private.wav")).Message);
+    }
+
+    [Fact]
+    public async Task A_video_claiming_100_000_pixels_across_is_refused_before_anything_is_decoded()
+    {
+        // A raw-video AVI of 16 × 16 pixels whose headers say 100 000 × 16.
+        var input = _dir.Combine("wide.avi");
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "testsrc2=size=16x16:rate=5:duration=1", "-c:v", "rawvideo", "-pix_fmt", "bgr24", "-f", "avi", input);
+        var bytes = await File.ReadAllBytesAsync(input);
+        var header = bytes.AsSpan().IndexOf("avih"u8);
+        BitConverter.TryWriteBytes(bytes.AsSpan(header + 8 + 32), 100_000);
+        var format = bytes.AsSpan().IndexOf("strf"u8);
+        BitConverter.TryWriteBytes(bytes.AsSpan(format + 8 + 4), 100_000);
+        await File.WriteAllBytesAsync(input, bytes);
+
+        var e = await Refused("video.to-mp4", input);
+
+        Assert.Equal(MediaException.TooLargeVideoMessage, e.Message);
+    }
+
+    [Fact]
+    public async Task Subtitles_and_attachments_never_reach_a_converted_video()
+    {
+        var input = _dir.Combine("film.mkv");
+        var subtitles = _dir.File("film.srt", "1\n00:00:00,000 --> 00:00:02,000\nXin chào\n");
+        var font = _dir.File("font.ttf", "not really a font");
+        await TestFfmpeg.RunRawAsync("-i", await Fixtures.SmallClipAsync(), "-i", subtitles, "-map", "0", "-map", "1", "-c", "copy", "-c:s", "srt",
+            "-attach", font, "-metadata:s:t", "mimetype=font/ttf", "-f", "matroska", input);
+        File.Delete(subtitles);
+        File.Delete(font);
+
+        var output = await Op("video.to-mp4").RunAsync(input, CancellationToken.None);
+
+        Assert.Equal(["h264", "aac"], (await VideoConvertTests.Probe(output)).Streams.Select(s => s.Codec));
+    }
+
+    [Theory]
     [InlineData("empty.mp4", "")]
     [InlineData("notes.avi", "Shopping list: milk, eggs.\n")]
     [InlineData("script.webm", "#!/bin/sh\nrm -rf ~\n")]
