@@ -4,14 +4,14 @@ using Flevert.Image;
 
 namespace Flevert.Pdf.Tests;
 
-/// <summary>The menu flevert.exe installs from the real image and PDF catalogs.</summary>
+/// <summary>The menu flevert.exe installs from the real image and PDF catalogs, in the order flevert.exe lists them.</summary>
 public sealed class PdfMenuTests
 {
     private const string Exe = @"C:\Program Files\Flevert\flevert.exe";
     private readonly MemoryRegistry _registry = new();
 
     public PdfMenuTests() =>
-        new MenuInstaller(_registry, Exe).Install([.. ImageOperations.All, .. PdfOperations.All]);
+        new MenuInstaller(_registry, Exe).Install(MenuOperations.All);
 
     [Fact]
     public void A_pdf_gets_the_flevert_menu_with_its_page_conversions_and_rotations()
@@ -27,18 +27,30 @@ public sealed class PdfMenuTests
                 .Select(command => command[$"\"{Exe}\" run ".Length..].Split(' ')[0]));
     }
 
+    [Fact]
+    public void Every_image_type_flevert_reads_gets_combine_into_pdf_and_a_pdf_does_not()
+    {
+        foreach (var extension in ImageFile.ReadableExtensions)
+            Assert.Contains("Combine into PDF", Labels($@"Flevert.Menu{extension}\shell"));
+        Assert.DoesNotContain("Combine into PDF", Labels(@"Flevert.Menu.pdf\shell"));
+        Assert.DoesNotContain(".pdf", MenuOperations.All.Single(op => op.Id == "pdf.from-images").Extensions);
+    }
+
     [Theory]
     [InlineData(".jpg")]
     [InlineData(".png")]
     [InlineData(".heic")]
-    public void Image_files_get_no_pdf_operation(string extension)
+    [InlineData(".webp")]
+    [InlineData(".tiff")]
+    public void Image_files_get_combine_into_pdf_between_compress_and_remove_metadata_and_no_other_pdf_operation(string extension)
     {
         var commands = _registry.ValuesUnder($"Flevert.Menu{extension}").Where(v => v.StartsWith($"\"{Exe}\" run ", StringComparison.Ordinal)).ToList();
 
-        Assert.Contains("Convert", Labels($@"Flevert.Menu{extension}\shell"));
-        Assert.DoesNotContain("Rotate", Labels($@"Flevert.Menu{extension}\shell"));
-        Assert.NotEmpty(commands);
-        Assert.DoesNotContain(commands, command => command.Contains(" run pdf.", StringComparison.Ordinal));
+        // docs/specs/pdf.md, "Thay đổi ở core" item 7.
+        Assert.Equal(["Convert", "Compress", "Combine into PDF", "Remove metadata"], Labels($@"Flevert.Menu{extension}\shell"));
+        Assert.Equal(
+            [$"\"{Exe}\" run pdf.from-images \"%1\""],
+            commands.Where(command => command.Contains(" run pdf.", StringComparison.Ordinal)));
         Assert.DoesNotContain(ImageOperations.All, op => op.Extensions.Contains(".pdf"));
     }
 

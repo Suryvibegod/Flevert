@@ -77,7 +77,52 @@ public sealed class FlevertExeTests : IDisposable
         }
     }
 
-    private Process StartRun(string operationId, string input)
+    [Fact]
+    public async Task Six_flevert_exe_processes_one_per_image_combine_them_into_one_pdf_in_natural_order()
+    {
+        // Explorer starts one flevert.exe per selected file, in no reliable order (ADR-0002); "photo 9" sorts before
+        // "photo 10" as Explorer shows them. Each image has its own width, so a page out of place shows.
+        var images = new[]
+        {
+            TestImages.Picture(_dir.Combine("photo 1.jpg"), 96, 64, ImageMagick.MagickFormat.Jpeg),
+            TestImages.Picture(_dir.Combine("photo 2.png"), 104, 64, ImageMagick.MagickFormat.Png),
+            CopyFixture("portrait-gps.heic", "photo 3.heic"), // 240 x 320 upright
+            TestImages.Picture(_dir.Combine("photo 9.webp"), 112, 64, ImageMagick.MagickFormat.WebP),
+            TestImages.Picture(_dir.Combine("photo 10.gif"), 120, 64, ImageMagick.MagickFormat.Gif),
+            TestImages.Picture(_dir.Combine("photo 11.tiff"), 128, 64, ImageMagick.MagickFormat.Tiff),
+        };
+        int[] startOrder = [4, 1, 5, 0, 3, 2];
+
+        // One batch even on a busy machine: every process must reach the leader within the idle window.
+        var processes = startOrder.Select(i => StartRun("pdf.from-images", images[i], idleMs: "3000")).ToList();
+        try
+        {
+            await Task.WhenAll(processes.Select(p => p.WaitForExitAsync())).WaitAsync(TimeSpan.FromSeconds(90));
+        }
+        finally
+        {
+            foreach (var process in processes.Where(p => !p.HasExited))
+                process.Kill(entireProcessTree: true);
+        }
+
+        var logs = string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText));
+        Assert.True(processes.All(p => p.ExitCode == 0), $"exit codes {string.Join(", ", processes.Select(p => p.ExitCode))}\n{logs}");
+        Assert.Equal(
+            images.Select(Path.GetFileName).Append("photo 1 (+5).pdf").Order(StringComparer.Ordinal),
+            Directory.GetFileSystemEntries(_dir.Path).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        using var pdf = PdfDocument.Open(_dir.Combine("photo 1 (+5).pdf"));
+        Assert.Equal([96, 104, 240, 112, 120, 128], Enumerable.Range(0, pdf.PageCount).Select(i => pdf.Render(i, 150).Width));
+        processes.ForEach(p => p.Dispose());
+    }
+
+    private string CopyFixture(string fixture, string name)
+    {
+        var path = _dir.Combine(name);
+        File.Copy(Fixture(fixture), path);
+        return path;
+    }
+
+    private Process StartRun(string operationId, string input, string idleMs = "100")
     {
         var start = new ProcessStartInfo(FlevertExe) { UseShellExecute = false };
         start.ArgumentList.Add("run");
@@ -85,7 +130,7 @@ public sealed class FlevertExeTests : IDisposable
         start.ArgumentList.Add(input);
         start.Environment["FLEVERT_LOG_DIR"] = _logs.Path;
         start.Environment["FLEVERT_HEADLESS"] = "1";
-        start.Environment["FLEVERT_BATCH_IDLE_MS"] = "100";
+        start.Environment["FLEVERT_BATCH_IDLE_MS"] = idleMs;
         return Process.Start(start)!;
     }
 
