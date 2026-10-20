@@ -52,37 +52,26 @@ Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task: [pdf/todo.md](pdf/t
 - T9 `PdfDocument` (pdfium P/Invoke, khóa toàn cục, giới hạn 2 000 trang / 2 GB / 10 000 px).
 - T10 `pdf.to-jpg`, `pdf.to-png` (đã có trong menu PDF: Convert > JPG pages / PNG pages).
 
-### Bàn giao giữa chừng (2026-10-20, chuyển sang máy PC ở nhà)
-
-Review ba góc cho T1–T10 đã chạy (bảng reconcile "Review vòng 1" trong [pdf/todo.md](pdf/todo.md), nhóm sửa F1–F7, quyết định F6 → T9b). Năm nhánh sửa trên GitHub, **chưa gộp vào `main`**, mỗi nhánh tách ra trước commit `0e39979` (chỉ đổi tài liệu) nên cần rebase. Commit cuối có chữ `wip:` là phần agent đang làm dở lúc dừng: **chưa build, chưa chạy test**.
-
-| Nhánh | Nội dung | Trạng thái |
-|---|---|---|
-| `wip/f1-safe-folder-outputs` | F1: `PartialFolder` giữ thư mục `.partial` bằng handle + file neo ẩn, đổi tên qua handle, thử lại khi trình quét giữ file, ẩn trong lúc ghi, dùng đường dẫn thật đã resolve (chống junction cao hơn trong đường dẫn), `DevSplit` ghi `CreateNew` | **Xong** (2026-10-20, nhánh local `f1-safe-folder-outputs`, đã rebase lên `main`, chưa push): DD-M1 (chờ ~30 s rồi giữ trang) và bảng "Review F1 vòng 1" dựng lại (R1–R24, kết quả từng mục trong [pdf/todo.md](pdf/todo.md)). Format exit 0, ba project test xanh. Sẵn sàng gộp |
-| `wip/f2-f3-f7-qpdf-limits` | F2/F3/F7: `ExternalTool` giới hạn bộ nhớ/1 tiến trình/môi trường, qpdf luôn `\\?\`, UTF-8 nghiêm ngặt, OpenSSL dùng cấu hình rỗng của Flevert, trần bộ nhớ theo kích thước input, "bad allocation" = lỗi, thử lại khi Windows từ chối giới hạn 1 tiến trình; test chứng minh đúng | **Xong** (2026-10-20): đã rebase lên `main` (sau T11a), `wip:` thay bằng commit thật; spec, ADR-0008, bảng "Review F2/F3/F7 vòng 2" trong todo; format và ba project test xanh. **Sẵn sàng gộp** sau T11a |
-| `wip/f4-scripts-and-notices` | F4: `write-notices.ps1` (từ chối file không có giấy phép, tính cả file ẩn), notices pdfium/qpdf/OpenSSL/zlib/libjpeg-turbo/MSVC, `fetch-deps` thư mục riêng quyền + hash từng file, `check-checkout.ps1` (cảnh báo checkout người khác ghi được, lệnh sửa đúng) | 14 commit, đã rebase lên `main` (sau T11a), build + format + ba project test xanh, **sẵn sàng gộp**. Phần "Còn" đã làm: 3 DLL runtime, chặn phát hành vì giấy phép MSVC (RELEASING bước 6), giấy phép ghim đúng phiên bản (zlib 1.3.2, libjpeg-turbo 3.2.0, OpenSSL 3.6.4; bằng chứng trong ADR-0008), `#error` trong `.iss`, test pwsh; bảng "Review F4" trong todo ghi lại những gì còn biết. Sau khi gộp: **phải fetch-deps lại** |
-| `wip/f5-batch-joins` | F5: lô N→1 không bao giờ ra output thiếu file im lặng (không ghi output dở, khóa lô riêng cho từng exe/phiên, đọc thời điểm tạo/dòng lệnh tiến trình khác để chặn tiến trình đến muộn), báo kết quả xong trong ân hạn hủy, không còn "Done: 0 files" | **Xong** (2026-10-20): rebase lên `main`, `wip:` thay bằng commit thật (tiến trình lấy được tên pipe lúc chủ lô còn gom thì trả tên và giao file; chủ lô chết lúc gom → phần còn lại của lựa chọn "left out"; gate bỏ qua close ở tương lai; test không phụ thuộc giờ), chạy thật không UI đạt, bảng "Review F5" trong todo; format và ba project test xanh. **Còn**: stress 100 tiến trình khi máy bận chưa chạy lại. **Sẵn sàng gộp** sau F1 (chạy lại Core sau khi gộp) |
-| `wip/t11a-images-to-pdf` | T11a: `JpegSegments` (allow-list marker, APP0 chỉ JFIF không thumbnail, kiểm đủ bảng DQT/DHT, CMYK cần APP14, ≤ 1 000 scan) + `PdfBuilder` (pdfium tạo PDF, Info chỉ `Producer: Flevert`, trần 1,5 GB nội dung, 100 MP mỗi ảnh) | 8 commit, đã qua review vòng 1 và 2, **sẵn sàng gộp** |
+Review ba góc cho T1–T10 đã chạy (bảng "Review vòng 1" trong [pdf/todo.md](pdf/todo.md)); các nhóm sửa F1, F2/F3/F7, F4, F5 và phần nền ảnh → PDF (T11a: `JpegSegments`, `PdfBuilder`) **đã gộp vào `main`**, mỗi nhóm có bảng reconcile riêng trong todo. Quyết định F6 → T9b (pdfium đọc PDF trong tiến trình worker).
 
 **Việc tiếp theo, theo thứ tự:**
-1. Trên máy mới: `git fetch`, rồi từng nhánh trên: rebase lên `main`, `scripts/fetch-deps.ps1`, build, format (exit code), ba project test lần lượt; sửa nốt phần "Còn" ở bảng trên (không cần review lại từng nhánh: quy trình mới verify một lần trước phát hành); gộp vào `main` theo thứ tự T11a → F2/F3/F7 → F1 → F4 → F5 (lịch sử thẳng), push, xóa nhánh `wip/*`. F1 và F5 cùng sửa core: gộp lần lượt và chạy lại Core sau mỗi lần.
-2. T11 (thao tác `pdf.from-images`, menu ảnh `Combine into PDF`, dùng `IBatchOperation`); đọc ghi chú T11 trong todo (DPI, MemoryBudget suốt đời builder, chuyển HEIC sang sRGB, JPEG cắt cụt bị từ chối, cạnh trang tối thiểu).
-3. T9b: pdfium đọc PDF trong tiến trình worker (quyết định F6, ADR-0008 **chưa ghi** phần này: thêm khi làm).
-4. T4 (phần còn lại sau F4: check-location, `test-installer.ps1`), T6 merge, T8 split, T12–T14 (đọc ghi chú T14 về mật khẩu), T15–T17 tùy chọn, T18, T19.
-5. Trước T20: verify một lần (chạy thật + ba review + reconcile), rồi phát hành theo RELEASING (có bước dọn repo).
+1. T11 (thao tác `pdf.from-images`, menu ảnh `Combine into PDF`, dùng `IBatchOperation`); ghi chú T11 trong todo (DPI, MemoryBudget suốt đời builder, chuyển HEIC sang sRGB, JPEG cắt cụt bị từ chối, cạnh trang tối thiểu).
+2. T9b: pdfium đọc PDF trong tiến trình worker (quyết định F6; ADR-0008 **chưa ghi** phần này: thêm khi làm).
+3. T4 (phần còn lại sau F4: check-location, `test-installer.ps1`), T6 merge, T8 split, T12–T14 (đọc ghi chú T14 về mật khẩu), T15–T17 tùy chọn, T18, T19.
+4. Trước T20: verify một lần (chạy thật + ba review + reconcile + quét thông tin cá nhân), rồi phát hành theo đúng từng bước của RELEASING (dọn repo, xóa dấu vết bàn giao).
 
-**Đã quyết (2026-10-21):** người dùng chấp nhận license Visual Studio Community; Flevert giữ 3 DLL MSVC runtime qpdf dùng (ADR-0008 Consequences). Bước chặn trong RELEASING đã xóa.
+**Đã quyết (2026-10-21):** chấp nhận license Visual Studio Community; Flevert giữ 3 DLL MSVC runtime qpdf dùng (ADR-0008 Consequences).
 
-**Cách làm agent:** việc độc lập giao cho agent `general-purpose` với `isolation: worktree`, **tối đa 2–3 agent cùng lúc** (nhiều hơn làm test lô N→1 lỗi ngẫu nhiên và Smart App Control chặn DLL mới build). Prompt: đọc CLAUDE.md, plan, todo; test cùng code; danh tính commit Suryvibegod (`git -c user.name=... -c user.email=... commit`); không push. Xong thì gộp, chạy lại ba project test, xóa worktree và nhánh. Trước khi đổi máy: dừng agent, commit `wip:` phần dở, push lên `wip/*`.
+**Cách làm agent:** việc độc lập giao cho agent `general-purpose` với `isolation: worktree`, **tối đa 2–3 agent cùng lúc** (nhiều hơn làm test lô N→1 lỗi ngẫu nhiên và Smart App Control chặn DLL mới build). Prompt: đọc CLAUDE.md, plan, todo; test cùng code; danh tính commit Suryvibegod (`git -c user.name=... -c user.email=... commit`), file message tên riêng; không push. Xong thì rebase lên `main`, gộp fast-forward, chạy lại ba project test, xóa worktree và nhánh. Nếu phải dừng giữa chừng: commit `wip:` phần dở, push lên `wip/*`, ghi vào đây.
 
-**Ghi chú kỹ thuật cho phiên sau:**
-- qpdf tự mở rộng ký tự đại diện trong đối số dòng lệnh (làm hỏng `\\?\` đường dẫn dài): đường dẫn đưa cho qpdf qua stdin `@-`; tùy chọn có `*`/`?` bị từ chối.
-- Một lần chạy cả bộ Image test, `FramesTests.An_animation_whose_expanded_frames_exceed_the_area_limit_is_refused_before_expanding` đỏ khi máy bận, chạy lại riêng xanh 2/2: theo dõi, nếu lặp lại thì điều tra (debugging-and-error-recovery).
-- `AGENTS.md` ở gốc repo là file người dùng tạo cho Codex, **chưa commit**, không đụng tới.
+**Ghi chú kỹ thuật:**
+- qpdf tự mở rộng ký tự đại diện trong đối số dòng lệnh (làm hỏng `\\?\` đường dẫn dài): đường dẫn đưa cho qpdf qua stdin `@-`; tùy chọn có `*`/`?`/`@` bị từ chối.
+- Test nào đếm tiến trình phải nhận diện đúng tiến trình của nó (PID, tiến trình cha), không đếm theo tên trên toàn máy: agent và CI chạy test song song.
+- Test lô nhiều tiến trình nhạy thời gian khi máy bận (đã gặp `Process_started_while_the_leader_is_busy_joins_its_batch`, `Processes_started_through_a_junction_still_form_one_batch`, `FramesTests…area_limit…`): đỏ thì chạy lại riêng trước; đỏ cả khi chạy riêng thì điều tra.
+- Smart App Control chặn ngẫu nhiên DLL vừa build (test tiến trình thoát `0xE0434352`, hoặc `0x800711C7`): build lại với `-p:SourceRevisionId=<chuỗi mới>`, không đổi mã nguồn.
+- Sau khi `scripts/deps.json` đổi: chạy lại `scripts/fetch-deps.ps1` trên mọi máy.
 - Các agent chạy thử UI có thể bật cửa sổ Flevert trên màn hình: báo người dùng trước.
-- Smart App Control chặn ngẫu nhiên DLL vừa build (test tiến trình thoát `0xE0434352`, hoặc `0x800711C7`): build lại với `-p:SourceRevisionId=<chuỗi mới>` để có hash khác, không đổi mã nguồn.
-- Thư mục checkout cũ trên máy văn phòng là `D:\ConvertAnything` (người dùng muốn đổi thành `D:\Flevert`). Trên máy mới, clone vào thư mục tên `Flevert`.
-- Repo GitHub và tài khoản đã đổi tên (SuryAdelia → Suryvibegod, ConvertAnything → Flevert) và lịch sử đã viết lại: clone cũ không có commit chung với `origin`; trỏ lại `origin` và `reset` về `origin/main`, đừng merge.
+- Repo và tài khoản GitHub đã đổi tên và lịch sử đã viết lại: clone cũ không có commit chung với `origin`; trỏ lại `origin` và `reset` về `origin/main`, đừng merge.
 
 ## Sau v0.2
 
