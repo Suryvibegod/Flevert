@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- LibraryImport in tests that look up a process's parent (ExternalToolTests). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>false</IsPackable>
     <!-- Sentence-style test names read as specifications. -->
     <NoWarn>$(NoWarn);CA1707</NoWarn>

@@ -1,14 +1,16 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Flevert.Core.Tests;
 
 /// <summary>
-/// Runs the system's own tools (cmd, findstr, ping, Windows PowerShell) the way Flevert will run qpdf. The tests in this
-/// class run one after another, and no other test starts ping.exe, so a ping left running can only come from here.
+/// Runs the system's own tools (cmd, findstr, ping, Windows PowerShell) the way Flevert will run qpdf. A ping left running
+/// is identified by its process id or its parent's, never by counting every ping.exe on the machine: other test runs (CI
+/// jobs, agents in other worktrees) start their own.
 /// </summary>
-public sealed class ExternalToolTests : IDisposable
+public sealed partial class ExternalToolTests : IDisposable
 {
     private static readonly string Cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
     private static readonly string Ping = Path.Combine(Environment.SystemDirectory, "PING.EXE");
@@ -71,14 +73,16 @@ public sealed class ExternalToolTests : IDisposable
     [Fact]
     public async Task A_tool_that_runs_too_long_is_killed_and_reported_as_a_timeout()
     {
-        var before = RunningPings();
+        var ping = 0;
         var timer = Stopwatch.StartNew();
 
         await Assert.ThrowsAsync<TimeoutException>(() =>
-            ExternalTool.RunAsync(Ping, ["-n", "30", "127.0.0.1"], TimeSpan.FromMilliseconds(500)));
+            ExternalTool.RunAsync(Ping, ["-n", "30", "127.0.0.1"], TimeSpan.FromMilliseconds(500), afterStart: null,
+                assign: (job, process) => { ping = process.Id; ExternalTool.AssignToJob(job, process); }));
 
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(2.5), $"took {timer.Elapsed}");
-        Assert.Empty(RunningPings().Except(before));
+        Assert.NotEqual(0, ping);
+        Assert.False(IsRunning(ping), "the timed-out ping is still running");
     }
 
     [Fact]
@@ -109,15 +113,15 @@ public sealed class ExternalToolTests : IDisposable
     {
         // cmd exits at once; the ping it started keeps cmd's output pipes open, so a caller that only waited for the
         // end of output would wait for the ping (30 s) instead of returning.
-        var before = RunningPings();
+        var cmd = 0;
         var timer = Stopwatch.StartNew();
 
         var result = await ExternalTool.RunAsync(Cmd, ["/c", "start", "", "/b", Ping, "-n", "30", "127.0.0.1"],
-            TimeSpan.FromSeconds(20));
+            TimeSpan.FromSeconds(20), afterStart: null, assign: (job, process) => { cmd = process.Id; ExternalTool.AssignToJob(job, process); });
 
         Assert.Equal(0, result.ExitCode);
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(5), $"took {timer.Elapsed}");
-        Assert.True(await WaitUntil(() => !RunningPings().Except(before).Any(), TimeSpan.FromSeconds(2)),
+        Assert.True(await WaitUntil(() => PingsStartedBy(cmd).Count == 0, TimeSpan.FromSeconds(2)),
             "the ping started by the tool is still running");
     }
 
@@ -296,13 +300,18 @@ public sealed class ExternalToolTests : IDisposable
     [Fact]
     public async Task Another_refusal_to_join_the_job_still_stops_the_run()
     {
-        var before = RunningPings();
+        var ping = 0;
 
         await Assert.ThrowsAsync<System.ComponentModel.Win32Exception>(() => ExternalTool.RunAsync(Ping, ["-n", "30", "127.0.0.1"],
             Generous, afterStart: null, limits: new ExternalToolLimits { SingleProcess = true },
-            assign: (_, _) => throw new System.ComponentModel.Win32Exception(87)));
+            assign: (_, process) =>
+            {
+                ping = process.Id;
+                throw new System.ComponentModel.Win32Exception(87);
+            }));
 
-        Assert.Empty(RunningPings().Except(before));
+        Assert.NotEqual(0, ping);
+        Assert.False(IsRunning(ping), "a tool that could not join its job is still running");
     }
 
     [Fact]
@@ -394,14 +403,43 @@ public sealed class ExternalToolTests : IDisposable
         }
     }
 
-    private static HashSet<int> RunningPings()
+    /// <summary>The ping.exe processes whose parent is <paramref name="parentId"/> (the parent may have exited already).</summary>
+    private static List<int> PingsStartedBy(int parentId)
     {
-        var processes = Process.GetProcessesByName("PING");
-        var ids = processes.Select(p => p.Id).ToHashSet();
-        foreach (var process in processes)
-            process.Dispose();
-        return ids;
+        var found = new List<int>();
+        foreach (var process in Process.GetProcessesByName("PING"))
+        {
+            using (process)
+            {
+                try
+                {
+                    if (NtQueryInformationProcess(process.Handle, 0, out var info, Marshal.SizeOf<ProcessBasicInformation>(), out _) == 0
+                        && info.InheritedFromUniqueProcessId == parentId)
+                        found.Add(process.Id);
+                }
+                catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                    // Exited meanwhile, or not ours to open.
+                }
+            }
+        }
+
+        return found;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ProcessBasicInformation
+    {
+        public nint ExitStatus;
+        public nint PebBaseAddress;
+        public nint AffinityMask;
+        public nint BasePriority;
+        public nint UniqueProcessId;
+        public nint InheritedFromUniqueProcessId;
+    }
+
+    [LibraryImport("ntdll.dll")]
+    private static partial int NtQueryInformationProcess(nint process, int informationClass, out ProcessBasicInformation information, int length, out int returnLength);
 
     private static async Task<bool> WaitUntil(Func<bool> condition, TimeSpan within)
     {
