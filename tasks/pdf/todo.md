@@ -585,7 +585,7 @@ Phần A (menu mới, icon, menu thứ hai `Flevert PDF tools`) làm song song �
 ## Còn mở
 
 - ~~Phần A: nối `PdfTools.Create` vào cửa sổ~~: đã nối vào menu thứ hai `Flevert PDF tools` (không có cửa sổ, xem phần A dưới). Icon menu do phần A chọn (`MenuOperations.Looks`); `PdfTool.Icon` (`grid`, `document_text`, `stamp`…) hiện không được menu dùng.
-- Watermark: ký tự Arial không có (chữ Hán, emoji) hiện thành ô vuông; chưa kiểm trước.
+- ~~Watermark: ký tự Arial không có (chữ Hán, emoji) hiện thành ô vuông; chưa kiểm trước.~~ Hộp thoại từ chối và nêu tên ký tự (kiểm cuối, `6d94709`).
 - Chưa đo thời gian thật trên PDF lớn (2 000 trang) cho watermark/n-up; ngân sách worker như render (60 s + 2 s/trang).
 - Review ba bối cảnh trống, MenuProbe, installer: bước Verify của bản phát hành.
 
@@ -627,3 +627,39 @@ Làm song song với phần B (các công cụ PDF, `src/Flevert.Pdf/PdfTools.cs
 - Ảnh chụp 150% DPI (cần màn hình 150%).
 - Tên file output trong README cho các công cụ (`(2 per sheet)`, `(parts)`…) lấy từ spec; phần B kiểm lại khi gộp.
 - Review đầy đủ (code, bảo mật, doubt) trước phát hành; kịch bản tìm việc ≤ 2 lần di chuột cho reviewer doubt.
+
+#### Kiểm cuối v0.2.2 (code, security, doubt): reconcile
+
+Nhánh `review-v0.2.2` (từ `8f86956`), 2026-10-20. Quyết định của maintainer cho từng phát hiện; test viết trước và thấy đỏ khi rẻ (thông báo đỏ ghi trong cột Xử lý).
+
+| Phát hiện | Mức | Đánh giá | Xử lý |
+|---|---|---|---|
+| 1. Làm phẳng biến câu trả lời tiếng Việt thành "?" (qpdf `--generate-appearances` chỉ vẽ bằng bảng mã một byte của font) | High | Đúng: probe qpdf 12.4.2 ra `(Nguy?n V?n ?) Tj` | `11d6a4e`: chỉ để qpdf vẽ lại khi form có `/NeedAppearances` **và** mọi câu trả lời là ASCII in được; không thì bỏ `/NeedAppearances` trong cùng lần chạy (`--update-from-json`) và khóa theo appearance sẵn có (chữ vẫn chọn được); câu trả lời không có appearance → lỗi `CannotRedrawForm` "This form has answers Flevert cannot redraw…", không ghi gì. Đỏ trước khi sửa: "No exception was thrown", "Sub-string not found". CHANGELOG nói lại |
+| 2. Chia theo dung lượng: PDF nhỏ có thể ra hàng chục GB (`--split-pages` chép tài nguyên dùng chung vào mỗi trang); vòng lớn dần chạy qpdf gần một lần mỗi trang | High | Đúng: 200 trang chung một ảnh → 204 lần chạy qpdf | `0c0d52b`: đo thư mục trong lúc qpdf tách, dừng qpdf khi vượt min(chỗ trống − lề, 4 × PDF) (vượt chỗ trống → lỗi rõ; vượt 4× → đoán theo trang trung bình); phần lớn dần theo chi phí mỗi trang đo được rồi thu hẹp giữa ứng viên vừa/vượt, tối đa 2 × số phần + 16 lần chạy; trước khi ghi: tổng phần ≤ 4 × PDF và vừa chỗ trống cạnh file gốc. Đỏ: "204 runs of qpdf for 5 parts", hai "No exception was thrown" |
+| 3. Bỏ trang trắng xóa trang có chữ ký tắt, con dấu nhỏ, ghi chú bút chì (≤ 0,1% điểm tối trên cả trang, không có ký tự) | High | Đúng: chữ ký tắt ~400 px trên 2,2 triệu px | `a53715f`: bỏ dải lề 5 mm, ô ~1 cm (59 px ở 150 DPI), trắng chỉ khi không ô nào > 1,5% điểm tối (ngưỡng 245 của Stirling-PDF, đã ghi nguồn và chỗ khác); trang có chú thích không bao giờ bị bỏ. Đỏ: 5 test (chữ ký tắt, con dấu, bút chì, bóng mép + bụi, fixture 6 trang). `5fbf5d6`: ô tối thiểu 8 px (trang 1e8 pt vẽ ở phần nhỏ của 1 DPI làm hàng triệu ô, `page-inverted` chạy 35 s); fixture `signed` giữ trang (trường chữ ký là chú thích). Sửa CHANGELOG và comment |
+| 4. Watermark nhúng cả Arial (~0,6–1 MB mỗi file) | Medium | Đúng, pdfium không cắt font | `4c8cc5d`: spec sửa, README và CHANGELOG nói "adds about 1 MB to the file". Cắt font (HarfBuzz `hb-subset`, MIT): còn mở cho bản sau |
+| 5. Print layout và Fit A4 bỏ bookmark, Info, link, nhãn trang, tag, trường form | Medium | Đúng (tài liệu mới) | `f87e3ed`: một câu trong README và CHANGELOG ("made for printing: bookmarks, links and fillable fields are not kept") |
+| 6. Print layout và Fit A4 chép tài nguyên dùng chung một lần mỗi trang | Should | Đúng: 50 trang chung ảnh 300 KB → 15 MB | `6baa42c`: làm phẳng từng trang rồi `FPDF_ImportNPagesToOne` một lần (một bộ chép); n-up dời mỗi form trang vào lề ô; Fit A4 (1×1 = pdfium chép nguyên trang) dùng `FPDFPage_TransFormWithClip` + đặt mọi hộp trang về A4; worker kiểm chỗ trống trước khi lưu mọi PDF sửa. Đỏ: "15276010 bytes from 479274" (cả 3 công cụ) |
+| 7. Fit A4: trang A4 chép bằng `FPDF_ImportPagesByIndex` (trường còn sống, mất `/AcroForm`), trang khác qua XObject | Should | Đúng | `6baa42c`: mọi trang đi cùng đường (làm phẳng, chép, biến đổi); chú thích còn lại (link) bị bỏ. Đỏ: "Sub-string not found" |
+| 8. Số ô watermark có thể tràn số với trang cực lớn | Should | Đúng về lý thuyết (pdfium đọc được hộp 1e11 pt) | `859ddcf`: tính bằng double, kẹp ≤ 1000 mỗi trục, ≤ 300 bản; công cụ sửa trang từ chối trang > 14 400 đơn vị mỗi cạnh (`TooLarge`). Đỏ: "No exception was thrown" (×3). `1788415`: bảng PDF độc (`page-giant`, `page-inverted`) |
+| 9. Hộp thoại watermark cướp focus và phím | Should | Đúng (đã thấy khi thử thật) | `fc35d4d`: chỉ câu hỏi đầu của lô lấy focus; câu sau `ShowWithoutActivation` và nháy nút taskbar (`FlashWindowEx`); Enter bị bỏ qua tới khi ô chữ có focus 500 ms hoặc được bấm chuột (`EnterGuard`, có test); chuột trên nút luôn được; ô bắt đầu trống. Chưa chạy test UI (maintainer chạy với `FLEVERT_UI_TESTS=1`) |
+| 10. Hai quy tắc khác nhau cho chữ watermark | Should | Đúng: hộp thoại đếm UTF-16, công cụ đếm scalar; ô chữ có thể cắt đôi emoji | `6d94709`: `WatermarkPrompts.Problem` gọi `PdfEdit.Check`; từ chối ký tự Cf, U+2028/2029, surrogate lẻ, noncharacter; đếm text element; ô chữ chứa 4 × 100 đơn vị; ký tự Arial không có glyph bị từ chối, nêu tên (đọc `cmap` của Arial trong tiến trình hộp thoại, `FontGlyphs`) |
+| 11. Tên cho người dùng thật | Should | Đồng ý | `9c220bd`: "Lock filled forms" (op-id và tên output giữ nguyên); README: Under 10 MB cho email (Gmail ~18 MB file, Outlook 20 MB), Under 25 MB cho chat; ảnh cần Combine into PDF trước khi đóng watermark |
+| 12. Phần thừa của cửa sổ công cụ đã bỏ | Should | Đúng: bộ lọc trong `Program` loại hết, `PdfTools.Operations` dựng mọi công cụ lần hai | `1272b90`: `PdfTool` chỉ còn op-id và tùy chọn, bỏ `PdfToolGroup`, nhãn tùy chọn, `PdfTools.Operations`; catalog = các mục menu; sửa comment `IOperation`, `MenuTests`, csproj; gộp hai test "không có đường menu"; sửa đầu phần B |
+| 13. Dòng spec v0.2.2 lệch code | Should | Đúng | `112dfad` (và `a53715f`, `4c8cc5d` cho mục trang trắng, font): Print layout/Fit A4 theo cách làm hiện tại (sau mục 6, dùng `FPDF_ImportNPagesToOne`, không phải `FPDF_NewXObjectFromPage`), Flatten bằng qpdf với quy tắc mục 1, số trang từ menu "1 / N", chia theo dung lượng |
+| 14. Hạ từ 0.2.2 về bản cũ để lại "Flevert PDF tools" trỏ vào khóa đã xóa | Low | Đúng | `2c41bcb`: CHANGELOG, Known issues: "uninstall first" |
+| 15. Trường thứ 7 của request phải rỗng cho việc không dùng; comment `Magic` sai | Low | Đúng | `9d74717`. Đỏ: hai request `blank`/`images` có tùy chọn không bị từ chối |
+| 16. Phụ thuộc dev của script icon không ghim hash | Low | Đúng | `8d69d19`: `scripts/make-menu-icons.requirements.txt` (mọi wheel Windows của resvg-py 0.5.0, Pillow 13.0.0, SHA256 từ PyPI), cài bằng `--require-hashes --only-binary=:all:` (đã thử `pip download` với Python 3.12) |
+| 17. Nit: icon "beside every entry", comment nhóm của `Looks`, tên output trong README | Low | Đúng | `d0f58cf`; tên output đã so với code cho mọi công cụ (`9c220bd` thêm tên phần) |
+| Tùy chọn: dòng `@-` của qpdf có kiểu (literal / path) thay vì `IsLiteralLine` theo giá trị | Optional | Hợp lý, rủi ro thấp (đường dẫn luôn tuyệt đối dạng `\\?\`) | Còn mở |
+| Tùy chọn: Mark of the Web cho file lấy ra từ PDF | Optional | Hợp lý cho ảnh lấy từ PDF lạ | Còn mở |
+
+**Còn mở sau kiểm cuối:**
+- Cắt font watermark (HarfBuzz `hb-subset`, MIT) cho bản sau.
+- Hai mục tùy chọn ở trên.
+- Test UI hộp thoại watermark (`FLEVERT_UI_TESTS=1`, maintainer): kiểm `ShowWithoutActivation` khi mở bằng `ShowDialog` cho câu hỏi thứ hai của lô, nút taskbar nháy, Enter bị bỏ trong 500 ms đầu.
+- Kiểm chỗ trống trước khi lưu của worker (`RequireRoom`) không có test (worker đọc chỗ trống thật của ổ đĩa).
+- Lock filled forms: appearance cũ (người điền đã sửa câu trả lời mà viewer không vẽ lại) được khóa như đang vẽ; câu trả lời không phải ASCII mà font WinAnsi vẽ được (vd. "José") vẫn bị coi là không vẽ lại được khi thiếu appearance: lỗi rõ, phía an toàn.
+- Chia theo dung lượng: khi đã chạy hết 2 × số phần + 16 lần qpdf, phần lấy ứng viên vừa lớn nhất (có thể nhiều phần hơn tối ưu).
+
+**Kiểm sau khi sửa (máy Windows dev, 2026-10-20):** build và `dotnet format --verify-no-changes` sạch; ba project test chạy lần lượt ở `8d69d19`: Core 513 đạt (2 bỏ qua), Image 245 đạt, Pdf 1354 đạt (1 bỏ qua: test UI hộp thoại watermark, cần `FLEVERT_UI_TESTS=1`). `b5c25bc` chỉ xóa một hàm không ai gọi (build, format, test Flatten lại đạt). Chưa chạy: MenuProbe, `flevert.exe` thật, `test-installer.ps1`, test UI (bước Verify của maintainer).
