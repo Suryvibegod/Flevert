@@ -18,6 +18,12 @@ public sealed record ExternalToolResult(
     /// included.
     /// </summary>
     public bool MemoryLimitExceeded { get; init; }
+
+    /// <summary>
+    /// Windows refused to run the tool under <see cref="ExternalToolLimits.SingleProcess"/>, so it ran once more without
+    /// that limit (a console host counted against it, which Windows 11 does not do).
+    /// </summary>
+    public bool SingleProcessLimitDropped { get; init; }
 }
 
 /// <summary>What the job of a run lets the tool do; nothing is limited by default.</summary>
@@ -81,9 +87,10 @@ public static partial class ExternalTool
         ExternalToolLimits? limits = null,
         IReadOnlyDictionary<string, string?>? environment = null,
         CancellationToken cancellationToken = default) =>
-        RunAsync(toolPath, arguments, timeout, null, standardInput, workingDirectory, limits, environment, cancellationToken);
+        RunAsync(toolPath, arguments, timeout, null, standardInput, workingDirectory, limits, environment, null, cancellationToken);
 
     /// <param name="afterStart">For tests: runs after the tool has started and before it is put in its job.</param>
+    /// <param name="assign">For tests: puts the tool in its job instead of <see cref="AssignToJob"/>.</param>
     internal static async Task<ExternalToolResult> RunAsync(
         string toolPath,
         IEnumerable<string> arguments,
@@ -93,6 +100,7 @@ public static partial class ExternalTool
         string? workingDirectory = null,
         ExternalToolLimits? limits = null,
         IReadOnlyDictionary<string, string?>? environment = null,
+        Action<SafeHandle, Process>? assign = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(arguments);
@@ -115,61 +123,99 @@ public static partial class ExternalTool
             start.ArgumentList.Add(argument);
         ChangeEnvironment(start, environment);
 
-        using var memoryReports = limits?.MaxMemoryBytes is null ? null : CreateCompletionPort();
-        using var job = CreateJob(limits, memoryReports);
-        using var process = Process.Start(start) ?? throw new InvalidOperationException($"{toolPath} did not start.");
-        afterStart?.Invoke(process);
+        var run = new Run(start, timeout, standardInput, afterStart, assign ?? AssignToJob);
         try
         {
-            AssignToJob(job, process);
+            return await run.OnceAsync(limits, cancellationToken).ConfigureAwait(false);
         }
-        catch (Win32Exception) when (process.HasExited)
+        catch (ProcessLimitRefusedException e)
         {
-            // A fast tool can finish before it is put in the job, and Windows then refuses with "Access is denied". It
-            // has nothing left to limit or kill; whatever it started meanwhile is the gap described at AssignToJob.
+            // Windows 11 lets the console host it starts for the tool join the job without counting; if a version counts
+            // it, the tool cannot run under the limit at all, and running it without the limit beats not running it.
+            Trace.TraceWarning($"{Path.GetFileName(toolPath)}: Windows refused the one-process limit ({e.InnerException?.Message}); running it without.");
+            var result = await run.OnceAsync(limits! with { SingleProcess = false }, cancellationToken).ConfigureAwait(false);
+            return result with { SingleProcessLimitDropped = true };
         }
-        catch (Win32Exception)
+    }
+
+    private const int ErrorAccessDenied = 5;
+    private const int ErrorNotEnoughQuota = 1816;
+
+    /// <summary>Windows refused the tool under the one-process limit and ended it; it can run again without.</summary>
+    private sealed class ProcessLimitRefusedException(Exception inner) : Exception(inner.Message, inner);
+
+    /// <summary>One start of the tool, in a job of its own, with its output read and its input written.</summary>
+    private sealed class Run(
+        ProcessStartInfo start, TimeSpan timeout, ReadOnlyMemory<byte> standardInput, Action<Process>? afterStart,
+        Action<SafeHandle, Process> assign)
+    {
+        public async Task<ExternalToolResult> OnceAsync(ExternalToolLimits? limits, CancellationToken cancellationToken)
         {
-            // Without the job, a crash of flevert.exe could leave the tool running: do not run it at all.
-            Kill(process, job);
-            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-            throw;
-        }
-
-        // Process.Dispose leaves a redirected stream open once it has been read (the caller could still hold it), so the
-        // pipes are closed here when the run ends; a read still waiting on a tool that escaped the job then stops too.
-        using var outputPipe = process.StandardOutput;
-        using var errorPipe = process.StandardError;
-
-        // Started together: a tool that fills one pipe while nobody reads it would stop and never exit.
-        var output = ReadCappedAsync(outputPipe.BaseStream);
-        var error = ReadCappedAsync(errorPipe.BaseStream);
-        var input = WriteInputAsync(process.StandardInput, standardInput);
-
-        using var timer = new CancellationTokenSource(timeout);
-        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timer.Token);
-        try
-        {
-            await process.WaitForExitAsync(stop.Token).ConfigureAwait(false);
-            // A child it started may still hold the pipes open; it is part of this run and ends with it.
-            _ = TerminateJobObject(job, 1);
-            var (stdout, stdoutTruncated) = await output.WaitAsync(stop.Token).ConfigureAwait(false);
-            var (stderr, stderrTruncated) = await error.WaitAsync(stop.Token).ConfigureAwait(false);
-            await input.WaitAsync(stop.Token).ConfigureAwait(false);
-            return new ExternalToolResult(process.ExitCode, stdout, stderr, stdoutTruncated, stderrTruncated)
+            using var memoryReports = limits?.MaxMemoryBytes is null ? null : CreateCompletionPort();
+            using var job = CreateJob(limits, memoryReports);
+            using var process = Process.Start(start) ?? throw new InvalidOperationException($"{start.FileName} did not start.");
+            try
             {
-                MemoryLimitExceeded = ReportsMemoryLimit(memoryReports),
-            };
+                afterStart?.Invoke(process);
+                assign(job, process);
+            }
+            catch (Win32Exception e) when (e.NativeErrorCode == ErrorAccessDenied && process.HasExited)
+            {
+                // A fast tool can finish before it is put in the job, and Windows then refuses with "Access is denied". It
+                // has nothing left to limit or kill; whatever it started meanwhile is the gap described at AssignToJob.
+            }
+            catch (Exception e)
+            {
+                // Without the job, a crash of flevert.exe could leave the tool running: do not run it at all.
+                Kill(process, job);
+                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                if (e is Win32Exception { NativeErrorCode: ErrorNotEnoughQuota } && limits?.SingleProcess == true)
+                    throw new ProcessLimitRefusedException(e);
+                throw;
+            }
+
+            return await WaitAsync(process, job, memoryReports, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+
+        private async Task<ExternalToolResult> WaitAsync(
+            Process process, SafeHandle job, SafeHandle? memoryReports, CancellationToken cancellationToken)
         {
-            Kill(process, job);
-            // Never return while the tool runs: the caller may delete its files next.
-            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-            await Task.WhenAny(Task.WhenAll(output, error, input), Task.Delay(DrainAfterKill, CancellationToken.None))
-                .ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            throw new TimeoutException($"{Path.GetFileName(toolPath)} did not finish within {timeout.TotalSeconds:0.#} s.");
+            // Process.Dispose leaves a redirected stream open once it has been read (the caller could still hold it), so
+            // the pipes are closed here when the run ends. A read already blocked on a process that escaped the job is not
+            // interrupted by that (the pipes are synchronous); the wait for it after a kill is bounded by DrainAfterKill.
+            using var outputPipe = process.StandardOutput;
+            using var errorPipe = process.StandardError;
+
+            // Started together: a tool that fills one pipe while nobody reads it would stop and never exit.
+            var output = ReadCappedAsync(outputPipe.BaseStream);
+            var error = ReadCappedAsync(errorPipe.BaseStream);
+            var input = WriteInputAsync(process.StandardInput, standardInput);
+
+            using var timer = new CancellationTokenSource(timeout);
+            using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timer.Token);
+            try
+            {
+                await process.WaitForExitAsync(stop.Token).ConfigureAwait(false);
+                // A child it started may still hold the pipes open; it is part of this run and ends with it.
+                _ = TerminateJobObject(job, 1);
+                var (stdout, stdoutTruncated) = await output.WaitAsync(stop.Token).ConfigureAwait(false);
+                var (stderr, stderrTruncated) = await error.WaitAsync(stop.Token).ConfigureAwait(false);
+                await input.WaitAsync(stop.Token).ConfigureAwait(false);
+                return new ExternalToolResult(process.ExitCode, stdout, stderr, stdoutTruncated, stderrTruncated)
+                {
+                    MemoryLimitExceeded = ReportsMemoryLimit(memoryReports),
+                };
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            {
+                Kill(process, job);
+                // Never return while the tool runs: the caller may delete its files next.
+                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                await Task.WhenAny(Task.WhenAll(output, error, input), Task.Delay(DrainAfterKill, CancellationToken.None))
+                    .ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new TimeoutException($"{Path.GetFileName(start.FileName)} did not finish within {timeout.TotalSeconds:0.#} s.");
+            }
         }
     }
 
@@ -195,6 +241,8 @@ public static partial class ExternalTool
             // "=" ends a name in the environment block and "\0" ends an entry: either would set a different variable.
             if (name.Length == 0 || name.AsSpan().ContainsAny('=', '\0'))
                 throw new ArgumentException($"Not a variable name Windows can hold: \"{name}\".", nameof(environment));
+            if (value is not null && value.Contains('\0', StringComparison.Ordinal))
+                throw new ArgumentException($"The value of {name} holds a null character, which would end it.", nameof(environment));
             if (value is null)
                 start.Environment.Remove(name);
             else
@@ -304,6 +352,7 @@ public static partial class ExternalTool
     /// </summary>
     private static SafeKernelHandle CreateJob(ExternalToolLimits? limits, SafeHandle? memoryReports)
     {
+        Debug.Assert(limits?.MaxMemoryBytes is null || memoryReports is not null, "a memory limit needs a port for its reports");
         var job = CreateJobObjectW(0, null);
         if (job.IsInvalid)
             throw new Win32Exception(Marshal.GetLastPInvokeError());

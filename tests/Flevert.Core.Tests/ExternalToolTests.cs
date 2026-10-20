@@ -197,8 +197,13 @@ public sealed class ExternalToolTests : IDisposable
         var limited = await ExternalTool.RunAsync(PowerShell, allocate, Generous,
             limits: new ExternalToolLimits { MaxMemoryBytes = 200 * 1024 * 1024 });
         var free = await ExternalTool.RunAsync(PowerShell, allocate, Generous);
+        var roomy = await ExternalTool.RunAsync(PowerShell, allocate, Generous,
+            limits: new ExternalToolLimits { MaxMemoryBytes = 1024 * 1024 * 1024 });
 
         Assert.True(limited.MemoryLimitExceeded, "the run under the limit was not reported");
+        // Control: a limit the tool stays under reports nothing, and the allocation succeeds.
+        Assert.Equal("allocated", roomy.StandardOutput.Trim());
+        Assert.False(roomy.MemoryLimitExceeded);
         Assert.DoesNotContain("allocated", limited.StandardOutput, StringComparison.Ordinal);
         // Control: the same allocation without a limit succeeds, and nothing is reported.
         Assert.Equal("allocated", free.StandardOutput.Trim());
@@ -255,6 +260,49 @@ public sealed class ExternalToolTests : IDisposable
     {
         await Assert.ThrowsAsync<ArgumentException>(() => ExternalTool.RunAsync(Cmd, ["/c", "exit 0"], Generous,
             environment: new Dictionary<string, string?> { [name] = "x" }));
+    }
+
+    [Fact]
+    public async Task A_value_with_a_null_character_is_refused()
+    {
+        // "\0" ends an entry of the environment block: the rest would become another variable.
+        await Assert.ThrowsAsync<ArgumentException>(() => ExternalTool.RunAsync(Cmd, ["/c", "exit 0"], Generous,
+            environment: new Dictionary<string, string?> { ["FLEVERT_TEST"] = "x\0OTHER=y" }));
+    }
+
+    [Fact]
+    public async Task A_tool_windows_refuses_under_the_one_process_limit_runs_again_without_it()
+    {
+        // Review DD-4: on Windows 11 the console host joins the job without counting; elsewhere it might count, and the
+        // assignment fails with ERROR_NOT_ENOUGH_QUOTA (1816) after Windows has ended the tool. The seam refuses once.
+        var assignments = 0;
+        void RefuseFirst(System.Runtime.InteropServices.SafeHandle job, Process process)
+        {
+            if (++assignments == 1)
+                throw new System.ComponentModel.Win32Exception(1816);
+            ExternalTool.AssignToJob(job, process);
+        }
+
+        var result = await ExternalTool.RunAsync(Cmd, ["/c", Ping, "-n", "1", "127.0.0.1"], Generous, afterStart: null,
+            limits: new ExternalToolLimits { SingleProcess = true }, assign: RefuseFirst);
+
+        Assert.Equal(2, assignments);
+        Assert.True(result.SingleProcessLimitDropped);
+        // Without the limit, cmd could start ping.
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("127.0.0.1", result.StandardOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Another_refusal_to_join_the_job_still_stops_the_run()
+    {
+        var before = RunningPings();
+
+        await Assert.ThrowsAsync<System.ComponentModel.Win32Exception>(() => ExternalTool.RunAsync(Ping, ["-n", "30", "127.0.0.1"],
+            Generous, afterStart: null, limits: new ExternalToolLimits { SingleProcess = true },
+            assign: (_, _) => throw new System.ComponentModel.Win32Exception(87)));
+
+        Assert.Empty(RunningPings().Except(before));
     }
 
     [Fact]
