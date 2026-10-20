@@ -222,6 +222,42 @@ public sealed class ExternalToolTests : IDisposable
     }
 
     [Fact]
+    public async Task The_tool_inherits_the_environment_with_the_given_changes()
+    {
+        // Set in the test process, as a variable of the user's would be; names no other test uses.
+        var removed = "FLEVERT_TEST_REMOVED_" + Guid.NewGuid().ToString("N");
+        var added = "FLEVERT_TEST_ADDED_" + Guid.NewGuid().ToString("N");
+        Environment.SetEnvironmentVariable(removed, "inherited");
+        try
+        {
+            // Windows names are case-insensitive, so the removal is given in another case.
+            var changed = await ExternalTool.RunAsync(Cmd, ["/c", "set FLEVERT_TEST_"], Generous,
+                environment: new Dictionary<string, string?> { [removed.ToLowerInvariant()] = null, [added] = "given" });
+            var unchanged = await ExternalTool.RunAsync(Cmd, ["/c", "set FLEVERT_TEST_"], Generous);
+
+            Assert.DoesNotContain(removed, changed.StandardOutput, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains($"{added}=given", changed.StandardOutput, StringComparison.Ordinal);
+            // Control: without changes the tool sees the variable, and only the variable.
+            Assert.Contains($"{removed}=inherited", unchanged.StandardOutput, StringComparison.Ordinal);
+            Assert.DoesNotContain(added, unchanged.StandardOutput, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(removed, null);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("A=B")]
+    [InlineData("A\0B")]
+    public async Task A_variable_name_windows_cannot_hold_is_refused(string name)
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => ExternalTool.RunAsync(Cmd, ["/c", "exit 0"], Generous,
+            environment: new Dictionary<string, string?> { [name] = "x" }));
+    }
+
+    [Fact]
     public async Task Runs_in_the_tools_own_folder_by_default()
     {
         var result = await ExternalTool.RunAsync(Cmd, ["/c", "cd"], Generous);

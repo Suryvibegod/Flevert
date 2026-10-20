@@ -67,6 +67,10 @@ public static partial class ExternalTool
     /// <param name="standardInput">Bytes for the tool's stdin, such as a password; not kept after the call.</param>
     /// <param name="workingDirectory">Absolute, existing folder; the tool's own folder when <c>null</c>.</param>
     /// <param name="limits">Memory and process limits for the tool's job; none when <c>null</c>.</param>
+    /// <param name="environment">
+    /// Changes to the environment the tool inherits from flevert.exe: a value sets the variable, <c>null</c> removes it.
+    /// Never for secrets: other processes of the user can read a process's environment.
+    /// </param>
     /// <exception cref="OperationCanceledException">Cancelled; the tool and its children were killed first.</exception>
     public static Task<ExternalToolResult> RunAsync(
         string toolPath,
@@ -75,8 +79,9 @@ public static partial class ExternalTool
         ReadOnlyMemory<byte> standardInput = default,
         string? workingDirectory = null,
         ExternalToolLimits? limits = null,
+        IReadOnlyDictionary<string, string?>? environment = null,
         CancellationToken cancellationToken = default) =>
-        RunAsync(toolPath, arguments, timeout, null, standardInput, workingDirectory, limits, cancellationToken);
+        RunAsync(toolPath, arguments, timeout, null, standardInput, workingDirectory, limits, environment, cancellationToken);
 
     /// <param name="afterStart">For tests: runs after the tool has started and before it is put in its job.</param>
     internal static async Task<ExternalToolResult> RunAsync(
@@ -87,6 +92,7 @@ public static partial class ExternalTool
         ReadOnlyMemory<byte> standardInput = default,
         string? workingDirectory = null,
         ExternalToolLimits? limits = null,
+        IReadOnlyDictionary<string, string?>? environment = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(arguments);
@@ -107,6 +113,7 @@ public static partial class ExternalTool
         };
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
+        ChangeEnvironment(start, environment);
 
         using var memoryReports = limits?.MaxMemoryBytes is null ? null : CreateCompletionPort();
         using var job = CreateJob(limits, memoryReports);
@@ -176,6 +183,23 @@ public static partial class ExternalTool
             throw new ArgumentException($"Only .exe tools are run: {toolPath}", nameof(toolPath));
         if (!File.Exists(toolPath))
             throw new FileNotFoundException("The tool was not found.", toolPath);
+    }
+
+    // ProcessStartInfo starts from flevert's own environment; on Windows its names compare case-insensitively.
+    private static void ChangeEnvironment(ProcessStartInfo start, IReadOnlyDictionary<string, string?>? environment)
+    {
+        if (environment is null)
+            return;
+        foreach (var (name, value) in environment)
+        {
+            // "=" ends a name in the environment block and "\0" ends an entry: either would set a different variable.
+            if (name.Length == 0 || name.AsSpan().ContainsAny('=', '\0'))
+                throw new ArgumentException($"Not a variable name Windows can hold: \"{name}\".", nameof(environment));
+            if (value is null)
+                start.Environment.Remove(name);
+            else
+                start.Environment[name] = value;
+        }
     }
 
     private static string? CheckWorkingDirectory(string? workingDirectory)
