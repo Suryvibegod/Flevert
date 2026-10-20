@@ -324,6 +324,21 @@ public sealed class RunnerBatchOperationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_batch_that_received_no_file_fails_instead_of_reporting_done()
+    {
+        // "Done: 0 files" would claim success for a join that wrote nothing.
+        var op = new RecordingJoin();
+
+        var outcome = await NewRunner().RunAsync(op, [], progress: null, CancellationToken.None);
+
+        Assert.Empty(op.Calls);
+        Assert.False(outcome.NoFailures);
+        var summary = BatchSummary.Describe(outcome, _logs.Path);
+        Assert.True(summary.HasFailures);
+        Assert.StartsWith("Failed: No files were received.", summary.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_successful_join_logs_every_input_with_the_output()
     {
         var files = new[] { _dir.File("1.txt"), _dir.File("2.txt") };

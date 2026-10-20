@@ -75,7 +75,12 @@ public sealed class Runner(RunLog log)
         }
 
         if (received.Count == 0)
-            return new BatchOutcome([], 0) { OneOutput = true };
+        {
+            // Not "Done: 0 files": nothing was joined.
+            var none = new FileResult("(batch)", null, "No files were received.");
+            log.Write(operation.Id, none, timer.Elapsed);
+            return new BatchOutcome([none], 1) { OneOutput = true };
+        }
 
         var pins = new List<SafeFileHandle>();
         try
