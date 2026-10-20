@@ -128,6 +128,29 @@ public sealed class ImagesToPdfTests : IDisposable
     }
 
     [Fact]
+    public async Task A_jpegs_colour_profile_with_the_text_it_can_carry_is_left_out_and_the_page_looks_the_same()
+    {
+        // Final audit of v0.2.0: an ICC profile can name the device and its owner (desc, cprt, dmdd), and pdfium marks
+        // every embedded JPEG DeviceRGB anyway, so no viewer uses the profile. The marker stands in for that text.
+        var profile = ColorProfiles.SRGB.ToByteArray().Concat("SecretProfileOwner"u8.ToArray()).ToArray();
+        var profiled = WriteJpeg("profiled.jpg", TestJpeg.Make(configure: image => image.SetProfile(new ColorProfile(profile))));
+        var plain = WriteJpeg("plain.jpg", TestJpeg.Make());
+        Assert.Contains("SecretProfileOwner", TestJpeg.Latin1(File.ReadAllBytes(profiled)), StringComparison.Ordinal); // control
+        Assert.Contains("ICC_PROFILE", TestJpeg.Latin1(File.ReadAllBytes(profiled)), StringComparison.Ordinal);
+
+        var output = await Run([profiled]);
+        var control = await Run([plain]);
+
+        var text = TestJpeg.Latin1(File.ReadAllBytes(output));
+        Assert.DoesNotContain("SecretProfileOwner", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("ICC_PROFILE", text, StringComparison.Ordinal);
+        Assert.Contains("/DeviceRGB", text, StringComparison.Ordinal); // what viewers used before, profile or not
+        using var pdf = PdfDocument.Open(output);
+        using var controlPdf = PdfDocument.Open(control);
+        Assert.True(pdf.Render(0, 150).Bgra.Span.SequenceEqual(controlPdf.Render(0, 150).Bgra.Span), "the page draws differently");
+    }
+
+    [Fact]
     public async Task A_jpeg_pdf_viewers_cannot_show_is_re_encoded_upright_and_without_its_metadata()
     {
         // Stored 96 x 64 with EXIF orientation 6, camera and GPS: upright 64 x 96, the red block at the top-right.

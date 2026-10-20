@@ -35,12 +35,14 @@ internal sealed class JpegImage
 /// </summary>
 /// <remarks>
 /// <para>
-/// Kept, an allow-list: SOI; the first JFIF APP0, without its thumbnail (which can show what was cropped out);
-/// APP2 holding an ICC profile; the 12 bytes of the first APP14 "Adobe" (it says how CMYK and YCCK colours are stored);
-/// the tables (DQT, DHT), frame and scan headers and restart interval (DRI); the entropy-coded data with its stuffed
-/// bytes and restart markers, up to EOI. Removed: COM and every other application segment, since cameras put metadata
-/// in many of them (APP1 EXIF and XMP, APP13 IPTC, APP3 "Meta", APP12, APP2 MPF, APP0 JFXX thumbnails and Canon CIFF),
-/// and everything after EOI (phones append further JPEGs there, each with its own EXIF). Any other marker fails.
+/// Kept, an allow-list: SOI; the first JFIF APP0, without its thumbnail (which can show what was cropped out); the
+/// 12 bytes of the first APP14 "Adobe" (it says how CMYK and YCCK colours are stored); the tables (DQT, DHT), frame and
+/// scan headers and restart interval (DRI); the entropy-coded data with its stuffed bytes and restart markers, up to
+/// EOI. Removed: COM and every other application segment, since cameras put metadata in many of them (APP1 EXIF and
+/// XMP, APP13 IPTC, APP3 "Meta", APP12, APP2 MPF, APP0 JFXX thumbnails and Canon CIFF), APP2 ICC profiles too (their
+/// text can name the device and its owner, and pdfium gives every embedded JPEG a device colour space, DeviceGray,
+/// DeviceRGB or DeviceCMYK, whatever the profile says), and everything after EOI (phones append further JPEGs there,
+/// each with its own EXIF). Any other marker fails.
 /// </para>
 /// <para>
 /// pdfium only reads a JPEG's header before embedding it, so a missing table shows only when the page is drawn: without
@@ -73,7 +75,6 @@ internal static class JpegSegments
     private const byte Exp = 0xDF;
     private const byte App0 = 0xE0;
     private const byte App1 = 0xE1;
-    private const byte App2 = 0xE2;
     private const byte App14 = 0xEE;
     private const byte App15 = 0xEF;
     private const byte Com = 0xFE;
@@ -206,10 +207,6 @@ internal static class JpegSegments
                     if (orientation == 0 && payload.StartsWith("Exif\0\0"u8))
                         orientation = ReadOrientation(payload[6..]);
                     break;
-                case App2:
-                    if (payload.StartsWith("ICC_PROFILE\0"u8))
-                        Copy(jpeg[markerStart..end]);
-                    break;
                 case App14:
                     if (!adobe && payload.Length >= AdobeLength && payload.StartsWith("Adobe"u8))
                     {
@@ -218,7 +215,7 @@ internal static class JpegSegments
                     }
 
                     break;
-                case (> App2 and <= App15) or Com:
+                case (> App1 and <= App15) or Com:
                     break; // metadata
                 case Dqt:
                     tables.ReadQuantization(payload);

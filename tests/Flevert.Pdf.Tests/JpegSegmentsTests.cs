@@ -21,7 +21,7 @@ public class JpegSegmentsTests
     });
 
     [Fact]
-    public void Removes_exif_xmp_iptc_and_comments_but_keeps_the_colour_profile()
+    public void Removes_exif_xmp_iptc_comments_and_the_colour_profile_but_not_a_pixel()
     {
         var original = JpegWithEverything();
         var text = TestJpeg.Latin1(original);
@@ -41,9 +41,10 @@ public class JpegSegmentsTests
         Assert.DoesNotContain("Exif\0\0", result, StringComparison.Ordinal);
         Assert.DoesNotContain("http://ns.adobe.com/xap/1.0/", result, StringComparison.Ordinal);
         Assert.DoesNotContain("Photoshop 3.0", result, StringComparison.Ordinal);
-        using var decodedOriginal = TestJpeg.Decode(original);
+        // An ICC profile can name the device and its owner, and pdfium marks the JPEG DeviceRGB whatever it holds.
+        Assert.DoesNotContain("ICC_PROFILE", result, StringComparison.Ordinal);
         using var decoded = TestJpeg.Decode(stripped);
-        Assert.Equal(decodedOriginal.GetColorProfile()!.ToByteArray(), decoded.GetColorProfile()?.ToByteArray());
+        Assert.Null(decoded.GetColorProfile());
         Assert.Null(decoded.GetExifProfile());
         Assert.True(TestJpeg.SamePixels(original, stripped), "the entropy-coded data must be unchanged");
     }
@@ -136,14 +137,13 @@ public class JpegSegmentsTests
     }
 
     [Fact]
-    public void Drops_other_application_segments_but_keeps_jfif_the_icc_profile_and_adobe()
+    public void Drops_other_application_segments_and_the_icc_profile_but_keeps_jfif_and_adobe()
     {
         var clean = TestJpeg.Make();
-        var icc = TestJpeg.Segment(0xE2, "ICC_PROFILE\0\x01\x01" + "fake profile bytes");
         var adobe = TestJpeg.Segment(0xEE, "Adobe\0\x64\0\0\0\0\x01");
         var jpeg = TestJpeg.InsertAfterSoi(clean,
             TestJpeg.Segment(0xE2, "MPF\0SecretMultiPicture"),   // APP2 that is not a colour profile
-            icc,
+            TestJpeg.Segment(0xE2, "ICC_PROFILE\0\x01\x01" + "SecretProfileOwner"),
             TestJpeg.Segment(0xE3, "Meta\0SecretKodakMeta"),       // APP3: EXIF-like camera data
             TestJpeg.Segment(0xEC, "Ducky\0SecretDucky"),          // APP12
             TestJpeg.Segment(0xEB, "JP\0SecretJpegXt"),            // APP11
@@ -152,7 +152,7 @@ public class JpegSegmentsTests
 
         var stripped = JpegSegments.Strip(jpeg).Bytes;
 
-        Assert.Equal(TestJpeg.InsertAfterSoi(clean, icc, adobe), stripped);
+        Assert.Equal(TestJpeg.InsertAfterSoi(clean, adobe), stripped);
     }
 
     // JFIF APP0: "JFIF\0", version 1.02, units 1 (DPI), density 300 x 300, then the thumbnail's width and height.
