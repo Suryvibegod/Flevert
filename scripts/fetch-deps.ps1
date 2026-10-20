@@ -78,7 +78,63 @@ if (-not $difference) {
 }
 "Fetching deps: $difference."
 
+# A new folder that only this user, SYSTEM and Administrators can change, whatever its parent passes down. %TEMP% may
+# let other accounts change what is created in it (on the maintainer's machine it grants a sandbox Modify): they could
+# swap a download after its hash check, or a staged file before it is copied into deps\, and the tests then run it.
+function New-PrivateFolder([string]$Path) {
+    $trusted = @(
+        [Security.Principal.WindowsIdentity]::GetCurrent().User,
+        [Security.Principal.SecurityIdentifier]'S-1-5-18', # SYSTEM
+        [Security.Principal.SecurityIdentifier]'S-1-5-32-544') # Administrators
+    $security = New-Object Security.AccessControl.DirectorySecurity
+    $security.SetAccessRuleProtection($true, $false) # inherits nothing
+    foreach ($sid in $trusted) {
+        $security.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
+            $sid, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')))
+    }
+    # Created with that ACL, so the entries of the parent never apply to it, not even for a moment.
+    $aclExtensions = 'System.IO.FileSystemAclExtensions' -as [type]
+    if ($aclExtensions) { $aclExtensions::Create([IO.DirectoryInfo]::new($Path), $security) } # PowerShell 7 (.NET)
+    else { [void][IO.Directory]::CreateDirectory($Path, $security) } # Windows PowerShell (.NET Framework)
+    # Both return quietly when the folder exists: make sure it is the private, empty folder asked for.
+    $acl = Get-Acl -LiteralPath $Path
+    $others = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) |
+        Where-Object { $trusted -notcontains $_.IdentityReference })
+    if (-not $acl.AreAccessRulesProtected -or $others.Count -gt 0 -or
+        $trusted -notcontains $acl.GetOwner([Security.Principal.SecurityIdentifier]) -or
+        @(Get-ChildItem -LiteralPath $Path -Force).Count -gt 0) {
+        throw "$Path is not a new folder of this user's own. Nothing was changed in $Destination."
+    }
+}
+
+function Get-StreamSha256([IO.Stream]$Stream) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { -join ($sha.ComputeHash($Stream) | ForEach-Object { $_.ToString('x2') }) }
+    finally { $sha.Dispose() }
+}
+
+# Deletes a file or folder without following links: a junction or symbolic link inside is removed itself, never what
+# it points to. Windows PowerShell 5.1.26100's Remove-Item -Recurse did not follow a junction when probed, but that is
+# one build, and symbolic links were not probed.
+function Remove-Tree([string]$Path) {
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if ($item) { Remove-Entry $item }
+}
+
+function Remove-Entry([IO.FileSystemInfo]$Entry) {
+    if (-not ($Entry.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        if ($Entry -is [IO.DirectoryInfo]) {
+            foreach ($child in $Entry.GetFileSystemInfos()) { Remove-Entry $child }
+        }
+        elseif ($Entry.Attributes -band [IO.FileAttributes]::ReadOnly) {
+            $Entry.Attributes = $Entry.Attributes -band -bnot [IO.FileAttributes]::ReadOnly
+        }
+    }
+    $Entry.Delete() # for a link, the link only
+}
+
 $work = Join-Path ([IO.Path]::GetTempPath()) ("flevert-deps-" + [guid]::NewGuid())
+New-PrivateFolder $work
 $stage = Join-Path $work 'stage'
 New-Item -ItemType Directory $stage | Out-Null
 try {
@@ -86,32 +142,41 @@ try {
         # Expand-Archive insists on a .zip extension.
         $download = Join-Path $work ($item.name + '.' + $item.kind)
         $uri = [Uri]$item.url
-        # Tests point the manifest at local files; real downloads are https (FetchDepsScriptTests checks the manifest).
+        # Tests point the manifest at local files or a loopback server; real downloads are https (FetchDepsScriptTests
+        # checks the manifest).
         if ($uri.IsFile) { Copy-Item -LiteralPath $uri.LocalPath $download }
         else { Invoke-WebRequest $uri -OutFile $download -UseBasicParsing }
 
-        $actual = (Get-FileHash $download -Algorithm SHA256).Hash.ToLowerInvariant()
-        if ($actual -ne $item.sha256) {
-            throw "SHA256 mismatch for $($item.name): expected $($item.sha256), got $actual. Nothing was changed in $Destination."
-        }
-
-        if ($item.kind -eq 'file') {
-            $target = Join-Path $stage $item.target
-            New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
-            Copy-Item -LiteralPath $download $target
-            continue
-        }
-
-        $unpacked = Join-Path $work ($item.name + '.unpacked')
-        New-Item -ItemType Directory $unpacked | Out-Null
-        switch ($item.kind) {
-            'zip' { Expand-Archive -LiteralPath $download -DestinationPath $unpacked }
-            'tgz' {
-                & "$env:SystemRoot\System32\tar.exe" -xzf $download -C $unpacked
-                if ($LASTEXITCODE -ne 0) { throw "Could not unpack $($item.name) ($LASTEXITCODE)." }
+        # Held open, refusing writers, deleters and renames, from the hash check until it is unpacked, so what is
+        # unpacked is what was checked. tar and Expand-Archive only read it, which this sharing allows.
+        $held = [IO.File]::Open($download, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        try {
+            $actual = Get-StreamSha256 $held
+            if ($actual -ne $item.sha256) {
+                throw "SHA256 mismatch for $($item.name): expected $($item.sha256), got $actual. Nothing was changed in $Destination."
             }
-            default { throw "Unknown kind '$($item.kind)' for $($item.name)." }
+
+            if ($item.kind -eq 'file') {
+                $target = Join-Path $stage $item.target
+                New-Item -ItemType Directory -Force (Split-Path -Parent $target) | Out-Null
+                $held.Position = 0
+                $copy = [IO.File]::Open($target, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+                try { $held.CopyTo($copy) } finally { $copy.Dispose() }
+                continue
+            }
+
+            $unpacked = Join-Path $work ($item.name + '.unpacked')
+            New-Item -ItemType Directory $unpacked | Out-Null
+            switch ($item.kind) {
+                'zip' { Expand-Archive -LiteralPath $download -DestinationPath $unpacked }
+                'tgz' {
+                    & "$env:SystemRoot\System32\tar.exe" -xzf $download -C $unpacked
+                    if ($LASTEXITCODE -ne 0) { throw "Could not unpack $($item.name) ($LASTEXITCODE)." }
+                }
+                default { throw "Unknown kind '$($item.kind)' for $($item.name)." }
+            }
         }
+        finally { $held.Dispose() }
 
         $root = Join-Path $unpacked $item.strip
         foreach ($pattern in $item.keep) {
@@ -126,18 +191,27 @@ try {
         }
     }
 
-    # Everything is verified and unpacked: only now replace what deps\ held for these names.
-    New-Item -ItemType Directory -Force $Destination | Out-Null
+    # Everything is verified and unpacked: only now replace what deps\ held for these names. The stamp gets the hashes of
+    # the staged files, and the copies must match them.
     $folders = @(Get-ChildItem -LiteralPath $stage -Directory | ForEach-Object Name)
+    $kept = [ordered]@{}
+    foreach ($file in @($folders | ForEach-Object { Get-TreeFiles $stage $_ } | Sort-Object)) {
+        $kept[$file] = Get-Sha256 (Join-Path $stage $file)
+    }
+    New-Item -ItemType Directory -Force $Destination | Out-Null
     foreach ($folder in $folders) {
         $existing = Join-Path $Destination $folder
-        if (Test-Path $existing) { Remove-Item $existing -Recurse -Force }
-        Copy-Item (Join-Path $stage $folder) $existing -Recurse
+        Remove-Tree $existing
+        Copy-Item -LiteralPath (Join-Path $stage $folder) $existing -Recurse
     }
-    $kept = @($folders | ForEach-Object { Get-TreeFiles $Destination $_ } | Sort-Object)
-    [IO.File]::WriteAllLines($stamp, [string[]](@($manifestHash) + @($kept | ForEach-Object { "$(Get-Sha256 (Join-Path $Destination $_))  $_" })))
+    $copied = @($folders | ForEach-Object { Get-TreeFiles $Destination $_ } | Sort-Object)
+    $changed = @($kept.Keys | Where-Object { $copied -notcontains $_ -or (Get-Sha256 (Join-Path $Destination $_)) -ne $kept[$_] }) +
+        @($copied | Where-Object { -not $kept.Contains($_) })
+    if ($changed.Count -gt 0) { throw "$($changed -join ', ') in $Destination changed while being copied; run this script again." }
+    [IO.File]::WriteAllLines($stamp, [string[]](@($manifestHash) + @($kept.Keys | ForEach-Object { "$($kept[$_])  $_" })))
     "deps fetched into $Destination"
 }
 finally {
-    Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+    try { Remove-Tree $work }
+    catch { Write-Warning "Could not remove $work ($_)." }
 }

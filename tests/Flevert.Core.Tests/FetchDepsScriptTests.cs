@@ -1,5 +1,11 @@
+using System.Diagnostics;
 using System.IO.Compression;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Principal;
+using System.Text;
 using System.Text.Json;
 
 namespace Flevert.Core.Tests;
@@ -139,6 +145,67 @@ public sealed class FetchDepsScriptTests : IDisposable
     }
 
     [Fact]
+    public async Task Downloads_are_checked_and_unpacked_in_a_folder_only_this_user_and_administrators_can_change()
+    {
+        // On the maintainer's machine %TEMP% grants a sandbox account Modify, inherited by everything created there: it
+        // could swap a download after its hash check, or a staged file before the copy into deps\. BUILTIN\Users plays
+        // that account here. The download comes from a loopback server, which looks at the work folder mid-download.
+        var temp = Directory.CreateDirectory(_dir.Combine("temp"));
+        var tempAcl = temp.GetAccessControl();
+        tempAcl.AddAccessRule(new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.Modify,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+        temp.SetAccessControl(tempAcl);
+        var archive = File.ReadAllBytes(Zip(("bin/tool.exe", "exe")));
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var url = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/tool.zip";
+        var manifest = Manifest(Item("tool", url, Convert.ToHexStringLower(SHA256.HashData(archive)), kind: "zip", keep: ["bin/tool.exe"]));
+        var seen = new List<(string Name, bool Protected, string[] Others)>();
+        var server = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            var stream = client.GetStream();
+            using var request = new StreamReader(stream, Encoding.ASCII, leaveOpen: true);
+            while (!string.IsNullOrEmpty(await request.ReadLineAsync())) { }
+            seen.AddRange(WorkFolders(temp.FullName));
+            await stream.WriteAsync(Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Length: {archive.Length}\r\nConnection: close\r\n\r\n"));
+            await stream.WriteAsync(archive);
+        });
+
+        var run = Fetch(manifest, _dir.Combine("deps"), temp.FullName);
+        listener.Stop();
+        await server.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.True(run.ExitCode == 0, run.Output);
+        var work = Assert.Single(seen);
+        Assert.True(work.Protected, $"{work.Name} inherits entries from %TEMP%");
+        Assert.Empty(work.Others);
+        Assert.Empty(Directory.GetDirectories(temp.FullName, "flevert-deps-*")); // and it is gone afterwards
+    }
+
+    [Fact]
+    public void Fetching_again_removes_a_junction_in_deps_without_touching_what_it_points_to()
+    {
+        // deps\ lies in the checkout, which other accounts may be able to change (setup-dev.ps1 warns): the old copy is
+        // removed without following links. Windows PowerShell 5.1.26100's Remove-Item did not follow this junction
+        // either (probed), but older builds and symbolic links were not checked.
+        var archive = Zip(("bin/tool.exe", "exe"));
+        var manifest = Manifest(Item("tool", archive, Sha256(archive), kind: "zip", keep: ["bin/tool.exe"]));
+        var deps = _dir.Combine("deps");
+        Assert.Equal(0, Fetch(manifest, deps).ExitCode);
+        var outside = Directory.CreateDirectory(_dir.Combine("outside")).FullName;
+        File.WriteAllText(Path.Combine(outside, "precious.txt"), "someone's file");
+        Junction(Path.Combine(deps, @"tool\bin\link"), outside);
+
+        var again = Fetch(manifest, deps);
+
+        Assert.True(again.ExitCode == 0, again.Output);
+        Assert.Equal("someone's file", File.ReadAllText(Path.Combine(outside, "precious.txt")));
+        Assert.Equal([@"bin\tool.exe"], Files(Path.Combine(deps, "tool")));
+    }
+
+    [Fact]
     public void A_listed_file_missing_from_the_archive_fails()
     {
         var archive = Zip(("bin/tool.exe", "exe"));
@@ -165,8 +232,9 @@ public sealed class FetchDepsScriptTests : IDisposable
 
     private static string Sha256(string path) => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));
 
-    private static object Item(string name, string path, string sha256, string kind, string strip = "", string[]? keep = null, string? target = null) =>
-        new { name, url = new Uri(path).AbsoluteUri, sha256, kind, strip, keep = keep ?? [], target };
+    /// <param name="source">A local file, or a URL.</param>
+    private static object Item(string name, string source, string sha256, string kind, string strip = "", string[]? keep = null, string? target = null) =>
+        new { name, url = new Uri(source).AbsoluteUri, sha256, kind, strip, keep = keep ?? [], target };
 
     private string Manifest(params object[] items)
     {
@@ -178,6 +246,36 @@ public sealed class FetchDepsScriptTests : IDisposable
     private static string[] Files(string dir) =>
         [.. Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(dir, f)).Order(StringComparer.Ordinal)];
 
-    private static (int ExitCode, string Output) Fetch(string manifest, string deps) =>
-        PowerShellScript.Run("fetch-deps.ps1", ["-Manifest", manifest, "-Destination", deps]);
+    private static (int ExitCode, string Output) Fetch(string manifest, string deps, string? temp = null) =>
+        PowerShellScript.Run(
+            "fetch-deps.ps1", ["-Manifest", manifest, "-Destination", deps],
+            temp is null ? null : new Dictionary<string, string> { ["TEMP"] = temp, ["TMP"] = temp });
+
+    // Each work folder fetch-deps.ps1 has in this temporary folder: whether it ignores the entries %TEMP% passes down, and
+    // who other than this user, SYSTEM and Administrators it grants anything.
+    private static IEnumerable<(string Name, bool Protected, string[] Others)> WorkFolders(string temp)
+    {
+        using var me = WindowsIdentity.GetCurrent();
+        var trusted = new[] { me.User!, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null) };
+        foreach (var folder in Directory.GetDirectories(temp, "flevert-deps-*"))
+        {
+            var acl = new DirectoryInfo(folder).GetAccessControl();
+            var others = acl.GetAccessRules(includeExplicit: true, includeInherited: true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
+                .Where(rule => rule.AccessControlType == AccessControlType.Allow && !trusted.Contains((SecurityIdentifier)rule.IdentityReference))
+                .Select(rule => $"{rule.IdentityReference}: {rule.FileSystemRights}")
+                .ToArray();
+            yield return (Path.GetFileName(folder), acl.AreAccessRulesProtected, others);
+        }
+    }
+
+    private static void Junction(string link, string target)
+    {
+        using var mklink = Process.Start(new ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+        })!;
+        mklink.WaitForExit();
+        Assert.Equal(0, mklink.ExitCode);
+    }
 }
