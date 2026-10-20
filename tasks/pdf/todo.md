@@ -351,6 +351,11 @@ Ba reviewer bối cảnh trống, chỉ đọc, trên nhánh `t11a` (JpegSegment
 
 ## Giai đoạn 6: hoàn thiện và phát hành
 
+### T17b: Lỗi có từ v0.1 tìm thấy khi làm T11
+- [ ] Vài thao tác ảnh **khác nhau** khởi động cùng lúc: một tiến trình có thể hỏng ở `MagickSetup.WriteConfiguration` vì tiến trình khác đang giữ `policy.xml`. Test tái hiện trước (nhiều tiến trình thật, mỗi cái một thao tác), rồi sửa (ví dụ ghi qua file tạm + đổi tên, hoặc khóa có tên toàn phiên, hoặc chấp nhận file đã đúng nội dung).
+- [ ] Kiểm tay trong Explorer thật: chọn lẫn JPG + HEIC → Combine into PDF ra một PDF (MenuProbe chỉ kiểm từng loại file).
+- [ ] README: bảng menu thêm Combine into PDF và ghi HEIC/HEIF không còn Convert > GIF (giới hạn 16 mục của Explorer) — làm cùng T20.
+
 ### T18: Hardening input độc
 - [ ] Fixture: bom nén, vòng tham chiếu object, 100 000 trang rỗng, trang khổng lồ, xref hỏng, file không phải PDF đổi đuôi → bị từ chối hoặc xử lý trong ≤ 10 s, bộ nhớ trong `MemoryBudget`
 - [ ] PDF có chữ ký số: thông báo nói chữ ký không còn hợp lệ ở output

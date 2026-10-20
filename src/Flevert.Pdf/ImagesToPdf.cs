@@ -140,7 +140,7 @@ public sealed class ImagesToPdf : IBatchOperation
         {
             // Magick.NET refuses an empty stream as a wrong argument, not as a bad image.
             if (new FileInfo(path).Length == 0)
-                throw new BatchInputException(path, "The file is empty.");
+                throw BatchInputException.ForInput(path, "The file is empty.");
             var format = ImageFile.RealFormat(path);
             var kind = format switch
             {
@@ -164,21 +164,21 @@ public sealed class ImagesToPdf : IBatchOperation
                     ? (canvas.Width, canvas.Height)
                     : (frame.Width, frame.Height);
                 if ((long)width * height > _maxImagePixels)
-                    throw new BatchInputException(path, PdfBuilder.TooManyPixelsError(width, height, _maxImagePixels).Message);
+                    throw BatchInputException.ForInput(path, PdfBuilder.TooManyPixelsError(width, height, _maxImagePixels).Message);
                 pages.Add(new PagePlan(index, width, height, Dpi(frame.Density), ImageFile.DecodedBytes(frame)));
             }
 
             if (pages.Count == 0)
-                throw new BatchInputException(path, "The TIFF holds only thumbnails.");
+                throw BatchInputException.ForInput(path, "The TIFF holds only thumbnails.");
             return new ImagePlan(path, format, kind, new FileInfo(path).Length, pages);
         }
         catch (MagickException e)
         {
-            throw new BatchInputException(path, Unreadable, e);
+            throw BatchInputException.ForInput(path, Unreadable, e);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            throw new BatchInputException(path, e.Message, e);
+            throw BatchInputException.ForInput(path, e.Message, e);
         }
     }
 
@@ -211,11 +211,11 @@ public sealed class ImagesToPdf : IBatchOperation
         }
         catch (MagickException e)
         {
-            throw new BatchInputException(image.Path, Unreadable, e);
+            throw BatchInputException.ForInput(image.Path, Unreadable, e);
         }
         catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException)
         {
-            throw new BatchInputException(image.Path, e.Message, e);
+            throw BatchInputException.ForInput(image.Path, e.Message, e);
         }
     }
 
