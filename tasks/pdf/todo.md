@@ -383,3 +383,12 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 ### T20: Docs và phát hành v0.2.0
 - [ ] README (menu PDF, ảnh động mới cho Combine into PDF), CHANGELOG `[0.2.0]`, capability-map, HANDOFF; `<Version>0.2.0`
 - [ ] `/ship`: ba chuyên gia song song → go/no-go; phát hành theo RELEASING (CI ×3, tag, kiểm bản nháp, VirusTotal); người dùng v0.1.0 thấy hộp thoại "Flevert 0.2.0 is available" (kiểm bằng bản 0.1.0 thật sau khi publish)
+
+#### Final audit (security-auditor, v0.2.0): reconcile
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| `openssl.cnf` (file rỗng của Flevert, chép cạnh `qpdf.exe` và vào thư mục publish) không được `write-notices.ps1` tính → `build-installer.ps1` dừng "No licence notice for openssl.cnf"; test cũ chỉ dùng thư mục publish giả | Medium (chặn phát hành) | Đúng | Xong: script nhận `openssl.cnf` là file riêng của Flevert (MIT). Test mới `Every_file_a_real_publish_of_flevert_ships_has_its_notice` publish thật `src/Flevert.Cli` rồi chạy script: đỏ ("No licence notice for openssl.cnf") → xanh. `build-installer.ps1` chạy được: `Flevert-Setup-0.1.0.exe` 47,1 MB (49 402 320 byte; version còn 0.1.0, T20 đổi). Test file rỗng giữ nguyên (`QpdfEnvironmentTests`) |
+| Combine into PDF giữ APP2 ICC của JPEG (`JpegSegments`) dù docs hứa không có thông tin máy; profile có thể chứa tên thiết bị/chủ (desc/cprt/dmdd), pdfium lại ghi DeviceRGB nên profile vô dụng | Low | Đúng | Xong: bỏ APP2 ICC như các segment ứng dụng khác. Test mới: JPEG có profile chứa chuỗi đánh dấu → PDF không còn chuỗi đó, có `/DeviceRGB`, trang render giống từng byte với JPEG không profile: đỏ → xanh; hai test `JpegSegmentsTests` sửa theo. ADR-0008 cập nhật. Remove metadata (ảnh) vẫn giữ ICC: trình xem ảnh có dùng |
+| `pdf-worker` thừa hưởng toàn bộ môi trường của flevert.exe (`MAGICK_*` điều khiển ImageMagick trong worker, `FLEVERT_*` là công tắc test) | Low | Đúng | Xong: `PdfWorker.WorkerEnvironment` bỏ `MAGICK_*` và `FLEVERT_*` (không phân biệt hoa thường), giữ phần còn lại. Test mới đọc khối môi trường của worker đang chạy (PEB): marker `MAGICK_`/`flevert_` có mặt → đỏ, sau sửa vắng mặt, marker khác và `SystemRoot` vẫn có → xanh. ADR-0008 ghi |
+| CHANGELOG nói worker có giới hạn bộ nhớ/thời gian, dễ hiểu là cách ly | Info | Đúng | Xong: một mệnh đề "not a sandbox" trong mục Security |
