@@ -13,20 +13,28 @@ internal static partial class TestProcesses
     private const int ProcessBasicInformation = 0;
     private const int ProcessCommandLineInformation = 60;
     private const uint ProcessQueryLimitedInformation = 0x1000;
+    private const uint Synchronize = 0x00100000;
+    private const uint WaitTimeout = 0x102;
+    private const int StatusInfoLengthMismatch = unchecked((int)0xC0000004);
 
     /// <summary>
     /// The PDF workers this process started: flevert.exe children whose command line ends with <c>pdf-worker</c> (the
     /// app runs of FlevertExeTests are children named flevert too). Classes that start workers share a collection
     /// (<see cref="WorkerProcesses"/>), so at most one test's worker runs at a time.
     /// </summary>
-    public static List<Process> Workers()
+    public static List<Process> Workers() => Workers(Process.GetProcessesByName("flevert"));
+
+    /// <summary>The workers among <paramref name="candidates"/>; disposes the others.</summary>
+    internal static List<Process> Workers(IEnumerable<Process> candidates)
     {
         var children = new List<Process>();
-        foreach (var process in Process.GetProcessesByName("flevert"))
+        foreach (var process in candidates)
         {
             try
             {
-                if (ParentId(process.Id) == Environment.ProcessId && CommandLine(process).EndsWith(" pdf-worker", StringComparison.Ordinal))
+                // A worker that is exiting can still be listed: it is no longer the worker a test is looking for.
+                if (ParentId(process.Id) == Environment.ProcessId && IsRunning(process)
+                    && CommandLine(process) is { } line && line.EndsWith(" pdf-worker", StringComparison.Ordinal))
                 {
                     children.Add(process);
                     continue;
@@ -64,19 +72,23 @@ internal static partial class TestProcesses
     }
 
     /// <summary>The command line Windows keeps for the process, as any other process of the user can read it.</summary>
-    public static string CommandLine(Process process)
+    /// <returns><c>null</c> when Windows does not give it, as for a process that is exiting (0xC000010A); like
+    /// <c>ProcessFacts.CommandLine</c> in the product.</returns>
+    public static string? CommandLine(Process process)
     {
         var handle = OpenProcess(ProcessQueryLimitedInformation, false, (uint)process.Id);
         if (handle == 0)
             throw new Win32Exception();
         try
         {
-            _ = NtQueryInformationProcess(handle, ProcessCommandLineInformation, 0, 0, out var size);
+            var status = NtQueryInformationProcess(handle, ProcessCommandLineInformation, 0, 0, out var size);
+            if (status != StatusInfoLengthMismatch || size == 0)
+                return null;
             var buffer = Marshal.AllocHGlobal((int)size);
             try
             {
-                var status = NtQueryInformationProcess(handle, ProcessCommandLineInformation, buffer, size, out _);
-                Assert.True(status == 0, $"NtQueryInformationProcess: 0x{status:X8}");
+                if (NtQueryInformationProcess(handle, ProcessCommandLineInformation, buffer, size, out _) != 0)
+                    return null;
                 // A UNICODE_STRING: length in bytes, maximum length, then a pointer to the characters.
                 var length = (ushort)Marshal.ReadInt16(buffer);
                 var text = Marshal.ReadIntPtr(buffer, IntPtr.Size);
@@ -86,6 +98,23 @@ internal static partial class TestProcesses
             {
                 Marshal.FreeHGlobal(buffer);
             }
+        }
+        finally
+        {
+            CloseHandle(handle);
+        }
+    }
+
+    /// <summary>Whether the process has not exited. Its handle is signalled once it has; a handle still open elsewhere
+    /// keeps an exited process listed.</summary>
+    private static bool IsRunning(Process process)
+    {
+        var handle = OpenProcess(ProcessQueryLimitedInformation | Synchronize, false, (uint)process.Id);
+        if (handle == 0)
+            return false;
+        try
+        {
+            return WaitForSingleObject(handle, 0) == WaitTimeout;
         }
         finally
         {
@@ -128,6 +157,9 @@ internal static partial class TestProcesses
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool CloseHandle(nint handle);
+
+    [LibraryImport("kernel32.dll")]
+    private static partial uint WaitForSingleObject(nint handle, uint milliseconds);
 
     [LibraryImport("ntdll.dll")]
     private static partial int NtQueryInformationProcess(nint process, int infoClass, nint info, uint length, out uint returned);
