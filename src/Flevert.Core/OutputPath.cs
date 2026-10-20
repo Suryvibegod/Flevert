@@ -190,12 +190,14 @@ public static class OutputPath
         }
     }
 
-    // The returned path is for names and logs, never reopened; drop the extended-length prefix so an ordinary or a long
-    // output reads the same way a single file's does. The real path the rename used is kept on the folder for any cleanup.
-    private static string Display(string path) => path switch
+    // The returned path is for names and logs, never reopened: the extended-length prefix is dropped from a drive-letter or
+    // UNC path, even a long one, so it reads like the folder the user opens. The real path the rename used is kept on the
+    // folder for any cleanup.
+    internal static string Display(string path) => path switch
     {
         _ when path.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) => @"\\" + path[8..],
-        _ when path.StartsWith(@"\\?\", StringComparison.Ordinal) => path[4..],
+        // Only a drive-letter form: \\?\Volume{guid}\ has no shorter spelling.
+        _ when path.StartsWith(@"\\?\", StringComparison.Ordinal) && path.Length > 6 && path[5] == ':' => path[4..],
         _ => path,
     };
 

@@ -684,6 +684,16 @@ public sealed class OutputPathTests : IDisposable
         Assert.False(left.HasFlag(FileAttributes.NotContentIndexed), $"{left}");
     }
 
+    // The returned folder is shown in the log and the notification. A volume mounted only into a folder has no drive
+    // letter, and its \\?\Volume{guid}\ form has no shorter spelling: cutting the prefix would name nothing.
+    [Theory]
+    [InlineData(@"\\?\C:\photos\a (pages)", @"C:\photos\a (pages)")]
+    [InlineData(@"\\?\UNC\server\share\a (pages)", @"\\server\share\a (pages)")]
+    [InlineData(@"\\?\Volume{0b6c2b42-1f2e-4c1d-9a9f-6f1e8d2a3b4c}\a (pages)", @"\\?\Volume{0b6c2b42-1f2e-4c1d-9a9f-6f1e8d2a3b4c}\a (pages)")]
+    [InlineData(@"C:\photos\a (pages)", @"C:\photos\a (pages)")]
+    public void WriteDirectoryAtomically_returns_a_folder_path_that_still_names_the_folder(string renamedTo, string shown) =>
+        Assert.Equal(shown, OutputPath.Display(renamedTo));
+
     // Guard: the folder is now created, held, renamed and deleted through Win32 calls rather than .NET's path APIs.
     [Fact]
     public async Task WriteDirectoryAtomically_handles_paths_longer_than_260_characters()
