@@ -5,7 +5,7 @@ using Flevert.Core;
 
 namespace Flevert.Media.Tests;
 
-/// <summary>The first slice of v0.3: Convert &gt; MP3, from the probe to the output beside the input.</summary>
+/// <summary>The first slice of v1.3: Convert &gt; MP3, from the probe to the output beside the input.</summary>
 public sealed class AudioToMp3Tests : IDisposable
 {
     private readonly TempDir _dir = new();

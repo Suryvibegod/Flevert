@@ -1,4 +1,4 @@
-# Todo: media (v0.3.0)
+# Todo: media (v1.3.0)
 
 Plan: [plan.md](plan.md). Spec: [docs/specs/media.md](../../docs/specs/media.md).
 
@@ -57,7 +57,7 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 - Đã làm: `MaliciousMediaTests` (11 test, mỗi file < 10 s, thư mục chỉ còn input, `TcpListener` loopback không nhận kết nối nào): playlist HLS đặt tên `.mp4` trỏ cổng test (qua 4 loại thao tác), danh sách concat `.mkv` trỏ video thật bên cạnh, file rỗng/văn bản/script, MOV cắt mất `moov`, MPEG-TS có mốc thời gian nhảy 99 giờ (→ "longer than 12 hours", trước khi mã hóa), MKV hỏng giữa file (ra file hoặc lỗi rõ). `subfile:` không áp dụng: input luôn là `file:<đường dẫn>`, nội dung file không chọn được giao thức. Đối chứng âm: bỏ hai whitelist thì test concat đỏ; bản đầu của test concat có thêm dòng `http://…` nên vẫn xanh khi bỏ whitelist (demuxer concat tự từ chối URL, `safe=1`), đã sửa để chỉ còn tên file. HLS trong `.mp4` còn bị chính ffmpeg (≥ 6) từ chối vì đuôi không phải `.m3u8`; whitelist là lớp thứ hai.
 
 ## T10: spec bổ sung lần 2 (gộp từ `main` 2026-10-20)
-- [x] Gộp `origin/main` vào nhánh (merge, không rebase: v0.2.1/v0.2.2 chưa vào `main`; rebase theo spec khi chúng vào)
+- [x] Gộp `origin/main` vào nhánh (merge, không rebase: v0.2.1/v1.2.2 chưa vào `main`; rebase theo spec khi chúng vào)
 - [x] Bỏ `video.to-mkv`; nhãn `Convert to ▸`; Compress đứng đầu, nhãn Light (best quality)/Strong (smallest); `Remove hidden info` riêng; video 16 mục (15 khi đích trùng nguồn), audio `Convert to ▸`
 - [x] Luồng video đầu + luồng audio đầu; note khi bỏ track audio khác (test note **cần kiểm trên Windows**)
 - [x] `video.strip-metadata`: `-c copy`, cùng container (mpegts 192 byte cho `.mts/.m2ts`), chỉ giữ `creation_time`, giữ ma trận xoay; bỏ luồng khác; không có gì → skipped. 12 test: gói video/audio trùng MD5 với nguồn, không còn khóa `location*`, mp4/webm/avi viết lại đúng container; đối chứng âm: bỏ `-map_metadata -1` thì 4 test đỏ. "Hidden info" = tag ngoài danh sách tag do container/ffmpeg tự ghi, hoặc luồng bị bỏ (data, phụ đề, đính kèm, ảnh bìa, track thêm). MPEG-TS không có chỗ cho title, nên TS chỉ có title là "không có gì để bỏ".
