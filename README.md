@@ -71,8 +71,8 @@ PDFs also have a second entry, **Flevert PDF tools**:
 | **Remove blank pages** | `report (no blank pages).pdf`, without the empty pages a two-sided scan leaves |
 | **Add page numbers** | `report (numbered).pdf`, numbered "1 / 12" at the bottom centre |
 | **Add watermark…** | `report (watermarked).pdf` with your text across every page, such as what the copy is for; it asks for the text once for all the PDFs you selected. Anyone with a PDF editor can still remove it. The font goes into the PDF and adds about 1 MB to the file. To mark a photo, use **Combine into PDF** first |
-| **Print layout** > 2 pages per sheet, 4 pages per sheet | `report (2 per sheet).pdf` or `report (4 per sheet).pdf` on A4, to print on less paper |
-| **Fit pages to A4** | `report (A4).pdf`: Letter, A3 and odd sizes scaled to A4 |
+| **Print layout** > 2 pages per sheet, 4 pages per sheet | `report (2 per sheet).pdf` or `report (4 per sheet).pdf` on A4, to print on less paper. Made for printing: bookmarks, links and fillable fields are not kept |
+| **Fit pages to A4** | `report (A4).pdf`: Letter, A3 and odd sizes scaled to A4. Like Print layout, made for printing: bookmarks, links and fillable fields are not kept |
 | **Lock filled forms** | `report (flattened).pdf`: the answers of a filled form, and comments, become part of the page, so nobody can change them |
 | **Split by size** > Under 10 MB, Under 25 MB | a folder `report (parts)` with `report part 1.pdf`, …, in page order. **Under 10 MB** is the safe size for email (Gmail counts 25 MB after encoding, about 18 MB of file; Outlook takes 20 MB); **Under 25 MB** is for chat apps |
 | **Extract images** | a folder `report (images)` with the pictures, photos exactly as they are in the PDF |

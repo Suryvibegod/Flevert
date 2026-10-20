@@ -12,6 +12,7 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
   - **Add watermark…** asks for your text once for all the PDFs you selected, and writes it, Vietnamese included, across every page in light grey. It marks what a copy is for; it does not stop anyone from editing the PDF. Windows' Arial goes into the PDF with it, which adds about 1 MB to the file. The text is one line of up to 100 letters that Windows' Arial can draw: emoji, Chinese and invisible characters are refused with the reason.
   - **Print layout** > **2 pages per sheet** and **4 pages per sheet** put the pages on A4 sheets, to print on less paper.
   - **Fit pages to A4** scales Letter, A3 and odd-sized pages to A4. Pages already A4 stay as they are.
+  - Print layout and Fit pages to A4 are made for printing: bookmarks, links and fillable fields are not kept, though filled-in answers and comments stay on the page.
   - **Lock filled forms** makes filled forms and comments part of the page, as the PDF draws them, so nobody can change the answers. Flevert draws an answer again only when the form asks for it and the answer is plain ASCII: a form with other answers (Vietnamese ones, say) that the PDF holds no drawing of is left as it is, and the notification says why.
   - **Split by size** > **Under 10 MB** or **Under 25 MB** writes the pages, in order, into as few PDFs as fit under the limit of an email or a chat app.
   - **Extract images** saves the pictures of a PDF to a folder: JPEG photos exactly as they are in it, other pictures as PNG.
