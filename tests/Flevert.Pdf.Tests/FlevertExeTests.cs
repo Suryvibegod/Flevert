@@ -145,6 +145,30 @@ public sealed class FlevertExeTests : IDisposable
         processes.ForEach(p => p.Dispose());
     }
 
+    [Fact]
+    public async Task Flevert_exe_splits_a_pdf_into_a_folder_of_pages()
+    {
+        var input = _dir.Combine("Hóa đơn.pdf");
+        WriteWidths(input, 100, 200, 300);
+
+        using var flevert = StartRun("pdf.split", input);
+        try
+        {
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+        }
+        finally
+        {
+            if (!flevert.HasExited)
+                flevert.Kill(entireProcessTree: true);
+        }
+
+        Assert.True(flevert.ExitCode == 0, string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)));
+        var folder = _dir.Combine("Hóa đơn (pages)");
+        Assert.Equal([100], PageWidths(Path.Combine(folder, "Hóa đơn 001.pdf")));
+        Assert.Equal([200], PageWidths(Path.Combine(folder, "Hóa đơn 002.pdf")));
+        Assert.Equal([300], PageWidths(Path.Combine(folder, "Hóa đơn 003.pdf")));
+    }
+
     private string CopyFixture(string fixture, string name)
     {
         var path = _dir.Combine(name);

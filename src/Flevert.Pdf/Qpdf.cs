@@ -156,6 +156,43 @@ public sealed class Qpdf
         RequireOutput(run, outputPath);
     }
 
+    /// <summary>The number of pages qpdf reads in the PDF (<c>qpdf --show-npages</c>).</summary>
+    /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
+    public async Task<int> CountPagesAsync(string inputPath, CancellationToken ct)
+    {
+        var run = await RunCheckedAsync(["--show-npages"], [inputPath], [inputPath], null, ct).ConfigureAwait(false);
+        return int.TryParse(run.StandardOutput.AsSpan().Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var pages)
+            ? pages
+            : throw new QpdfException(run.ExitCode, $"it printed no page count. {Detail(run)}");
+    }
+
+    /// <summary>
+    /// Runs <c>qpdf --split-pages</c>: each page of the input becomes <c>&lt;n&gt;.pdf</c> in
+    /// <paramref name="outputFolder"/>, n counting from 1, zero-padded by qpdf to the digits of the page count
+    /// (<c>01.pdf</c> … <c>12.pdf</c>). qpdf creates the files by name and writes through whatever is there by that name,
+    /// so the folder must be one nobody else can add to.
+    /// </summary>
+    /// <exception cref="PdfException">
+    /// As for <see cref="TransformAsync"/>, and <see cref="PdfError.UnsupportedFileName"/> when the folder's path holds
+    /// <c>%d</c>: qpdf puts the page number in place of the first <c>%d</c> of the output path, wherever it is, and
+    /// would write the pages into another folder.
+    /// </exception>
+    /// <exception cref="IOException">qpdf could not write a page.</exception>
+    public async Task SplitPagesAsync(string inputPath, string outputFolder, CancellationToken ct)
+    {
+        RequireArgumentLine(outputFolder, nameof(outputFolder));
+        if (ToExtendedPath(outputFolder).Contains(PageNumber, StringComparison.Ordinal))
+            throw new PdfException(PdfError.UnsupportedFileName, PageNumberInPathMessage);
+        var pattern = Path.Join(outputFolder, PageNumber + ".pdf");
+        await RunCheckedAsync(["--split-pages"], [inputPath], [inputPath, pattern], outputFolder, ct).ConfigureAwait(false);
+    }
+
+    // qpdf's placeholder for the page number in the output name of --split-pages.
+    private const string PageNumber = "%d";
+
+    internal const string PageNumberInPathMessage =
+        "The path of this PDF has \"%d\" in a folder name, which Flevert's PDF tool reads as a page number: rename that folder or move the PDF, and try again.";
+
     // Ends the list of files after --pages. Not a path: it goes through @- as it is.
     private const string EndOfPages = "--";
 
