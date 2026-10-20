@@ -54,12 +54,36 @@ internal static class SharingPdf
         drawables.Draw(image);
         if (seed % 3 == 0)
         {
-            using var photo = new MagickImage("gradient:#4060a0-#e0c080", 900, 600);
+            using var photo = Gradient(900, 600, (0x40, 0x60, 0xA0), (0xE0, 0xC0, 0x80));
             image.Composite(photo, 300, 1300, CompositeOperator.Over);
         }
 
         image.GaussianBlur(0, 1);
         image.Strip();
+        return image;
+    }
+
+    /// <summary>
+    /// A top-to-bottom gradient between two colours, from pixels: Flevert's ImageMagick policy allows no coder that makes
+    /// images (<c>gradient:</c>, <c>xc:</c>), as it allows nothing the converted files do not need.
+    /// </summary>
+    public static MagickImage Gradient(uint width, uint height, (byte R, byte G, byte B) from, (byte R, byte G, byte B) to)
+    {
+        MagickSetup.EnsureInitialized();
+        var rgb = new byte[width * height * 3];
+        for (var y = 0; y < height; y++)
+        {
+            var t = height == 1 ? 0 : (double)y / (height - 1);
+            var colour = new[] { from.R + ((to.R - from.R) * t), from.G + ((to.G - from.G) * t), from.B + ((to.B - from.B) * t) };
+            for (var x = 0; x < width; x++)
+            {
+                for (var c = 0; c < 3; c++)
+                    rgb[(((y * width) + x) * 3) + c] = (byte)Math.Round(colour[c]);
+            }
+        }
+
+        var image = new MagickImage();
+        image.ReadPixels(rgb, new PixelReadSettings(width, height, StorageType.Char, PixelMapping.RGB));
         return image;
     }
 
