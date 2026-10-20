@@ -21,7 +21,7 @@ env:
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -142,7 +142,8 @@ jobs:
   release:
     needs: [attest, ffmpeg-source]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Downloads the source archive (a gigabyte or more) and uploads it again with the setup.
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
@@ -182,6 +183,10 @@ jobs:
           Flevert runs ffmpeg, which is free software under the GNU GPL version 3, as a separate program. \`$(ls installer/ffmpeg-source-*.tar | xargs -n1 basename)\` below is its complete corresponding source: FFmpeg, every library built into it, and the scripts that built it.
           EOF
           cat notes.md
+      - name: Add the source archive to the checksums
+        # Built by third-party scripts in the ffmpeg-source job: its hash beside the setup's lets anyone check the copy
+        # they downloaded is the one this run attached.
+        run: (cd installer && sha256sum ffmpeg-source-*.tar) >> installer/SHA256SUMS.txt
       - name: Draft the release
         env:
           GH_TOKEN: ${{ github.token }}

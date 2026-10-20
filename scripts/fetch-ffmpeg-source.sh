@@ -101,10 +101,11 @@ for STAGE in $STAGES; do
         exit 1
     fi
     cp -L "$archive" "$WORK/source/libraries/$STAGE.tar.xz"
-    # Licence files at the top of the library or one folder down (stages that fetch into a named folder), never from
-    # its history or its tests.
-    mapfile -t licences < <(tar -tJf "$archive" | grep -iE '^(\./)?([^/]+/)?(COPYING|COPYRIGHT|LICEN[CS]E|NOTICE|UNLICENSE)[^/]*$' \
-        | grep -v '/\.git/' || true)
+    # Licence files anywhere in the library's source: at its top, and those of the code it bundles (vendored Rust
+    # crates, third_party/ and subprojects/ folders), which are linked into ffmpeg too (doubt-driven review, DD-6).
+    # Never from its history or its test data.
+    mapfile -t licences < <(tar -tJf "$archive" | grep -iE '(^|/)(COPYING|COPYRIGHT|LICEN[CS]E|NOTICE|UNLICENSE)[^/]*$' \
+        | grep -viE '/\.git/|/(tests?|testdata|test-data)/' || true)
     if [[ ${#licences[@]} -eq 0 ]]; then
         # Some keep their licence only in their source files' headers (nv-codec-headers): a person reads those.
         missing+=("$STAGE")

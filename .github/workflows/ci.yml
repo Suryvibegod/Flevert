@@ -13,7 +13,8 @@ permissions:
 jobs:
   build-and-test:
     runs-on: windows-latest
-    timeout-minutes: 30
+    # The media tests encode real video (a minute of 1080p in two passes among them): 30 minutes left no margin.
+    timeout-minutes: 45
     steps:
       # Actions are pinned by commit; the comment names the release.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

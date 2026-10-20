@@ -48,6 +48,10 @@ jobs:
         # by hand for a library listed in licences-missing.txt) are allowed.
         run: |
           status=0
+          # Until they are committed, the FFmpeg notice in deps.json names BtbN's LICENSE.txt alone; then it must name them.
+          if ! jq -e '.notices[] | select(.files | index("ffmpeg\\ffmpeg.exe")) | .licences | index("installer/notices/ffmpeg/*")' scripts/deps.json > /dev/null; then
+            echo "The FFmpeg notice in scripts/deps.json does not list installer/notices/ffmpeg/*."; status=1
+          fi
           while IFS= read -r -d '' file; do
             relative="${file#/mnt/work/out/licences/}"
             if ! cmp -s "$file" "installer/notices/ffmpeg/$relative"; then echo "Not in installer/notices/ffmpeg as built: $relative"; status=1; fi

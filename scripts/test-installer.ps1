@@ -259,8 +259,9 @@ try {
     Assert (Test-Path "$app\LICENSE.txt") 'LICENSE.txt is installed'
     foreach ($file in $bundledFiles + 'openssl.cnf') { Assert (Test-Path -LiteralPath "$app\$file") "$file is installed" }
     # The build scripts\deps.json pins, and no other: its version line names the release and the commit.
+    $pinnedFfmpeg = ([IO.File]::ReadAllText((Join-Path $root 'scripts\deps.json')) | ConvertFrom-Json).ffmpegSource.ffmpegVersion
     $ffmpegVersion = @(& "$app\ffmpeg\ffmpeg.exe" -hide_banner -version)[0]
-    Assert ("$ffmpegVersion".StartsWith('ffmpeg version n8.1.3-9-g29e619e767-')) "the installed ffmpeg is the pinned build ($ffmpegVersion)"
+    Assert ("$ffmpegVersion".StartsWith("ffmpeg version $pinnedFfmpeg-")) "the installed ffmpeg is the pinned build $pinnedFfmpeg ($ffmpegVersion)"
     $settings = @(Get-Content "$app\openssl.cnf" | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') })
     Assert ($settings.Count -eq 0) 'the installed openssl.cnf holds no setting, so OpenSSL in qpdf loads nothing'
     $notices = Get-Content "$app\THIRD-PARTY-NOTICES.txt" -Raw -ErrorAction SilentlyContinue

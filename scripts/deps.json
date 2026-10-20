@@ -119,7 +119,7 @@
       "files": ["ffmpeg\\ffmpeg.exe", "ffmpeg\\ffprobe.exe", "ffmpeg\\avcodec-62.dll", "ffmpeg\\avdevice-62.dll", "ffmpeg\\avfilter-11.dll",
         "ffmpeg\\avformat-62.dll", "ffmpeg\\avutil-60.dll", "ffmpeg\\swresample-6.dll", "ffmpeg\\swscale-9.dll"],
       "note": "FFmpeg runs as a separate program. It and the libraries built into it are distributed under the GNU General Public License version 3; every Flevert release publishes their complete corresponding source as ffmpeg-source-autobuild-2026-09-30-13-08.tar. The licences of FFmpeg and of each library follow, named after the stage of BtbN's build scripts that builds it.",
-      "licences": ["deps/ffmpeg/LICENSE.txt", "installer/notices/ffmpeg/*"]
+      "licences": ["deps/ffmpeg/LICENSE.txt"]
     }
   ]
 }
