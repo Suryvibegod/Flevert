@@ -125,6 +125,17 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         [("bomb-image", "pdf.extract-images")] = Ok,
         [("bomb-image", "pdf.remove-blank-pages")] = Skipped, // its image of zeros draws a black page
         [("signed", "pdf.remove-blank-pages")] = Skipped, // its signature field is an annotation, which keeps its page
+        // Pages larger than PDF allows (14 400 units a side): the edit tools refuse them before measuring them.
+        [("page-giant", "pdf.page-numbers")] = nameof(PdfError.TooLarge),
+        [("page-giant", "pdf.watermark")] = nameof(PdfError.TooLarge),
+        [("page-giant", "pdf.n-up-2")] = nameof(PdfError.TooLarge),
+        [("page-giant", "pdf.n-up-4")] = nameof(PdfError.TooLarge),
+        [("page-giant", "pdf.fit-a4")] = nameof(PdfError.TooLarge),
+        [("page-inverted", "pdf.page-numbers")] = nameof(PdfError.TooLarge),
+        [("page-inverted", "pdf.watermark")] = nameof(PdfError.TooLarge),
+        [("page-inverted", "pdf.n-up-2")] = nameof(PdfError.TooLarge),
+        [("page-inverted", "pdf.n-up-4")] = nameof(PdfError.TooLarge),
+        [("page-inverted", "pdf.fit-a4")] = nameof(PdfError.TooLarge),
     };
 
     // Remove metadata reads every object of the PDF twice, as qpdf's JSON and back (MetadataRemoval): real work that grows
