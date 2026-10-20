@@ -1,6 +1,6 @@
 # Todo: core
 
-> Nhật ký lịch sử: ghi lại công việc và các vòng review lúc làm. Tên cũ (`ca.exe`, `ConvertAnything`) và mã commit cũ trong đây giữ nguyên như lúc ghi; trạng thái hiện tại ở [HANDOFF.md](HANDOFF.md).
+> Nhật ký lịch sử: ghi lại công việc và các vòng review lúc làm. Mã commit trong đây giữ nguyên như lúc ghi; trạng thái hiện tại ở [HANDOFF.md](HANDOFF.md).
 
 Spec: [docs/specs/core.md](../docs/specs/core.md) · Plan: [plan.md](plan.md)
 
