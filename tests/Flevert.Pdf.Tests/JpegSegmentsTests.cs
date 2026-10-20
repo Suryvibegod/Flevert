@@ -155,6 +155,133 @@ public class JpegSegmentsTests
         Assert.Equal(TestJpeg.InsertAfterSoi(clean, icc, adobe), stripped);
     }
 
+    // JFIF APP0: "JFIF\0", version 1.02, units 1 (DPI), density 300 x 300, then the thumbnail's width and height.
+    private static readonly byte[] JfifHeader = [.. "JFIF\0"u8, 1, 2, 1, 0x01, 0x2C, 0x01, 0x2C];
+
+    public static TheoryData<string, byte[]> JfifWithExtras() => new()
+    {
+        // A 2 x 1 RGB thumbnail: it can show what was cropped out of the photo. Its colour is the secret here.
+        { "a thumbnail", TestJpeg.Segment(0xE0, [.. JfifHeader, 2, 1, 0x5E, 0xC2, 0x7A, 0x5E, 0xC2, 0x7A]) },
+        { "bytes after a 0 x 0 thumbnail", TestJpeg.Segment(0xE0, [.. JfifHeader, 0, 0, .. "SecretTrailer"u8]) },
+    };
+
+    [Theory]
+    [MemberData(nameof(JfifWithExtras))]
+    public void Keeps_the_jfif_header_but_not_its_thumbnail_or_anything_after_it(string what, byte[] app0)
+    {
+        var clean = TestJpeg.Make();
+        var jpeg = TestJpeg.ReplaceApp0(clean, app0);
+
+        var stripped = JpegSegments.Strip(jpeg).Bytes;
+
+        // The same version, units and density, with no thumbnail: 16 bytes after the marker.
+        byte[] header = [0xFF, 0xE0, 0x00, 0x10, .. JfifHeader, 0, 0];
+        Assert.True(TestJpeg.ReplaceApp0(clean, header).SequenceEqual(stripped), what);
+        Assert.Equal(-1, stripped.AsSpan().IndexOf([(byte)0x5E, (byte)0xC2, (byte)0x7A]));
+        Assert.DoesNotContain("Secret", TestJpeg.Latin1(stripped), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("JFXX\0\x10SecretJfxxThumbnail")] // JFIF extension: a thumbnail as a JPEG, palette or RGB
+    [InlineData("CIFF\0SecretOwnerNameAndSerial")] // Canon's camera data
+    [InlineData("AVI1\0SecretAvi1")]                // motion-JPEG frames
+    [InlineData("JFIF\0\x01")]                     // a JFIF header cut short
+    public void Drops_every_other_app0_segment(string payload)
+    {
+        var clean = TestJpeg.Make();
+        // After the JPEG's own JFIF APP0, as cameras write them; a second JFIF header is dropped too.
+        byte[] jpeg = [.. clean.AsSpan(0, 20), .. TestJpeg.Segment(0xE0, payload), .. TestJpeg.Segment(0xE0, clean.AsSpan(6, 14)), .. clean.AsSpan(20)];
+        Assert.Equal(0xDB, clean[21]); // control: the JFIF APP0 of an ImageMagick JPEG ends at byte 20
+
+        Assert.Equal(clean, JpegSegments.Strip(jpeg).Bytes);
+    }
+
+    [Fact]
+    public void Keeps_only_the_twelve_bytes_of_the_adobe_segment()
+    {
+        var clean = TestJpeg.Make();
+        const string Adobe = "Adobe\0\x64\0\0\0\0\x01";
+        var jpeg = TestJpeg.InsertAfterSoi(clean,
+            TestJpeg.Segment(0xEE, Adobe + "SecretAdobeTail"),
+            TestJpeg.Segment(0xEE, "Adobe\0\x64")); // too short to say anything: dropped
+
+        var stripped = JpegSegments.Strip(jpeg).Bytes;
+
+        Assert.Equal(TestJpeg.InsertAfterSoi(clean, TestJpeg.Segment(0xEE, Adobe)), stripped);
+    }
+
+    public static TheoryData<string, byte[]> MissingTables()
+    {
+        var bogusIndex = TestJpeg.Make();
+        bogusIndex[bogusIndex.AsSpan().IndexOf([(byte)0xFF, (byte)0xDB]) + 4] = 0x0F;
+        var synthetic = TestJpeg.Synthetic([0x00]);
+        var sos = synthetic.AsSpan().IndexOf([(byte)0xFF, (byte)0xDA]);
+        return new()
+        {
+            // pdfium embeds this one and renders it black (PdfBuilderTests).
+            { "no quantization table", TestJpeg.WithoutSegments(TestJpeg.Make(), 0xDB) },
+            // libjpeg falls back to the standard Huffman tables: decoders "succeed" with a warning and show garbage.
+            { "no Huffman table", TestJpeg.WithoutSegments(TestJpeg.Make(), 0xC4) },
+            { "a quantization table index past 3", bogusIndex },
+            { "a scan of a component the frame lacks", Patch(synthetic, sos + 5, 2, 1) },
+            { "a scan using Huffman tables 1", Patch(synthetic, sos + 6, 0x11, 1) },
+            { "a Huffman table claiming more codes than it holds", Patch(synthetic, synthetic.AsSpan().IndexOf([(byte)0xFF, (byte)0xC4]) + 5, 9, 1) },
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(MissingTables))]
+    public void Refuses_a_jpeg_whose_tables_are_missing_or_malformed(string what, byte[] jpeg)
+    {
+        var error = Assert.Throws<InvalidDataException>(() => JpegSegments.Strip(jpeg));
+        Assert.Contains("damaged", error.Message, StringComparison.Ordinal);
+        Assert.False(string.IsNullOrWhiteSpace(what));
+    }
+
+    [Fact]
+    public void Accepts_tables_defined_after_the_frame_header()
+    {
+        // Legal, and what TestJpeg.Synthetic does too: a table only has to come before the scan that uses it.
+        var clean = TestJpeg.Make();
+        var dqt = clean.AsSpan().IndexOf([(byte)0xFF, (byte)0xDB]);
+        var dqtEnd = dqt + 2 + ((clean[dqt + 2] << 8) | clean[dqt + 3]);
+        var sof = clean.AsSpan().IndexOf([(byte)0xFF, (byte)0xC0]);
+        var sofEnd = sof + 2 + ((clean[sof + 2] << 8) | clean[sof + 3]);
+        Assert.True(dqtEnd <= sof, "control: ImageMagick writes the quantization tables before the frame header");
+        byte[] jpeg = [.. clean.AsSpan(0, dqt), .. clean.AsSpan(dqtEnd, sofEnd - dqtEnd), .. clean.AsSpan(dqt, dqtEnd - dqt), .. clean.AsSpan(sofEnd)];
+
+        var stripped = JpegSegments.Strip(jpeg).Bytes;
+
+        Assert.Equal(jpeg, stripped);
+        Assert.True(TestJpeg.SamePixels(clean, stripped));
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 0xFF, 0x01 })]                         // TEM
+    [InlineData(new byte[] { 0xFF, 0x02, 0x00, 0x04, 0x00, 0x00 })] // reserved
+    [InlineData(new byte[] { 0xFF, 0xC8, 0x00, 0x04, 0x00, 0x00 })] // JPG, reserved for extensions
+    [InlineData(new byte[] { 0xFF, 0xDC, 0x00, 0x04, 0x00, 0x08 })] // DNL, without a frame of unknown height
+    [InlineData(new byte[] { 0xFF, 0xF7, 0x00, 0x04, 0x00, 0x00 })] // JPEG-LS frame header (JPGn)
+    [InlineData(new byte[] { 0xFF, 0xDD, 0x00, 0x05, 0x00, 0x01, 0x00 })] // DRI of the wrong length
+    public void Refuses_markers_a_photo_for_a_pdf_has_no_use_for(byte[] segment)
+    {
+        var jpeg = TestJpeg.InsertAfterSoi(TestJpeg.Make(), segment);
+
+        Assert.Throws<InvalidDataException>(() => JpegSegments.Strip(jpeg));
+    }
+
+    [Fact]
+    public void A_cmyk_jpeg_without_its_adobe_segment_is_left_to_re_encoding()
+    {
+        // pdfium writes /Decode [1 0 1 0 1 0 1 0] for every CMYK JPEG, which is right only for Adobe's inverted CMYK:
+        // without APP14 nothing says how the colours are stored.
+        var cmyk = TestJpeg.Make(configure: image => image.ColorSpace = ColorSpace.CMYK);
+
+        var error = Assert.Throws<NotSupportedException>(() => JpegSegments.Strip(TestJpeg.WithoutSegments(cmyk, 0xEE)));
+
+        Assert.Contains("CMYK", error.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Removes_metadata_between_the_scans_of_a_progressive_jpeg()
     {
@@ -281,6 +408,9 @@ public class JpegSegmentsTests
         { "12-bit samples", TestJpeg.Synthetic([0x00], sof: 0xC1, precision: 12) },
         { "two components", TestJpeg.Synthetic([0x00], components: 2) },
         { "height given later by DNL", TestJpeg.Synthetic([0x00], height: 0) },
+        { "arithmetic conditioning (DAC)", TestJpeg.InsertAfterSoi(TestJpeg.Synthetic([0x00]), TestJpeg.Segment(0xCC, [0x00, 0x10])) },
+        { "hierarchical (DHP)", TestJpeg.InsertAfterSoi(TestJpeg.Synthetic([0x00]), TestJpeg.Segment(0xDE, [8, 0, 8, 0, 16, 1, 1, 0x11, 0])) },
+        { "hierarchical (EXP)", TestJpeg.InsertAfterSoi(TestJpeg.Synthetic([0x00]), TestJpeg.Segment(0xDF, [0x11])) },
     };
 
     [Theory]
@@ -348,11 +478,10 @@ public class JpegSegmentsTests
         }
     }
 
-    private static byte[] Patch(byte[] bytes, int at, byte value)
+    private static byte[] Patch(byte[] bytes, int at, byte value, int count = 2)
     {
         var copy = (byte[])bytes.Clone();
-        copy[at] = value;
-        copy[at + 1] = value;
+        copy.AsSpan(at, count).Fill(value);
         return copy;
     }
 

@@ -34,11 +34,20 @@ internal sealed class JpegImage
 /// show (arithmetic, lossless or hierarchical coding, 12-bit samples), which can still be decoded and re-encoded.
 /// </summary>
 /// <remarks>
-/// Kept: SOI, APP0 (JFIF), APP2 holding an ICC profile, APP14 "Adobe" (it says how CMYK and YCCK colours are stored),
-/// every non-application marker (tables, frame and scan headers, restart intervals) and the entropy-coded data with its
-/// stuffed bytes and restart markers, up to EOI. Removed: COM and every other application segment, an allow-list rather
-/// than a deny-list, since cameras put metadata in many of them (APP1 EXIF and XMP, APP13 IPTC, APP3 "Meta", APP12,
-/// APP2 MPF), and everything after EOI (phones append further JPEGs there, each with its own EXIF).
+/// <para>
+/// Kept, an allow-list: SOI; the first JFIF APP0, without its thumbnail (which can show what was cropped out);
+/// APP2 holding an ICC profile; the 12 bytes of the first APP14 "Adobe" (it says how CMYK and YCCK colours are stored);
+/// the tables (DQT, DHT), frame and scan headers and restart interval (DRI); the entropy-coded data with its stuffed
+/// bytes and restart markers, up to EOI. Removed: COM and every other application segment, since cameras put metadata
+/// in many of them (APP1 EXIF and XMP, APP13 IPTC, APP3 "Meta", APP12, APP2 MPF, APP0 JFXX thumbnails and Canon CIFF),
+/// and everything after EOI (phones append further JPEGs there, each with its own EXIF). Any other marker fails.
+/// </para>
+/// <para>
+/// pdfium only reads a JPEG's header before embedding it, and libjpeg decodes a JPEG whose tables are missing with
+/// defaults (no quantization: black; no Huffman table: the standard ones, garbage for an optimized JPEG). So every
+/// table a scan uses must be defined before it, or the JPEG is refused as damaged (<see cref="InvalidDataException"/>):
+/// re-encoding would only turn the garbage into pixels.
+/// </para>
 /// </remarks>
 internal static class JpegSegments
 {
@@ -48,12 +57,24 @@ internal static class JpegSegments
     private const byte Soi = 0xD8;
     private const byte Eoi = 0xD9;
     private const byte Sos = 0xDA;
+    private const byte Dqt = 0xDB;
+    private const byte Dht = 0xC4;
+    private const byte Dri = 0xDD;
+    private const byte Dac = 0xCC;
+    private const byte Dhp = 0xDE;
+    private const byte Exp = 0xDF;
     private const byte App0 = 0xE0;
+    private const byte App1 = 0xE1;
     private const byte App2 = 0xE2;
     private const byte App14 = 0xEE;
     private const byte App15 = 0xEF;
     private const byte Com = 0xFE;
-    private const byte App1 = 0xE1;
+
+    /// <summary>"JFIF\0", version, units, X and Y density, then the thumbnail's width and height.</summary>
+    private const int JfifHeaderLength = 14;
+
+    /// <summary>"Adobe", version, two flag words and the colour transform.</summary>
+    private const int AdobeLength = 12;
 
     /// <inheritdoc cref="Strip(ReadOnlySpan{byte}, int)"/>
     public static JpegImage Strip(ReadOnlySpan<byte> jpeg) => Strip(jpeg, MaxBytes);
@@ -84,9 +105,12 @@ internal static class JpegSegments
         Copy(jpeg[..2]);
         var pos = 2;
         var orientation = 0; // not seen yet
-        (int Width, int Height)? frame = null;
+        Frame? frame = null;
         var scans = 0;
         var inScan = false;
+        var jfif = false;
+        var adobe = false;
+        var tables = new Tables();
 
         while (true)
         {
@@ -140,9 +164,9 @@ internal static class JpegSegments
                     if (scans == 0)
                         throw new InvalidDataException("The JPEG holds no image data.");
                     Copy(jpeg[markerStart..pos]);
-                    return new JpegImage(output[..written], frame!.Value.Width, frame.Value.Height, orientation == 0 ? 1 : orientation);
-                case 0x01 or (>= 0xD0 and <= 0xD7):
-                    Copy(jpeg[markerStart..pos]); // TEM and RSTn stand alone, without a length
+                    return new JpegImage(output[..written], frame!.Width, frame.Height, orientation == 0 ? 1 : orientation);
+                case >= 0xD0 and <= 0xD7:
+                    Copy(jpeg[markerStart..pos]); // RSTn stands alone, without a length
                     continue;
             }
 
@@ -156,45 +180,92 @@ internal static class JpegSegments
                 throw Truncated();
             var payload = jpeg[(pos + 2)..end];
 
-            if (marker == App1 && orientation == 0 && payload.StartsWith("Exif\0\0"u8))
-                orientation = ReadOrientation(payload[6..]);
-            if (IsFrameHeader(marker))
+            switch (marker)
             {
-                if (frame is not null)
-                    throw new NotSupportedException("The JPEG holds several frames, which PDF viewers cannot show.");
-                frame = ReadFrame(marker, payload);
+                case App0:
+                    // Only the first JFIF header, and never its thumbnail: copied as it is when it has none.
+                    if (!jfif && payload.Length >= JfifHeaderLength && payload.StartsWith("JFIF\0"u8))
+                    {
+                        jfif = true;
+                        if (payload.Length == JfifHeaderLength && payload[12] == 0 && payload[13] == 0)
+                            Copy(jpeg[markerStart..end]);
+                        else
+                            Copy([0xFF, App0, 0, JfifHeaderLength + 2, .. payload[..12], 0, 0]);
+                    }
+
+                    break;
+                case App1:
+                    if (orientation == 0 && payload.StartsWith("Exif\0\0"u8))
+                        orientation = ReadOrientation(payload[6..]);
+                    break;
+                case App2:
+                    if (payload.StartsWith("ICC_PROFILE\0"u8))
+                        Copy(jpeg[markerStart..end]);
+                    break;
+                case App14:
+                    if (!adobe && payload.Length >= AdobeLength && payload.StartsWith("Adobe"u8))
+                    {
+                        adobe = true;
+                        Copy([0xFF, App14, 0, AdobeLength + 2, .. payload[..AdobeLength]]);
+                    }
+
+                    break;
+                case (> App2 and <= App15) or Com:
+                    break; // metadata
+                case Dqt:
+                    tables.ReadQuantization(payload);
+                    Copy(jpeg[markerStart..end]);
+                    break;
+                case Dht:
+                    tables.ReadHuffman(payload);
+                    Copy(jpeg[markerStart..end]);
+                    break;
+                case Dri:
+                    if (payload.Length != 2)
+                        throw new InvalidDataException("The JPEG is damaged: its restart interval has the wrong length.");
+                    Copy(jpeg[markerStart..end]);
+                    break;
+                case Sos:
+                    if (frame is null)
+                        throw new InvalidDataException("The JPEG is damaged: its image data comes before its frame header.");
+                    if (frame.Components.Length == 4 && !adobe)
+                    {
+                        // pdfium writes /Decode [1 0 1 0 1 0 1 0] for every CMYK JPEG, right only for Adobe's inverted CMYK.
+                        throw new NotSupportedException("The JPEG is CMYK without the Adobe marker that says how its colours are stored.");
+                    }
+
+                    tables.CheckScan(payload, frame);
+                    scans++;
+                    inScan = true;
+                    Copy(jpeg[markerStart..end]);
+                    break;
+                case Dac:
+                    throw new NotSupportedException("The JPEG uses arithmetic coding, which PDF viewers cannot show.");
+                case Dhp or Exp:
+                    throw new NotSupportedException("The JPEG is hierarchical, which PDF viewers cannot show.");
+                case var _ when IsFrameHeader(marker):
+                    if (frame is not null)
+                        throw new NotSupportedException("The JPEG holds several frames, which PDF viewers cannot show.");
+                    frame = ReadFrame(marker, payload);
+                    Copy(jpeg[markerStart..end]);
+                    break;
+                default:
+                    throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture,
+                        $"The JPEG is damaged or unusual: it holds marker FF{marker:X2}, which has no place in a photo."));
             }
 
-            if (marker == Sos)
-            {
-                if (frame is null)
-                    throw new InvalidDataException("The JPEG is damaged: its image data comes before its frame header.");
-                scans++;
-                inScan = true;
-            }
-
-            if (Keep(marker, payload))
-                Copy(jpeg[markerStart..end]);
             pos = end;
         }
     }
 
-    private static bool Keep(byte marker, ReadOnlySpan<byte> payload) => marker switch
-    {
-        App0 => true,
-        App2 => payload.StartsWith("ICC_PROFILE\0"u8),
-        App14 => payload.StartsWith("Adobe"u8),
-        >= App0 and <= App15 => false,
-        Com => false,
-        _ => true,
-    };
-
     private static bool IsRestart(byte marker) => marker is >= 0xD0 and <= 0xD7;
 
     // SOF0 to SOF15, except DHT (C4), JPG (C8) and DAC (CC), which share the range.
-    private static bool IsFrameHeader(byte marker) => marker is >= 0xC0 and <= 0xCF and not (0xC4 or 0xC8 or 0xCC);
+    private static bool IsFrameHeader(byte marker) => marker is >= 0xC0 and <= 0xCF and not (Dht or 0xC8 or Dac);
 
-    private static (int Width, int Height) ReadFrame(byte marker, ReadOnlySpan<byte> payload)
+    private sealed record Frame(int Width, int Height, bool Progressive, (byte Id, byte Table)[] Components);
+
+    private static Frame ReadFrame(byte marker, ReadOnlySpan<byte> payload)
     {
         // Baseline, extended and progressive Huffman coding are what PDF's DCTDecode and its viewers support.
         if (marker is not (0xC0 or 0xC1 or 0xC2))
@@ -204,21 +275,99 @@ internal static class JpegSegments
                 : "The JPEG is lossless or hierarchical, which PDF viewers cannot show.");
         }
 
-        if (payload.Length < 6 || payload.Length < 6 + (3 * payload[5]))
-            throw new InvalidDataException("The JPEG is damaged: its frame header is too short.");
+        if (payload.Length < 6 || payload.Length != 6 + (3 * payload[5]))
+            throw new InvalidDataException("The JPEG is damaged: its frame header has the wrong length.");
         var precision = payload[0];
         var height = BinaryPrimitives.ReadUInt16BigEndian(payload[1..]);
         var width = BinaryPrimitives.ReadUInt16BigEndian(payload[3..]);
-        var components = payload[5];
+        var count = payload[5];
         if (width == 0)
             throw new InvalidDataException("The JPEG is damaged: its width is zero.");
         if (precision != 8)
             throw new NotSupportedException("The JPEG stores more than 8 bits per sample, which PDF viewers cannot show.");
-        if (components is not (1 or 3 or 4))
+        if (count is not (1 or 3 or 4))
             throw new NotSupportedException("The JPEG has neither 1, 3 nor 4 colour components.");
         if (height == 0)
             throw new NotSupportedException("The JPEG gives its height only after the image data, which PDF viewers cannot show.");
-        return (width, height);
+
+        var components = new (byte Id, byte Table)[count];
+        for (var i = 0; i < count; i++)
+        {
+            var table = payload[6 + (3 * i) + 2];
+            if (table > 3)
+                throw new InvalidDataException("The JPEG is damaged: its frame header names a quantization table past 3.");
+            components[i] = (payload[6 + (3 * i)], table);
+        }
+
+        return new Frame(width, height, marker == 0xC2, components);
+    }
+
+    /// <summary>Which quantization and Huffman tables have been defined so far (four of each kind, as libjpeg allows).</summary>
+    private sealed class Tables
+    {
+        private readonly bool[] _quantization = new bool[4];
+        private readonly bool[] _dc = new bool[4];
+        private readonly bool[] _ac = new bool[4];
+
+        public void ReadQuantization(ReadOnlySpan<byte> payload)
+        {
+            while (!payload.IsEmpty)
+            {
+                var (precision, table) = (payload[0] >> 4, payload[0] & 0x0F);
+                var size = precision == 0 ? 64 : 128; // 8-bit or 16-bit values
+                if (precision > 1 || table > 3 || payload.Length < 1 + size)
+                    throw new InvalidDataException("The JPEG is damaged: a quantization table is malformed.");
+                _quantization[table] = true;
+                payload = payload[(1 + size)..];
+            }
+        }
+
+        public void ReadHuffman(ReadOnlySpan<byte> payload)
+        {
+            while (!payload.IsEmpty)
+            {
+                if (payload.Length < 17)
+                    throw MalformedHuffman();
+                var (kind, table) = (payload[0] >> 4, payload[0] & 0x0F);
+                var codes = 0;
+                foreach (var count in payload[1..17])
+                    codes += count;
+                if (kind > 1 || table > 3 || codes > 256 || payload.Length < 17 + codes)
+                    throw MalformedHuffman();
+                (kind == 0 ? _dc : _ac)[table] = true;
+                payload = payload[(17 + codes)..];
+            }
+        }
+
+        /// <summary>
+        /// Checks a scan header against the frame and the tables defined before it. A sequential scan decodes with both
+        /// Huffman tables of each component; a progressive DC scan with its DC table (none when refining), an AC scan
+        /// with its AC table.
+        /// </summary>
+        public void CheckScan(ReadOnlySpan<byte> payload, Frame frame)
+        {
+            if (payload.IsEmpty || payload[0] is < 1 or > 4 || payload.Length != 1 + (2 * payload[0]) + 3)
+                throw new InvalidDataException("The JPEG is damaged: a scan header has the wrong length.");
+            var count = payload[0];
+            var spectralStart = payload[1 + (2 * count)];
+            var refining = payload[3 + (2 * count)] >> 4 != 0;
+            var needsDc = !frame.Progressive || (spectralStart == 0 && !refining);
+            var needsAc = !frame.Progressive || spectralStart != 0;
+            for (var i = 0; i < count; i++)
+            {
+                var id = payload[1 + (2 * i)];
+                var index = Array.FindIndex(frame.Components, component => component.Id == id);
+                if (index < 0)
+                    throw new InvalidDataException("The JPEG is damaged: a scan names a colour component its frame does not have.");
+                if (!_quantization[frame.Components[index].Table])
+                    throw new InvalidDataException("The JPEG is damaged: it uses a quantization table it never defines.");
+                var (dc, ac) = (payload[2 + (2 * i)] >> 4, payload[2 + (2 * i)] & 0x0F);
+                if ((needsDc && (dc > 3 || !_dc[dc])) || (needsAc && (ac > 3 || !_ac[ac])))
+                    throw new InvalidDataException("The JPEG is damaged: it uses a Huffman table it never defines.");
+            }
+        }
+
+        private static InvalidDataException MalformedHuffman() => new("The JPEG is damaged: a Huffman table is malformed.");
     }
 
     /// <summary>The Orientation tag (0x0112) of IFD0 in a TIFF structure; 1 when missing, damaged or out of range.</summary>

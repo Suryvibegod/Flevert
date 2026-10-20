@@ -181,9 +181,8 @@ public sealed class PdfBuilderTests : IDisposable
         var good = TestJpeg.Make();
         var damaged = damage switch
         {
-            // Structurally sound, so JpegSegments accepts it, but libjpeg refuses the quantization table's index.
-            "bogus DQT index" => JpegSegments.Strip(WithByte(good, good.AsSpan().IndexOf([(byte)0xFF, (byte)0xDB]) + 4, 0x0F)),
-            // The rest would not get through JpegSegments, but the builder must not count on it.
+            // None of these gets through JpegSegments, but the builder must not count on it: libjpeg refuses each header.
+            "bogus DQT index" => new JpegImage(WithByte(good, good.AsSpan().IndexOf([(byte)0xFF, (byte)0xDB]) + 4, 0x0F), 96, 64, 1),
             "not a JPEG" => new JpegImage("not a jpeg at all"u8.ToArray(), 96, 64, 1),
             "cut before SOF" => new JpegImage(good[..good.AsSpan().IndexOf([(byte)0xFF, (byte)0xC0])], 96, 64, 1),
             _ => new JpegImage(good[..good.AsSpan().IndexOf([(byte)0xFF, (byte)0xDA])], 96, 64, 1),
@@ -204,12 +203,12 @@ public sealed class PdfBuilderTests : IDisposable
     }
 
     [Fact]
-    public void A_jpeg_without_quantization_tables_gets_past_pdfium_so_the_operation_must_check_it()
+    public void A_jpeg_without_quantization_tables_gets_past_pdfium_so_the_tables_are_checked_before()
     {
         // pdfium only reads the header (libjpeg's jpeg_read_header), which does not need the tables until decoding: the
-        // page is embedded and renders black. A full decode refuses it ("Quantization table 0x00 was not defined"), an
-        // ImageMagick ping does not; pdf.from-images has to check before it hands JPEGs to the builder (tasks/pdf/todo.md).
-        var jpeg = JpegSegments.Strip(WithoutSegments(TestJpeg.Make(), 0xDB));
+        // page is embedded and renders black. JpegSegments refuses such a JPEG (its tests), so the builder is given it
+        // directly here, to show that the check has to happen before the builder.
+        var jpeg = new JpegImage(TestJpeg.WithoutSegments(TestJpeg.Make(), 0xDB), 96, 64, 1);
 
         var path = Build(builder => builder.AddJpegPage(jpeg));
 
@@ -430,23 +429,6 @@ public sealed class PdfBuilderTests : IDisposable
         var copy = (byte[])bytes.Clone();
         copy[index] = value;
         return copy;
-    }
-
-    /// <summary><paramref name="jpeg"/> without any of its <paramref name="marker"/> segments, found before the scan.</summary>
-    private static byte[] WithoutSegments(byte[] jpeg, byte marker)
-    {
-        var result = new List<byte>(jpeg);
-        for (var at = 2; result[at + 1] != 0xDA;)
-        {
-            var length = (result[at + 2] << 8) | result[at + 3];
-            if (result[at + 1] == marker)
-                result.RemoveRange(at, length + 2);
-            else
-                at += length + 2;
-        }
-
-        Assert.NotEqual(jpeg.Length, result.Count);
-        return [.. result];
     }
 
     /// <summary>The document's Info, its catalog's keys and the first part of its /ID, as qpdf reads them.</summary>
