@@ -39,14 +39,15 @@ public sealed class BatchSummaryTests
 
     [Theory]
     [InlineData(850_000, "850 KB")]
-    [InlineData(999_499, "999 KB")]
+    [InlineData(999_999, "999 KB")]
     [InlineData(1_000_000, "1 MB")]
-    [InlineData(9_870_000, "9.9 MB")]
+    [InlineData(9_870_000, "9.8 MB")]
     [InlineData(24_301_000, "24.3 MB")]
-    [InlineData(99_940_000, "99.9 MB")]
-    [InlineData(412_345_678, "412 MB")]
-    [InlineData(1_234_000_000, "1.2 GB")]
-    public void Sizes_are_written_in_megabytes_of_a_million_bytes(long bytes, string text)
+    [InlineData(24_960_000, "24.9 MB")] // under 25 MB, and it must read so
+    [InlineData(99_999_999, "99.9 MB")]
+    [InlineData(412_945_678, "412 MB")]
+    [InlineData(1_299_000_000, "1.2 GB")]
+    public void Sizes_are_written_in_megabytes_of_a_million_bytes_rounded_down(long bytes, string text)
     {
         Assert.Equal(text, BatchSummary.SizeText(bytes));
     }

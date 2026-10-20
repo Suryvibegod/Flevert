@@ -96,13 +96,14 @@ public sealed record BatchSummary(string Text, bool HasFailures, bool ShowsLog)
 
     /// <summary>
     /// A size as people read it, 1 MB being 1 000 000 bytes as everywhere in Flevert: "850 KB", "24.3 MB", "412 MB",
-    /// "1.2 GB" (one decimal below 100, none above).
+    /// "1.2 GB" (one decimal below 100, none above). Always rounded down, so a file of 24 960 000 bytes made to be under
+    /// 25 MB never reads "25 MB" (doubt-driven review, DD-8).
     /// </summary>
     public static string SizeText(long bytes) => bytes switch
     {
-        < 999_500 => string.Create(CultureInfo.InvariantCulture, $"{Math.Round(bytes / 1e3, MidpointRounding.AwayFromZero):0} KB"),
-        < 99_950_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e6:0.#} MB"),
-        < 999_500_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e6:0} MB"),
-        _ => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1e9:0.#} GB"),
+        < 1_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1_000} KB"),
+        < 100_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 100_000 / 10.0:0.#} MB"),
+        < 1_000_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1_000_000} MB"),
+        _ => string.Create(CultureInfo.InvariantCulture, $"{bytes / 100_000_000 / 10.0:0.#} GB"),
     };
 }
