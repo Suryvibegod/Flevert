@@ -376,8 +376,50 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 - [ ] README: bảng menu thêm Combine into PDF và ghi HEIC/HEIF không còn Convert > GIF (giới hạn 16 mục của Explorer) — làm cùng T20.
 
 ### T18: Hardening input độc
-- [ ] Fixture: bom nén, vòng tham chiếu object, 100 000 trang rỗng, trang khổng lồ, xref hỏng, file không phải PDF đổi đuôi → bị từ chối hoặc xử lý trong ≤ 10 s, bộ nhớ trong `MemoryBudget`
-- [ ] PDF có chữ ký số: thông báo nói chữ ký không còn hợp lệ ở output
+- [x] Fixture: bom nén, vòng tham chiếu object, 100 000 trang rỗng, trang khổng lồ, xref hỏng, file không phải PDF đổi đuôi → bị từ chối hoặc xử lý trong ≤ 10 s, bộ nhớ trong trần job (qpdf, worker)
+- [x] PDF có chữ ký số: thông báo nói chữ ký không còn hợp lệ ở output
+- [x] (Audit bảo mật cuối, Low) ngân sách thời gian cả file cho worker pdfium
+- Đã làm (2026-10-21, nhánh `worktree-agent-a1ac3f3e933f441cb`, 3 commit code + 1 docs): `MaliciousPdf` (31 fixture sinh lúc chạy, chỉ thư viện chuẩn .NET; README fixtures), `PdfHardeningTests` (31 × rotate/split/merge/to-png/to-jpg = 155 ca: kết quả, ≤ 10 s, không còn gì trong thư mục, không worker sót, không chạy launch action), `PdfSignatureTests`, test mới trong `QpdfTests`, `PdfWorkerTests`, `FlevertExeTests` (một `flevert.exe` với 5 PDF độc + 1 tốt + 1 ký số: chủ lô thoát 1, file tốt xoay xong, log nêu lý do từng file và ghi chú chữ ký).
+  - **Sửa** (mỗi cái có test đỏ trước, lần chạy đỏ: 22/165): qpdf `--show-npages` chỉ đọc `/Count` → đếm bằng `--show-pages` (dừng ở trang 2 001), giới hạn 2 000 trang cho xoay/merge (tổng)/split (`count-lie-low` split trước đây: 100 000 file, `TimeoutException` thô sau 131 s); `--stream-data=preserve` cho xoay/merge/split (bom hai lớp Flate 15–20 s → 0,1–0,2 s; `--decode-level=none` một mình vẫn 16 s); handler mã hóa lạ → `UnsupportedEncryption`; timeout qpdf → `TooSlow`, mã thoát lạ (crash) → `ReaderFailed` (test bằng `whoami.exe` thay qpdf, thoát 1); ghi chú chữ ký qua `OutputNote` (core, commit riêng; test song song: đột biến AsyncLocal → biến tĩnh làm test đỏ); ngân sách worker 60 s + 2 s/trang (test 6 trang ~1 s/trang dưới ngân sách thử 1 s + 0,1 s/trang: đỏ "No exception was thrown" rồi xanh; đối chứng với ngân sách sản phẩm xanh).
+  - **Đối chứng cho ca xanh ngay**: đột biến trần bộ nhớ worker 16 GB → 3 ca bom render đỏ (`ReaderFailed` sau 5–7 s thay vì `NeedsTooMuchMemory`); bỏ `KILL_ON_JOB_CLOSE` → test giết `flevert.exe` (đầu vào mới: một triệu object, ~13 s qpdf; tìm qpdf có `--rotate`, không phải qpdf đếm trang) đỏ; launch action: test đối chứng chạy đúng lệnh của PDF bằng tay → file đánh dấu xuất hiện. Ca from-images (PDF/zip đổi tên .jpg/.png, file rỗng) xanh ngay: bảo vệ có sẵn (định dạng theo chữ ký + policy Magick), test ghim file bị nêu và thông báo.
+  - Thời gian (máy dev, test chạy trong tiến trình, giây; worker gồm khởi động tiến trình):
+
+| Fixture | Rotate | Split | Merge | To PNG | To JPG |
+|---|---|---|---|---|---|
+| `bomb-content` | ok 0.0 | ok 0.1 | ok 0.2 | NeedsTooMuchMemory 1.2 | NeedsTooMuchMemory 1.2 |
+| `bomb-double-flate` | ok 0.2 | ok 0.2 | ok 0.1 | ok 0.2 | ok 0.2 |
+| `bomb-double-flate-content` | ok 0.2 | ok 0.1 | ok 0.1 | NeedsTooMuchMemory 0.9 | NeedsTooMuchMemory 0.9 |
+| `bomb-image` | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.3 | ok 0.2 |
+| `bomb-object-stream` | NeedsTooMuchMemory 0.5 | NeedsTooMuchMemory 0.7 | NeedsTooMuchMemory 0.5 | NeedsTooMuchMemory 0.9 | NeedsTooMuchMemory 1.2 |
+| `count-lie-high` | ok 0.1 | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.2 |
+| `count-lie-low` | TooManyPages 2.7 | TooManyPages 2.7 | TooManyPages 3.2 | ok 0.3 (pdfium tin /Count: 1 trang) | ok 0.3 |
+| `cycle-kids-loop` | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.0 | ok 0.3 | ok 0.2 |
+| `cycle-kids-self` | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.0 | DamagedPage 0.1 | DamagedPage 0.1 |
+| `cycle-parent` | ok 0.0 | ok 0.0 | ok 0.1 | ok 0.5 | ok 0.2 |
+| `cycle-self-reference` | ok 0.0 | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.2 |
+| `deep-page-tree` | NotPdf 0.1 | NotPdf 0.1 | NotPdf 0.1 | DamagedPage 0.2 | DamagedPage 0.2 |
+| `encrypt-unknown-handler` | UnsupportedEncryption 0.0 | UnsupportedEncryption 0.0 | UnsupportedEncryption 0.2 | UnsupportedEncryption 0.1 | UnsupportedEncryption 0.1 |
+| `header-only` | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.2 | NotPdf 0.1 | NotPdf 0.1 |
+| `launch-action` | ok 0.1 | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.2 |
+| `many-objects` (300 000) | ok 4.2 | ok 0.7 | ok 0.6 | ok 0.5 | ok 0.4 |
+| `nested-arrays` | ok 0.1 | ok 0.1 | ok 0.1 | ok 0.3 | ok 0.2 |
+| `nested-dictionaries` | ok 0.3 | ok 0.3 | ok 0.2 | ok 0.2 | ok 0.2 |
+| `not-pdf-empty` | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.1 |
+| `not-pdf-png` | NotPdf 0.0 | NotPdf 0.2 | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.1 |
+| `not-pdf-zip` | NotPdf 0.1 | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.1 |
+| `page-giant` | ok 0.0 | ok 0.1 | ok 0.1 | ok 3.3 | ok 1.4 |
+| `page-inverted` | ok 0.1 | ok 0.1 | ok 0.1 | ok 2.8 | ok 1.5 |
+| `page-zero` | ok 0.0 | ok 0.0 | ok 0.1 | ok 0.2 | ok 0.2 |
+| `pages-100000` | TooManyPages 2.8 | TooManyPages 2.7 | TooManyPages 2.7 | TooManyPages 0.1 | TooManyPages 0.2 |
+| `pages-2001` | TooManyPages 0.1 | TooManyPages 0.1 | TooManyPages 0.1 | TooManyPages 0.1 | TooManyPages 0.1 |
+| `signed` | ok + ghi chú 0.0 | ok + ghi chú 0.1 | ok + ghi chú 0.1 | ok 0.2 | ok 0.2 |
+| `startxref-past-end` | ok 0.3 | ok 0.1 | ok 0.1 | ok 0.4 | ok 0.3 |
+| `truncated` | ok 0.0 (qpdf sửa) | ok 0.1 | ok 0.1 | NotPdf 0.1 | NotPdf 0.1 |
+| `xref-missing` | ok 0.0 (qpdf sửa) | ok 0.1 | ok 0.5 | NotPdf 0.1 | NotPdf 0.2 |
+| `xref-wrong-offsets` | ok 0.0 | ok 0.0 | ok 0.1 | ok 0.4 | ok 0.2 |
+
+  - Ngoài 10 s (spec cho phép: việc thật tỉ lệ với cỡ, dưới timeout qpdf 2 phút + 1 s/MB): PDF một triệu object (53 MB) xoay ~13 s; không có trong bảng, dùng làm đầu vào chậm cho test hủy/giết.
+  - **Còn mở**: (1) T12/T13/T14 (agent song song) phải gọi `Qpdf.CountPagesAsync` và `PdfSignature`/`OutputNote` cho thao tác ghi PDF mới, và `--stream-data=preserve` khi không cần nén (compress cố ý giải nén: bom hai lớp Flate sẽ tốn ~15 s, cần giới hạn riêng); unlock không đếm trang được khi chưa có mật khẩu. (2) DD-M7 (mã thoát 3 sau khi qpdf sửa file hỏng: không báo "repaired") chưa làm. (3) R13/R15/R9 (symlink treo, FAT/SMB, USN) vẫn hoãn: máy này không tạo được symlink (cần Developer Mode). (4) SA-L1 (giới hạn tổng byte ảnh khi PDF → ảnh) chưa làm. (5) Ghi chú chữ ký dựa vào khóa `/ByteRange` trong byte file (khóa viết bằng `#` thoát bị bỏ sót). (6) pdfium tin `/Count` thấp: `count-lie-low` ra 1 ảnh (giới hạn công việc vẫn đúng). (7) Chưa chạy qua menu thật (bước verify trước T20).
 
 ### T19: Nâng cấp từ 0.1.0
 - [x] `test-installer.ps1`: cài 0.1.0 (tải từ Releases, kiểm SHA256 `aa85392b…92e3`) rồi cài 0.2.0 đè; giữ lựa chọn menu cổ điển và kiểm cập nhật; menu có mục PDF; gỡ sạch (viết xong; **maintainer chạy thật** cùng lệnh ở T4)
