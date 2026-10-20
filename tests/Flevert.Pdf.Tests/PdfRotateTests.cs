@@ -248,9 +248,9 @@ public sealed class PdfRotateTests : IDisposable
     [Fact]
     public async Task Cancelling_stops_qpdf_and_leaves_no_partial_file()
     {
-        // About 5 s of qpdf work: long enough to cancel in the middle.
+        // About 13 s of qpdf work in few pages (the page limit refuses many pages): long enough to cancel in the middle.
         var input = _dir.Combine("big.pdf");
-        WriteBlank(input, 200_000, resources: true);
+        MaliciousPdf.WriteManyObjects(input, 1_000_000);
         using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
         var timer = System.Diagnostics.Stopwatch.StartNew();
 

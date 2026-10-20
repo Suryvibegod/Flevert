@@ -184,10 +184,13 @@ public sealed class PdfDocument : IDisposable
     private static PdfException LoadError(uint error) => error switch
     {
         PdfiumNative.ErrPassword => new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage),
-        PdfiumNative.ErrSecurity => new PdfException(PdfError.UnsupportedEncryption, "This PDF is protected by an encryption Flevert cannot open."),
+        PdfiumNative.ErrSecurity => new PdfException(PdfError.UnsupportedEncryption, UnsupportedEncryptionMessage),
         PdfiumNative.ErrFile => new PdfException(PdfError.Unreadable, "The PDF could not be read from disk."),
         _ => new PdfException(PdfError.NotPdf, NotPdfMessage),
     };
+
+    /// <summary>The same words from pdfium and qpdf for a PDF encrypted in a way neither reads (an unknown security handler).</summary>
+    internal const string UnsupportedEncryptionMessage = "This PDF is protected by an encryption Flevert cannot open.";
 
     /// <summary>The same words from pdfium and qpdf for a file that does not open as a PDF.</summary>
     internal const string NotPdfMessage = "This file is not a PDF, or it is damaged.";

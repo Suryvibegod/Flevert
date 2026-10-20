@@ -253,7 +253,7 @@ public sealed class PdfSplitTests : IDisposable
         var ex = await Assert.ThrowsAsync<PdfException>(() => Op().RunAsync(input, CancellationToken.None));
 
         Assert.Equal(PdfError.TooManyPages, ex.Error);
-        Assert.Equal("This PDF has 2001 pages; Flevert works with at most 2000.", ex.Message);
+        Assert.Equal("This PDF has more than 2000 pages; Flevert works with at most 2000.", ex.Message);
         Assert.Equal(["huge.pdf"], Entries(_dir.Path));
     }
 

@@ -30,15 +30,43 @@ public sealed class PdfMerge : IBatchOperation
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
 
-    public Task<string> RunAsync(IReadOnlyList<string> inputPaths, IProgress<FileProgress>? progress, CancellationToken ct)
+    public async Task<string> RunAsync(IReadOnlyList<string> inputPaths, IProgress<FileProgress>? progress, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(inputPaths);
         // Names no file: the selection is what is wrong, not the one PDF in it.
         if (inputPaths.Count < 2)
             throw new BatchInputException(NeedsTwoMessage);
 
+        // The merged PDF is a PDF like any other, so at most PdfDocument.MaxPages in all (T18). Each input is counted on its
+        // own, so one that cannot be used is named.
+        var total = 0;
+        var signed = false;
+        foreach (var input in inputPaths)
+        {
+            try
+            {
+                total += await _qpdf.CountPagesAsync(input, ct).ConfigureAwait(false);
+            }
+            catch (PdfException e)
+            {
+                throw BatchInputException.ForInput(input, e.Message, e);
+            }
+
+            signed |= await PdfSignature.IsSignedAsync(input, ct).ConfigureAwait(false);
+        }
+
+        if (total > PdfDocument.MaxPages)
+        {
+            throw new PdfException(PdfError.TooManyPages, string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"Together these PDFs have {total} pages; Flevert makes PDFs of at most {PdfDocument.MaxPages}."));
+        }
+
         var first = inputPaths[0];
         var desired = Path.Combine(Path.GetDirectoryName(first)!, Path.GetFileNameWithoutExtension(first) + " (merged).pdf");
-        return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _qpdf.MergeAsync(inputPaths, temp, token), ct);
+        var output = await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _qpdf.MergeAsync(inputPaths, temp, token), ct)
+            .ConfigureAwait(false);
+        if (signed)
+            OutputNote.Add(PdfSignature.NotValidNote);
+        return output;
     }
 }

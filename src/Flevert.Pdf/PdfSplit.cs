@@ -53,19 +53,19 @@ public sealed class PdfSplit : IOperation
 
     public async Task<string> RunAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
     {
+        // Refuses more than PdfDocument.MaxPages, walking the page tree (a /Count may lie).
         var total = await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
         if (total == 0)
             throw new PdfException(PdfError.NoPages, "This PDF has no pages.");
-        if (total > PdfDocument.MaxPages)
-        {
-            throw new PdfException(PdfError.TooManyPages, string.Create(CultureInfo.InvariantCulture,
-                $"This PDF has {total} pages; Flevert works with at most {PdfDocument.MaxPages}."));
-        }
+        var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);
 
         var stem = Path.GetFileNameWithoutExtension(inputPath);
         var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, stem + FolderSuffix);
-        return await OutputPath.WriteDirectoryAtomicallyAsync(desired, FolderSuffix,
+        var output = await OutputPath.WriteDirectoryAtomicallyAsync(desired, FolderSuffix,
             (folder, token) => SplitIntoAsync(inputPath, folder, stem, total, progress, token), ct).ConfigureAwait(false);
+        if (signed)
+            OutputNote.Add(PdfSignature.NotValidNote);
+        return output;
     }
 
     private async Task SplitIntoAsync(string inputPath, string folder, string stem, int total, IProgress<FileProgress>? progress, CancellationToken ct)

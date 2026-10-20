@@ -39,11 +39,19 @@ public sealed class PdfRotate : IOperation
     // by Qpdf.MaxMemoryFor (1 GB for a PDF under about 300 MB), so four ordinary PDFs at once stay within 4 GB.
     public int MaxParallel => 4;
 
-    public Task<string> RunAsync(string inputPath, CancellationToken ct)
+    public async Task<string> RunAsync(string inputPath, CancellationToken ct)
     {
+        // At most 2 000 pages, like every PDF operation (T18); qpdf walks the page tree, whatever /Count says.
+        await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
+        var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);
+
         var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + " (rotated).pdf");
         // "+" turns relative to each page's current /Rotate; "1-z" is every page.
         var rotate = string.Create(CultureInfo.InvariantCulture, $"--rotate=+{_degrees}:1-z");
-        return OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _qpdf.TransformAsync(inputPath, temp, [rotate], token), ct);
+        var output = await OutputPath.WriteAtomicallyAsync(desired,
+            (temp, token) => _qpdf.TransformAsync(inputPath, temp, [Qpdf.KeepStreamsAsTheyAre, rotate], token), ct).ConfigureAwait(false);
+        if (signed)
+            OutputNote.Add(PdfSignature.NotValidNote);
+        return output;
     }
 }

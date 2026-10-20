@@ -152,20 +152,50 @@ public sealed class Qpdf
     {
         ArgumentNullException.ThrowIfNull(inputPaths);
         ArgumentOutOfRangeException.ThrowIfLessThan(inputPaths.Count, 2, nameof(inputPaths));
-        var run = await RunCheckedAsync(["--empty", "--pages"], inputPaths, [.. inputPaths, EndOfPages, outputPath], outputPath, ct)
+        var run = await RunCheckedAsync([KeepStreamsAsTheyAre, "--empty", "--pages"], inputPaths, [.. inputPaths, EndOfPages, outputPath], outputPath, ct)
             .ConfigureAwait(false);
         RequireOutput(run, outputPath);
     }
 
-    /// <summary>The number of pages qpdf reads in the PDF (<c>qpdf --show-npages</c>).</summary>
-    /// <exception cref="PdfException">As for <see cref="TransformAsync"/>.</exception>
+    /// <summary>
+    /// The number of pages qpdf finds in the PDF's page tree, refusing a PDF with more than
+    /// <see cref="PdfDocument.MaxPages"/> (docs/specs/pdf.md: every operation works on at most 2 000 pages).
+    /// </summary>
+    /// <remarks>
+    /// <c>--show-npages</c> only prints the root's <c>/Count</c>, which a PDF may set to anything (T18: 100 000 pages under
+    /// a /Count of 1 went through, and split then wrote 100 000 files before failing). <c>--show-pages</c> walks the
+    /// tree as every other qpdf operation does, and prints a <c>page n: …</c> line for each page; qpdf is stopped at the
+    /// first page past the limit, and a tree with a loop, or nested too deep, fails as damaged.
+    /// </remarks>
+    /// <exception cref="PdfException">
+    /// As for <see cref="TransformAsync"/>, and <see cref="PdfError.TooManyPages"/> past the limit.
+    /// </exception>
     public async Task<int> CountPagesAsync(string inputPath, CancellationToken ct)
     {
-        var run = await RunCheckedAsync(["--show-npages"], [inputPath], [inputPath], null, ct).ConfigureAwait(false);
-        return int.TryParse(run.StandardOutput.AsSpan().Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var pages)
-            ? pages
-            : throw new QpdfException(run.ExitCode, $"it printed no page count. {Detail(run)}");
+        var pages = 0;
+        void OnLine(string line)
+        {
+            if (line.StartsWith("page ", StringComparison.Ordinal) && ++pages > PdfDocument.MaxPages)
+                throw TooManyPagesError();
+        }
+
+        await RunCheckedAsync(["--show-pages"], [inputPath], [inputPath], null, ct, OnLine).ConfigureAwait(false);
+        return pages;
     }
+
+    /// <summary>The error for a PDF past <see cref="PdfDocument.MaxPages"/>, whose exact count was not read.</summary>
+    internal static PdfException TooManyPagesError() => new(PdfError.TooManyPages, string.Create(CultureInfo.InvariantCulture,
+        $"This PDF has more than {PdfDocument.MaxPages} pages; Flevert works with at most {PdfDocument.MaxPages}."));
+
+    /// <summary>
+    /// The option every qpdf operation that only moves pages around passes (rotate, merge, split): streams are copied as
+    /// they are, never decoded nor compressed. By default qpdf decodes a stream whose filters it would not keep as they are
+    /// (two Flate filters, say) and compresses it again, so a 10 KB stream that inflates to 4 GB took 15 to 20 s to rotate
+    /// (T18); <c>--decode-level=none</c> alone still took 16 s, since compressing streams (<c>--compress-streams=y</c>,
+    /// the default) decodes such a stream to compress it once. <c>preserve</c> turns off both, and the bomb rotates in
+    /// 0.04 s. Nothing is lost, and nothing is compressed that was not: the pages are the same bytes.
+    /// </summary>
+    public const string KeepStreamsAsTheyAre = "--stream-data=preserve";
 
     /// <summary>
     /// Runs <c>qpdf --split-pages</c>: each page of the input becomes <c>&lt;n&gt;.pdf</c> in
@@ -185,7 +215,7 @@ public sealed class Qpdf
         if (ToExtendedPath(outputFolder).Contains(PageNumber, StringComparison.Ordinal))
             throw new PdfException(PdfError.UnsupportedFileName, PageNumberInPathMessage);
         var pattern = Path.Join(outputFolder, PageNumber + ".pdf");
-        await RunCheckedAsync(["--split-pages"], [inputPath], [inputPath, pattern], outputFolder, ct).ConfigureAwait(false);
+        await RunCheckedAsync([KeepStreamsAsTheyAre, "--split-pages"], [inputPath], [inputPath, pattern], outputFolder, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -329,7 +359,7 @@ public sealed class Qpdf
     /// a password that does not open the input is <see cref="PdfError.WrongPassword"/>.</param>
     private async Task<ExternalToolResult> RunCheckedAsync(
         string[] options, IReadOnlyList<string> inputs, string[] lines, string? output, CancellationToken ct,
-        Secret? secret = null, PdfPassword? opening = null)
+        Secret? secret = null, PdfPassword? opening = null, Action<string>? outputLine = null)
     {
         // The options stay on the command line, where qpdf's C runtime would expand them as wildcards.
         if (options.FirstOrDefault(option => option.AsSpan().ContainsAny('*', '?')) is { } wild)
@@ -358,16 +388,18 @@ public sealed class Qpdf
         }
 
         var maxMemory = MaxMemoryBytes ?? MaxMemoryFor(total);
-        var run = await RunWithLinesAsync(options, lines, TimeoutFor(total), maxMemory, ct, secret).ConfigureAwait(false);
+        var run = await RunWithLinesAsync(options, lines, Timeout ?? TimeoutFor(total), maxMemory, ct, secret, outputLine).ConfigureAwait(false);
         if (run.ExitCode is 0 or ExitWarnings)
             return run;
 
         var detail = Detail(run);
-        if (run.ExitCode != ExitError)
-            throw new QpdfException(run.ExitCode, detail);
         // qpdf names the file it failed on, as it was given. With one input it can only be that one; with several, the
-        // input named in its error (the last line), and if it names none, each of them is asked about a password.
+        // input named in its error (the last line).
         var named = inputs.Count == 1 ? inputs[0] : NamedInput(run, inputs);
+        // Any other exit code is not qpdf's: it crashed (a stack overflow is 0xC00000FD) or was ended from outside.
+        if (run.ExitCode != ExitError)
+            throw ForInput(inputs, named, new PdfException(PdfError.ReaderFailed, ToolFailedMessage, new QpdfException(run.ExitCode, detail)));
+        // If it names none, each input is asked about a password.
         foreach (var input in named is null ? inputs : [named])
         {
             if (await RequiresPasswordAsync(input, maxMemory, ct, opening).ConfigureAwait(false))
@@ -381,7 +413,32 @@ public sealed class Qpdf
         // The output's name is a fresh temporary one no input contains.
         if (output is not null && run.StandardError.Contains(ToExtendedPath(output), StringComparison.OrdinalIgnoreCase))
             throw new IOException($"qpdf could not write the output: {detail}", new QpdfException(run.ExitCode, detail));
+        if (UnsupportedEncryption(run))
+        {
+            throw ForInput(inputs, named, new PdfException(PdfError.UnsupportedEncryption, PdfDocument.UnsupportedEncryptionMessage,
+                new QpdfException(run.ExitCode, detail)));
+        }
+
         throw ForInput(inputs, named, new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage, new QpdfException(run.ExitCode, detail)));
+    }
+
+    /// <summary>A timeout instead of <see cref="TimeoutFor"/>, for tests.</summary>
+    internal TimeSpan? Timeout { get; init; }
+
+    internal const string ToolFailedMessage =
+        "Flevert's PDF tool stopped on this PDF without finishing: the PDF may be damaged, or made to crash PDF tools.";
+
+    internal const string TooSlowMessage =
+        "This PDF took too long to process: it is too large or too complex, or made to stall PDF tools.";
+
+    // qpdf describes the object it failed on as "(encryption dictionary…)" when the encryption is one it cannot read, such
+    // as a security handler nobody implements ("unsupported encryption filter"); the same words as pdfium give then, rather
+    // than "not a PDF". The text may change between qpdf versions: then the file is "not a PDF, or damaged", still true.
+    private static bool UnsupportedEncryption(ExternalToolResult run)
+    {
+        var error = run.StandardError.TrimEnd().Split('\n')[^1];
+        return error.Contains("encryption dictionary", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("unsupported encryption", StringComparison.OrdinalIgnoreCase);
     }
 
     // The input whose path, as qpdf was given it, starts a message in qpdf's error ("qpdf: <path>: …", "qpdf: open <path>:
@@ -407,7 +464,8 @@ public sealed class Qpdf
     }
 
     private async Task<ExternalToolResult> RunWithLinesAsync(
-        string[] options, string[] paths, TimeSpan timeout, ulong maxMemory, CancellationToken ct, Secret? secret = null)
+        string[] options, string[] paths, TimeSpan timeout, ulong maxMemory, CancellationToken ct, Secret? secret = null,
+        Action<string>? outputLine = null)
     {
         byte[] lines;
         try
@@ -425,8 +483,19 @@ public sealed class Qpdf
         {
             // qpdf starts no process of its own, so it may not start one.
             var limits = new ExternalToolLimits { MaxMemoryBytes = maxMemory, SingleProcess = true };
-            var run = await ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, limits: limits,
-                environment: ToolEnvironment(), cancellationToken: ct).ConfigureAwait(false);
+            ExternalToolResult run;
+            try
+            {
+                run = await ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, limits: limits,
+                    environment: ToolEnvironment(), standardOutputLine: outputLine, cancellationToken: ct).ConfigureAwait(false);
+            }
+            catch (TimeoutException e)
+            {
+                // qpdf has been killed and has exited.
+                throw new PdfException(PdfError.TooSlow, TooSlowMessage, e);
+            }
+
+
             if (secret is not null)
                 run = WithoutPassword(run, secret.Password);
             if (Untrustworthy(run, maxMemory) is { } error)

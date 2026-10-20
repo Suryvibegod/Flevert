@@ -46,9 +46,10 @@ public sealed class FlevertExeTests : IDisposable
     [Fact]
     public async Task Killing_flevert_exe_while_qpdf_runs_ends_qpdf_too()
     {
-        // About 13 s of qpdf work (50 MB): far longer than the wait below, so qpdf ending in time means it was killed.
+        // About 13 s of qpdf work (a million objects on one page, 53 MB; the page limit refuses a PDF of many pages): far
+        // longer than the wait below, so qpdf ending in time means it was killed.
         var input = _dir.Combine("big.pdf");
-        WriteBlank(input, 500_000, resources: true);
+        MaliciousPdf.WriteManyObjects(input, 1_000_000);
         var qpdfPath = Path.Combine(Path.GetDirectoryName(FlevertExe)!, "qpdf.exe");
 
         using var flevert = StartRun("pdf.rotate-right", input);
@@ -56,7 +57,8 @@ public sealed class FlevertExeTests : IDisposable
         try
         {
             var waited = Stopwatch.StartNew();
-            while ((qpdf = FindRunning(qpdfPath)) is null && !flevert.HasExited && waited.Elapsed < TimeSpan.FromSeconds(30))
+            // The qpdf that rotates, not the one that counts the pages first and ends on its own.
+            while ((qpdf = FindRunning(qpdfPath, "--rotate")) is null && !flevert.HasExited && waited.Elapsed < TimeSpan.FromSeconds(30))
                 await Task.Delay(20);
             Assert.True(qpdf is not null, $"qpdf.exe never started (flevert.exe exited: {flevert.HasExited})");
 
@@ -242,6 +244,43 @@ public sealed class FlevertExeTests : IDisposable
         Assert.Equal([input], Directory.GetFileSystemEntries(_dir.Path));
     }
 
+    [Fact]
+    public async Task One_flevert_exe_given_malicious_pdfs_and_a_good_one_reports_each_and_still_rotates_the_good_one()
+    {
+        // T18: the batch leader survives whatever the PDFs do to qpdf, and says why each one failed.
+        string[] malicious = ["bomb-object-stream", "pages-100000", "cycle-kids-self", "not-pdf-zip", "encrypt-unknown-handler"];
+        var inputs = malicious.Select(name => MaliciousPdf.Write(name, _dir.Combine(name + ".pdf"))).ToList();
+        var good = CopyFixture("rotations.pdf", "good.pdf");
+        var signed = MaliciousPdf.Write("signed", _dir.Combine("signed.pdf"));
+
+        var start = new ProcessStartInfo(FlevertExe) { UseShellExecute = false };
+        foreach (var argument in (string[])["run", "pdf.rotate-right", .. inputs, good, signed])
+            start.ArgumentList.Add(argument);
+        start.Environment["FLEVERT_LOG_DIR"] = _logs.Path;
+        start.Environment["FLEVERT_HEADLESS"] = "1";
+        using var flevert = Process.Start(start)!;
+        try
+        {
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+        }
+        finally
+        {
+            if (!flevert.HasExited)
+                flevert.Kill(entireProcessTree: true);
+        }
+
+        var log = string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText));
+        Assert.True(flevert.ExitCode == 1, $"exit code {flevert.ExitCode}\n{log}");
+        Assert.Equal(
+            malicious.Select(name => name + ".pdf").Concat(["good (rotated).pdf", "good.pdf", "signed (rotated).pdf", "signed.pdf"]).Order(StringComparer.Ordinal),
+            Directory.GetFileSystemEntries(_dir.Path).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Assert.Contains("This PDF needs more memory than Flevert allows for it", log, StringComparison.Ordinal);
+        Assert.Contains("This PDF has more than 2000 pages", log, StringComparison.Ordinal);
+        Assert.Contains("This file is not a PDF, or it is damaged.", log, StringComparison.Ordinal);
+        Assert.Contains("This PDF is protected by an encryption Flevert cannot open.", log, StringComparison.Ordinal);
+        Assert.Contains("\tSigned PDF: the digital signature is not valid in the output.", log, StringComparison.Ordinal);
+    }
+
     private string CopyFixture(string fixture, string name)
     {
         var path = _dir.Combine(name);
@@ -261,13 +300,14 @@ public sealed class FlevertExeTests : IDisposable
         return Process.Start(start)!;
     }
 
-    private static Process? FindRunning(string exePath)
+    private static Process? FindRunning(string exePath, string argument)
     {
         foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(exePath)))
         {
             try
             {
-                if (string.Equals(process.MainModule?.FileName, exePath, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(process.MainModule?.FileName, exePath, StringComparison.OrdinalIgnoreCase)
+                    && TestProcesses.CommandLine(process).Contains(argument, StringComparison.Ordinal))
                     return process;
             }
             catch (Exception e) when (e is Win32Exception or InvalidOperationException)

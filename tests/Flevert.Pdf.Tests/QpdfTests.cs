@@ -24,6 +24,53 @@ public sealed class QpdfTests : IDisposable
         Assert.Equal(TimeSpan.FromMinutes(2) + TimeSpan.FromSeconds(2048), Qpdf.TimeoutFor(PdfDocument.MaxFileBytes));
     }
 
+    [Fact]
+    public async Task A_run_past_its_timeout_fails_as_too_slow_rather_than_with_a_raw_timeout()
+    {
+        // About 13 s of qpdf work (a million objects, MaliciousPdf.WriteManyObjects) under a 1 s limit.
+        var input = _dir.Combine("slow.pdf");
+        MaliciousPdf.WriteManyObjects(input, 1_000_000);
+        var qpdf = new Qpdf(Qpdf.NextToApp.ExePath) { Timeout = TimeSpan.FromSeconds(1) };
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => qpdf.TransformAsync(input, _dir.Combine("out.pdf"), [], CancellationToken.None));
+
+        Assert.Equal(PdfError.TooSlow, ex.Error);
+        Assert.Equal("This PDF took too long to process: it is too large or too complex, or made to stall PDF tools.", ex.Message);
+        Assert.IsType<TimeoutException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task An_exit_code_qpdf_never_gives_fails_as_a_crash_rather_than_with_qpdfs_numbers()
+    {
+        // qpdf exits with 0, 2 or 3; anything else is a crash, or a kill. whoami.exe stands in for such a qpdf: it refuses
+        // qpdf's arguments with exit code 1.
+        var crashing = new Qpdf(Path.Combine(Environment.SystemDirectory, "whoami.exe"));
+        var input = _dir.Combine("in.pdf");
+        File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => crashing.TransformAsync(input, _dir.Combine("out.pdf"), [], CancellationToken.None));
+
+        Assert.Equal(PdfError.ReaderFailed, ex.Error);
+        Assert.Equal("Flevert's PDF tool stopped on this PDF without finishing: the PDF may be damaged, or made to crash PDF tools.", ex.Message);
+        Assert.Equal(1, Assert.IsType<QpdfException>(ex.InnerException).ExitCode);
+    }
+
+    [Fact]
+    public async Task Counting_walks_the_page_tree_instead_of_trusting_its_count()
+    {
+        var low = MaliciousPdf.Write("count-lie-low", _dir.Combine("low.pdf"));
+        var high = MaliciousPdf.Write("count-lie-high", _dir.Combine("high.pdf"));
+        var exact = _dir.Combine("exact.pdf");
+        TestPdf.WriteBlank(exact, PdfDocument.MaxPages, resources: true);
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => Qpdf.NextToApp.CountPagesAsync(low, CancellationToken.None));
+
+        Assert.Equal(PdfError.TooManyPages, ex.Error);
+        Assert.Equal("This PDF has more than 2000 pages; Flevert works with at most 2000.", ex.Message);
+        Assert.Equal(1, await Qpdf.NextToApp.CountPagesAsync(high, CancellationToken.None));
+        Assert.Equal(PdfDocument.MaxPages, await Qpdf.NextToApp.CountPagesAsync(exact, CancellationToken.None));
+    }
+
     [Theory]
     [InlineData(@"C:\Users\me\in.pdf", @"\\?\C:\Users\me\in.pdf")]
     [InlineData(@"\\?\C:\Users\me\in.pdf", @"\\?\C:\Users\me\in.pdf")]
