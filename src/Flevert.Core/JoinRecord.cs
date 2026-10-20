@@ -21,12 +21,16 @@ internal enum Arrival
 {
     OnTime,
 
-    /// <summary>It existed before the last batch of its operation closed, or another leader is still collecting: its
-    /// file belongs to a batch that can no longer take it.</summary>
+    /// <summary>It existed before the last batch of its operation closed, or belongs to a batch whose leader died while
+    /// collecting: its file belongs to a batch that can no longer take it.</summary>
     Late,
 
     /// <summary>The last batch accepted it already; only the acknowledgement was lost.</summary>
     AlreadyDelivered,
+
+    /// <summary>The batch's leader still collects; this process got the name only while the leader was replacing its pipe
+    /// instance. Give the name back and hand the file to that leader: it is this process's batch.</summary>
+    LeaderCollecting,
 }
 
 /// <summary>
@@ -47,8 +51,21 @@ internal sealed record JoinRecord(bool Open, ProcessStamp Leader, DateTime? Late
         // A close in the future means the clock went back since: it says nothing about this process.
         if (record.LatestClose is { } closed && closed <= nowUtc && self.Created < closed)
             return Arrival.Late;
-        return record.Open && record.Leader != self && isRunning(record.Leader) ? Arrival.Late : Arrival.OnTime;
+        if (!record.Open || record.Leader == self)
+            return Arrival.OnTime;
+        // The leader let go of its name for a moment (it was replacing its pipe instance): give the name back and join.
+        if (isRunning(record.Leader))
+            return Arrival.LeaderCollecting;
+        // It died while collecting, so the files already handed to it are lost; a process of its selection joining the
+        // rest would write an output that looks complete. A selection made well after the crash is not held back.
+        return (self.Created - record.Leader.Created).Duration() <= SelectionSpan ? Arrival.Late : Arrival.OnTime;
     }
+
+    /// <summary>
+    /// How far from its leader's creation a process of the same selection can have been created: the shell took 18.6 s
+    /// for 100 processes under load.
+    /// </summary>
+    public static readonly TimeSpan SelectionSpan = TimeSpan.FromSeconds(30);
 
     public string Format()
     {

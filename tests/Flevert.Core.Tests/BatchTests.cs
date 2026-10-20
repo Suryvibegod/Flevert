@@ -419,6 +419,37 @@ public sealed class BatchTests
         Assert.Equal(newer, File.ReadAllText(Batch.SecretPath(op)));
     }
 
+    [Fact]
+    public async Task A_joining_process_that_finds_the_name_free_while_its_leader_collects_hands_its_file_to_that_leader()
+    {
+        // The leader of a join is replacing its pipe instance: the name is free for a moment, and a process of its
+        // selection takes it. That process must give the name back and join, not report its file left out.
+        var op = UniqueOp();
+        var leaderStamp = ProcessStamp.Self; // running, so its open record says it still collects
+        Directory.CreateDirectory(Path.GetDirectoryName(Batch.RecordPath(op))!);
+        File.WriteAllText(Batch.RecordPath(op), new JoinRecord(Open: true, leaderStamp, LatestClose: null, []).Format());
+        try
+        {
+            var follower = Batch.LeadOrJoinOneOutputAsync(
+                op, [@"C:\b.txt"], Idle, new ProcessStamp(leaderStamp.Id, leaderStamp.Created.AddSeconds(0.2)), _ => [],
+                CancellationToken.None);
+            await Task.Delay(500);
+            Assert.False(follower.IsCompleted, "the process gave up on a batch that was still collecting");
+
+            await using var leader = (await Batch.LeadOrJoinOneOutputAsync(
+                op, [@"C:\a.txt"], Idle, leaderStamp, _ => [], CancellationToken.None))!;
+            var drained = DrainAsync(leader);
+
+            Assert.Null(await follower);
+            Assert.Equal([@"C:\a.txt", @"C:\b.txt"], await drained);
+            Assert.False(leader.LeavesOut);
+        }
+        finally
+        {
+            File.Delete(Batch.RecordPath(op));
+        }
+    }
+
     private static async Task<List<string>> DrainAsync(BatchLeader leader)
     {
         var files = new List<string>();

@@ -85,13 +85,19 @@ public static class Batch
                     case Arrival.Late:
                         await server.DisposeAsync().ConfigureAwait(false);
                         return await LeaveOutAsync(operationId, files, idle, self, ct).ConfigureAwait(false);
+                    case Arrival.OnTime:
+                        var gate = new JoinGate(self, record?.LatestClose, () => census(operationId));
+                        WriteRecord(operationId, new JoinRecord(Open: true, self, record?.LatestClose, []), self, onlyOverOwn: false);
+                        return BatchLeader.Start(() => CreateServer(name), server, files, idle,
+                            onClosed: () => TryRotateSecret(operationId, key), gate,
+                            beforeClose: () => WriteRecord(operationId, new JoinRecord(Open: false, self, DateTime.UtcNow, gate.Members), self, onlyOverOwn: true));
+                    default:
+                        // LeaderCollecting: its leader is replacing its pipe instance and retries for a while. Give the
+                        // name back and wait, as a client, for the new instance: taking the name again and again could
+                        // keep the leader from getting it back.
+                        await server.DisposeAsync().ConfigureAwait(false);
+                        break;
                 }
-
-                var gate = new JoinGate(self, record?.LatestClose, () => census(operationId));
-                WriteRecord(operationId, new JoinRecord(Open: true, self, record?.LatestClose, []), self, onlyOverOwn: false);
-                return BatchLeader.Start(() => CreateServer(name), server, files, idle,
-                    onClosed: () => TryRotateSecret(operationId, key), gate,
-                    beforeClose: () => WriteRecord(operationId, new JoinRecord(Open: false, self, DateTime.UtcNow, gate.Members), self, onlyOverOwn: true));
             }
 
             var result = foreignOwner
@@ -740,7 +746,8 @@ public sealed class BatchLeader : IAsyncDisposable
     {
         await server.DisposeAsync().ConfigureAwait(false);
         // A joining batch tries for a while: a process of its own selection that took the free name gives it back at once
-        // (it finds this batch still open and is late), and ending early here would leave a partial output.
+        // (it finds this batch still open and hands its file over instead), and ending early here would leave a partial
+        // output.
         for (var attempt = 1; ; attempt++)
         {
             try

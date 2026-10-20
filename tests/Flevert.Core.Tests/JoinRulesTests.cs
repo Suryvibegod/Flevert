@@ -47,16 +47,26 @@ public sealed class JoinRulesTests
     }
 
     [Fact]
-    public void While_another_leader_still_collects_a_process_that_got_a_pipe_of_its_own_is_late()
+    public void While_another_leader_still_collects_a_process_that_got_the_pipe_name_tries_again()
     {
-        // The batch split (a rotated key, a lost pipe name): this process belongs to a batch it cannot reach.
+        // The name was free for a moment (the leader was replacing its pipe instance, or the key was rotated): this
+        // process belongs to that batch and must not give its file up.
         var record = new JoinRecord(Open: true, P(9, 0), LatestClose: null, []);
 
-        Assert.Equal(Arrival.Late, JoinRecord.Classify(P(1, 0.5), record, T0.AddSeconds(2), Running));
+        Assert.Equal(Arrival.LeaderCollecting, JoinRecord.Classify(P(1, 0.5), record, T0.AddSeconds(2), Running));
     }
 
     [Fact]
-    public void An_open_batch_whose_leader_is_gone_does_not_make_later_selections_late()
+    public void A_process_of_a_batch_whose_leader_died_while_collecting_is_late()
+    {
+        // The files already handed to that leader are lost; joining the rest would look complete.
+        var record = new JoinRecord(Open: true, P(9, 0), LatestClose: null, []);
+
+        Assert.Equal(Arrival.Late, JoinRecord.Classify(P(1, 1.5), record, T0.AddSeconds(20), Dead));
+    }
+
+    [Fact]
+    public void An_open_batch_whose_leader_died_long_ago_does_not_make_later_selections_late()
     {
         var record = new JoinRecord(Open: true, P(9, 0), LatestClose: T0.AddSeconds(-30), []);
 
