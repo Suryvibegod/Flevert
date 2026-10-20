@@ -15,5 +15,4 @@ python make_pdf_fixtures.py .
 ..\..\..\deps\qpdf\bin\qpdf.exe --encrypt --user-password=flevert-test --owner-password=flevert-test --bits=256 -- three-colours.pdf password-protected.pdf
 ```
 
-The 2 001-page document, the document information written inside a trailer, the catalog nested 490 deep, the 200 000- and 500 000-page documents that keep qpdf busy for the cancel and kill tests, the non-PDF file and the copies at Unicode and long paths are made at run time by the tests themselves (`TestPdf.cs`).
-. So are the malicious pages of the PDF worker tests: `WriteStallingPage` (one A4 page whose shading is a million page-sized triangles, 60 KB, about 40 minutes of pdfium work) and `WriteSquarePage` (a 14 400 pt square page, 400 MB of pixels at 10 000 px).
+The 2 001-page document, the document information written inside a trailer, the catalog nested 490 deep, the 200 000- and 500 000-page documents that keep qpdf busy for the cancel and kill tests, the non-PDF file and the copies at Unicode and long paths are made at run time by the tests themselves (`TestPdf.cs`). So are the malicious pages of the PDF worker tests: `WriteStallingPage` (one A4 page whose shading is a million page-sized triangles, 60 KB, about 40 minutes of pdfium work) and `WriteSquarePage` (a 14 400 pt square page, 400 MB of pixels at 10 000 px).

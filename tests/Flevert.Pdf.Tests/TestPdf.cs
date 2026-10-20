@@ -77,6 +77,54 @@ internal static class TestPdf
             "");
     }
 
+    /// <summary>
+    /// One 400×300 pt page drawn by <paramref name="squares"/> tiny black squares in a pattern, its content stream
+    /// written as it is (<paramref name="flateLevel"/> null) or Flate-compressed at that level: a PDF that is larger than
+    /// it needs to be, as some scanners and old tools write them.
+    /// </summary>
+    public static void WriteBloated(string path, int squares, System.IO.Compression.CompressionLevel? flateLevel = null)
+    {
+        var content = new StringBuilder();
+        for (var i = 0; i < squares; i++)
+            content.Append(CultureInfo.InvariantCulture, $"{i * 7 % 397} {i * 13 % 293} 2 2 re f\n");
+        var data = Encoding.ASCII.GetBytes(content.ToString());
+        var filter = "";
+        if (flateLevel is { } level)
+        {
+            using var compressed = new MemoryStream();
+            using (var zlib = new System.IO.Compression.ZLibStream(compressed, level))
+                zlib.Write(data);
+            data = compressed.ToArray();
+            filter = " /Filter /FlateDecode";
+        }
+
+        using var file = File.Create(path);
+        var offsets = new List<long>();
+        void Write(string text) => file.Write(Encoding.ASCII.GetBytes(text));
+        Write("%PDF-1.4\n");
+        string[] objects =
+        [
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Resources << >> /Contents 4 0 R >>",
+        ];
+        for (var i = 0; i < objects.Length; i++)
+        {
+            offsets.Add(file.Position);
+            Write(string.Create(CultureInfo.InvariantCulture, $"{i + 1} 0 obj\n{objects[i]}\nendobj\n"));
+        }
+
+        offsets.Add(file.Position);
+        Write(string.Create(CultureInfo.InvariantCulture, $"4 0 obj\n<< /Length {data.Length}{filter} >>\nstream\n"));
+        file.Write(data);
+        Write("\nendstream\nendobj\n");
+        var xref = file.Position;
+        Write("xref\n0 5\n0000000000 65535 f \n");
+        foreach (var offset in offsets)
+            Write(string.Create(CultureInfo.InvariantCulture, $"{offset:D10} 00000 n \n"));
+        Write(string.Create(CultureInfo.InvariantCulture, $"trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"));
+    }
+
     // Objects 1..n in order, an xref table and a trailer whose root is object 1, with the extra entries given.
     private static void WriteObjects(string path, List<string> objects, string trailer)
     {

@@ -194,6 +194,30 @@ public sealed class FlevertExeTests : IDisposable
         Assert.DoesNotContain("Attached secret text", text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Flevert_exe_compresses_a_pdf()
+    {
+        var input = _dir.Combine("Hóa đơn.pdf");
+        WriteBloated(input, 20_000);
+
+        using var flevert = StartRun("pdf.compress", input);
+        try
+        {
+            await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+        }
+        finally
+        {
+            if (!flevert.HasExited)
+                flevert.Kill(entireProcessTree: true);
+        }
+
+        Assert.True(flevert.ExitCode == 0, string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)));
+        var output = _dir.Combine("Hóa đơn (compressed).pdf");
+        Assert.True(new FileInfo(output).Length < new FileInfo(input).Length / 3);
+        using var pdf = PdfDocument.Open(output);
+        Assert.Equal(1, pdf.PageCount);
+    }
+
     private string CopyFixture(string fixture, string name)
     {
         var path = _dir.Combine(name);
