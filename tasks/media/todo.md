@@ -77,7 +77,7 @@ Code-reviewer (CR), security-auditor (SEC), doubt-driven (DD) trên `git diff or
 | DD-1, CR-2, SEC-7 | Critical | ADR-0009 bị commit 3e2524f làm rỗng (script mở file để ghi trước khi đọc) | **Sửa**: khôi phục từ af2f710 + ba bổ sung định làm |
 | CR-1 | Critical | Notice FFmpeg làm đỏ hai test Core trên Windows (thiếu `ffmpeg\` trong publish giả; `installer/notices/ffmpeg/*` chưa có) | **Sửa**: test chép `deps\ffmpeg\bin\*` vào `publish\ffmpeg\`; notice chỉ liệt kê `LICENSE.txt` của BtbN đến khi giấy phép được commit; `ffmpeg-source.yml` đỏ đến khi có cả file lẫn mẫu `installer/notices/ffmpeg/*` (chặn phát hành, không chặn CI) |
 | CR-3 | High | Hai lượt Under N khác chế độ khung (`null` passthrough, MP4 CFR) | **Sửa**: `-fps_mode passthrough` cho mọi lần mã hóa video. Tái hiện trên 6.1: với video VFR, lượt 2 **treo** (0 % CPU) chứ không chỉ vượt cỡ. Test VFR (108 khung) cho Under và Convert; đối chứng âm: bỏ thì cả hai đỏ (Under treo đến hết chờ) |
-| SEC-1 | Medium, Required | Đầy đĩa: file chứa nhiều hơn header khai; `-fs` lớn hơn chỗ trống | **Sửa**: `-t` = thời lượng × 1,5 + 10 s cho mọi lần chạy (cả lượt 1); `-fs` không quá chỗ trống − 50 MB. Test FLAC khai 2 s chứa 60 s → output ≈ 13 s; đối chứng âm đỏ |
+| SEC-1 | Medium, Required | Đầy đĩa: file chứa nhiều hơn header khai; `-fs` lớn hơn chỗ trống | **Sửa** (bản cuối, sau RC-1): `-fs` không quá chỗ trống − 50 MB; mã hóa video có thêm `-t` = max(thời lượng × 1,5 + 10 s, byte × 8 / 8 kbit/s), chạm `-t` là lỗi. Test FLAC khai 2 s chứa 60 s → WAV đủ 60 s trong giới hạn |
 | SEC-2 | Medium, Required | Remove hidden info giữ SEI của H.264 (chữ ký x264, MDPM của máy quay AVCHD có GPS) | **Sửa**: H.264 bỏ SEI (`filter_units=remove_types=6`): hình giải mã y hệt, gói không còn trùng byte (lệch tiêu chí 13, ghi ADR); HEVC giữ SEI (dữ liệu HDR). Test `.m2ts` có SEI x264 → hết; đối chứng âm đỏ |
 | DD-9 | Medium | "No hidden info" sai với XMP/hộp riêng của hãng/SEI mà ffprobe không thấy | **Sửa**: MP4/MOV/3GP/AVCHD và mọi H.264 luôn được ghi bản sao, không skip |
 | CR-4 | Medium | Remove hidden info bỏ track audio không báo; mất ngôn ngữ | **Sửa**: `FirstAudio` (note) + giữ `language` |
@@ -98,8 +98,25 @@ Code-reviewer (CR), security-auditor (SEC), doubt-driven (DD) trên `git diff or
 | SEC-8 | Info | `^[a-z]{3}$` khớp "eng\n" | **Sửa**: `\z` |
 | CR-13 | Nit | so chuỗi message, kiểm tra thừa, "-t 30", 2 GB/GiB, `DriveInfo` với `\\?\` | **Sửa** "-t 30"; còn lại giữ (không đổi hành vi) |
 | SEC-3 | Medium, Recommended | Không có whitelist decoder | **Để bản sau**: danh sách phải đủ mọi codec nguồn + phụ đề/ảnh bìa/data, chỉ kiểm được trên bản 8.1 Windows; ghi ADR |
-| SEC-4 | Low | Video 12 h 8K giả rỗng → timeout nhiều ngày | **Chấp nhận**: Cancel, ưu tiên thấp |
+| SEC-4, RC-5 | Low | Video 12 h 8K giả rỗng → timeout nhiều ngày (và sau sửa CR-5: hàng năm) | **Sửa**: hệ số ≤ 200, timeout ≤ 2 ngày; còn lại nhờ Cancel, ưu tiên thấp |
 | SEC-5 | Low | 8 audio song song × trần riêng | **Chấp nhận**: audio dùng ít bộ nhớ |
 | SEC-6 | Low | `check-location` không kiểm thư mục con `ffmpeg\` có sẵn | **Để bản sau** (installer) |
 | DD-17 | Low | Chi tiết lỗi lấy từ 1 MB stderr đầu | **Chấp nhận** |
 | DD-2, DD-11, DD-13, DD-16, DD-18 | — | Mọi thứ chỉ Windows: CI, ffmpeg 8.1 qua `ExternalTool`, job/ưu tiên, `flevert.exe`, Cancel video, khởi động lạnh, bộ cài, MenuProbe, icon | **Mở**: chạy CI Windows (pull request) và kiểm tay trên máy Windows |
+
+### Review lại các sửa (một reviewer gộp, bối cảnh trống)
+
+| id | mức | việc | quyết định |
+|---|---|---|---|
+| RC-1 | High, Required | `-t` (sửa SEC-1) cắt im lặng file thật có thời lượng chỉ ước lượng: AAC thô 300 s → 43 s, MP3 không header VBR, TS ghép bằng `copy /b` | **Sửa**: âm thanh và chép luồng không giới hạn thời gian (`-fs` đủ); mã hóa video `-t` = max(thời lượng × 1,5 + 10 s, byte / 8 kbit/s); chạm `-t` → lỗi "holds far more than its header says", không bao giờ commit file cụt. Test AAC/MP3 ước lượng (300 s đủ) và TS ghép 3 lần (60 s đủ); đối chứng âm: công thức cũ thì cả ba đỏ; test runner giả báo chạm giới hạn → lỗi |
+| RC-2 | High, Required | Trần 4 GB vỡ với số luồng tự chọn trên PC 16 luồng (4,4 GB) | **Sửa**: x264 `-threads` ≤ 12 (1,5 × nhân), decoder ≤ 8 (số nhân). Đo (Linux, giả lập 16 luồng, 3 s 4K60 HLG): tự chọn 24/13 → 4,47 GB; 12/8 → 3,16 GB, nhanh hơn (26 s so với 37 s); 8/4 → 2,65 GB. Còn mở: đo trên Windows 8–16 nhân |
+| RC-3 | Medium | Bỏ mọi SEI làm mất điểm phục hồi (intra refresh không còn tua được) | **Sửa**: chỉ bỏ SEI của H.264 trong AVCHD (`.mts/.m2ts`, nơi có MDPM); ADR ghi rõ hệ quả |
+| RC-4 | Medium (release) | Regex giấy phép sót `LICENSES/…`, `docs/FTL.TXT` của FreeType; bắt nhầm `notice.c` | **Sửa**: thêm thư mục `LICENSES/`, file FreeType, loại đuôi mã nguồn. Soát bộ giấy phép thật vẫn mở (DD-6) |
+| RC-6 | Low | Chạm `-fs` vì đĩa đầy bị báo "file may be damaged" | **Sửa**: thông báo nói cả chỗ trống |
+| RC-7 | Low | Không có test cho `Slowness`, `MaxTime` | **Sửa**: test thuần |
+| RC-8 | Low | `passthrough` với khung sát nhau hơn tốc độ danh nghĩa → cảnh báo DTS | **Chấp nhận**, ghi ADR |
+| RC-9 | Nit | < 1 000 byte hiện "0 KB" | **Sửa**: "<1 KB" |
+| RC-10 | Nit | Ghi chú notice nói giấy phép thư viện "follow" khi chưa có | **Sửa**: bỏ câu đó đến khi commit giấy phép (RELEASING bước 6 nói thêm lại) |
+
+Kết luận: không còn Critical/High/Required nào mở trừ các mục chỉ Windows/CI xác nhận được (DD-2, DD-11, DD-13, DD-16, DD-18, đo bộ nhớ RC-2 trên máy nhiều nhân, chạy `ffmpeg-source.yml` cho DD-6/DD-7 và RC-4).
+
