@@ -140,7 +140,7 @@ Kết luận lần 2: không còn Critical/High/Required nào mở trừ các m�
 
 | id | mức | việc | quyết định |
 |---|---|---|---|
-| RC3-1 | High, Required | Sửa RC2-4 đưa thời lượng sàn (byte ÷ 32 kbit/s) vào cả kiểm chỗ trống: WAV/FLAC 1 GB → MP3 đòi 5,9 GB, Extract audio từ phim 4 GB đòi 23,75 GB → "Not enough free disk space" sai | **Sửa**: `AudioConvert.Sizes` trả về (cần, giới hạn): chỗ trống theo thời lượng ffprobe đọc, sàn chỉ cho `-fs` (đã kẹp theo chỗ trống). Test thuần: WAV 1 GB → MP3 cần 134,6 MB, giới hạn 5,94 GB |
+| RC3-1 | High, Required | Sửa RC2-4 đưa thời lượng sàn (byte ÷ 32 kbit/s) vào cả kiểm chỗ trống: WAV/FLAC 1 GB → MP3 đòi 5,9 GB, Extract audio từ phim 4 GB đòi 23,75 GB → "Not enough free disk space" sai | **Sửa**: `AudioConvert.Sizes` trả về (cần, giới hạn): chỗ trống theo thời lượng ffprobe đọc, sàn chỉ cho `-fs` (đã kẹp theo chỗ trống). Test thuần: WAV 1 GB → MP3 cần 134,6 MB, giới hạn ước tính 5,94 GB (`-fs` = 2×, kẹp theo chỗ trống) |
 | RC3-2 | Low | Cửa sổ 8 MB sót MDPM trong MP4 faststart dài vài giờ (moov > 8 MB) hoặc MKV có attachment lớn ở đầu | **Chấp nhận**, ghi ADR: hiếm, đọc xa hơn làm chậm mọi file |
 | RC3-3 | Low | Khớp 4 byte `MDPM` trần → ~0,2 % file H.264 > 8 MB khớp nhầm, dashcam intra refresh mất điểm phục hồi | **Sửa**: khớp 20 byte UUID + `MDPM` |
 | RC3-4 | Low | `FileShare.Read` lỗi khi tiến trình khác đang mở ghi (đồng bộ đám mây) | **Sửa**: `FileShare.ReadWrite \| FileShare.Delete` |
@@ -148,3 +148,7 @@ Kết luận lần 2: không còn Critical/High/Required nào mở trừ các m�
 | RC3-6 | Nit | ADR thiếu sàn âm thanh và `-fs` của Remove hidden info | **Sửa** |
 
 Kết luận lần 3: RC3-1 là mục Required duy nhất, đã sửa; còn lại Low/Nit đã sửa hoặc chấp nhận. Không còn Critical/High/Required nào mở trừ các mục chỉ Windows/CI xác nhận được.
+
+### Review lại lần 4 (một reviewer gộp, bối cảnh trống)
+
+Không còn Critical/High/Required. RC4-1 (không test nào kiểm `RunAsync` truyền đúng `needed`/`bound`), RC4-2 (MP3 nói dưới 16 kbit/s bị ước lượng thiếu chạm `-fs`: báo lỗi, không cắt), RC4-3 (ffprobe ước lượng thừa có thể đòi thừa chỗ trống), RC4-5 ("8 MB" là 8 MiB): Low/Nit, **chấp nhận**. RC4-4 (ghi chú giới hạn RC3-1): **sửa**.
