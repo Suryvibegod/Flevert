@@ -4,32 +4,37 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-PDF tools, right from the menu.
+PDFs: turn photos into one, and convert, merge, split, rotate, compress or password-protect PDF files.
 
 ### Added
 
-- Right-click pictures and choose **Flevert > Combine into PDF**: one PDF with a page per picture, in name order (`photo 2` before `photo 10`), turned the right way up. JPEG photos go in unchanged, without their GPS location or camera details; the PDF itself carries no metadata but "Producer: Flevert".
+- Right-click pictures and choose **Flevert > Combine into PDF**: one PDF with a page per picture, in name order (`photo 2` before `photo 10`), each turned the right way up. JPEG photos are embedded without re-encoding, minus their GPS location and camera details. The PDF's only metadata is "Producer: Flevert".
 - Right-click a `.pdf` and choose **Flevert**:
   - **Convert** to JPG pages or PNG pages: a folder with one picture per page, at 150 DPI.
   - **Merge PDFs** (two or more, in name order) and **Split into pages** (a folder with one PDF per page).
   - **Rotate** every page 90° right, 90° left or 180°.
   - **Compress** without losing quality, and **Remove metadata** (author, dates, XMP, attachments, scripts).
   - **Protect with password** (AES-256) and **Remove password** (when you know it). Passwords are never written to disk or logs.
-- The progress window counts pages inside a long file ("page 37 of 200") and its bar moves within one file.
+- **Combine into PDF** and **Merge PDFs** wait for every selected file. If one arrives too late, Flevert reports it rather than leaving it out of the result without a word.
+- The progress window counts pages inside a long file ("page 37 of 200"), and its bar moves while that file is processed.
+- The installer includes the licences of pdfium, qpdf and the libraries they bundle (OpenSSL, zlib, libjpeg-turbo, Microsoft Visual C++ runtime).
 
 ### Changed
 
-- HEIC and HEIF photos no longer offer **Convert > GIF**: with **Combine into PDF** added, Explorer would have hidden **Remove metadata** (it shows at most 16 entries in a menu like Flevert's).
-- Selecting many files for one result (Combine into PDF, Merge PDFs) waits a little longer for the last of them, and never makes a result with a file silently left out: a file that arrives too late is reported.
+- HEIC and HEIF photos no longer offer **Convert > GIF**. Explorer shows at most 16 entries in a menu like Flevert's, and with **Combine into PDF** added, **Remove metadata** would have been the one hidden.
 
 ### Security
 
-- PDFs are read with a current pdfium in a separate process with a memory cap, a time limit per page and no rights to start anything; qpdf also runs as its own limited process. A damaged or hostile PDF fails on its own, and the rest of the batch still finishes.
-- The installer now includes the licences of pdfium, qpdf and the libraries they bundle (OpenSSL, zlib, libjpeg-turbo, Microsoft Visual C++ runtime).
+- PDFs are read by pdfium in a separate process that has a memory cap and a time limit per page and cannot start other programs; qpdf runs as its own limited process too. A damaged or hostile PDF fails on its own, and the rest of the batch still finishes.
 
 ### Fixed
 
 - Starting two different picture actions at the same moment (for example **Convert > PNG** on some files and **Compress** on others) no longer makes one of them fail with "Access to the path is denied". This also affected v0.1.0.
+
+### Known issues
+
+- The TIFF issue listed for 0.1.0 remains: Flevert still bundles ImageMagick 7.1.2-33 ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity).
+- Releases are still not code-signed, so Windows Smart App Control may block them (see the README).
 
 ## [0.1.0] - 2026-10-20
 

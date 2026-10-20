@@ -18,7 +18,7 @@ Open an issue describing what you want to do with your files, not just the butto
 
 ## Working on the code
 
-You need Windows 10 or 11 and the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). For the installer, also [Inno Setup 6](https://jrsoftware.org/isinfo.php) (free; `winget install JRSoftware.InnoSetup --scope user`).
+You need Windows 10 or 11 and the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). For the installer, also [Inno Setup](https://jrsoftware.org/isinfo.php) 6.7.3 or later (free; `winget install JRSoftware.InnoSetup --scope user`).
 
 The PDF module needs pdfium and qpdf, which are downloaded (pinned by SHA256) into `deps/` rather than committed; the build stops with a message if they are missing.
 
@@ -31,6 +31,8 @@ dotnet test tests/Flevert.Pdf.Tests
 dotnet format Flevert.sln --verify-no-changes
 powershell -File scripts/build-installer.ps1
 ```
+
+Run the test projects one at a time, as above, not `dotnet test Flevert.sln`: run together, the image encodes starve the batching tests of CPU and those tests can fail.
 
 To try the menu without the installer, register a development build. `install-menu` refuses a folder that other accounts can modify, or one reached through a junction, because the menu runs `flevert.exe` as whoever clicks it; `--allow-insecure-location` accepts it on a machine you trust, and `--dev` adds operations that copy `.txt` files to exercise batching and the progress window. Remove it again afterwards:
 
@@ -47,7 +49,7 @@ dotnet run --project tools/MenuProbe -- list "C:\path\file.txt"
 dotnet run --project tools/MenuProbe -- invoke "Flevert/Dev/Copy" "C:\path\file.txt"
 ```
 
-The architecture in four decisions: the menu is a classic entry under `HKCU`, so no administrator rights ([ADR-0001](docs/adr/0001-registry-extendedsubcommandskey.md)); selecting many files starts one `flevert.exe` per file and they join into one batch over a named pipe ([ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md)); the app is a self-contained .NET 10 build ([ADR-0003](docs/adr/0003-self-contained-readytorun-winforms.md)); images go through Magick.NET with an allow-list of formats and resource limits ([ADR-0004](docs/adr/0004-magick-net-for-images.md)). The README's demo animation is drawn by `assets/demo/make_demo_gif.py`.
+The main design decisions: the menu is a classic entry under `HKCU`, so no administrator rights ([ADR-0001](docs/adr/0001-registry-extendedsubcommandskey.md)); selecting many files starts one `flevert.exe` per file and they join into one batch over a named pipe ([ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md)); the app is a self-contained .NET 10 build ([ADR-0003](docs/adr/0003-self-contained-readytorun-winforms.md)); images go through Magick.NET with an allow-list of formats and resource limits ([ADR-0004](docs/adr/0004-magick-net-for-images.md)); PDFs are read by pdfium in a separate worker process and changed by qpdf, also run as its own process ([ADR-0008](docs/adr/0008-pdf-engines-pdfium-and-qpdf.md)). The rest are in [docs/adr](docs/adr). The README's demo animations are drawn by `assets/demo/make_demo_gif.py` (`python make_demo_gif.py convert convert.gif`, or `combine combine.gif`).
 
 How the project works:
 

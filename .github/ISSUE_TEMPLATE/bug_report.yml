@@ -4,13 +4,13 @@ labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: Thanks for reporting! Security problems go through SECURITY.md instead, not a public issue.
+      value: Thanks for reporting. Security problems go privately through SECURITY.md, not in a public issue.
   - type: input
     id: version
     attributes:
       label: Flevert version
       description: Settings > Apps > Installed apps
-      placeholder: 0.1.0
+      placeholder: 0.2.0
     validations:
       required: true
   - type: input
@@ -24,7 +24,7 @@ body:
     id: steps
     attributes:
       label: What did you do?
-      description: Which menu item, on which kind of file (and how many files)?
+      description: Which menu item, on which kind of file (a photo, a PDF), and how many files?
     validations:
       required: true
   - type: textarea
