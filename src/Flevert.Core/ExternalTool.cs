@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
@@ -48,6 +49,12 @@ public static partial class ExternalTool
     /// <summary>How much of each of stdout and stderr is kept; the rest is read and discarded so the tool never blocks.</summary>
     public const int MaxCapturedBytes = 1024 * 1024;
 
+    /// <summary>
+    /// The longest line handed to a <c>standardOutputLine</c> callback; the rest of a longer line is dropped, so a tool
+    /// that never writes a line break cannot make Flevert hold an unbounded line.
+    /// </summary>
+    public const int MaxLineChars = 64 * 1024;
+
     // Bounds the wait for output after a kill: only a process that escaped the job (see AssignToJob) can still hold the
     // pipes then, and the caller is not kept waiting for it.
     private static readonly TimeSpan DrainAfterKill = TimeSpan.FromSeconds(1);
@@ -77,6 +84,12 @@ public static partial class ExternalTool
     /// Changes to the environment the tool inherits from flevert.exe: a value sets the variable, <c>null</c> removes it.
     /// Never for secrets: other processes of the user can read a process's environment.
     /// </param>
+    /// <param name="standardOutputLine">
+    /// Called with each line the tool writes to standard output as soon as it is written, read as UTF-8, without its
+    /// <c>\n</c> or <c>\r\n</c>, and cut to <see cref="MaxLineChars"/>; a last line without a break counts too. Called on
+    /// one thread at a time, in order, before this returns; the lines are still in
+    /// <see cref="ExternalToolResult.StandardOutput"/>. If it throws, the tool is killed and the exception is rethrown.
+    /// </param>
     /// <exception cref="OperationCanceledException">Cancelled; the tool and its children were killed first.</exception>
     public static Task<ExternalToolResult> RunAsync(
         string toolPath,
@@ -86,8 +99,10 @@ public static partial class ExternalTool
         string? workingDirectory = null,
         ExternalToolLimits? limits = null,
         IReadOnlyDictionary<string, string?>? environment = null,
+        Action<string>? standardOutputLine = null,
         CancellationToken cancellationToken = default) =>
-        RunAsync(toolPath, arguments, timeout, null, standardInput, workingDirectory, limits, environment, null, cancellationToken);
+        RunAsync(toolPath, arguments, timeout, null, standardInput, workingDirectory, limits, environment, null, standardOutputLine,
+            cancellationToken);
 
     /// <param name="afterStart">For tests: runs after the tool has started and before it is put in its job.</param>
     /// <param name="assign">For tests: puts the tool in its job instead of <see cref="AssignToJob"/>.</param>
@@ -101,6 +116,7 @@ public static partial class ExternalTool
         ExternalToolLimits? limits = null,
         IReadOnlyDictionary<string, string?>? environment = null,
         Action<SafeHandle, Process>? assign = null,
+        Action<string>? standardOutputLine = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(arguments);
@@ -123,7 +139,7 @@ public static partial class ExternalTool
             start.ArgumentList.Add(argument);
         ChangeEnvironment(start, environment);
 
-        var run = new Run(start, timeout, standardInput, afterStart, assign ?? AssignToJob);
+        var run = new Run(start, timeout, standardInput, afterStart, assign ?? AssignToJob, standardOutputLine);
         try
         {
             return await run.OnceAsync(limits, cancellationToken).ConfigureAwait(false);
@@ -147,7 +163,7 @@ public static partial class ExternalTool
     /// <summary>One start of the tool, in a job of its own, with its output read and its input written.</summary>
     private sealed class Run(
         ProcessStartInfo start, TimeSpan timeout, ReadOnlyMemory<byte> standardInput, Action<Process>? afterStart,
-        Action<SafeHandle, Process> assign)
+        Action<SafeHandle, Process> assign, Action<string>? standardOutputLine)
     {
         public async Task<ExternalToolResult> OnceAsync(ExternalToolLimits? limits, CancellationToken cancellationToken)
         {
@@ -186,13 +202,17 @@ public static partial class ExternalTool
             using var outputPipe = process.StandardOutput;
             using var errorPipe = process.StandardError;
 
+            // A callback that throws ends the run: the tool is killed as on a cancel, and the exception is rethrown.
+            using var callbackFailed = new CancellationTokenSource();
+            var lines = standardOutputLine is null ? null : new LineSplitter(standardOutputLine, callbackFailed);
+
             // Started together: a tool that fills one pipe while nobody reads it would stop and never exit.
-            var output = ReadCappedAsync(outputPipe.BaseStream);
-            var error = ReadCappedAsync(errorPipe.BaseStream);
+            var output = ReadCappedAsync(outputPipe.BaseStream, lines);
+            var error = ReadCappedAsync(errorPipe.BaseStream, null);
             var input = WriteInputAsync(process.StandardInput, standardInput);
 
             using var timer = new CancellationTokenSource(timeout);
-            using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timer.Token);
+            using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timer.Token, callbackFailed.Token);
             try
             {
                 await process.WaitForExitAsync(stop.Token).ConfigureAwait(false);
@@ -201,6 +221,7 @@ public static partial class ExternalTool
                 var (stdout, stdoutTruncated) = await output.WaitAsync(stop.Token).ConfigureAwait(false);
                 var (stderr, stderrTruncated) = await error.WaitAsync(stop.Token).ConfigureAwait(false);
                 await input.WaitAsync(stop.Token).ConfigureAwait(false);
+                lines?.ThrowIfFailed();
                 return new ExternalToolResult(process.ExitCode, stdout, stderr, stdoutTruncated, stderrTruncated)
                 {
                     MemoryLimitExceeded = ReportsMemoryLimit(memoryReports),
@@ -214,6 +235,7 @@ public static partial class ExternalTool
                 await Task.WhenAny(Task.WhenAll(output, error, input), Task.Delay(DrainAfterKill, CancellationToken.None))
                     .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
+                lines?.ThrowIfFailed();
                 throw new TimeoutException($"{Path.GetFileName(start.FileName)} did not finish within {timeout.TotalSeconds:0.#} s.");
             }
         }
@@ -261,7 +283,7 @@ public static partial class ExternalTool
         return workingDirectory;
     }
 
-    private static async Task<(string Text, bool Truncated)> ReadCappedAsync(Stream stream)
+    private static async Task<(string Text, bool Truncated)> ReadCappedAsync(Stream stream, LineSplitter? lines)
     {
         var kept = new MemoryStream();
         var truncated = false;
@@ -275,7 +297,10 @@ public static partial class ExternalTool
                 if (read > room)
                     truncated = true;
                 kept.Write(buffer, 0, Math.Min(read, room));
+                lines?.Add(buffer.AsSpan(0, read));
             }
+
+            lines?.End();
         }
         catch (IOException)
         {
@@ -286,6 +311,76 @@ public static partial class ExternalTool
         }
 
         return (Encoding.UTF8.GetString(kept.GetBuffer(), 0, (int)kept.Length), truncated);
+    }
+
+    /// <summary>
+    /// Turns the bytes of standard output into lines for a callback as they arrive. Once the callback has thrown it is not
+    /// called again; the run is stopped through <c>failed</c>, and <see cref="ThrowIfFailed"/> rethrows the exception.
+    /// </summary>
+    private sealed class LineSplitter(Action<string> onLine, CancellationTokenSource failed)
+    {
+        private readonly Decoder _decoder = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetDecoder();
+        private readonly StringBuilder _line = new();
+        private char[] _chars = new char[1024];
+        private bool _pending;
+        private ExceptionDispatchInfo? _error;
+
+        public void Add(ReadOnlySpan<byte> bytes) => Decode(bytes, flush: false);
+
+        /// <summary>The output has ended: a last line without a break is a line too.</summary>
+        public void End()
+        {
+            Decode([], flush: true);
+            if (_pending)
+                Emit();
+        }
+
+        public void ThrowIfFailed() => _error?.Throw();
+
+        private void Decode(ReadOnlySpan<byte> bytes, bool flush)
+        {
+            var needed = _decoder.GetCharCount(bytes, flush);
+            if (needed > _chars.Length)
+                _chars = new char[needed];
+            var count = _decoder.GetChars(bytes, _chars, flush);
+            foreach (var c in _chars.AsSpan(0, count))
+            {
+                if (c == '\n')
+                {
+                    Emit();
+                    continue;
+                }
+
+                _pending = true;
+                // One character past the cap is kept, so a "\r" right after a line of exactly the cap is still removed;
+                // the rest of a longer line is dropped.
+                if (_line.Length <= MaxLineChars)
+                    _line.Append(c);
+            }
+        }
+
+        private void Emit()
+        {
+            var length = _line.Length;
+            if (length > 0 && _line[length - 1] == '\r')
+                length--;
+            var line = _line.ToString(0, Math.Min(length, MaxLineChars));
+            _line.Clear();
+            _pending = false;
+            if (_error is not null)
+                return;
+            try
+            {
+                onLine(line);
+            }
+#pragma warning disable CA1031 // Rethrown to the caller once the tool is killed.
+            catch (Exception e)
+#pragma warning restore CA1031
+            {
+                _error = ExceptionDispatchInfo.Capture(e);
+                failed.Cancel();
+            }
+        }
     }
 
     private static async Task WriteInputAsync(StreamWriter stdin, ReadOnlyMemory<byte> bytes)
