@@ -88,6 +88,10 @@ internal static unsafe partial class PdfiumNative
     [LibraryImport(Library)]
     public static partial void FPDF_RenderPageBitmap(nint bitmap, nint page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
 
+    /// <summary>The number of annotations on the page (fpdf_annot.h), or -1 on an error.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_GetAnnotCount(nint page);
+
     // Reading text: fpdf_text.h.
 
     [LibraryImport(Library)]

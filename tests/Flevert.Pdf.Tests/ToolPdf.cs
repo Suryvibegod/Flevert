@@ -88,6 +88,18 @@ internal static class ToolPdf
 
         /// <summary>White, with one short line of real text in 6 pt Helvetica: almost no ink, but characters.</summary>
         OneSmallLine,
+
+        /// <summary>A blank back with handwritten initials in a corner, about 1 x 0.6 cm of pen strokes: a picture, no characters.</summary>
+        Initials,
+
+        /// <summary>A blank back with a small stamp: a red square outline of 1.5 cm.</summary>
+        Stamp,
+
+        /// <summary>A blank back with the scanner lid's shadow along the left edge and specks of dust scattered over it.</summary>
+        ShadowAndDust,
+
+        /// <summary>A blank back with a comment (a sticky note) on it.</summary>
+        Comment,
     }
 
     /// <summary>
@@ -111,7 +123,7 @@ internal static class ToolPdf
             var page = 4 + (3 * i);
             var width = 591 + i;
             objects.Add(Ascii(string.Create(CultureInfo.InvariantCulture,
-                $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} 842] /Resources << /XObject << /Im0 {page + 1} 0 R >> /Font << /F1 3 0 R >> >> /Contents {page + 2} 0 R >>")));
+                $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} 842] /Resources << /XObject << /Im0 {page + 1} 0 R >> /Font << /F1 3 0 R >> >> /Contents {page + 2} 0 R{(pages[i] == ScanPage.Comment ? " /Annots [<< /Type /Annot /Subtype /Text /Rect [500 60 520 80] /Contents (Ky lai) /Open false >>]" : "")} >>")));
             var pixels = new byte[Width * Height];
             for (var at = 0; at < pixels.Length; at++)
                 pixels[at] = (byte)random.Next(248, 256);
@@ -127,17 +139,22 @@ internal static class ToolPdf
                     }
                 }
             }
-            else if (pages[i] == ScanPage.Blank)
-            {
-                for (var speck = 0; speck < 3; speck++)
-                    pixels[random.Next(pixels.Length)] = 40;
-            }
 
             objects.Add(Stream(string.Create(CultureInfo.InvariantCulture, $"/Type /XObject /Subtype /Image /Width {Width} /Height {Height} /ColorSpace /DeviceGray /BitsPerComponent 8"), pixels));
-            var content = pages[i] == ScanPage.OneSmallLine
-                ? "BT /F1 6 Tf 72 400 Td (Ghi chu) Tj ET"
-                : string.Create(CultureInfo.InvariantCulture, $"q {width} 0 0 842 0 0 cm /Im0 Do Q");
+            // Marks drawn over the scan as vectors, at their real size: a 1 pt speck is two pixels at 150 DPI.
+            var dust = string.Concat(Enumerable.Range(0, pages[i] == ScanPage.ShadowAndDust ? 40 : 3).Select(_ =>
+                string.Create(CultureInfo.InvariantCulture, $" {random.Next(30, width - 30)} {random.Next(30, 812)} 1 1 re f")));
+            var content = pages[i] switch
+            {
+                ScanPage.OneSmallLine => "BT /F1 6 Tf 72 400 Td (Ghi chu) Tj ET",
+                ScanPage.Text => string.Create(CultureInfo.InvariantCulture, $"q {width} 0 0 842 0 0 cm /Im0 Do Q"),
+                ScanPage.Initials => Scanned("0 g 1.5 w 500 60 m 500 77 l 512 60 l 512 77 l S 518 60 m 518 77 l 528 60 l S 530 60 m 530 77 l S"),
+                ScanPage.Stamp => Scanned("0.8 0 0 RG 1.5 w 100 100 42 42 re S"),
+                ScanPage.ShadowAndDust => Scanned("0.35 g 0 0 1.5 842 re f 0.15 g" + dust),
+                _ => Scanned("0.15 g" + dust),
+            };
             objects.Add(Stream("", Ascii(content)));
+            string Scanned(string marks) => string.Create(CultureInfo.InvariantCulture, $"q {width} 0 0 842 0 0 cm /Im0 Do Q {marks}");
         }
 
         Write(path, objects);

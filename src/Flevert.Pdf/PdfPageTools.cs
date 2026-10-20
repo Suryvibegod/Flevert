@@ -244,9 +244,11 @@ public sealed class PdfFitA4 : IOperation
 /// </summary>
 /// <remarks>
 /// <para>
-/// The worker draws each page at 150 DPI: a page is blank when at least 99.9% of its pixels are at least 245 of 255 light
-/// (Stirling-PDF's BlankPageController, MIT: threshold 10, white percent 99.9) and it has no character at all
-/// (<c>FPDFText_CountChars</c>, which Flevert adds so a page with one short line of text is never dropped).
+/// A page with a character (<c>FPDFText_CountChars</c>) or an annotation (<c>FPDFPage_GetAnnotCount</c>: a comment, a
+/// stamp, a form field) is kept. The worker draws the others at 150 DPI and looks for marks: leaving out a 5 mm band
+/// along the edges, a page is blank when no square of about 1 cm has more than 1.5% pixels darker than 245 of 255
+/// (<see cref="PdfToolsWorker.IsBlank"/>). The threshold comes from Stirling-PDF's BlankPageController (MIT), which
+/// counts over the whole page instead (blank at 99.9% white) and so drops a page with only initials or a stamp on it.
 /// </para>
 /// <para>
 /// qpdf then writes the other pages (<see cref="Qpdf.SelectPagesAsync"/>, keeping the document: its information,

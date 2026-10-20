@@ -7,7 +7,7 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 ### Added
 
 - New PDF tools in **Flevert PDF tools**, a second entry beside **Flevert** in the PDF menu with its own list. Each runs straight from the menu, on your computer, for each PDF you select:
-  - **Remove blank pages** drops the empty backs of a two-sided scan and says which pages it removed. A page with any text on it is kept.
+  - **Remove blank pages** drops the empty backs of a two-sided scan and says which pages it removed. A page with a comment or with text you can select is always kept, and so is a scanned page with any small mark, such as initials, a stamp or a pencil note; a scanner's shadow along the edge and specks of dust do not count.
   - **Add page numbers** at the bottom centre, as `1 / 12`, upright even on turned pages.
   - **Add watermark…** asks for your text once for all the PDFs you selected, and writes it, Vietnamese included, across every page in light grey. It marks what a copy is for; it does not stop anyone from editing the PDF.
   - **Print layout** > **2 pages per sheet** and **4 pages per sheet** put the pages on A4 sheets, to print on less paper.

@@ -526,9 +526,9 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
 
 **Remove blank pages** (`pdf.remove-blank-pages`):
 - Worker render từng trang ở 150 DPI xám.
-- Một trang là trắng khi cả hai điều kiện đúng:
-  - ≥ 99,9% điểm ảnh có độ sáng ≥ 245 (ngưỡng 10 trên 255). Ngưỡng lấy từ `BlankPageController` của Stirling-PDF (MIT).
-  - Trang không có ký tự nào (`FPDFText_CountChars` = 0). Điều kiện này Flevert thêm vào, để không bỏ nhầm trang chỉ có một dòng chữ nhỏ.
+- Trang có ký tự (`FPDFText_CountChars` > 0) hoặc có chú thích (`FPDFPage_GetAnnotCount` > 0: ghi chú, con dấu, trường form) luôn được giữ.
+- Trang còn lại là trắng khi, bỏ dải lề 5 mm quanh mép (bóng máy scan), chia phần còn lại thành ô khoảng 1 cm (≈ 59 × 59 px ở 150 DPI), **không ô nào** có quá 1,5% điểm ảnh tối (độ sáng < 245, ngưỡng 10 trên 255 lấy từ `BlankPageController` của Stirling-PDF, MIT). Bụi rải rác nên ô nào cũng ít; chữ ký tắt, con dấu, ghi chú bút chì tập trung nên vượt ngưỡng ở ít nhất một ô.
+- Khác Stirling-PDF: Stirling đếm trên cả trang (trắng khi ≥ 99,9% điểm sáng), nên bỏ nhầm trang chỉ có chữ ký tắt hay con dấu nhỏ (dưới 0,1% trang A4). Đổi sau kiểm cuối v0.2.2.
 - Giữ các trang còn lại bằng qpdf `--pages`: chép nguyên, không mã hóa lại.
 - Thông báo nêu số trang đã bỏ: "Removed 3 blank pages: 2, 8, 9."
 - Không trang nào trắng → skipped "This PDF has no blank pages."
@@ -559,7 +559,7 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
 
 - Test viết trước và thấy đỏ.
 - Fixture sinh bằng script, ghi nguồn gốc:
-  - scan 6 trang, trong đó 2 trang trắng và 1 trang chỉ có một dòng chữ nhỏ (trang này không được bỏ);
+  - scan 6 trang, trong đó 2 trang trắng và 1 trang chỉ có một dòng chữ nhỏ (trang này không được bỏ); scan có trang chỉ có chữ ký tắt, con dấu nhỏ, ghi chú (giữ) và trang có bóng mép cùng bụi (bỏ);
   - PDF có trang xoay `/Rotate 90` (số trang và watermark phải đúng chỗ khi xem);
   - trang Letter, A3 và khổ lạ (cho fit A4);
   - form AcroForm đã điền, kèm chú thích;

@@ -40,6 +40,22 @@ public sealed class PdfRemoveBlankPagesTests : IDisposable
     }
 
     [Fact]
+    public async Task Initials_a_stamp_or_a_comment_keep_a_scanned_page_and_a_shadow_with_dust_does_not()
+    {
+        var input = _dir.Combine("signed.pdf");
+        ToolPdf.WriteScan(input, ToolPdf.ScanPage.Text, ToolPdf.ScanPage.Initials, ToolPdf.ScanPage.Stamp,
+            ToolPdf.ScanPage.ShadowAndDust, ToolPdf.ScanPage.Comment, ToolPdf.ScanPage.Blank);
+        using var logs = new TempDir();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op(), [input], null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal([591, 592, 593, 595], PageWidths(result.Output!));
+        Assert.Equal("Removed 2 blank pages: 4, 6.", result.Note);
+    }
+
+    [Fact]
     public async Task A_pdf_without_blank_pages_is_skipped()
     {
         var input = _dir.Combine("full.pdf");
@@ -78,16 +94,83 @@ public sealed class PdfRemoveBlankPagesTests : IDisposable
             PdfRemoveBlankPages.RemovedNote([.. Enumerable.Range(1, 25)]));
     }
 
-    [Fact]
-    public void A_page_is_blank_with_up_to_one_dark_pixel_in_a_thousand()
-    {
-        var page = Enumerable.Repeat((byte)255, 1000 * 4).ToArray();
-        page[0] = page[1] = page[2] = 0; // one black pixel of 1000
+    // An A4 page drawn at 150 DPI: 1240 x 1754 pixels, white.
+    private const int PageWidth = 1240, PageHeight = 1754;
 
-        Assert.True(PdfToolsWorker.IsBlank(page));
-        page[4] = page[5] = page[6] = 244; // a second, just under white
-        Assert.False(PdfToolsWorker.IsBlank(page));
+    private static byte[] WhitePage() => Enumerable.Repeat((byte)255, PageWidth * PageHeight * 4).ToArray();
+
+    private static void Ink(byte[] page, int x, int y, int width, int height, byte luma = 0)
+    {
+        for (var row = y; row < y + height; row++)
+        {
+            for (var column = x; column < x + width; column++)
+                page[((row * PageWidth) + column) * 4] = page[((row * PageWidth) + column) * 4 + 1] = page[((row * PageWidth) + column) * 4 + 2] = luma;
+        }
     }
+
+    private static bool IsBlank(byte[] page) => PdfToolsWorker.IsBlank(page, PageWidth, PageHeight, PdfToolsWorker.BlankDpi);
+
+    [Fact]
+    public void A_white_page_is_blank()
+    {
+        Assert.True(IsBlank(WhitePage()));
+    }
+
+    [Fact]
+    public void Handwritten_initials_keep_a_page_though_they_are_far_under_a_thousandth_of_it()
+    {
+        // "N.A." in pen, about 1.2 x 0.6 cm in the bottom right corner: four strokes 3 pixels wide.
+        var page = WhitePage();
+        Ink(page, 1050, 1600, 3, 35);
+        Ink(page, 1050, 1600, 25, 3);
+        Ink(page, 1075, 1600, 3, 35);
+        Ink(page, 1095, 1600, 3, 35);
+        Assert.True(4 * 35 * 3 < PageWidth * PageHeight / 1000); // the old rule took it for blank
+
+        Assert.False(IsBlank(page));
+    }
+
+    [Fact]
+    public void A_small_stamp_keeps_a_page()
+    {
+        // A ring of 1.5 cm, 3 pixels thick, in red ink.
+        var page = WhitePage();
+        for (var y = 0; y < PageHeight; y++)
+        {
+            for (var x = 0; x < PageWidth; x++)
+            {
+                var distance = Math.Sqrt(Math.Pow(x - 300, 2) + Math.Pow(y - 300, 2));
+                if (distance is >= 41 and < 44)
+                    (page[((y * PageWidth) + x) * 4], page[((y * PageWidth) + x) * 4 + 1]) = ((byte)40, (byte)40);
+            }
+        }
+
+        Assert.False(IsBlank(page));
+    }
+
+    [Fact]
+    public void A_pencil_note_keeps_a_page()
+    {
+        // A light grey line of 4 cm, 2 pixels high.
+        var page = WhitePage();
+        Ink(page, 400, 900, 236, 2, luma: 180);
+
+        Assert.False(IsBlank(page));
+    }
+
+    [Fact]
+    public void A_scanner_shadow_along_an_edge_and_scattered_dust_leave_a_page_blank()
+    {
+        var page = WhitePage();
+        Ink(page, 0, 0, 3, PageHeight, luma: 90); // the lid's shadow, 3 pixels along the left edge
+        Ink(page, 0, PageHeight - 4, PageWidth, 4, luma: 120); // and along the bottom
+        var random = new Random(3);
+        for (var speck = 0; speck < 60; speck++)
+            Ink(page, random.Next(40, PageWidth - 42), random.Next(40, PageHeight - 42), 2, 2, luma: 60);
+
+        Assert.True(IsBlank(page));
+    }
+
 }
 
 /// <summary>docs/specs/pdf.md, v0.2.2, success criterion 3: <c>Add page numbers</c>.</summary>

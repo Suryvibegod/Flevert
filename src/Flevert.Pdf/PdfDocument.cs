@@ -287,6 +287,20 @@ public sealed class PdfDocument : IDisposable
         }
     }
 
+    /// <summary>The number of annotations on page <paramref name="pageIndex"/> (comments, stamps, form fields, links).</summary>
+    internal int CountAnnotations(int pageIndex)
+    {
+        lock (Pdfium.Gate)
+        {
+            ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
+            using var page = PageHandle.Load(_handle, pageIndex);
+            var count = PdfiumNative.FPDFPage_GetAnnotCount(page.DangerousGetHandle());
+            if (count < 0)
+                throw new PdfException(PdfError.DamagedPage, $"Page {pageIndex + 1} of this PDF is damaged and its comments cannot be read.");
+            return count;
+        }
+    }
+
     private static unsafe PdfPageImage? Describe(nint page, nint image, int index)
     {
         PdfiumNative.ImageMetadata metadata;

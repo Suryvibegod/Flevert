@@ -31,6 +31,15 @@ internal static class PdfToolsWorker
     /// <summary>A pixel at least this light is white: 255 less Stirling-PDF's default threshold of 10.</summary>
     internal const int WhiteLevel = 245;
 
+    /// <summary>The band along the edges a blank page may have marks in (a scanner's shadow, the lid's edge): 5 mm.</summary>
+    internal const double BlankMarginMillimetres = 5;
+
+    /// <summary>The side of the squares the rest of the page is looked at in: 1 cm, about 59 pixels at 150 DPI.</summary>
+    internal const double BlankTileCentimetres = 1;
+
+    /// <summary>A square with more than this many dark pixels in a thousand holds a mark: 1.5%.</summary>
+    internal const int MaxDarkPerThousand = 15;
+
     /// <summary>A4 in points, portrait.</summary>
     internal const double A4Width = 595.28;
     internal const double A4Height = 841.89;
@@ -74,8 +83,9 @@ internal static class PdfToolsWorker
             var page = index + 1;
             var size = pdf.GetRenderSize(index, request.Dpi);
             lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"page {page} {size.Width} {size.Height}"));
-            // A page with any character is kept, however little of it is inked: one short line on a page is not blank.
-            if (pdf.CountChars(index) == 0)
+            // A page with a character or an annotation (a comment, a stamp, a form field) is kept, however little ink it
+            // shows; the others are judged by their pixels, which is all a scan has.
+            if (pdf.CountChars(index) == 0 && pdf.CountAnnotations(index) == 0)
             {
                 if (pixels.Length < size.Bytes)
                 {
@@ -84,7 +94,7 @@ internal static class PdfToolsWorker
                 }
 
                 pdf.RenderInto(index, request.Dpi, pixels);
-                if (IsBlank(pixels.AsSpan(0, (int)size.Bytes)))
+                if (IsBlank(pixels.AsSpan(0, (int)size.Bytes), size.Width, size.Height, size.Dpi))
                     lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"blank {page}"));
             }
 
@@ -95,23 +105,58 @@ internal static class PdfToolsWorker
     }
 
     /// <summary>
-    /// Whether BGRA pixels, drawn on white, are a blank page: at least 99.9% of them are at least <see cref="WhiteLevel"/>
-    /// light (Stirling-PDF's BlankPageController, MIT: threshold 10, white percent 99.9). Scanner dust and a faint edge
-    /// stay under the 0.1%; a line of small text does not (and is caught by its characters first, when it has any).
+    /// Whether BGRA pixels (<paramref name="width"/> by <paramref name="height"/>, rows without padding, drawn on white at
+    /// <paramref name="dpi"/>) are a blank page. A pixel is dark below <see cref="WhiteLevel"/> (Stirling-PDF's
+    /// BlankPageController, MIT: threshold 10). Stirling-PDF then counts dark pixels over the whole page (blank at 99.9%
+    /// white), which drops a page whose only mark is small: handwritten initials, a stamp, a pencil note are under 0.1% of
+    /// an A4 page. Flevert looks instead at squares of about <see cref="BlankTileCentimetres"/> cm, leaving out a band of
+    /// <see cref="BlankMarginMillimetres"/> mm along the edges where scanners leave shadows: the page is blank only if no
+    /// square has more than <see cref="MaxDarkPerThousand"/> dark pixels in a thousand. Dust is scattered and stays under
+    /// that in every square; writing is concentrated, and one stroke through a square passes it.
     /// </summary>
-    internal static bool IsBlank(ReadOnlySpan<byte> bgra)
+    internal static bool IsBlank(ReadOnlySpan<byte> bgra, int width, int height, double dpi)
     {
-        var pixels = bgra.Length / 4;
-        long dark = 0;
-        for (var at = 0; at + 3 < bgra.Length; at += 4)
+        if (width <= 0 || height <= 0 || bgra.Length < (long)width * height * 4)
+            throw new ArgumentException("The pixels do not fill the size given.", nameof(bgra));
+        var margin = (int)Math.Round(dpi * BlankMarginMillimetres / 25.4);
+        // A page too small for the band is looked at whole.
+        var (left, top, right, bottom) = width > 2 * margin && height > 2 * margin
+            ? (margin, margin, width - margin, height - margin)
+            : (0, 0, width, height);
+        var tile = dpi * BlankTileCentimetres / 2.54;
+        // Squares of about a centimetre that share out the area exactly: none is a sliver whose one speck counts for much.
+        var columns = Math.Max(1, (int)Math.Round((right - left) / tile));
+        var rows = Math.Max(1, (int)Math.Round((bottom - top) / tile));
+        var columnOf = new int[right - left];
+        for (var x = 0; x < columnOf.Length; x++)
+            columnOf[x] = (int)((long)x * columns / columnOf.Length);
+        var dark = new int[columns];
+        for (var row = 0; row < rows; row++)
         {
-            // ITU-R BT.601 luma, in thousandths: blue, green, red.
-            var luma = ((bgra[at] * 114) + (bgra[at + 1] * 587) + (bgra[at + 2] * 299)) / 1000;
-            if (luma < WhiteLevel)
-                dark++;
+            var (from, to) = (top + (int)((long)row * (bottom - top) / rows), top + (int)((long)(row + 1) * (bottom - top) / rows));
+            Array.Clear(dark);
+            for (var y = from; y < to; y++)
+            {
+                var line = bgra.Slice(((y * width) + left) * 4, (right - left) * 4);
+                for (var x = 0; x < columnOf.Length; x++)
+                {
+                    var at = x * 4;
+                    // ITU-R BT.601 luma, in thousandths: blue, green, red.
+                    var luma = ((line[at] * 114) + (line[at + 1] * 587) + (line[at + 2] * 299)) / 1000;
+                    if (luma < WhiteLevel)
+                        dark[columnOf[x]]++;
+                }
+            }
+
+            for (var column = 0; column < columns; column++)
+            {
+                var tileWidth = (int)((long)(column + 1) * columnOf.Length / columns) - (int)((long)column * columnOf.Length / columns);
+                if ((long)dark[column] * 1000 > (long)MaxDarkPerThousand * tileWidth * (to - from))
+                    return false;
+            }
         }
 
-        return dark * 1000 <= pixels;
+        return true;
     }
 
     // ---- Edits ---------------------------------------------------------------------------------------------------
