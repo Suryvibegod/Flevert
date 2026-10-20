@@ -161,6 +161,7 @@ Mỗi file được mở giữ (pin) không cho xóa/đổi tên trong lúc xử
 - Cùng thư mục với file gốc. Tên do thao tác đề xuất (`anh.png`, `anh (nén).jpg`).
 - Trùng tên thì thêm ` (1)`, ` (2)`...
 - Ghi ra file tạm `.flevert-<guid>.partial` (độ dài cố định) rồi đổi tên khi xong: hỏng giữa chừng không để lại file dở. Tên output tự cắt bớt để vừa 255 ký tự; thư mục trùng tên cũng tính là đã có.
+- **Output là thư mục** (1 → N, ví dụ mỗi trang PDF một file): `OutputPath.WriteDirectoryAtomicallyAsync(thư mục mong muốn, write, ct)`. Tạo thư mục tạm rỗng `.flevert-<guid>.partial` cạnh file gốc, thao tác ghi mọi file vào đó, rồi đổi tên **một lần** sang tên trống đầu tiên: `tên`, `tên (1)`, … (cùng quy tắc và cắt 255 ký tự như file; file hoặc thư mục trùng tên đều tính là đã có; ` (n)` luôn ở cuối tên thư mục, kể cả khi tên có dấu chấm). Không bao giờ gộp vào hay ghi đè thư mục có sẵn; tên bị chiếm giữa lúc chọn và lúc đổi tên thì thử tên kế. Lỗi hoặc hủy: xóa thư mục tạm cùng mọi thứ trong đó; link (junction) bên trong chỉ bị gỡ, không đi theo, nên không xóa được gì bên ngoài.
 
 ### Log
 
