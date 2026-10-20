@@ -450,6 +450,69 @@ public sealed class BatchTests
         }
     }
 
+    [Fact]
+    public async Task A_process_of_a_cancelled_join_that_arrives_afterwards_is_accounted_for_not_left_out()
+    {
+        // The user cancelled the join while a process of the selection was still starting: when it runs, its file must
+        // not bring a "left out" notification.
+        var op = UniqueOp();
+        var leaderStamp = ProcessStamp.Self;
+        try
+        {
+            var leader = (await Batch.LeadOrJoinOneOutputAsync(op, [@"C:\a.txt"], Idle, leaderStamp, _ => [], CancellationToken.None))!;
+            await using (leader)
+            {
+                using var cancel = new CancellationTokenSource();
+                await cancel.CancelAsync();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+                {
+                    await foreach (var _ in leader.ReadAllAsync(cancel.Token))
+                    {
+                    }
+                });
+                await leader.MarkCancelledAsync();
+            }
+
+            Assert.True(Batch.ReadRecord(op)!.Cancelled);
+            var straggler = new ProcessStamp(leaderStamp.Id + 1, leaderStamp.Created.AddSeconds(0.2));
+            await using var late = await Batch.LeadOrJoinOneOutputAsync(op, [@"C:\b.txt"], Idle, straggler, _ => [], CancellationToken.None);
+
+            Assert.NotNull(late);
+            Assert.True(late.AccountedFor);
+            Assert.False(late.LeavesOut);
+        }
+        finally
+        {
+            File.Delete(Batch.RecordPath(op));
+        }
+    }
+
+    [Fact]
+    public async Task A_join_that_was_not_cancelled_still_reports_a_late_file_left_out()
+    {
+        // The control for the test above: the same straggler, after a join that ran.
+        var op = UniqueOp();
+        var leaderStamp = ProcessStamp.Self;
+        try
+        {
+            var leader = (await Batch.LeadOrJoinOneOutputAsync(op, [@"C:\a.txt"], Idle, leaderStamp, _ => [], CancellationToken.None))!;
+            await using (leader)
+                await DrainAsync(leader);
+
+            Assert.False(Batch.ReadRecord(op)!.Cancelled);
+            var straggler = new ProcessStamp(leaderStamp.Id + 1, leaderStamp.Created.AddSeconds(0.2));
+            await using var late = await Batch.LeadOrJoinOneOutputAsync(op, [@"C:\b.txt"], Idle, straggler, _ => [], CancellationToken.None);
+
+            Assert.NotNull(late);
+            Assert.True(late.LeavesOut);
+            Assert.False(late.AccountedFor);
+        }
+        finally
+        {
+            File.Delete(Batch.RecordPath(op));
+        }
+    }
+
     private static async Task<List<string>> DrainAsync(BatchLeader leader)
     {
         var files = new List<string>();

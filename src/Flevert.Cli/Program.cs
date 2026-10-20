@@ -176,6 +176,13 @@ internal static class Program
             : Batch.LeadOrJoinAsync(run.OperationId, inputs, idle, CancellationToken.None)).GetAwaiter().GetResult();
         if (leader is null)
             return Ok;
+        if (leader.AccountedFor && operation is IBatchOperation accounted)
+        {
+            // Their batch already told the user (it reported them missing, or was cancelled): a log line, no notification.
+            new Runner(log).LogAccountedFor(accounted, inputs);
+            leader.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            return Ok;
+        }
 
         var headless = Environment.GetEnvironmentVariable("FLEVERT_HEADLESS") == "1";
         // Protect and unlock ask for the password in a dialog, once for the batch when the user agrees. Without windows
@@ -199,7 +206,7 @@ internal static class Program
                 // Files that came too late for their batch: one notification for all of them, and no second output.
                 IBatchOperation join when leader.LeavesOut => (_, ct) => runner.LeaveOutAsync(join, leader.ReadAllAsync(ct), ct),
                 // Collects the whole batch first, so the leader closes once no file has arrived for the idle window.
-                IBatchOperation join => (progress, ct) => runner.RunAsync(join, leader.ReadAllAsync(ct), progress, ct, () => leader.Missing),
+                IBatchOperation join => (progress, ct) => JoinAsync(runner, join, leader, progress, ct),
                 IOperation each => (progress, ct) => runner.RunAsync(
                     each, leader.ReadAllAsync(ct), () => leader.Pending, progress, ct, MaxParallelFor(each), count =>
                     {
@@ -218,6 +225,16 @@ internal static class Program
             asking?.Dispose(); // wipes the passwords it still holds
             leader.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
+    }
+
+    private static async Task<BatchOutcome> JoinAsync(
+        Runner runner, IBatchOperation join, BatchLeader leader, IProgress<BatchProgress>? progress, CancellationToken ct)
+    {
+        var outcome = await runner.RunAsync(join, leader.ReadAllAsync(ct), progress, ct, () => leader.Missing).ConfigureAwait(false);
+        // Files of this selection that come after a cancel must not bring a "left out" notification.
+        if (ct.IsCancellationRequested)
+            await leader.MarkCancelledAsync().ConfigureAwait(false);
+        return outcome;
     }
 
     private static bool _lowered;

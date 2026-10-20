@@ -98,6 +98,48 @@ public sealed class RunnerBatchOperationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_file_whose_process_is_still_starting_did_not_reach_flevert_in_time_and_nothing_is_joined()
+    {
+        var one = _dir.File("1.txt");
+        var two = _dir.Combine("2.txt");
+        var op = new RecordingJoin();
+
+        var outcome = await NewRunner().RunAsync(op, new[] { one }.ToAsyncEnumerable(), progress: null, CancellationToken.None,
+            () => [new MissingFile(two, StillRunning: true)]);
+
+        Assert.Empty(op.Calls);
+        var result = Assert.Single(outcome.Results);
+        Assert.Equal("2.txt did not reach Flevert in time, so nothing was joined. Select the files again.", result.Error);
+        Assert.Contains(File.ReadAllLines(Assert.Single(Directory.GetFiles(_logs.Path))), line =>
+            line.Contains("\t" + two + "\tfailed\t", StringComparison.Ordinal) && line.Contains("\tdid not reach Flevert in time", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_file_whose_process_ended_never_reached_flevert()
+    {
+        var one = _dir.File("1.txt");
+        var op = new RecordingJoin();
+
+        var outcome = await NewRunner().RunAsync(op, new[] { one }.ToAsyncEnumerable(), progress: null, CancellationToken.None,
+            () => [new MissingFile(_dir.Combine("2.txt"), StillRunning: true), new MissingFile(_dir.Combine("3.txt"), StillRunning: false)]);
+
+        Assert.Empty(op.Calls);
+        Assert.Equal("2.txt and 1 more file never reached Flevert, so nothing was joined. Select the files again.", Assert.Single(outcome.Results).Error);
+    }
+
+    [Fact]
+    public void Files_a_batch_accounted_for_are_logged_as_skipped_without_anything_else()
+    {
+        var file = _dir.Combine("late.txt");
+
+        NewRunner().LogAccountedFor(new DevJoin(), [file]);
+
+        var line = Assert.Single(File.ReadAllLines(Assert.Single(Directory.GetFiles(_logs.Path))));
+        Assert.Contains("\t" + file + "\tskipped\t", line, StringComparison.Ordinal);
+        Assert.Contains("its batch had been cancelled", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_missing_file_fails_the_whole_output()
     {
         var present = _dir.File("1.txt");

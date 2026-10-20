@@ -526,6 +526,30 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_process_too_slow_to_start_is_named_as_late_and_its_file_brings_no_second_notification()
+    {
+        // Still suspended when the batch stops waiting for it (JoinGate.HoldLimit): it did not end, it is late. When it
+        // runs at last, its batch has already said so: it exits without a "left out" of its own.
+        var files = Enumerable.Range(1, 3).Select(i => _dir.File($"{i}.txt", $"{i}\r\n")).ToList();
+        using var slow = SuspendedFlevert("dev.join", files[1]);
+        var others = new[] { files[0], files[2] }.Select(f => StartFlevert("dev.join", f)).ToList();
+        await Task.WhenAll(others.Select(p => p.WaitForExitAsync())).WaitAsync(TimeSpan.FromSeconds(90));
+
+        Assert.Equal([0, 1], others.Select(p => p.ExitCode).Order());
+        Assert.Contains(LogLines(), line =>
+            line.Contains("\t" + files[1] + "\tfailed\t", StringComparison.Ordinal) && line.Contains("\tdid not reach Flevert in time", StringComparison.Ordinal));
+
+        slow.Resume();
+        await slow.Process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+
+        Assert.Equal(0, slow.Process.ExitCode);
+        Assert.Equal(["1.txt", "2.txt", "3.txt"], _dir.FileNames());
+        Assert.Contains(LogLines(), line =>
+            line.Contains("\t" + files[1] + "\tskipped\t", StringComparison.Ordinal) && line.Contains("\tnot joined:", StringComparison.Ordinal));
+        Assert.DoesNotContain(LogLines(), line => line.Contains("\tleft out:", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Two_joins_run_one_after_the_other_both_write_their_output()
     {
         // As a script does: the second starts as soon as the first has exited.

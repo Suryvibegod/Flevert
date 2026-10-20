@@ -28,6 +28,10 @@ internal enum Arrival
     /// <summary>The last batch accepted it already; only the acknowledgement was lost.</summary>
     AlreadyDelivered,
 
+    /// <summary>Its batch already told the user about its file: it named the file as never having reached it, or the
+    /// user cancelled the batch. Nothing to join, and nothing more to say (no second notification).</summary>
+    AccountedFor,
+
     /// <summary>The batch's leader still collects; this process got the name only while the leader was replacing its pipe
     /// instance. Give the name back and hand the file to that leader: it is this process's batch.</summary>
     LeaderCollecting,
@@ -42,12 +46,21 @@ internal sealed record JoinRecord(bool Open, ProcessStamp Leader, DateTime? Late
 {
     private const string Header = "flevert-join 1";
 
+    /// <summary>For a closed batch, the processes of its selection it named as never having handed over their file: some
+    /// may still be running, and arrive later.</summary>
+    public IReadOnlyList<ProcessStamp> Reported { get; init; } = [];
+
+    /// <summary>For a closed batch, whether the user cancelled it: its late files are dropped without a word.</summary>
+    public bool Cancelled { get; init; }
+
     public static Arrival Classify(ProcessStamp self, JoinRecord? record, DateTime nowUtc, Func<ProcessStamp, bool> isRunning)
     {
         if (record is null)
             return Arrival.OnTime;
         if (record.Members.Contains(self))
             return Arrival.AlreadyDelivered;
+        if (record.AccountsFor(self, nowUtc))
+            return Arrival.AccountedFor;
         // A close in the future means the clock went back since: it says nothing about this process.
         if (record.LatestClose is { } closed && closed <= nowUtc && self.Created < closed)
             return Arrival.Late;
@@ -67,6 +80,21 @@ internal sealed record JoinRecord(bool Open, ProcessStamp Leader, DateTime? Late
     /// </summary>
     public static readonly TimeSpan SelectionSpan = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Whether this closed batch has already told the user about <paramref name="self"/>'s file: it reported the process
+    /// missing, or it was cancelled and the process belongs to its selection (created before the close, within
+    /// <see cref="SelectionSpan"/> of the leader).
+    /// </summary>
+    public bool AccountsFor(ProcessStamp self, DateTime nowUtc)
+    {
+        if (Open)
+            return false;
+        if (Reported.Contains(self))
+            return true;
+        return Cancelled && LatestClose is { } closed && closed <= nowUtc && self.Created < closed
+            && (self.Created - Leader.Created).Duration() <= SelectionSpan;
+    }
+
     public string Format()
     {
         var text = new StringBuilder().AppendLine(Header).AppendLine(Open ? "open" : "closed");
@@ -75,6 +103,10 @@ internal sealed record JoinRecord(bool Open, ProcessStamp Leader, DateTime? Late
             text.Append("close ").AppendLine(close.Ticks.ToString(CultureInfo.InvariantCulture));
         foreach (var member in Members)
             Line(text, "member", member);
+        foreach (var reported in Reported)
+            Line(text, "reported", reported);
+        if (Cancelled)
+            text.AppendLine("cancelled");
         return text.ToString();
     }
 
@@ -88,6 +120,8 @@ internal sealed record JoinRecord(bool Open, ProcessStamp Leader, DateTime? Late
         ProcessStamp? leader = null;
         DateTime? close = null;
         var members = new List<ProcessStamp>();
+        var reported = new List<ProcessStamp>();
+        var cancelled = false;
         foreach (var line in lines.Skip(2))
         {
             var parts = line.Split(' ');
@@ -102,12 +136,18 @@ internal sealed record JoinRecord(bool Open, ProcessStamp Leader, DateTime? Late
                 case ["member", var id, var ticks] when Stamp(id, ticks) is { } stamp:
                     members.Add(stamp);
                     break;
+                case ["reported", var id, var ticks] when Stamp(id, ticks) is { } stamp:
+                    reported.Add(stamp);
+                    break;
+                case ["cancelled"]:
+                    cancelled = true;
+                    break;
                 default:
                     return null;
             }
         }
 
-        return leader is { } l ? new JoinRecord(lines[1] == "open", l, close, members) : null;
+        return leader is { } l ? new JoinRecord(lines[1] == "open", l, close, members) { Reported = reported, Cancelled = cancelled } : null;
     }
 
     private static void Line(StringBuilder text, string name, ProcessStamp stamp) =>
