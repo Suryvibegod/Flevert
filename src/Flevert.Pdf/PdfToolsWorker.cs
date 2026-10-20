@@ -187,16 +187,23 @@ internal static class PdfToolsWorker
                 throw new PdfException(PdfError.TooLarge, string.Create(CultureInfo.InvariantCulture, $"Page {index + 1} of this PDF is larger than PDF allows (200 inches on a side), so Flevert cannot change it."));
         }
 
+        // What pdfium writes is about the PDF (its pages and what they share, once), and the font of a watermark.
+        var needed = RandomAccess.GetLength(file) + (font?.Length ?? 0) + PdfRenderBudget.MarginBytes;
         switch (edit.Kind)
         {
             case PdfEditKind.PageNumbers:
             case PdfEditKind.Watermark:
                 EditPages(pdf, total, edit, font, lines);
+                RequireRoom(request.Folder, needed);
                 Save(pdf.Handle, request.Folder, lines);
                 break;
             default:
                 using (var sheets = Arrange(pdf, total, edit.Kind, lines))
+                {
+                    RequireRoom(request.Folder, needed);
                     Save(sheets, request.Folder, lines);
+                }
+
                 break;
         }
 
@@ -410,11 +417,14 @@ internal static class PdfToolsWorker
 
     /// <summary>
     /// A new PDF of A4 sheets: 2 pages side by side on landscape A4, 4 two by two on portrait A4 (in reading order), or
-    /// each page scaled onto A4 in its own orientation, centred, keeping its proportions. Pages already A4 are copied as
-    /// they are. Each page is drawn as a form (<c>FPDF_NewXObjectFromPage</c>, as <c>FPDF_ImportNPagesToOne</c> does)
-    /// after its form fields and comments are flattened into it, which a form would otherwise leave out.
+    /// each page scaled onto A4 in its own orientation, centred, keeping its proportions; an A4 page goes the same way, at
+    /// its size. Each page's form fields and comments are flattened into it first, and any annotation left (a link) is not
+    /// kept: the result is for printing. pdfium copies every page in one run (<c>FPDF_ImportNPagesToOne</c>), so what
+    /// pages share (fonts, images) is copied once. For several per sheet, pages come as forms on the sheets and each is
+    /// moved inside a margin of its cell. For one per sheet, pdfium copies the pages as they are, and each page's content is
+    /// scaled onto A4 where it is (<c>FPDFPage_TransFormWithClip</c>), its boxes made A4.
     /// </summary>
-    private static unsafe DocumentHandle Arrange(PdfDocument pdf, int total, PdfEditKind kind, StreamWriter lines)
+    private static DocumentHandle Arrange(PdfDocument pdf, int total, PdfEditKind kind, StreamWriter lines)
     {
         var sizes = Enumerable.Range(0, total).Select(pdf.GetPageSize).ToArray();
         if (kind == PdfEditKind.FitA4 && sizes.All(IsA4))
@@ -427,67 +437,51 @@ internal static class PdfToolsWorker
             _ => (1, 1, A4Width, A4Height),
         };
         var perSheet = columns * rows;
+        var margin = perSheet == 1 ? 0 : SheetMargin;
         DocumentHandle sheets;
         lock (Pdfium.Gate)
         {
-            var native = PdfiumNative.FPDF_CreateNewDocument();
+            for (var index = 0; index < total; index++)
+            {
+                lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"page {index + 1} 1 1"));
+                FlattenSource(pdf.Handle, index);
+                lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"wrote {index + 1}"));
+            }
+
+            var native = PdfiumNative.FPDF_ImportNPagesToOne(pdf.Handle.DangerousGetHandle(), (float)sheetWidth, (float)sheetHeight, (nuint)columns, (nuint)rows);
             if (native == 0)
-                throw new InvalidOperationException("pdfium could not create a document.");
+                throw new PdfException(PdfError.ReaderFailed, "Flevert's PDF reader could not lay out the pages: the PDF may be damaged.");
             sheets = new DocumentHandle(native, new NothingToRelease());
         }
 
         try
         {
-            var source = pdf.Handle.DangerousGetHandle();
+            if (perSheet == 1)
+            {
+                for (var index = 0; index < total; index++)
+                    FitOnA4(sheets, index);
+                return sheets;
+            }
+
             for (var sheet = 0; sheet * perSheet < total; sheet++)
             {
                 lock (Pdfium.Gate)
                 {
-                    var first = sheet * perSheet;
-                    if (kind == PdfEditKind.FitA4 && IsA4(sizes[first]))
-                    {
-                        lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"page {first + 1} 1 1"));
-                        var index = first;
-                        if (PdfiumNative.FPDF_ImportPagesByIndex(sheets.DangerousGetHandle(), source, &index, 1, sheet) == 0)
-                            throw new PdfException(PdfError.DamagedPage, $"Page {first + 1} of this PDF is damaged and cannot be copied.");
-                        lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"wrote {first + 1}"));
-                        continue;
-                    }
-
-                    var (width, height) = kind == PdfEditKind.FitA4 && sizes[first].Width > sizes[first].Height
-                        ? (A4Height, A4Width)
-                        : (sheetWidth, sheetHeight);
-                    using var page = PageHandle.New(sheets, sheet, width, height);
+                    using var page = PageHandle.Load(sheets, sheet);
                     var native = page.DangerousGetHandle();
-                    var margin = perSheet == 1 ? 0 : SheetMargin;
-                    var (cellWidth, cellHeight) = (width / columns, height / rows);
-                    for (var slot = 0; slot < perSheet && first + slot < total; slot++)
+                    var first = sheet * perSheet;
+                    var slots = Math.Min(perSheet, total - first);
+                    if (PdfiumNative.FPDFPage_CountObjects(native) != slots)
+                        throw new PdfException(PdfError.ReaderFailed, "Flevert's PDF reader could not lay out the pages: the PDF may be damaged.");
+                    for (var slot = 0; slot < slots; slot++)
                     {
-                        var index = first + slot;
-                        lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"page {index + 1} 1 1"));
-                        FlattenSource(pdf.Handle, index);
-                        var xobject = PdfiumNative.FPDF_NewXObjectFromPage(sheets.DangerousGetHandle(), source, index);
-                        if (xobject == 0)
-                            throw new PdfException(PdfError.DamagedPage, $"Page {index + 1} of this PDF is damaged and cannot be copied.");
-                        nint form;
-                        try
-                        {
-                            form = PdfiumNative.FPDF_NewFormObjectFromXObject(xobject);
-                        }
-                        finally
-                        {
-                            PdfiumNative.FPDF_CloseXObject(xobject);
-                        }
-
-                        if (form == 0)
-                            throw new PdfException(PdfError.DamagedPage, $"Page {index + 1} of this PDF is damaged and cannot be copied.");
-                        var (cellX, cellY) = ((slot % columns) * cellWidth, height - ((slot / columns) + 1) * cellHeight);
-                        var size = sizes[index];
-                        var scale = Math.Min((cellWidth - (2 * margin)) / size.Width, (cellHeight - (2 * margin)) / size.Height);
-                        var x = cellX + ((cellWidth - (size.Width * scale)) / 2);
-                        var y = cellY + ((cellHeight - (size.Height * scale)) / 2);
-                        Place(native, form, new Affine(scale, 0, 0, scale, x, y));
-                        lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"wrote {index + 1}"));
+                        // Where pdfium put the page (its cell of the sheet it was given, scaled to fit, centred), and where
+                        // it goes (its cell of this sheet, inside the margin): the same page, moved and scaled.
+                        var size = sizes[first + slot];
+                        var (fromX, fromY, fromScale) = Fit(size, sheetWidth, sheetHeight, columns, rows, slot, 0);
+                        var (toX, toY, toScale) = Fit(size, sheetWidth, sheetHeight, columns, rows, slot, margin);
+                        var scale = toScale / fromScale;
+                        PdfiumNative.FPDFPageObj_Transform(PdfiumNative.FPDFPage_GetObject(native, slot), scale, 0, 0, scale, toX - (scale * fromX), toY - (scale * fromY));
                     }
 
                     if (PdfiumNative.FPDFPage_GenerateContent(native) == 0)
@@ -502,6 +496,72 @@ internal static class PdfToolsWorker
             sheets.Dispose();
             throw;
         }
+    }
+
+    // Page index of a copy of the PDF: its content scaled onto A4 as it is shown (landscape for a page wider than tall),
+    // centred, clipped to where the page was; its annotations removed (they would stay where they were); its boxes A4.
+    private static unsafe void FitOnA4(DocumentHandle document, int index)
+    {
+        lock (Pdfium.Gate)
+        {
+            using var handle = PageHandle.Load(document, index);
+            var page = handle.DangerousGetHandle();
+            var shown = PageGeometry.Of(page, index + 1);
+            var rotation = PdfiumNative.FPDFPage_GetRotation(page);
+            var (width, height) = shown.Width > shown.Height ? (A4Height, A4Width) : (A4Width, A4Height);
+            var (x, y, scale) = Fit(new PdfPageSize(shown.Width, shown.Height), width, height, 1, 1, 0, 0);
+            // The new box, in the page's own space: turned a quarter, the page shows its box's height across.
+            var (boxWidth, boxHeight) = (rotation & 1) == 1 ? (height, width) : (width, height);
+            var target = PageGeometry.For(rotation, 0, 0, boxWidth, boxHeight);
+            var placed = new Affine(scale, 0, 0, scale, x, y);
+            var matrix = target.ToUser(placed).After(shown.FromShown.Inverse());
+            var (left, bottom) = target.FromShown.Apply(x, y);
+            var (right, top) = target.FromShown.Apply(x + (shown.Width * scale), y + (shown.Height * scale));
+            var clip = new PdfiumNative.RectF
+            {
+                Left = (float)Math.Min(left, right),
+                Right = (float)Math.Max(left, right),
+                Bottom = (float)Math.Min(bottom, top),
+                Top = (float)Math.Max(bottom, top),
+            };
+            var native = new PdfiumNative.Matrix
+            {
+                A = (float)matrix.A,
+                B = (float)matrix.B,
+                C = (float)matrix.C,
+                D = (float)matrix.D,
+                E = (float)matrix.E,
+                F = (float)matrix.F,
+            };
+            for (var annotation = PdfiumNative.FPDFPage_GetAnnotCount(page) - 1; annotation >= 0; annotation--)
+            {
+                if (PdfiumNative.FPDFPage_RemoveAnnot(page, annotation) == 0)
+                    throw new PdfException(PdfError.DamagedPage, $"Page {index + 1} of this PDF is damaged and cannot be copied.");
+            }
+
+            // A page with nothing drawn has no content to move (and pdfium refuses to).
+            if (PdfiumNative.FPDFPage_CountObjects(page) > 0 && PdfiumNative.FPDFPage_TransFormWithClip(page, &native, &clip) == 0)
+                throw new PdfException(PdfError.DamagedPage, $"Page {index + 1} of this PDF is damaged and cannot be copied.");
+            var (w, h) = ((float)boxWidth, (float)boxHeight);
+            PdfiumNative.FPDFPage_SetMediaBox(page, 0, 0, w, h);
+            PdfiumNative.FPDFPage_SetCropBox(page, 0, 0, w, h);
+            PdfiumNative.FPDFPage_SetBleedBox(page, 0, 0, w, h);
+            PdfiumNative.FPDFPage_SetTrimBox(page, 0, 0, w, h);
+            PdfiumNative.FPDFPage_SetArtBox(page, 0, 0, w, h);
+        }
+    }
+
+    /// <summary>
+    /// Where a page of <paramref name="size"/> goes in <paramref name="slot"/> of a sheet of <paramref name="columns"/> x
+    /// <paramref name="rows"/> cells (in reading order, the first at the top left), inside <paramref name="margin"/>: its
+    /// bottom left corner and its scale, the largest that fits, centred in the cell (as pdfium's N-up places pages).
+    /// </summary>
+    internal static (double X, double Y, double Scale) Fit(PdfPageSize size, double width, double height, int columns, int rows, int slot, double margin)
+    {
+        var (cellWidth, cellHeight) = (width / columns, height / rows);
+        var (cellX, cellY) = ((slot % columns) * cellWidth, height - (((slot / columns) + 1) * cellHeight));
+        var scale = Math.Min((cellWidth - (2 * margin)) / size.Width, (cellHeight - (2 * margin)) / size.Height);
+        return (cellX + ((cellWidth - (size.Width * scale)) / 2), cellY + ((cellHeight - (size.Height * scale)) / 2), scale);
     }
 
     internal static bool IsA4(PdfPageSize size) =>
@@ -524,6 +584,15 @@ internal static class PdfToolsWorker
     }
 
     // ---- Saving -------------------------------------------------------------------------------------------------
+
+    private static void RequireRoom(string path, long needed)
+    {
+        if (PdfRenderBudget.FreeBytes(Path.GetDirectoryName(path)!) is { } free && needed > free)
+        {
+            throw new PdfRenderWorker.PageWriteException(
+                $"There is not enough free space for the result: it needs about {PdfRenderBudget.Describe(needed)}, and {PdfRenderBudget.Describe(free)} is free.", null);
+        }
+    }
 
     // The whole document, never an update appended to the input, into a new file the parent named.
     private static unsafe void Save(DocumentHandle document, string path, StreamWriter lines)
@@ -737,6 +806,14 @@ internal readonly record struct Affine(double A, double B, double C, double D, d
         (B * first.E) + (D * first.F) + F);
 
     public (double X, double Y) Apply(double x, double y) => ((A * x) + (C * y) + E, (B * x) + (D * y) + F);
+
+    /// <summary>The matrix that undoes this one (which must not flatten the plane).</summary>
+    public Affine Inverse()
+    {
+        var determinant = (A * D) - (B * C);
+        return new Affine(D / determinant, -B / determinant, -C / determinant, A / determinant,
+            ((C * F) - (D * E)) / determinant, ((B * E) - (A * F)) / determinant);
+    }
 }
 
 /// <summary>

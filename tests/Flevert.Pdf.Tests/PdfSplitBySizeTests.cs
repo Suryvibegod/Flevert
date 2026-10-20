@@ -80,7 +80,7 @@ public sealed class PdfSplitBySizeTests : IDisposable
     {
         // Ten pages draw the same 300 KB image and one of 30 KB each: alone a page weighs 330 KB, four together 420 KB.
         var input = _dir.Combine("shared.pdf");
-        WriteSharedImagePages(input, 10, 300_000, 30_000);
+        ToolPdf.WriteSharedImagePages(input, 10, 300_000, 30_000);
 
         var folder = await Op(450_000).RunAsync(input, CancellationToken.None);
 
@@ -95,7 +95,7 @@ public sealed class PdfSplitBySizeTests : IDisposable
         // 200 pages draw the same 300 KB image and one of 3 KB each: alone a page weighs 303 KB, 200 of them 900 KB. Grown
         // a page at a time, as single pages' sizes suggest, a part took a run of qpdf per page.
         var input = _dir.Combine("logo on every page.pdf");
-        WriteSharedImagePages(input, 200, 300_000, 3_000);
+        ToolPdf.WriteSharedImagePages(input, 200, 300_000, 3_000);
         var op = Op(450_000);
 
         var folder = await op.RunAsync(input, CancellationToken.None);
@@ -111,7 +111,7 @@ public sealed class PdfSplitBySizeTests : IDisposable
     {
         // Split apart, the 200 pages of 303 KB would be 60 MB in the temporary folder, on a disk with 2.7 MB free.
         var input = _dir.Combine("shared.pdf");
-        WriteSharedImagePages(input, 200, 300_000, 3_000);
+        ToolPdf.WriteSharedImagePages(input, 200, 300_000, 3_000);
         var length = new FileInfo(input).Length;
         var scratch = _dir.Combine("scratch");
         Directory.CreateDirectory(scratch);
@@ -156,37 +156,6 @@ public sealed class PdfSplitBySizeTests : IDisposable
         Assert.Equal(new FileProgress("page", 1, 6), reports[0]);
         Assert.Equal(6, reports[^1].Total);
         Assert.All(reports, report => Assert.Equal("page", report.Unit));
-    }
-
-    // Objects: 1 catalog, 2 page tree, 3 the shared image, then per page: the page, its own image, its content.
-    private static void WriteSharedImagePages(string path, int pages, int sharedBytes, int ownBytes)
-    {
-        var random = new Random(5);
-        byte[] Image(int bytes, out int side)
-        {
-            side = (int)Math.Ceiling(Math.Sqrt(bytes / 3.0));
-            var pixels = new byte[side * side * 3];
-            random.NextBytes(pixels);
-            return pixels;
-        }
-
-        var shared = Image(sharedBytes, out var sharedSide);
-        var objects = new List<byte[]>
-        {
-            ToolPdf.Ascii("<< /Type /Catalog /Pages 2 0 R >>"),
-            ToolPdf.Ascii($"<< /Type /Pages /Count {pages} /Kids [{string.Join(" ", Enumerable.Range(0, pages).Select(i => (4 + (3 * i)) + " 0 R"))}] >>"),
-            ToolPdf.Stream($"/Type /XObject /Subtype /Image /Width {sharedSide} /Height {sharedSide} /ColorSpace /DeviceRGB /BitsPerComponent 8", shared),
-        };
-        for (var i = 0; i < pages; i++)
-        {
-            var page = 4 + (3 * i);
-            var own = Image(ownBytes, out var ownSide);
-            objects.Add(ToolPdf.Ascii($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /XObject << /Im0 3 0 R /Im1 {page + 1} 0 R >> >> /Contents {page + 2} 0 R >>"));
-            objects.Add(ToolPdf.Stream($"/Type /XObject /Subtype /Image /Width {ownSide} /Height {ownSide} /ColorSpace /DeviceRGB /BitsPerComponent 8", own));
-            objects.Add(ToolPdf.Stream("", "q 300 0 0 200 0 0 cm /Im0 Do Q q 300 0 0 200 0 200 cm /Im1 Do Q"u8.ToArray()));
-        }
-
-        ToolPdf.Write(path, objects);
     }
 
     private sealed class SyncProgress(Action<FileProgress> report) : IProgress<FileProgress>

@@ -293,17 +293,49 @@ internal static unsafe partial class PdfiumNative
     [LibraryImport(Library)]
     public static partial int FPDFPage_Flatten(nint page, int flag);
 
-    /// <summary>A form XObject in <paramref name="destination"/> drawing the source page as shown, from (0, 0) to its shown size.</summary>
+    /// <summary>
+    /// A new document of sheets <paramref name="width"/> by <paramref name="height"/>, each holding up to
+    /// <paramref name="columns"/> x <paramref name="rows"/> pages of the source in reading order, each page a form XObject
+    /// drawing it as shown, scaled to its cell and centred in it. One copier for the whole run: what pages share (fonts,
+    /// images) is copied once. size_t: 64 bits.
+    /// </summary>
     [LibraryImport(Library)]
-    public static partial nint FPDF_NewXObjectFromPage(nint destination, nint source, int sourcePageIndex);
+    public static partial nint FPDF_ImportNPagesToOne(nint source, float width, float height, nuint columns, nuint rows);
 
     [LibraryImport(Library)]
-    public static partial void FPDF_CloseXObject(nint xobject);
+    public static partial void FPDFPage_SetMediaBox(nint page, float left, float bottom, float right, float top);
 
     [LibraryImport(Library)]
-    public static partial nint FPDF_NewFormObjectFromXObject(nint xobject);
+    public static partial void FPDFPage_SetCropBox(nint page, float left, float bottom, float right, float top);
 
-    /// <summary>Copies pages, annotations included, into <paramref name="destination"/> at <paramref name="index"/> (unsigned long: 32 bits on Windows).</summary>
     [LibraryImport(Library)]
-    public static partial int FPDF_ImportPagesByIndex(nint destination, nint source, int* pageIndices, uint length, int index);
+    public static partial void FPDFPage_SetBleedBox(nint page, float left, float bottom, float right, float top);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPage_SetTrimBox(nint page, float left, float bottom, float right, float top);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFPage_SetArtBox(nint page, float left, float bottom, float right, float top);
+
+    /// <summary>FS_MATRIX.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Matrix
+    {
+        public float A;
+        public float B;
+        public float C;
+        public float D;
+        public float E;
+        public float F;
+    }
+
+    /// <summary>
+    /// Wraps the page's content in <c>q &lt;clip&gt; re W* n &lt;matrix&gt; cm … Q</c>: the clip in the page's new space,
+    /// then the matrix. Annotations are not moved.
+    /// </summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_TransFormWithClip(nint page, Matrix* matrix, RectF* clip);
+
+    [LibraryImport(Library)]
+    public static partial int FPDFPage_RemoveAnnot(nint page, int index);
 }

@@ -213,6 +213,41 @@ internal static class ToolPdf
         ]);
     }
 
+    /// <summary>
+    /// <paramref name="pages"/> pages of 300 x 400 points, each drawing one image of <paramref name="sharedBytes"/> bytes
+    /// of noise that every page shares, and one of <paramref name="ownBytes"/> of its own. Objects: 1 catalog, 2 page
+    /// tree, 3 the shared image, then per page: the page, its own image, its content.
+    /// </summary>
+    public static void WriteSharedImagePages(string path, int pages, int sharedBytes, int ownBytes)
+    {
+        var random = new Random(5);
+        byte[] Image(int bytes, out int side)
+        {
+            side = (int)Math.Ceiling(Math.Sqrt(bytes / 3.0));
+            var pixels = new byte[side * side * 3];
+            random.NextBytes(pixels);
+            return pixels;
+        }
+
+        var shared = Image(sharedBytes, out var sharedSide);
+        var objects = new List<byte[]>
+        {
+            Ascii("<< /Type /Catalog /Pages 2 0 R >>"),
+            Ascii($"<< /Type /Pages /Count {pages} /Kids [{string.Join(" ", Enumerable.Range(0, pages).Select(i => (4 + (3 * i)) + " 0 R"))}] >>"),
+            Stream($"/Type /XObject /Subtype /Image /Width {sharedSide} /Height {sharedSide} /ColorSpace /DeviceRGB /BitsPerComponent 8", shared),
+        };
+        for (var i = 0; i < pages; i++)
+        {
+            var page = 4 + (3 * i);
+            var own = Image(ownBytes, out var ownSide);
+            objects.Add(Ascii($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /XObject << /Im0 3 0 R /Im1 {page + 1} 0 R >> >> /Contents {page + 2} 0 R >>"));
+            objects.Add(Stream($"/Type /XObject /Subtype /Image /Width {ownSide} /Height {ownSide} /ColorSpace /DeviceRGB /BitsPerComponent 8", own));
+            objects.Add(Stream("", "q 300 0 0 200 0 0 cm /Im0 Do Q q 300 0 0 200 0 200 cm /Im1 Do Q"u8.ToArray()));
+        }
+
+        Write(path, objects);
+    }
+
     /// <summary>Writes objects 1..n, a cross-reference table and a trailer whose root is object 1.</summary>
     public static void Write(string path, IReadOnlyList<byte[]> objects, string trailer = "")
     {

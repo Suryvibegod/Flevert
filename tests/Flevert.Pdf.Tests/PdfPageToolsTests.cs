@@ -513,6 +513,48 @@ public sealed class PdfSheetsTests : IDisposable
         Assert.Contains("Nguyen Van A", pdf.GetText(0), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("pdf.n-up-2")]
+    [InlineData("pdf.n-up-4")]
+    [InlineData("pdf.fit-a4")]
+    public async Task Pages_sharing_one_image_carry_it_once(string tool)
+    {
+        // 50 pages draw the same 300 KB image: a copy per page would make the result about 15 MB.
+        var input = _dir.Combine("logo.pdf");
+        ToolPdf.WriteSharedImagePages(input, 50, 300_000, 3_000);
+        var op = PdfTools.Create(tool, new Dictionary<string, string>(), Qpdf.NextToApp, TestPdf.Worker);
+
+        var output = await op.RunAsync(input, CancellationToken.None);
+
+        var (before, after) = (new FileInfo(input).Length, new FileInfo(output).Length);
+        Assert.True(after < 2 * before, $"{after} bytes from {before}");
+    }
+
+    [Fact]
+    public async Task Fit_a4_draws_a_form_on_an_a4_page_as_on_any_other()
+    {
+        // An A4 page with a filled field, and a Letter page: both are drawn onto new A4 pages, the field's answer with them.
+        var input = _dir.Combine("form and letter.pdf");
+        ToolPdf.Write(input,
+        [
+            ToolPdf.Ascii("<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /DR << /Font << /Helv 6 0 R >> >> >> >>"),
+            ToolPdf.Ascii("<< /Type /Pages /Count 2 /Kids [3 0 R 7 0 R] >>"),
+            ToolPdf.Ascii("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << >> /Annots [4 0 R] >>"),
+            ToolPdf.Ascii("<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (Nguyen Van A) /Rect [100 700 300 720] /P 3 0 R /F 4 /AP << /N 5 0 R >> /DA (/Helv 12 Tf 0 g) >>"),
+            ToolPdf.Stream("/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 6 0 R >> >>", ToolPdf.Ascii("/Tx BMC q BT /Helv 12 Tf 0 g 2 5 Td (Nguyen Van A) Tj ET Q EMC")),
+            ToolPdf.Ascii("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"),
+            ToolPdf.Ascii("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>"),
+        ]);
+
+        var output = await new PdfFitA4(Qpdf.NextToApp, TestPdf.Worker).RunAsync(input, CancellationToken.None);
+
+        using (var pdf = PdfDocument.Open(output))
+            Assert.Contains("Nguyen Van A", pdf.GetText(0), StringComparison.Ordinal);
+        var qdf = await QdfText(output);
+        Assert.DoesNotContain("/Widget", qdf, StringComparison.Ordinal);
+        Assert.DoesNotContain("/Annots", qdf, StringComparison.Ordinal);
+    }
+
     private static void AssertA4(PdfPageSize size, bool landscape)
     {
         var (width, height) = landscape ? (A4Long, A4Short) : (A4Short, A4Long);
