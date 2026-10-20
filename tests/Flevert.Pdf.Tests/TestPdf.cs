@@ -23,7 +23,36 @@ internal static class TestPdf
                 + string.Join(" ", Enumerable.Range(3, pages).Select(n => n + " 0 R")) + "] >>",
         };
         objects.AddRange(Enumerable.Repeat(resources ? "<< /Type /Page /Parent 2 0 R /Resources << >> >>" : "<< /Type /Page /Parent 2 0 R >>", pages));
+        WriteObjects(path, objects);
+    }
 
+    /// <summary>
+    /// A PDF of blank pages of the given widths (in points, 100 high each): a page's width tells which file and which page
+    /// it came from, so a test can check the order of pages after a merge or a split.
+    /// </summary>
+    public static void WriteWidths(string path, params int[] widths)
+    {
+        var objects = new List<string>
+        {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Count " + widths.Length + " /Kids ["
+                + string.Join(" ", Enumerable.Range(3, widths.Length).Select(n => n + " 0 R")) + "] >>",
+        };
+        objects.AddRange(widths.Select(width =>
+            string.Create(CultureInfo.InvariantCulture, $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} 100] /Resources << >> >>")));
+        WriteObjects(path, objects);
+    }
+
+    /// <summary>The width in points of every page of the PDF at <paramref name="path"/>, in page order (pdfium).</summary>
+    public static int[] PageWidths(string path)
+    {
+        using var pdf = PdfDocument.Open(path);
+        return Enumerable.Range(0, pdf.PageCount).Select(page => (int)Math.Round(pdf.GetPageSize(page).Width)).ToArray();
+    }
+
+    // Objects 1..n in order, an xref table and a trailer whose root is object 1.
+    private static void WriteObjects(string path, List<string> objects)
+    {
         var body = new StringBuilder("%PDF-1.4\n");
         var offsets = new List<int>();
         for (var i = 0; i < objects.Count; i++)

@@ -10,7 +10,7 @@ public sealed class PdfRotateTests : IDisposable
 
     public void Dispose() => _dir.Dispose();
 
-    private static IOperation Op(string id) => PdfOperations.All.Single(op => op.Id == id);
+    private static IOperation Op(string id) => PdfOperations.All.OfType<IOperation>().Single(op => op.Id == id);
 
     private string CopyFixture(string fixture, string name)
     {

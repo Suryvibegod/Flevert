@@ -123,57 +123,134 @@ public sealed class Qpdf
     public async Task TransformAsync(string inputPath, string outputPath, IEnumerable<string> options, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(options);
-        string[] commandLine = [.. options];
+        var run = await RunCheckedAsync([.. options], [inputPath], [inputPath, outputPath], outputPath, ct).ConfigureAwait(false);
+        RequireOutput(run, outputPath);
+    }
+
+    /// <summary>
+    /// Runs <c>qpdf --empty --pages &lt;input&gt;… -- &lt;output&gt;</c>: every page of every input, in the order given,
+    /// into one new PDF. The inputs and the output reach qpdf through <c>@-</c>, like the paths of
+    /// <see cref="TransformAsync"/>; a page range may follow a file in <c>--pages</c>, and a <c>\\?\</c> path never reads
+    /// as one.
+    /// </summary>
+    /// <remarks>
+    /// qpdf holds every input at once, so the size limit, the memory cap (<see cref="MaxMemoryFor"/>) and the timeout go by
+    /// the inputs' total size.
+    /// </remarks>
+    /// <param name="inputPaths">At least two, fully qualified.</param>
+    /// <exception cref="BatchInputException">
+    /// One input cannot be used: it needs a password, is not a PDF or is damaged, or is too large. It names that input,
+    /// and its inner exception is the <see cref="PdfException"/> <see cref="TransformAsync"/> would throw for it alone.
+    /// </exception>
+    /// <exception cref="PdfException">
+    /// The inputs together are too large or need more memory than allowed, a path has a character qpdf cannot be given,
+    /// or qpdf failed on an input without naming it.
+    /// </exception>
+    /// <exception cref="IOException">qpdf could not write <paramref name="outputPath"/>.</exception>
+    public async Task MergeAsync(IReadOnlyList<string> inputPaths, string outputPath, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(inputPaths);
+        ArgumentOutOfRangeException.ThrowIfLessThan(inputPaths.Count, 2, nameof(inputPaths));
+        var run = await RunCheckedAsync(["--empty", "--pages"], inputPaths, [.. inputPaths, EndOfPages, outputPath], outputPath, ct)
+            .ConfigureAwait(false);
+        RequireOutput(run, outputPath);
+    }
+
+    // Ends the list of files after --pages. Not a path: it goes through @- as it is.
+    private const string EndOfPages = "--";
+
+    private static void RequireOutput(ExternalToolResult run, string outputPath)
+    {
+        if (!File.Exists(outputPath))
+            throw new QpdfException(run.ExitCode, $"it reported success but wrote no output. {Detail(run)}");
+    }
+
+    /// <summary>
+    /// Runs qpdf with <paramref name="options"/> on its command line and <paramref name="lines"/> (paths, or
+    /// <see cref="EndOfPages"/>) through <c>@-</c>, and returns the run if it succeeded (exit code 0 or 3); otherwise
+    /// throws the error the user can act on. <paramref name="inputs"/> are the files qpdf reads; with several, an error
+    /// that comes from one of them is a <see cref="BatchInputException"/> naming it. <paramref name="output"/>, when
+    /// qpdf's error names it (or a file in it), makes the failure an <see cref="IOException"/>.
+    /// </summary>
+    private async Task<ExternalToolResult> RunCheckedAsync(
+        string[] options, IReadOnlyList<string> inputs, string[] lines, string? output, CancellationToken ct)
+    {
         // The options stay on the command line, where qpdf's C runtime would expand them as wildcards.
-        if (commandLine.FirstOrDefault(option => option.AsSpan().ContainsAny('*', '?')) is { } wild)
+        if (options.FirstOrDefault(option => option.AsSpan().ContainsAny('*', '?')) is { } wild)
             throw new ArgumentException($"qpdf would expand the wildcard in the option {wild}.", nameof(options));
         // qpdf reads "@file" as more arguments from that file, which nothing here would have checked.
-        if (commandLine.FirstOrDefault(option => option.StartsWith('@')) is { } file)
+        if (options.FirstOrDefault(option => option.StartsWith('@')) is { } file)
             throw new ArgumentException($"qpdf would read the option {file} as a file of options.", nameof(options));
         // qpdf has no end-of-options marker ("--" is not one): a relative path such as "-x.pdf" would be an option.
-        RequireArgumentLine(inputPath, nameof(inputPath));
-        RequireArgumentLine(outputPath, nameof(outputPath));
+        foreach (var line in lines.Where(line => line != EndOfPages))
+            RequireArgumentLine(line, nameof(lines));
         RequireExe();
 
-        var length = new FileInfo(inputPath).Length;
-        if (length > MaxInputBytes)
-            throw PdfDocument.TooLargeError(MaxInputBytes);
-
-        var maxMemory = MaxMemoryBytes ?? MaxMemoryFor(length);
-        var run = await RunWithPathsAsync(commandLine, [inputPath, outputPath], TimeoutFor(length), maxMemory, ct).ConfigureAwait(false);
-        if (run.ExitCode is 0 or ExitWarnings)
+        long total = 0;
+        foreach (var input in inputs)
         {
-            if (!File.Exists(outputPath))
-                throw new QpdfException(run.ExitCode, $"it reported success but wrote no output. {Detail(run)}");
-            return;
+            var length = new FileInfo(input).Length;
+            if (length > MaxInputBytes)
+                throw ForInput(inputs, input, PdfDocument.TooLargeError(MaxInputBytes));
+            total += length;
         }
+
+        if (total > MaxInputBytes)
+        {
+            throw new PdfException(PdfError.TooLarge,
+                $"Together these PDFs are larger than {PdfDocument.DescribeBytes(MaxInputBytes)}, the most Flevert works with at once.");
+        }
+
+        var maxMemory = MaxMemoryBytes ?? MaxMemoryFor(total);
+        var run = await RunWithLinesAsync(options, lines, TimeoutFor(total), maxMemory, ct).ConfigureAwait(false);
+        if (run.ExitCode is 0 or ExitWarnings)
+            return run;
 
         var detail = Detail(run);
         if (run.ExitCode != ExitError)
             throw new QpdfException(run.ExitCode, detail);
-        if (await RequiresPasswordAsync(inputPath, maxMemory, ct).ConfigureAwait(false))
-            throw new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage);
-        // qpdf names the file it failed on, as it was given; the output's name is a fresh temporary one no input contains.
-        if (run.StandardError.Contains(ToExtendedPath(outputPath), StringComparison.OrdinalIgnoreCase))
+        // qpdf names the file it failed on, as it was given. With one input it can only be that one; with several, the
+        // input named in its error (the last line), and if it names none, each of them is asked about a password.
+        var named = inputs.Count == 1 ? inputs[0] : NamedInput(run, inputs);
+        foreach (var input in named is null ? inputs : [named])
+        {
+            if (await RequiresPasswordAsync(input, maxMemory, ct).ConfigureAwait(false))
+                throw ForInput(inputs, input, new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage));
+        }
+
+        // The output's name is a fresh temporary one no input contains.
+        if (output is not null && run.StandardError.Contains(ToExtendedPath(output), StringComparison.OrdinalIgnoreCase))
             throw new IOException($"qpdf could not write the output: {detail}", new QpdfException(run.ExitCode, detail));
-        throw new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage, new QpdfException(run.ExitCode, detail));
+        throw ForInput(inputs, named, new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage, new QpdfException(run.ExitCode, detail)));
     }
+
+    // The input whose path, as qpdf was given it, starts a message in qpdf's error ("qpdf: <path>: …", "qpdf: open <path>:
+    // …"). Every path given is in the \\?\ form, so one cannot be found inside another.
+    private static string? NamedInput(ExternalToolResult run, IReadOnlyList<string> inputs)
+    {
+        var error = run.StandardError.TrimEnd().Split('\n')[^1];
+        return inputs.FirstOrDefault(input => error.Contains(ToExtendedPath(input) + ":", StringComparison.Ordinal));
+    }
+
+    // Among several inputs, the error of one names it, so the notification says which file stopped the batch.
+    private static Exception ForInput(IReadOnlyList<string> inputs, string? input, PdfException error) =>
+        inputs.Count > 1 && input is not null ? BatchInputException.ForInput(input, error.Message, error) : error;
 
     // Asked only after a failure, so a PDF that opens costs no second process. qpdf documents these exit codes, while
     // its error text ("invalid password") may change between versions.
     private async Task<bool> RequiresPasswordAsync(string inputPath, ulong maxMemory, CancellationToken ct)
     {
-        var probe = await RunWithPathsAsync(["--requires-password"], [inputPath], ProbeTimeout, maxMemory, ct).ConfigureAwait(false);
+        var probe = await RunWithLinesAsync(["--requires-password"], [inputPath], ProbeTimeout, maxMemory, ct).ConfigureAwait(false);
         return probe.ExitCode == ExitPasswordRequired;
     }
 
-    private async Task<ExternalToolResult> RunWithPathsAsync(
+    private async Task<ExternalToolResult> RunWithLinesAsync(
         string[] options, string[] paths, TimeSpan timeout, ulong maxMemory, CancellationToken ct)
     {
         byte[] lines;
         try
         {
-            lines = StrictUtf8.GetBytes(string.Concat(paths.Select(path => ToExtendedPath(path) + "\n")));
+            lines = StrictUtf8.GetBytes(string.Concat(paths.Select(path => (path == EndOfPages ? path : ToExtendedPath(path)) + "\n")));
         }
         catch (EncoderFallbackException e)
         {

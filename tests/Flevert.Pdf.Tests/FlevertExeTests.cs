@@ -115,6 +115,36 @@ public sealed class FlevertExeTests : IDisposable
         processes.ForEach(p => p.Dispose());
     }
 
+    [Fact]
+    public async Task Three_flevert_exe_processes_one_per_pdf_merge_them_into_one_pdf_in_natural_order()
+    {
+        // Explorer starts one flevert.exe per selected file, in no reliable order; "file 2" sorts before "file 10".
+        string[] pdfs = [_dir.Combine("file 1.pdf"), _dir.Combine("file 2.pdf"), _dir.Combine("file 10.pdf")];
+        WriteWidths(pdfs[0], 101);
+        WriteWidths(pdfs[1], 201, 202);
+        WriteWidths(pdfs[2], 1001, 1002, 1003);
+        int[] startOrder = [2, 0, 1];
+
+        var processes = startOrder.Select(i => StartRun("pdf.merge", pdfs[i], idleMs: "3000")).ToList();
+        try
+        {
+            await Task.WhenAll(processes.Select(p => p.WaitForExitAsync())).WaitAsync(TimeSpan.FromSeconds(90));
+        }
+        finally
+        {
+            foreach (var process in processes.Where(p => !p.HasExited))
+                process.Kill(entireProcessTree: true);
+        }
+
+        var logs = string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText));
+        Assert.True(processes.All(p => p.ExitCode == 0), $"exit codes {string.Join(", ", processes.Select(p => p.ExitCode))}\n{logs}");
+        Assert.Equal(
+            ["file 1 (merged).pdf", "file 1.pdf", "file 10.pdf", "file 2.pdf"],
+            Directory.GetFileSystemEntries(_dir.Path).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        Assert.Equal([101, 201, 202, 1001, 1002, 1003], PageWidths(_dir.Combine("file 1 (merged).pdf")));
+        processes.ForEach(p => p.Dispose());
+    }
+
     private string CopyFixture(string fixture, string name)
     {
         var path = _dir.Combine(name);
