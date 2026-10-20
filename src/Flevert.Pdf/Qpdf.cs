@@ -27,6 +27,19 @@ public sealed class Qpdf
     // encoder would put U+FFFD in its place, and qpdf would open another file of that name (one that may exist).
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
+    /// <summary>
+    /// What qpdf does not inherit from flevert.exe's environment. qpdf links OpenSSL, which loads the configuration file
+    /// OPENSSL_CONF names (qpdf 12.4.2 opens it even to rotate), and a configuration can load modules and engines from
+    /// the folders OPENSSL_MODULES and OPENSSL_ENGINES name: code from wherever the user's environment points. Without
+    /// them OpenSSL uses the folders it was built with, under C:\Program Files, which only administrators can change.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string?> ToolEnvironment { get; } = new Dictionary<string, string?>
+    {
+        ["OPENSSL_CONF"] = null,
+        ["OPENSSL_MODULES"] = null,
+        ["OPENSSL_ENGINES"] = null,
+    };
+
     internal const string UnsupportedFileNameMessage =
         "The name of this PDF or of a folder it is in has a character Flevert cannot pass to its PDF tool: rename it and try again.";
 
@@ -126,7 +139,7 @@ public sealed class Qpdf
             throw new PdfException(PdfError.UnsupportedFileName, UnsupportedFileNameMessage, e);
         }
 
-        return ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, cancellationToken: ct);
+        return ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, environment: ToolEnvironment, cancellationToken: ct);
     }
 
     /// <summary>
