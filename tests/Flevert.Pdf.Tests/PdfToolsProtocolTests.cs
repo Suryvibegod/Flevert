@@ -46,6 +46,8 @@ public sealed class PdfToolsProtocolTests
     [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0edit\0150\0numbers\u001F7\u001F0\0")]
     [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0blank\0150\0\0extra\0")]
     [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0\0")] // an old task with a seventh field
+    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0blank\0150\0something\0")] // options for a task that takes none
+    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0images\0150\0something\0")]
     public void A_damaged_request_of_a_new_task_is_refused(string text) =>
         Assert.Throws<FormatException>(() => PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(text)));
 

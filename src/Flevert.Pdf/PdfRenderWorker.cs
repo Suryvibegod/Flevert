@@ -50,7 +50,11 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
 
     private bool HasOptions => Task is PdfWorkerTask.BlankPages or PdfWorkerTask.Edit or PdfWorkerTask.ExtractImages;
 
-    /// <summary>Changes whenever the fields change, so a worker of another version refuses the request rather than misreading it.</summary>
+    /// <summary>
+    /// Changes whenever a field of a task already sent changes its meaning, so a worker of another version refuses the
+    /// request rather than misreading it. A new task may add a field without changing it: a worker that does not know the
+    /// task refuses the request by its task name, and the count of fields is checked per task.
+    /// </summary>
     internal const string Magic = "flevert-pdf-worker/2";
 
     /// <summary>Two paths of at most 32 767 characters and a few short fields fit with room to spare.</summary>
@@ -114,9 +118,12 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
             "images" => PdfWorkerTask.ExtractImages,
             _ => PdfWorkerTask.Pictures,
         };
-        // An edit this version does not know is refused with the rest of the request.
+        // An edit this version does not know is refused with the rest of the request; the tasks that take no options
+        // must have none, so a field this version would ignore is never read as something else.
         if (task == PdfWorkerTask.Edit)
             PdfEdit.Decode(fields[6]);
+        else if (withOptions && fields[6].Length != 0)
+            throw new FormatException($"The {format} task takes no options.");
         return new PdfRenderRequest(input, FileIdentity.Parse(identity), folder, imageFormat, dpi)
         {
             Task = task,
