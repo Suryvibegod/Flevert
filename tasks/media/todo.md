@@ -65,7 +65,13 @@ Lệnh: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.sln`, `
 - [x] ffmpeg/ffprobe chạy `SingleProcess = true`, trần 2 GB; bị từ chối bộ nhớ → "needs more memory than Flevert allows its video tool (2 GB)".
 - [x] File độc thêm: HLS/`ffconcat` trỏ một bản ghi âm cục bộ khác (bị từ chối bởi 3 loại thao tác, không ghi gì; đối chứng âm: bỏ whitelist demuxer thì danh sách concat tên trơn đỏ; bản đầu dùng file `.txt` thì vẫn xanh khi bỏ whitelist vì ffmpeg 6+ không còn dò `.txt` bằng demuxer `tty`, đã đổi), AVI khai 100 000 px (→ "larger than 8K" trước khi giải mã), MKV có phụ đề + tệp đính kèm → MP4 chỉ h264 + aac.
 - [x] Đo tốc độ (máy dev 4 nhân, ffmpeg 6.1, video 60 s 1080p): Convert to MP4 (CRF 20) 36,3 s = 0,60× thời gian thực; Compress Balanced (CRF 28) 32,2 s = 0,53×; mục tiêu ≤ 2×: đạt.
-- [ ] Icon Fluent cho nhóm và việc đơn lẻ (`arrow_minimize`, `arrow_swap`, `music_note_2`, `shield`/`eye_off`) sau khi v0.2.2 vào `main`; ảnh chụp menu sáng/tối trong PR.
+- [x] Icon Fluent cho nhóm và việc đơn lẻ (`arrow_minimize`, `arrow_swap`, `music_note_2`, `shield`) sau khi v1.2.2 vào `main`: làm ở T11.
+- [ ] Ảnh chụp menu video và audio (sáng và tối) trong PR (maintainer, trên Windows thật).
+
+## T11: gộp `main` 1.2.2 (2026-10-21)
+- [x] Merge `origin/main` (1.2.2) vào nhánh, không viết lại lịch sử PR. Xung đột: CHANGELOG (mục media ở `[Unreleased]`, trên `[1.2.2]`), `installer/Flevert.iss` (mục `{app}` loại `ffmpeg\*`, chú thích nói cả thư mục `icons`), `Program.cs` (catalog có `MediaOperations.All`), `NoticesScriptTests` (publish giả có cả `ffmpeg\` lẫn `icons\`; notices phải có FFmpeg, GPL và Fluent). Xung đột ngầm: `IRegistry.SetDword` (1.2.2) thêm vào registry giả của `MediaMenuTests`.
+- [x] Menu theo nguyên tắc 1.2.2: `MediaOperations.Looks` (Compress `arrow_minimize`, Convert to `arrow_swap`, Extract audio `music_note_2`, nhóm 1; Remove hidden info `shield`, nhóm 2 → đường kẻ trước nó). `install-menu` gộp looks của ảnh/PDF và media bằng `MenuEntryLook.Combine`, từ chối một nhãn có hai kiểu. Icon `music_note_2` vẽ bằng `make-menu-icons.py` từ cùng commit Fluent đã ghim (3 SVG có SHA256); chạy lại cho 18 icon cũ trùng từng byte. Nhãn, thứ tự, op-id không đổi: video 16 mục (15 cho `.mp4 .mov .webm`), audio 6 hoặc 7; đường kẻ không tính vào 16. Test: `MediaMenuTests` (icon ở mục trên cùng, không icon trong submenu, đường kẻ, icon có trong `icons\`), `MenuTests` (Combine); `test-installer.ps1` kiểm icon của menu `.mp4` và `.mp3`.
+- [ ] MenuProbe trên Explorer thật cho `.mp4`, `.mkv`, `.mp3` (icon, đường kẻ, 16 mục); rồi `uninstall-menu` (maintainer).
 
 
 ## Review trước khi gộp (2026-10-20): ba review bối cảnh trống, chỉ đọc
