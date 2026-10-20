@@ -142,7 +142,12 @@ public sealed class InstallerScriptTests
         File.Copy(Environment.ProcessPath!, Path.Combine(source, "flevert.exe"));
         // [Files] names each of these, and ISCC fails when one is missing.
         foreach (var file in ConversionOnlyFiles())
-            File.WriteAllText(Path.Combine(source, file), "stand-in");
+        {
+            // ffmpeg's files are in a folder of their own (ffmpeg\ffmpeg.exe).
+            var path = Path.Combine(source, file);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, "stand-in");
+        }
 
         var without = Compile(iscc!, source, dir.Combine("out"));
         File.WriteAllText(Path.Combine(source, "THIRD-PARTY-NOTICES.txt"), "notices");
