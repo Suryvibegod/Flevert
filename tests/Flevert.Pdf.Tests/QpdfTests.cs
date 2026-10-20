@@ -32,6 +32,13 @@ public sealed class QpdfTests : IDisposable
     // \\?\ turns off Windows' normalisation, so it is done first, as .NET does when it opens the same path.
     [InlineData(@"C:\Users\me\..\you\.\in.pdf", @"\\?\C:\Users\you\in.pdf")]
     [InlineData(@"C:/Users/me/in.pdf", @"\\?\C:\Users\me\in.pdf")]
+    // Windows drops trailing dots and spaces from a name; with \\?\ it would not, and would name another file.
+    [InlineData(@"C:\Users\me\in.pdf. ", @"\\?\C:\Users\me\in.pdf")]
+    [InlineData(@"\??\C:\Users\me\in.pdf", @"\\?\C:\Users\me\in.pdf")]
+    [InlineData(@"//?/C:/Users/me/in.pdf", @"\\?\C:\Users\me\in.pdf")]
+    [InlineData(@"//./C:/Users/me/in.pdf", @"\\?\C:\Users\me\in.pdf")]
+    [InlineData(@"\\.\UNC\server\share\in.pdf", @"\\?\UNC\server\share\in.pdf")]
+    [InlineData(@"\\?\UNC\server\share\in.pdf", @"\\?\UNC\server\share\in.pdf")]
     public void Paths_reach_qpdf_in_the_extended_form_it_opens_at_any_length(string path, string extended)
     {
         Assert.Equal(extended, Qpdf.ToExtendedPath(path));
@@ -90,6 +97,15 @@ public sealed class QpdfTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(
             () => Qpdf.NextToApp.TransformAsync(input, _dir.Combine("out.pdf"), ["@" + options], CancellationToken.None));
         Assert.False(File.Exists(_dir.Combine("out.pdf")));
+    }
+
+    [Fact]
+    public void Paths_in_qpdfs_message_are_shown_without_the_extended_prefix()
+    {
+        var detail = Qpdf.Detail(new ExternalToolResult(2, "",
+            @"qpdf: open \\?\C:\Users\me\out.pdf: No such file or directory" + "\n" + @"WARNING: \\?\UNC\server\share\in.pdf: damaged", false, false));
+
+        Assert.Equal(@"qpdf: open C:\Users\me\out.pdf: No such file or directory" + "\n" + @"WARNING: \\server\share\in.pdf: damaged", detail);
     }
 
     [Fact]

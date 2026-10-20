@@ -231,15 +231,28 @@ public sealed class Qpdf
     /// characters while the temporary output beside it is 51 characters longer. The prefix turns off Windows'
     /// normalisation, so the path is normalised first, as .NET does when it opens the same path.
     /// </summary>
+    /// <remarks>
+    /// .NET opens <c>\\?\</c> and <c>\??\</c> (its NT form) paths as they are, so they stay unnormalised. Every other form,
+    /// <c>//?/</c> and <c>\\.\</c> included, goes through <see cref="Path.GetFullPath(string)"/> first, which also drops
+    /// the trailing dots and spaces Windows ignores in a name.
+    /// </remarks>
     internal static string ToExtendedPath(string path)
     {
-        if (path.StartsWith(@"\\?\", StringComparison.Ordinal))
+        if (path.StartsWith(ExtendedPrefix, StringComparison.Ordinal))
             return path;
+        if (path.StartsWith(@"\??\", StringComparison.Ordinal))
+            return ExtendedPrefix + path[4..];
         var full = Path.GetFullPath(path);
+        // GetFullPath turns "//?/" into "\\?\" and normalises what follows, as Windows does when it opens that form.
+        if (full.StartsWith(ExtendedPrefix, StringComparison.Ordinal))
+            return full;
         if (full.StartsWith(@"\\.\", StringComparison.Ordinal))
-            return @"\\?\" + full[4..];
-        return full.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + full[2..] : @"\\?\" + full;
+            return ExtendedPrefix + full[4..];
+        return full.StartsWith(@"\\", StringComparison.Ordinal) ? ExtendedUncPrefix + full[2..] : ExtendedPrefix + full;
     }
+
+    private const string ExtendedPrefix = @"\\?\";
+    private const string ExtendedUncPrefix = @"\\?\UNC\";
 
     private void RequireExe()
     {
@@ -262,10 +275,13 @@ public sealed class Qpdf
     }
 
     // qpdf's error is the last line of stderr. ExternalTool keeps the first megabyte, so the end of what it kept is
-    // the error itself, or, after a megabyte of warnings, the last warnings kept.
+    // the error itself, or, after a megabyte of warnings, the last warnings kept. qpdf names files as it was given them,
+    // always with the extended prefix (ToExtendedPath); the message shows them as the user knows them.
     internal static string Detail(ExternalToolResult run)
     {
-        var text = run.StandardError.Trim();
+        var text = run.StandardError.Trim()
+            .Replace(ExtendedUncPrefix, @"\\", StringComparison.OrdinalIgnoreCase)
+            .Replace(ExtendedPrefix, "", StringComparison.Ordinal);
         if (text.Length == 0)
             text = string.Create(CultureInfo.InvariantCulture, $"no message, exit code {run.ExitCode}");
         if (text.Length <= MaxDetailChars)
