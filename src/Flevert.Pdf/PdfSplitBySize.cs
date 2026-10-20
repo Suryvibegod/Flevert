@@ -22,7 +22,9 @@ namespace Flevert.Pdf;
 /// from the PDF's average page) or past the free space of the disk (an error). A part is then searched for by its real
 /// size: grown by the cost per page measured on the candidates written, and once one candidate fits and a larger one does
 /// not, narrowed between them. After <see cref="MaxRuns"/> runs of qpdf in all, a part keeps the largest candidate that
-/// fits, so a PDF of shared resources costs a few runs per part, not one per page.
+/// fits, so a PDF of shared resources costs a few runs per part, not one per page. The parts are counted as they are
+/// written: past four times the PDF, the free space of the disk, or the runs of qpdf that many parts may take, the split
+/// stops there.
 /// </para>
 /// <para>
 /// Everything qpdf writes goes into a folder of its own under the temporary folder, which only this user, SYSTEM and
@@ -85,6 +87,10 @@ public sealed class PdfSplitBySize : IOperation
     /// <summary>The runs of qpdf after which a part takes the largest candidate that fits: twice the parts, and 16.</summary>
     internal static int MaxRuns(int parts) => (2 * parts) + 16;
 
+    // The most parts that take budget bytes in all: two parts in a row hold more than the limit (the second's first page
+    // did not fit in the first), so they are at most twice the budget over the limit, and one more.
+    private int MostParts(long budget) => (int)Math.Min(int.MaxValue / 4, (2 * budget / LimitBytes) + 1);
+
     private string Limit => string.Create(CultureInfo.InvariantCulture, $"{LimitBytes / 1_000_000.0:0.##} MB");
 
     public Task<string> RunAsync(string inputPath, CancellationToken ct) => RunAsync(inputPath, null, ct);
@@ -111,9 +117,8 @@ public sealed class PdfSplitBySize : IOperation
             var parts = await PlanAsync(inputPath, scratch, total, length, free, progress, ct).ConfigureAwait(false);
             var stem = Path.GetFileNameWithoutExtension(inputPath);
             var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, stem + FolderSuffix);
+            // At most MaxGrowth times the PDF: PlanAsync stops past it.
             var sizes = parts.Sum(part => new FileInfo(part).Length);
-            if (sizes > MaxGrowth * length)
-                throw TooMuchShared();
             if (FreeSpace(Path.GetDirectoryName(desired)!) is { } beside && sizes + FreeMarginBytes > beside)
                 throw NoRoom(desired);
             var output = await OutputPath.WriteDirectoryAtomicallyAsync(desired, FolderSuffix, async (folder, token) =>
@@ -152,6 +157,13 @@ public sealed class PdfSplitBySize : IOperation
         progress?.Report(new FileProgress("page", 1, total));
         var single = await SinglePageSizesAsync(inputPath, scratch, total, length, free, ct).ConfigureAwait(false);
         var parts = new List<string>();
+        // The parts stay in the scratch folder until all are written: stopped as soon as they pass MaxGrowth times the
+        // PDF or the free space of its disk, and past the runs of qpdf the most parts that budget allows may take.
+        var budget = MaxGrowth * length;
+        var disk = free is { } room ? room - FreeMarginBytes : long.MaxValue;
+        var cap = Math.Min(budget, disk);
+        var runs = MaxRuns(MostParts(budget));
+        long kept = 0;
         // What a page adds to a part, until a part is measured: the PDF's average.
         var perPage = Math.Max(1.0, (double)length / total);
         var first = 0;
@@ -174,6 +186,11 @@ public sealed class PdfSplitBySize : IOperation
 
             var (path, count, size) = await FillPartAsync(inputPath, scratch, first, remaining, guess, parts.Count + 1, ct).ConfigureAwait(false);
             parts.Add(path);
+            kept += size;
+            if (kept > cap)
+                throw disk < budget ? NoRoom(scratch) : TooMuchShared();
+            if (Written > runs)
+                throw TooMuchShared();
             perPage = Math.Max(1.0, (double)size / count);
             first += count;
             progress?.Report(new FileProgress("page", Math.Min(first + 1, total), total));

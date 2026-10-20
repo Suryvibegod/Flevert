@@ -126,6 +126,50 @@ public sealed class PdfSplitBySizeTests : IDisposable
     }
 
     [Fact]
+    public async Task Parts_that_would_pass_four_times_the_pdf_stop_the_split_early()
+    {
+        // 100 pages draw the same 300 KB image and one of 3 KB each; under 310 KB, a part holds about three pages and the
+        // image: 34 parts, 10 MB in all, for a 0.6 MB PDF. The split stops once the parts written pass 2.4 MB.
+        var input = _dir.Combine("shared.pdf");
+        ToolPdf.WriteSharedImagePages(input, 100, 300_000, 3_000);
+        var length = new FileInfo(input).Length;
+        var scratch = _dir.Combine("scratch");
+        Directory.CreateDirectory(scratch);
+        var op = new PdfSplitBySize(10, Qpdf.NextToApp) { LimitBytes = 310_000, ScratchRoot = scratch };
+        long most = 0;
+        using var stop = new CancellationTokenSource();
+        var watch = Task.Run(async () =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                try
+                {
+                    var bytes = new DirectoryInfo(scratch).EnumerateFiles("part-*.pdf", SearchOption.AllDirectories).Sum(file => file.Length);
+                    most = Math.Max(most, bytes);
+                }
+                catch (IOException)
+                {
+                    // A file deleted while measured.
+                }
+
+                await Task.Delay(5, CancellationToken.None);
+            }
+        }, CancellationToken.None);
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => op.RunAsync(input, CancellationToken.None));
+        await stop.CancelAsync();
+        await watch;
+
+        Assert.Equal(PdfError.TooLarge, ex.Error);
+        Assert.Contains("more than 4 times its size", ex.Message, StringComparison.Ordinal);
+        Assert.True(op.Written <= 40, $"{op.Written} runs of qpdf");
+        // The parts kept, and the candidates of the last one (the single pages are stopped by their own watch).
+        Assert.True(most <= (4 * length) + (3 * 400_000), $"{most} bytes of parts in the temporary folder for a PDF of {length}");
+        Assert.Equal(["shared.pdf"], FileNames(_dir.Path));
+        Assert.Empty(Directory.GetFileSystemEntries(scratch));
+    }
+
+    [Fact]
     public async Task Parts_that_do_not_fit_beside_the_pdf_are_not_written()
     {
         var input = _dir.Combine("Hồ sơ.pdf");
