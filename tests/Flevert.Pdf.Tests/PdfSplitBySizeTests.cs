@@ -90,6 +90,61 @@ public sealed class PdfSplitBySizeTests : IDisposable
     }
 
     [Fact]
+    public async Task Many_pages_sharing_one_image_take_few_runs_of_qpdf()
+    {
+        // 200 pages draw the same 300 KB image and one of 3 KB each: alone a page weighs 303 KB, 200 of them 900 KB. Grown
+        // a page at a time, as single pages' sizes suggest, a part took a run of qpdf per page.
+        var input = _dir.Combine("logo on every page.pdf");
+        WriteSharedImagePages(input, 200, 300_000, 3_000);
+        var op = Op(450_000);
+
+        var folder = await op.RunAsync(input, CancellationToken.None);
+
+        var parts = FileNames(folder).Select(name => Path.Combine(folder, name)).ToList();
+        Assert.All(parts, part => Assert.True(new FileInfo(part).Length < 450_000));
+        Assert.Equal(200, parts.Sum(part => PageWidths(part).Length));
+        Assert.True(op.Written <= (2 * parts.Count) + 16, $"{op.Written} runs of qpdf for {parts.Count} parts");
+    }
+
+    [Fact]
+    public async Task Splitting_stops_with_a_clear_error_before_the_pages_fill_the_disk()
+    {
+        // Split apart, the 200 pages of 303 KB would be 60 MB in the temporary folder, on a disk with 2.7 MB free.
+        var input = _dir.Combine("shared.pdf");
+        WriteSharedImagePages(input, 200, 300_000, 3_000);
+        var length = new FileInfo(input).Length;
+        var scratch = _dir.Combine("scratch");
+        Directory.CreateDirectory(scratch);
+        var op = new PdfSplitBySize(10, Qpdf.NextToApp) { LimitBytes = 450_000, ScratchRoot = scratch, FreeSpace = _ => 3 * length, FreeMarginBytes = 0 };
+
+        var ex = await Assert.ThrowsAsync<IOException>(() => op.RunAsync(input, CancellationToken.None));
+
+        Assert.StartsWith("There is not enough free space", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(["shared.pdf"], FileNames(_dir.Path));
+        Assert.Equal([scratch], Directory.GetDirectories(_dir.Path));
+        Assert.Empty(Directory.GetFileSystemEntries(scratch));
+    }
+
+    [Fact]
+    public async Task Parts_that_do_not_fit_beside_the_pdf_are_not_written()
+    {
+        var input = _dir.Combine("Hồ sơ.pdf");
+        ToolPdf.WriteHeavyPages(input, 100_000, 300, 301, 302, 303, 304, 305);
+        var scratch = Path.GetFullPath(Path.GetTempPath());
+        // Room in the temporary folder, none beside the PDF.
+        var op = new PdfSplitBySize(10, Qpdf.NextToApp)
+        {
+            LimitBytes = Limit,
+            FreeSpace = folder => Path.GetFullPath(folder).StartsWith(scratch, StringComparison.OrdinalIgnoreCase) && !Path.GetFullPath(folder).StartsWith(_dir.Path, StringComparison.OrdinalIgnoreCase) ? null : 100_000,
+        };
+
+        var ex = await Assert.ThrowsAsync<IOException>(() => op.RunAsync(input, CancellationToken.None));
+
+        Assert.StartsWith("There is not enough free space", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(["Hồ sơ.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
     public async Task Progress_counts_pages_placed_in_parts()
     {
         var input = _dir.Combine("progress.pdf");
