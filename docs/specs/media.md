@@ -1,16 +1,16 @@
-# Spec: media (v0.3)
+# Spec: media (v1.3)
 
-Module `media` trong [capability-map.md](capability-map.md). Phụ thuộc `core` (dùng lại `ExternalTool`, tiến độ trong file và output nhiều file làm ở v0.2). Phiên bản: **v0.3.0**. Trạng thái: **đã chốt phạm vi** (2026-10-20), **bản bổ sung đã duyệt** (2026-10-20: menu, giấy phép GPL, thứ tự làm, phạm vi nhánh); **bổ sung lần 2** (2026-10-20, người dùng giao maintainer tự quyết: Remove hidden info cho video, bỏ MKV khỏi đích Convert, menu theo người dùng thật có icon, thông báo nêu dung lượng, danh sách demuxer được phép, chọn luồng, thư viện đã cân nhắc); bản dựng ffmpeg và preset được đo lại ở bước Plan.
+Module `media` trong [capability-map.md](capability-map.md). Phụ thuộc `core` (dùng lại `ExternalTool`, tiến độ trong file và output nhiều file làm ở v0.2). Phiên bản: **v1.3.0**. Trạng thái: **đã chốt phạm vi** (2026-10-20), **bản bổ sung đã duyệt** (2026-10-20: menu, giấy phép GPL, thứ tự làm, phạm vi nhánh); **bổ sung lần 2** (2026-10-20, người dùng giao maintainer tự quyết: Remove hidden info cho video, bỏ MKV khỏi đích Convert, menu theo người dùng thật có icon, thông báo nêu dung lượng, danh sách demuxer được phép, chọn luồng, thư viện đã cân nhắc); bản dựng ffmpeg và preset được đo lại ở bước Plan.
 
-Làm trên nhánh `feat/v0.3-media` từ `main` sau v0.2.0, song song với v0.2.1 (nhánh `feat/v0.2.1-pdf`). Thứ tự phát hành: v0.2.1 → v0.2.2 → v0.3.0. Khi v0.2.1 rồi v0.2.2 vào `main`, nhánh này rebase lên `main` rồi mới mở (hoặc cập nhật) pull request. Menu video/audio theo nguyên tắc menu của v0.2.2 (pdf.md, mục "Menu: sắp lại theo người dùng thật"): nhãn "Convert to ▸", việc hay làm đứng trên, icon Fluent (MIT) cho nhóm và việc đơn lẻ. Để ít đụng nhau: chỉ thêm file trong `src/Flevert.Media/`, `tests/Flevert.Media.Tests/`, `docs/adr/0009-…`, và sửa tối thiểu ở chỗ chung (đăng ký thao tác trong `Program.cs`, danh sách đuôi của menu, `scripts/deps.json`, `Flevert.sln`, CI, installer, notices).
+Làm trên nhánh `feat/v0.3-media` từ `main` sau v0.2.0, song song với v0.2.1 (nhánh `feat/v0.2.1-pdf`). Thứ tự phát hành: v0.2.1 → v1.2.2 → v1.3.0. Khi v0.2.1 rồi v1.2.2 vào `main`, nhánh này rebase lên `main` rồi mới mở (hoặc cập nhật) pull request. Menu video/audio theo nguyên tắc menu của v1.2.2 (pdf.md, mục "Menu: sắp lại theo người dùng thật"): nhãn "Convert to ▸", việc hay làm đứng trên, icon Fluent (MIT) cho nhóm và việc đơn lẻ. Để ít đụng nhau: chỉ thêm file trong `src/Flevert.Media/`, `tests/Flevert.Media.Tests/`, `docs/adr/0009-…`, và sửa tối thiểu ở chỗ chung (đăng ký thao tác trong `Program.cs`, danh sách đuôi của menu, `scripts/deps.json`, `Flevert.sln`, CI, installer, notices).
 
 ## Objective
 
-Video quay điện thoại quá nặng để gửi, định dạng không mở được trên máy khác, cần lấy nhạc từ video: hôm nay người dùng tải "video converter" đầy quảng cáo hoặc upload lên web. Flevert v0.3 làm các việc phổ biến nhất **bằng chuột phải, trên máy, không upload**, với preset dễ hiểu thay cho thông số kỹ thuật.
+Video quay điện thoại quá nặng để gửi, định dạng không mở được trên máy khác, cần lấy nhạc từ video: hôm nay người dùng tải "video converter" đầy quảng cáo hoặc upload lên web. Flevert v1.3 làm các việc phổ biến nhất **bằng chuột phải, trên máy, không upload**, với preset dễ hiểu thay cho thông số kỹ thuật.
 
 ### User stories (ưu tiên từ trên xuống)
 
-1. Video 2 phút quay iPhone (MOV, HEVC, 400 MB) → **Compress > Under 25 MB** → MP4 dưới 25 MB, gửi được qua Messenger hay Discord, xem được trên mọi máy. (Gmail tính giới hạn 25 MB sau khi mã hóa base64, nên file gốc chỉ nên tới khoảng 18 MB: gửi email là việc của "For email" ở v0.3.1.)
+1. Video 2 phút quay iPhone (MOV, HEVC, 400 MB) → **Compress > Under 25 MB** → MP4 dưới 25 MB, gửi được qua Messenger hay Discord, xem được trên mọi máy. (Gmail tính giới hạn 25 MB sau khi mã hóa base64, nên file gốc chỉ nên tới khoảng 18 MB: gửi email là việc của "For email" ở v1.3.1.)
 2. MOV/MKV/WEBM không mở được → **Convert to > MP4** (H.264 + AAC, chạy mọi nơi).
 3. Lấy nhạc/tiếng từ video → **Extract audio > MP3**.
 4. Đổi định dạng audio: FLAC/WAV/M4A/OGG/OPUS/WMA → MP3, M4A, FLAC, WAV…
@@ -18,7 +18,7 @@ Video quay điện thoại quá nặng để gửi, định dạng không mở �
 6. Chọn 20 video → một lô, từng file một (mã hóa video đã dùng hết CPU), cửa sổ tiến độ hiện % của file đang chạy và số file.
 7. Video quay iPhone có vị trí GPS → **Remove hidden info** → bản sao không còn vị trí, không mã hóa lại (nhanh, không giảm chất lượng), trước khi đăng lên mạng.
 
-Ngoài phạm vi v0.3: cắt/ghép đoạn, ghép nhiều video, phụ đề, xoay video, tải video từ mạng, DRM, mã hóa phần cứng tùy chọn (xem Open Questions), H.265/AV1 làm output, MKV làm output (ít người cần; MKV vẫn là nguồn đọc được).
+Ngoài phạm vi v1.3: cắt/ghép đoạn, ghép nhiều video, phụ đề, xoay video, tải video từ mạng, DRM, mã hóa phần cứng tùy chọn (xem Open Questions), H.265/AV1 làm output, MKV làm output (ít người cần; MKV vẫn là nguồn đọc được).
 
 ### Thao tác
 
@@ -48,7 +48,7 @@ Quy tắc chung:
 
 ### Menu (bắt buộc ≤ 16 mục mỗi đuôi): theo người dùng thật, có icon
 
-Theo nguyên tắc menu của v0.2.2 (pdf.md, mục "Menu: sắp lại theo người dùng thật"): việc hay làm đứng trên, tên là lời thường, icon Fluent (MIT) cho nhóm và việc đơn lẻ, đường kẻ chỉ dùng nếu v0.2.2 đã đo là không tính vào giới hạn 16. Explorer chỉ hiện 16 mục đầu của cây menu dưới `Flevert` (tính cả mục mở submenu; core.md, mục Menu).
+Theo nguyên tắc menu của v1.2.2 (pdf.md, mục "Menu: sắp lại theo người dùng thật"): việc hay làm đứng trên, tên là lời thường, icon Fluent (MIT) cho nhóm và việc đơn lẻ, đường kẻ chỉ dùng nếu v1.2.2 đã đo là không tính vào giới hạn 16. Explorer chỉ hiện 16 mục đầu của cây menu dưới `Flevert` (tính cả mục mở submenu; core.md, mục Menu).
 
 ```
 Video:
@@ -63,7 +63,7 @@ Audio:
 ```
 
 - **Compress đứng đầu**: user story số 1 (video quá nặng để gửi). Convert thứ hai, Extract audio thứ ba, Remove hidden info riêng một cụm (riêng tư).
-- Icon: Compress `arrow_minimize`, Convert to `arrow_swap`, Extract audio `music_note_2`, Remove hidden info như ảnh và PDF (`shield`/`eye_off`); dùng chung `assets/menu/` và cách ghi `Icon` của v0.2.2. Nếu v0.2.2 chưa vào `main` khi làm task menu: làm nhãn và thứ tự trước, thêm icon sau khi rebase.
+- Icon: Compress `arrow_minimize`, Convert to `arrow_swap`, Extract audio `music_note_2`, Remove hidden info như ảnh và PDF (`shield`/`eye_off`); dùng chung `assets/menu/` và cách ghi `Icon` của v1.2.2. Nếu v1.2.2 chưa vào `main` khi làm task menu: làm nhãn và thứ tự trước, thêm icon sau khi rebase.
 - Đích trùng nguồn không hiện (`.mp4` không có `Convert to > MP4`). Không thêm mục nào vào menu video mà không bỏ mục khác.
 - Test menu khẳng định mọi đuôi video/audio ≤ 16 mục; MenuProbe kiểm trên Explorer thật; ảnh chụp menu video và audio (sáng và tối) trong PR để người dùng duyệt.
 - `.gif` vẫn là **ảnh** (module image), không thêm vào nguồn video.
@@ -181,7 +181,7 @@ docs/adr/0009-…                → bản dựng ffmpeg (GPL hay LGPL) và ngh�
 6. Cancel giữa chừng: ffmpeg dừng ≤ 2 s, không còn `.partial`.
 7. Cửa sổ tiến độ hiện % trong file và "2 of 20".
 8. Bộ cài có `ffmpeg.exe`, `ffprobe.exe` (thư mục `ffmpeg\`), giấy phép trong `THIRD-PARTY-NOTICES.txt`; release có asset mã nguồn ffmpeg tương ứng; nâng cấp từ bản 0.2.x đã ghim giữ cài đặt; gỡ sạch; bộ cài ≤ 150 MB (hoặc người dùng đã đồng ý con số khác).
-9. Menu thật (MenuProbe) của `.mp4`, `.mov`, `.mkv`, `.mp3`, `.flac` đúng bố cục và thứ tự, ≤ 16 mục, có icon (khi v0.2.2 đã vào `main`); người dùng đã duyệt ảnh chụp menu sáng/tối.
+9. Menu thật (MenuProbe) của `.mp4`, `.mov`, `.mkv`, `.mp3`, `.flac` đúng bố cục và thứ tự, ≤ 16 mục, có icon (khi v1.2.2 đã vào `main`); người dùng đã duyệt ảnh chụp menu sáng/tối.
 13. Remove hidden info: video iPhone có vị trí → output không còn khóa vị trí nào (ffprobe, toàn cục và từng luồng), gói video/audio trùng hash với nguồn, chạy ≤ 5 s cho video 400 MB.
 14. Playlist HLS hoặc `ffconcat` trỏ file cục bộ khác: bị từ chối trước khi chạy ffmpeg, output không tồn tại, nội dung file kia không xuất hiện ở đâu.
 15. Thông báo Compress/Under N nêu dung lượng mới và cũ.
@@ -193,21 +193,21 @@ docs/adr/0009-…                → bản dựng ffmpeg (GPL hay LGPL) và ngh�
 
 1. **GPL hay LGPL: đã chốt GPL** (người dùng duyệt 2026-10-20). Lý do: "Under N MB" cần mã hóa 2 lượt và CRF của x264 để vừa dung lượng mà vẫn đẹp; bản LGPL phải dùng `h264_mf`, không CRF, không 2 lượt, chất lượng tùy bộ mã hóa của từng máy (khó test, khó hứa). Cả hai bản đều phải kèm mã nguồn, nên GPL chỉ làm asset mã nguồn lớn hơn, và asset đó sinh tự động. ffmpeg chạy tiến trình riêng nên Flevert vẫn MIT.
 2. Kích thước: bản GPL static khoảng 80–130 MB giải nén; có cần tải ffmpeg lúc cài (bộ cài nhỏ) thay vì đóng gói? Mặc định: đóng gói (offline, không tải gì lúc chạy hay lúc cài).
-3. Mã hóa phần cứng (NVENC/QSV/AMF) cho máy yếu: để sau v0.3 trừ khi đo thấy preset `medium` quá chậm (> 3× thời gian thực ở 1080p trên máy 4 nhân).
+3. Mã hóa phần cứng (NVENC/QSV/AMF) cho máy yếu: để sau v1.3 trừ khi đo thấy preset `medium` quá chậm (> 3× thời gian thực ở 1080p trên máy 4 nhân).
 
 ---
 
-# v0.3.1: công cụ video và âm thanh thêm
+# v1.3.1: công cụ video và âm thanh thêm
 
 Trạng thái: **đã chốt** (2026-10-20). Người dùng giao maintainer tự quyết, nên các quyết định được ghi ngay trong spec, không qua bước hỏi.
 
-**Nhánh:** `feat/v0.3.1-media`, tạo từ `main` sau khi v0.3.0 được gộp. Dùng lại cơ chế mũi tên thứ hai của v0.2.2 ("Flevert PDF tools ▸") và kiểu ô nhập của hộp thoại mật khẩu.
+**Nhánh:** `feat/v0.3.1-media`, tạo từ `main` sau khi v1.3.0 được gộp. Dùng lại cơ chế mũi tên thứ hai của v1.2.2 ("Flevert PDF tools ▸") và kiểu ô nhập của hộp thoại mật khẩu.
 
-**Thứ tự phát hành:** v0.2.1 → v0.2.2 → v0.3.0 → v0.3.1. Mọi quy tắc của v0.3.0 vẫn áp dụng: tiến trình riêng, whitelist giao thức và demuxer, chọn luồng, bỏ GPS, giới hạn, `.partial`.
+**Thứ tự phát hành:** v0.2.1 → v1.2.2 → v1.3.0 → v1.3.1. Mọi quy tắc của v1.3.0 vẫn áp dụng: tiến trình riêng, whitelist giao thức và demuxer, chọn luồng, bỏ GPS, giới hạn, `.partial`.
 
-## Objective (v0.3.1)
+## Objective (v1.3.1)
 
-Người dùng điện thoại ở Việt Nam hay làm vài việc với video và ghi âm mà v0.3.0 chưa có:
+Người dùng điện thoại ở Việt Nam hay làm vài việc với video và ghi âm mà v1.3.0 chưa có:
 - cắt lấy đoạn cần gửi;
 - xoay video quay ngang;
 - bỏ tiếng nền;
@@ -216,7 +216,7 @@ Người dùng điện thoại ở Việt Nam hay làm vài việc với video v
 - ghép mấy clip một chuyến đi thành một video;
 - nén đúng giới hạn của nơi sẽ gửi.
 
-v0.3.1 thêm các việc đó, vẫn bằng chuột phải và preset, chạy trên máy.
+v1.3.1 thêm các việc đó, vẫn bằng chuột phải và preset, chạy trên máy.
 
 ## Nguồn tham khảo (khảo sát 2026-10-20)
 
@@ -239,23 +239,23 @@ v0.3.1 thêm các việc đó, vẫn bằng chuột phải và preset, chạy tr
 
 Ghi nguồn ở ADR của media và trong commit message khi lấy tham số hay code.
 
-## Sửa cho v0.3.0 (làm trong nhánh v0.3.0 nếu chưa phát hành, không thì ở v0.3.1)
+## Sửa cho v1.3.0 (làm trong nhánh v1.3.0 nếu chưa phát hành, không thì ở v1.3.1)
 
 **Gmail tính giới hạn 25 MB sau khi mã hóa base64**, tức file tăng khoảng một phần ba, nên file gốc chỉ nên tới khoảng **18 MB**. Nguồn: fast.io, compresto.app, compress.lol, kiểm 2026-10-20. Gmail không báo lỗi khi vượt: nó thay file đính kèm bằng link Google Drive.
 
-Hệ quả cho v0.3.0:
+Hệ quả cho v1.3.0:
 - User story 1 và mọi lời nhắc tới Gmail không hứa "Under 25 MB gửi được qua Gmail". Ví dụ đúng là Messenger hay Discord.
-- Gửi email là việc của mục "For email" ở v0.3.1.
+- Gửi email là việc của mục "For email" ở v1.3.1.
 
 ## Menu (≤ 16 mục mỗi mũi tên): thuần chuột phải
 
-Người dùng chốt ngày 2026-10-20: Flevert chỉ là menu chuột phải, **không có cửa sổ chọn công cụ**. Mỗi loại file được tối đa 16 mục trong một mũi tên (Explorer tính cả cây con). Hết chỗ thì thêm **mũi tên thứ hai** cho loại file đó, như "Flevert PDF tools ▸" của v0.2.2.
+Người dùng chốt ngày 2026-10-20: Flevert chỉ là menu chuột phải, **không có cửa sổ chọn công cụ**. Mỗi loại file được tối đa 16 mục trong một mũi tên (Explorer tính cả cây con). Hết chỗ thì thêm **mũi tên thứ hai** cho loại file đó, như "Flevert PDF tools ▸" của v1.2.2.
 
-Hộp thoại chỉ được dùng khi người dùng phải tự gõ chữ. Ở v0.3.1 chỉ có một: ô nhập thời điểm bắt đầu/kết thúc của Trim, cùng kiểu với ô nhập mật khẩu.
+Hộp thoại chỉ được dùng khi người dùng phải tự gõ chữ. Ở v1.3.1 chỉ có một: ô nhập thời điểm bắt đầu/kết thúc của Trim, cùng kiểu với ô nhập mật khẩu.
 
-Theo nguyên tắc menu của v0.2.2: việc hay làm đứng trên, tên là lời thường, có icon Fluent.
+Theo nguyên tắc menu của v1.2.2: việc hay làm đứng trên, tên là lời thường, có icon Fluent.
 
-**Video, mũi tên chính** (giữ như v0.3.0, ≤ 16):
+**Video, mũi tên chính** (giữ như v1.3.0, ≤ 16):
 
 ```
 [icon] Compress ▸        Light · Balanced · Strong · Under 10 MB · Under 25 MB · Under 100 MB   (7)
@@ -288,8 +288,8 @@ Theo nguyên tắc menu của v0.2.2: việc hay làm đứng trên, tên là l�
 [icon] Small file for voice                                                                      (1)   ≤ 15
 ```
 
-- Mũi tên thứ hai được ghi và gỡ như mũi tên chính: cùng cách ghi registry, cùng lưới an toàn khi gỡ, cùng test. Dùng lại cơ chế đã làm cho "Flevert PDF tools" ở v0.2.2.
-- Lật video (Flip), đổi tốc độ 2× / 0.5× và GIF từ một đoạn giữa video: **ra ngoài v0.3.1**, vì mũi tên video tools đã đủ 16 mục. Để lại cho bản sau.
+- Mũi tên thứ hai được ghi và gỡ như mũi tên chính: cùng cách ghi registry, cùng lưới an toàn khi gỡ, cùng test. Dùng lại cơ chế đã làm cho "Flevert PDF tools" ở v1.2.2.
+- Lật video (Flip), đổi tốc độ 2× / 0.5× và GIF từ một đoạn giữa video: **ra ngoài v1.3.1**, vì mũi tên video tools đã đủ 16 mục. Để lại cho bản sau.
 
 ## Yêu cầu
 
@@ -310,7 +310,7 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
 
 **Trim** (`video.trim`):
 - Hai mục cắt sẵn: giữ 30 s đầu, giữ 60 s đầu (không hỏi gì). Mục "Choose start and end…" mở ô nhập nhỏ kiểu hộp thoại mật khẩu: hai ô "Start" và "End" (mm:ss), một câu trả lời cho cả lô.
-- Mặc định **chính xác** (mã hóa lại theo chuỗi MP4 của v0.3.0, `-ss` đặt trước `-i`).
+- Mặc định **chính xác** (mã hóa lại theo chuỗi MP4 của v1.3.0, `-ss` đặt trước `-i`).
 - Tùy chọn "Fast" (`-c copy`): nói rõ là chỉ cắt được ở keyframe, có thể lệch một giây hoặc hơn.
 
 **Make volume even** (`video.normalize`, `audio.normalize`):
@@ -321,7 +321,7 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
 
 **Save a frame** (`video.frame-jpg`):
 - Tùy chọn vị trí: start, middle (mặc định), "best" (`thumbnail=n=100`).
-- Lệnh: `-ss T -i file:… -frames:v 1 -update 1 -q:v 2`; xoay đúng chiều; HDR thì tone-map như v0.3.0.
+- Lệnh: `-ss T -i file:… -frames:v 1 -update 1 -q:v 2`; xoay đúng chiều; HDR thì tone-map như v1.3.0.
 - **Muxer image2 đọc `%` trong tên output**, nên luôn ghi ra tên tạm cố định rồi đổi tên. Không bao giờ để tên file của người dùng nằm trong mẫu tên.
 
 **Merge into one** (`video.merge`, `audio.merge`):
@@ -331,7 +331,7 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
 - **Thứ tự:** sắp theo `creation_time` (thời điểm quay), rồi theo tên. Thứ tự Explorer gửi file không đáng tin.
 - **Giới hạn:** tối đa 50 file và 12 giờ tổng; timeout bằng tổng thời lượng × 6 + 60 s.
 
-## Bảo mật (thêm cho v0.3.1)
+## Bảo mật (thêm cho v1.3.1)
 
 - Tên file có `%` (image2, segment): luôn ghi ra tên tạm cố định rồi đổi tên. Test với file tên `50%off.mp4`.
 - Ghép nhiều file: filter concat với nhiều `-i`, không bao giờ dùng demuxer concat hay danh sách file. Giới hạn số file, tổng thời lượng và bộ nhớ (trần job 2 GB).
@@ -339,9 +339,9 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
 - Không dùng filter đọc file (`subtitles=`, `movie=`), nên **burn phụ đề** để sau. Cách an toàn duy nhất là Flevert tự đọc SRT rồi vẽ bằng `drawtext`.
 - `loudnorm`, `silencedetect`: đọc kết quả JSON và log của ffmpeg có giới hạn kích thước (1 MB như mọi output của `ExternalTool`).
 
-## Ngoài phạm vi v0.3.1 (để sau)
+## Ngoài phạm vi v1.3.1 (để sau)
 
-- Split thành nhiều phần (v0.3.2).
+- Split thành nhiều phần (v1.3.2).
 - MP4 nhanh không mã hóa lại khi nguồn đã là H.264/AAC: cải tiến nội bộ, xét ở bản hiệu năng.
 - Nhạc chuông `.m4r`.
 - Motion Photo → MP4 (module ảnh).
@@ -350,7 +350,7 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
 - Tìm chất lượng theo VMAF.
 - Giữ HDR, AI upscale.
 
-## Testing Strategy (v0.3.1)
+## Testing Strategy (v1.3.1)
 
 - Test viết trước và thấy đỏ.
 - Fixture sinh bằng ffmpeg (`lavfi`), không dùng video cá nhân:
@@ -359,7 +359,7 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
   - 3 clip khác độ phân giải, fps, có và không có tiếng (cho Merge);
   - audio có 2 s im lặng ở đầu và cuối;
   - file tên `50%off.mp4`;
-  - input độc của v0.3.0 (HLS, concat) cho mọi công cụ mới.
+  - input độc của v1.3.0 (HLS, concat) cho mọi công cụ mới.
 - Kiểm bằng ffprobe:
   - thời lượng ±0,1 s;
   - xoay đúng;
@@ -371,7 +371,7 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
 - Ô nhập thời điểm của Trim: test logic không cần UI; UI Automation cho tên trợ năng. MenuProbe: mỗi mũi tên ≤ 16 mục, mũi tên thứ hai gỡ sạch khi gỡ cài.
 - Đo tốc độ, ghi vào todo: xoay không mã hóa lại ≤ 2 s cho 400 MB; trim chính xác 30 s ≤ 2× thời gian thực.
 
-## Success Criteria (v0.3.1)
+## Success Criteria (v1.3.1)
 
 1. Hai mũi tên của video ("Flevert", "Flevert video tools") và mũi tên của âm thanh đúng bố cục, mỗi mũi tên ≤ 16 mục, có icon; mọi mục chạy thẳng từ menu cho 1 file và cho nhiều file; gỡ cài không để lại mũi tên nào.
 2. Trim chính xác: đoạn 00:10–00:40 ra dài 30,0 ± 0,1 s. Fast mode báo rõ có thể lệch.
@@ -380,4 +380,4 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
 5. Merge 3 clip khác thông số: một video, thời lượng bằng tổng ± 0,2 s, theo thứ tự thời điểm quay. Không có demuxer concat trong mọi lệnh ffmpeg (test đọc dòng lệnh).
 6. For email / WhatsApp / Messenger: output < 18 / 16 / 25 × 1 000 000 byte.
 7. File tên `50%off.mp4`: mọi công cụ ra đúng tên output.
-8. Mọi công cụ: bảng input độc của v0.3.0 đạt. CI xanh 3 lần. `test-installer.ps1` đạt (gồm nâng cấp từ bản đã ghim). Ba review bối cảnh trống không còn Critical/High/Required.
+8. Mọi công cụ: bảng input độc của v1.3.0 đạt. CI xanh 3 lần. `test-installer.ps1` đạt (gồm nâng cấp từ bản đã ghim). Ba review bối cảnh trống không còn Critical/High/Required.
