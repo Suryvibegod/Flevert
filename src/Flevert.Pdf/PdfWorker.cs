@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using Flevert.Core;
 
@@ -61,6 +62,20 @@ public sealed class PdfWorker
     internal TimeSpan StallTimeout { get; init; } = DefaultStallTimeout;
 
     /// <summary>
+    /// The whole file's time budget before its pages count (T18, final security audit): the stall window bounds one page,
+    /// but 2 000 pages each just inside it would keep a worker busy for hours. Once the worker has said how many pages
+    /// the PDF has, the run may take this plus <see cref="FileBudgetPerPage"/> for each, in all; past it the worker is
+    /// killed and the file fails with <see cref="OverBudgetMessage"/>. 2 000 pages get 68 minutes; an honest page takes
+    /// well under a tenth of a second at 150 DPI on the dev machine, and a 100 MP page 2.5 s.
+    /// </summary>
+    internal TimeSpan FileBudgetBase { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>Added to the whole file's budget per page (<see cref="FileBudgetBase"/>); lower for tests.</summary>
+    internal TimeSpan FileBudgetPerPage { get; init; } = TimeSpan.FromSeconds(2);
+
+    internal const string OverBudgetMessage = "This PDF takes too long to convert: its pages are too complex, or made to stall PDF readers.";
+
+    /// <summary>
     /// How long a page of <paramref name="width"/> x <paramref name="height"/> px may go without a sign of progress: the
     /// stall timeout plus a quarter second per megapixel, since honest work grows with the pixels.
     /// </summary>
@@ -102,6 +117,10 @@ public sealed class PdfWorker
         {
             run = await ExternalTool.RunAsync(ExePath, [Command], RunTimeout, request, limits: limits, environment: WorkerEnvironment(),
                 standardOutputLine: session.OnLine, cancellationToken: session.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested && session.OverBudget)
+        {
+            throw new PdfException(PdfError.TooSlow, OverBudgetMessage);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested && session.Stalled)
         {
@@ -162,6 +181,8 @@ public sealed class PdfWorker
         private readonly IProgress<FileProgress>? _progress;
         private readonly CancellationToken _cancel;
         private readonly CancellationTokenSource _stall = new();
+        private readonly CancellationTokenSource _budget = new();
+        private readonly Stopwatch _elapsed = Stopwatch.StartNew();
         private readonly CancellationTokenSource _linked;
         private readonly Lock _gate = new();
         private TimeSpan _pageWindow;
@@ -176,19 +197,30 @@ public sealed class PdfWorker
             _worker = worker;
             _progress = progress;
             _cancel = cancel;
-            _linked = CancellationTokenSource.CreateLinkedTokenSource(cancel, _stall.Token);
+            _linked = CancellationTokenSource.CreateLinkedTokenSource(cancel, _stall.Token, _budget.Token);
             _stall.CancelAfter(openWindow);
         }
 
-        /// <summary>Cancelled by the caller, or by the watchdog.</summary>
+        /// <summary>Cancelled by the caller, by the watchdog, or when the whole file is past its budget.</summary>
         public CancellationToken Token => _linked.Token;
 
         public bool Stalled => _stall.IsCancellationRequested;
+
+        public bool OverBudget => _budget.IsCancellationRequested;
 
         public void Dispose()
         {
             _linked.Dispose();
             _stall.Dispose();
+            _budget.Dispose();
+        }
+
+        // Set once, when the page count is known: the budget counts from the start of the run.
+        private void StartBudget(int pages)
+        {
+            var budget = _worker.FileBudgetBase + (_worker.FileBudgetPerPage * pages);
+            var left = budget - _elapsed.Elapsed;
+            _budget.CancelAfter(left > TimeSpan.Zero ? left : TimeSpan.Zero);
         }
 
         /// <summary>
@@ -211,6 +243,7 @@ public sealed class PdfWorker
                 {
                     case "pages" when parts.Length == 2 && _total == 0:
                         _total = Number(parts[1], 1, PdfDocument.MaxPages);
+                        StartBudget(_total);
                         Watch(_worker.StallTimeout);
                         return null;
                     case "page" when parts.Length == 3 && _total > 0:
@@ -237,6 +270,7 @@ public sealed class PdfWorker
                         Number(parts[1], _total, _total);
                         _done = true;
                         _stall.CancelAfter(Timeout.InfiniteTimeSpan);
+                        _budget.CancelAfter(Timeout.InfiniteTimeSpan);
                         return null;
                     case "error" when parts.Length == 3 && _error is null:
                         _error = (parts[1], PdfRenderWorker.OneLine(parts[2]));

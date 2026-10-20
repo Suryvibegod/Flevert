@@ -34,6 +34,39 @@ public sealed class PdfWorkerTests : IDisposable
     }
 
     [Fact]
+    public async Task Pages_each_inside_the_stall_window_are_stopped_once_the_whole_file_is_past_its_budget()
+    {
+        // Final security audit (T18): 2 000 pages each just under the per-page window would keep a worker busy for hours.
+        // Six pages of about a second each, under a budget of 1 s plus 0.1 s a page (the product's is 60 s plus 2 s a page).
+        var input = _dir.Combine("slow pages.pdf");
+        TestPdf.WriteStallingPages(input, pages: 6, triangles: 400);
+        var worker = new PdfWorker(TestPdf.FlevertExe) { FileBudgetBase = TimeSpan.FromSeconds(1), FileBudgetPerPage = TimeSpan.FromSeconds(0.1) };
+        var timer = Stopwatch.StartNew();
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => Png(worker).RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.TooSlow, ex.Error);
+        Assert.Equal("This PDF takes too long to convert: its pages are too complex, or made to stall PDF readers.", ex.Message);
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(4), $"took {timer.Elapsed}");
+        Assert.Equal(["slow pages.pdf"], Names(_dir.Path));
+        Assert.Empty(TestProcesses.Workers());
+    }
+
+    [Fact]
+    public async Task The_same_slow_pages_convert_within_the_products_budget()
+    {
+        // The control for the test above: only the budget differs.
+        var input = _dir.Combine("slow pages.pdf");
+        TestPdf.WriteStallingPages(input, pages: 6, triangles: 400);
+
+        var folder = await Png(TestPdf.Worker).RunAsync(input, CancellationToken.None);
+
+        Assert.Equal(6, Names(folder).Length);
+        Assert.Equal(TimeSpan.FromSeconds(60), new PdfWorker(TestPdf.FlevertExe).FileBudgetBase);
+        Assert.Equal(TimeSpan.FromSeconds(2), new PdfWorker(TestPdf.FlevertExe).FileBudgetPerPage);
+    }
+
+    [Fact]
     public async Task Cancelling_kills_the_worker_within_two_seconds_and_leaves_nothing()
     {
         var input = _dir.Combine("stalled.pdf");

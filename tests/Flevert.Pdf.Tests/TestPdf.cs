@@ -217,7 +217,14 @@ internal static class TestPdf
     /// call, about 2.5 ms each at 150 DPI on the dev machine (2 000 took 5 s, 20 000 took 50 s), so a million keep it busy
     /// for about 40 minutes at 77 MB, from a 60 KB file (Flate packs the repeated triangle).
     /// </summary>
-    public static void WriteStallingPage(string path, int triangles = 1_000_000)
+    public static void WriteStallingPage(string path, int triangles = 1_000_000) => WriteStallingPages(path, 1, triangles);
+
+    /// <summary>
+    /// <paramref name="pages"/> A4 pages that all draw the same triangle mesh as <see cref="WriteStallingPage"/>: with a
+    /// few hundred triangles, each page takes about a second, well inside the per-page stall window, so only a budget for
+    /// the whole file stops them.
+    /// </summary>
+    public static void WriteStallingPages(string path, int pages, int triangles)
     {
         // Per vertex: flag (8 bits), x and y (16 bits each), red, green, blue (8 bits each).
         byte[] triangle =
@@ -234,11 +241,12 @@ internal static class TestPdf
         }
 
         var mesh = packed.ToArray();
+        // Objects: 1 catalog, 2 page tree, 3 the shading, 4 the content stream every page shares, 5… the pages.
+        var kids = string.Join(' ', Enumerable.Range(5, pages).Select(n => n.ToString(CultureInfo.InvariantCulture) + " 0 R"));
         WriteObjects(path,
         [
             Encoding.ASCII.GetBytes("<< /Type /Catalog /Pages 2 0 R >>"),
-            Encoding.ASCII.GetBytes("<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
-            Encoding.ASCII.GetBytes("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Shading << /Sh0 4 0 R >> >> /Contents 5 0 R >>"),
+            Encoding.ASCII.GetBytes(string.Create(CultureInfo.InvariantCulture, $"<< /Type /Pages /Count {pages} /Kids [{kids}] >>")),
             [
                 .. Encoding.ASCII.GetBytes(string.Create(CultureInfo.InvariantCulture,
                     $"<< /ShadingType 4 /ColorSpace /DeviceRGB /BitsPerCoordinate 16 /BitsPerComponent 8 /BitsPerFlag 8 /Decode [0 1200 0 1700 0 1 0 1 0 1] /Filter /FlateDecode /Length {mesh.Length} >>\nstream\n")),
@@ -246,6 +254,9 @@ internal static class TestPdf
                 .. "\nendstream"u8,
             ],
             Encoding.ASCII.GetBytes("<< /Length 7 >>\nstream\n/Sh0 sh\nendstream"),
+            .. Enumerable.Repeat(
+                Encoding.ASCII.GetBytes("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Shading << /Sh0 3 0 R >> >> /Contents 4 0 R >>"),
+                pages),
         ]);
     }
 
