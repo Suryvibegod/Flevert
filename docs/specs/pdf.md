@@ -608,3 +608,22 @@ Việc mới của worker: công cụ ghi PDF bằng pdfium cần worker **lưu*
 2. **Phạm vi**: cả 8 công cụ trong bảng Yêu cầu.
 3. **OCR**: v1.4.0, sau media (v1.3.0); spec riêng viết khi bắt đầu v1.4.0 (Tesseract Apache-2.0 + dữ liệu `vie`, bộ cài nặng thêm khoảng 30–60 MB).
 4. **Giữ thuần chuột phải, không cửa sổ công cụ; thêm menu thứ hai `Flevert PDF tools`** (người dùng 2026-10-20, sau quyết định 1): mọi công cụ chạy thẳng từ menu với tùy chọn mặc định (Add page numbers: dưới giữa, `1 / N`); chỉ watermark hỏi chữ, trong hộp thoại kiểu hộp thoại mật khẩu; `Text` ở lại `Convert to` của menu `Flevert`. Xem mục "Menu" ở trên.
+
+---
+
+# v1.2.3: một dòng Flevert cho PDF (hotfix)
+
+Người dùng (2026-10-21): hai dòng "Flevert" và "Flevert PDF tools" cạnh nhau trong menu chuột phải là rối. Đo trên Explorer thật (MenuProbe, đuôi thử `.flvtest`): giới hạn 16 tính cho **cả cây** dưới một mục tầng trên, mũi tên con trỏ tới khóa gốc riêng cũng không được thêm chỗ (15 lệnh + "More" → "More" rỗng; 3 + "More" với 12 → đủ 16). Không thể đặt 28 dòng PDF dưới một mục bằng verb tĩnh.
+
+Người dùng chọn (2026-10-21): **một dòng `Flevert`** với 16 việc hay dùng; việc ít dùng ở mục thứ hai **`Flevert: more PDF tools`, chỉ hiện khi giữ Shift + chuột phải** (giá trị `Extended` của verb, `MenuCascade.ShiftOnly`).
+
+```
+Flevert ▸  Compress ▸ (2) · Merge PDFs · Split into pages · Convert to ▸ (JPG images · Text) · Rotate ▸ (3)
+           ── Add watermark… · Protect with password · Remove password · Remove hidden info          (16)
+Shift: Flevert: more PDF tools ▸  Remove blank pages · Add page numbers ── Print layout ▸ (2) · Fit pages to A4
+           · Lock filled forms · Split by size ▸ (2) ── Convert to PNG images · Extract images        (12)
+```
+
+- op-id không đổi; PNG chuyển từ `Convert to` sang menu Shift (`Convert to PNG images`); Add watermark… sang menu chính (nhóm bảo vệ và chia sẻ).
+- MenuProbe có `list --shift` (CMF_EXTENDEDVERBS) để kiểm menu khi giữ Shift.
+- Hướng lâu dài (không làm ở hotfix): menu động bằng shell extension (`IExplorerCommand`) cho một dòng không giới hạn; cần ký số trước vì Smart App Control chặn DLL chưa ký nạp vào Explorer.
