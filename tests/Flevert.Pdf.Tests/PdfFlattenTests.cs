@@ -89,6 +89,19 @@ public sealed class PdfFlattenTests : IDisposable
     }
 
     [Fact]
+    public async Task A_form_that_asks_to_be_drawn_through_a_reference_is_treated_as_asking()
+    {
+        // /NeedAppearances may be written as a reference to a true object; read as false, the stale drawing would be locked.
+        var input = _dir.Combine("Tờ khai.pdf");
+        ToolPdf.WriteFilledForm(input, "Nguyễn Văn A", needAppearances: true, drawn: "Drawn by the viewer", indirect: true);
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.CannotRedrawForm, ex.Error);
+        Assert.Equal(["Tờ khai.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
     public async Task A_field_of_several_lines_in_a_form_that_asks_to_be_drawn_fails_rather_than_being_cut()
     {
         // qpdf 12.4.2 draws a field of several lines as one line, cut at the field's edge (probe in tasks/pdf/todo.md).

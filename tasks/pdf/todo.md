@@ -676,7 +676,7 @@ Nhánh `review-v0.2.2` (từ `8f86956`), 2026-10-20. Quyết định của maint
 | R6. Nit: `FontGlyphs.Read` không bắt `OverflowException` của phép đổi `checked` trong `Format12` | Nit | Không xảy ra được với `byte[]` (≤ `Array.MaxLength`, `Slice` ném `ArgumentOutOfRangeException` trước) | `9b38afa`: bắt thêm `OverflowException` (phòng xa); test mới với `cmap` format 12 dựng tay (đọc đúng; số nhóm vượt dữ liệu → không đọc được). Không làm đỏ được. Font không đọc được thì như trước: không kiểm glyph |
 
 **Còn mở sau phần sửa:**
-- Lock filled forms: `/NeedAppearances` ghi dạng tham chiếu (`9 0 R` trỏ tới `true`) được đọc là không yêu cầu vẽ, nên khóa theo appearance sẵn có (đúng trường hợp R2). Sửa rẻ: mọi giá trị khác `false` trực tiếp coi như yêu cầu vẽ.
+- Lock filled forms: `/NeedAppearances` ghi dạng tham chiếu (`9 0 R` trỏ tới `true`) được đọc là không yêu cầu vẽ, nên khóa theo appearance sẵn có (đúng trường hợp R2). Sửa rẻ: mọi giá trị khác `false` trực tiếp coi như yêu cầu vẽ. **Đã sửa** (maintainer, trước phát hành): mọi giá trị không phải `false` trực tiếp được coi là yêu cầu vẽ lại; test đỏ trước ("No exception was thrown"), rồi xanh.
 - Chia theo dung lượng: đồng hồ 50 ms của lượt tách từng trang để qpdf ghi quá giới hạn (test R1 thấy 12,8 MB trang lẻ cho ngân sách 2,6 MB) trước khi bị dừng.
 
 **Kiểm sau khi sửa (máy Windows dev, 2026-10-20):** build và `dotnet format --verify-no-changes` sạch; ba project test chạy lần lượt ở `9b38afa`: Core 513 đạt (2 bỏ qua), Image 245 đạt, Pdf 1367 đạt (1 bỏ qua: test UI hộp thoại watermark, cần `FLEVERT_UI_TESTS=1`).

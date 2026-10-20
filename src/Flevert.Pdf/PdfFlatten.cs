@@ -233,7 +233,9 @@ public sealed class PdfFlatten : IOperation
             };
             if (key is null || form is null || !form.ContainsKey("/NeedAppearances"))
                 return (false, null);
-            var need = form["/NeedAppearances"] is JsonValue flag && flag.TryGetValue<bool>(out var on) && on;
+            // Only a direct false says the drawings are current: a reference (to true, usually) or anything else asks for them
+            // to be drawn, and locking a stale drawing would lose the answer.
+            var need = !(form["/NeedAppearances"] is JsonValue flag && flag.TryGetValue<bool>(out var on) && !on);
             form.Remove("/NeedAppearances");
             return (need, new KeyValuePair<string, JsonObject>(key, key == _root ? catalog : form));
         }
