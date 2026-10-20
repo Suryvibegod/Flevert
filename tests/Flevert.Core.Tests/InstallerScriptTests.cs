@@ -17,9 +17,23 @@ public sealed class InstallerScriptTests
     public void Menu_key_names_match_the_menu_installer()
     {
         Assert.Contains($"#define AppName \"{MenuInstaller.Title}\"", Script, StringComparison.Ordinal);
-        Assert.Contains("'{#AppName}.Menu'", Script, StringComparison.Ordinal);
+        Assert.Contains("SweepMenu('{#AppName}')", Script, StringComparison.Ordinal);
+        Assert.Contains("Name + '.Menu'", Script, StringComparison.Ordinal);
         Assert.Contains($@"'\{MenuInstaller.Associations}\'", Script, StringComparison.Ordinal);
-        Assert.Contains(@"'\shell\{#AppName}'", Script, StringComparison.Ordinal);
+        Assert.Contains(@"'\shell\' + Name", Script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Setup_moves_a_flevert_install_over()
+    {
+        // ADR-0009: Flevert 0.1.0 was released as Flevert, with the same AppId.
+        Assert.Contains("#define OldName \"Flevert\"", Script, StringComparison.Ordinal);
+        Assert.Contains("AppMutex={#AppMutexName},{#OldName}.App", Script, StringComparison.Ordinal);
+        Assert.Contains("SweepMenu('{#OldName}')", Script, StringComparison.Ordinal);
+        Assert.Contains("RegValueExists(HKCU, ClassicMenuKey, '{#OldName}')", Script, StringComparison.Ordinal);
+        Assert.Contains(@"'{localappdata}\{#OldName}\update\state.json'", Script, StringComparison.Ordinal);
+        foreach (var folder in AppData.Subfolders)
+            Assert.Contains($@"DeleteOldFolder(OldData + '\{folder}');", Script, StringComparison.Ordinal);
     }
 
     [Fact]

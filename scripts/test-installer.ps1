@@ -26,6 +26,9 @@ $root = Split-Path -Parent $PSScriptRoot
 $arpKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{8B7A3F52-2C64-4F0B-9E3D-5A1C7E2B9D40}_is1'
 $app = Join-Path $env:LOCALAPPDATA 'Programs\Flevert'
 $appData = Join-Path $env:LOCALAPPDATA 'Flevert'
+# Flevert 0.1.0 was released as Flevert (ADR-0009): the upgrade scenario installs it, and setup must move it over.
+$oldApp = Join-Path $env:LOCALAPPDATA 'Programs\Flevert'
+$oldAppData = Join-Path $env:LOCALAPPDATA 'Flevert'
 $classes = 'HKCU:\Software\Classes'
 $associations = "$classes\SystemFileAssociations"
 $classicKey = "$classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"
@@ -44,11 +47,11 @@ function Assert([bool]$Condition, [string]$Message) {
     Write-Host "  ok  $Message"
 }
 
-function MenuKeys {
+function MenuKeys([string]$Name = 'Flevert') {
     # Every key named after the app, not only the ones today's code writes, so a new kind of key cannot be left behind.
     @(Get-ChildItem $associations -ErrorAction SilentlyContinue |
-        Where-Object { Test-Path "$($_.PSPath)\shell\Flevert" }) +
-    @(Get-ChildItem $classes -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'Flevert*' })
+        Where-Object { Test-Path "$($_.PSPath)\shell\$Name" }) +
+    @(Get-ChildItem $classes -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like "$Name*" })
 }
 
 function AssociationNames { @(Get-ChildItem $associations -ErrorAction SilentlyContinue | ForEach-Object { $_.PSChildName }) }
@@ -109,6 +112,10 @@ function AssertClean {
     $added = @(AssociationNames | Where-Object { $associationsBefore -notcontains $_ })
     Assert ($added.Count -eq 0) "no SystemFileAssociations keys left behind ($($added -join ', '))"
     Assert (-not (Test-Path $classicKey) -or $userClassicKey) 'no classic menu key left'
+    Assert (-not (Test-Path $oldApp)) "no Flevert install folder ($oldApp)"
+    Assert (-not (Test-Path $oldAppData)) "no Flevert app data ($oldAppData)"
+    $old = @(MenuKeys 'Flevert')
+    Assert ($old.Count -eq 0) "no Flevert menu keys left ($(($old | ForEach-Object { $_.PSChildName }) -join ', '))"
 }
 
 function UpdateCheckEnabled {
@@ -203,6 +210,9 @@ if (Test-Path $app) { throw "$app exists; remove it before running this test." }
 if (Test-Path $appData) { throw "$appData exists (logs of a development build?); remove it before running this test." }
 if (@(MenuKeys).Count -gt 0) { throw 'A Flevert menu is registered (flevert.exe install-menu?); run flevert.exe uninstall-menu first.' }
 if (Test-Path $classicKey) { throw "The classic-menu key exists already ($classicKey); this test needs to create and remove it." }
+if ((Test-Path $oldApp) -or (Test-Path $oldAppData) -or @(MenuKeys 'Flevert').Count -gt 0) {
+    throw "Flevert is installed or left traces ($oldApp, $oldAppData, its menu); uninstall it before running this test."
+}
 if (@(RunningFlevert).Count -gt 0) { throw 'flevert.exe is running; a running batch leader would take over the conversions this test checks.' }
 $elevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($elevated) { throw 'Run this test without administrator rights: it checks that setup needs none.' }
@@ -380,24 +390,36 @@ try {
     (Get-Item $cwdLink).Delete()
     AssertClean
 
-    Write-Host 'Scenario 10: an upgrade over the previous release keeps both choices, adds the new menu, leaves no stale file'
+    Write-Host 'Scenario 10: an upgrade over Flevert 0.1.0 moves it to Flevert, keeps both choices, leaves nothing stale'
     # Downloaded (or copied from -PreviousSetup) into a new private folder and checked against the pinned SHA256 first.
     $getPrevious = @{ Destination = (Join-Path $work 'previous') }
     if ($PreviousSetup) { $getPrevious.Path = $PreviousSetup }
     $previous = & (Join-Path $PSScriptRoot 'get-previous-setup.ps1') @getPrevious
     $run = Setup @('/CLASSICMENU=1', '/UPDATECHECK=0') -Exe $previous
     Assert ($run.ExitCode -eq 0) "the previous release installs (got $($run.ExitCode); log $($run.Log))"
-    Write-Host "      installed $((Get-Item "$app\flevert.exe").VersionInfo.ProductVersion) from $previous"
+    Write-Host "      installed $((Get-Item "$oldApp\flevert.exe").VersionInfo.ProductVersion) from $previous"
     Assert ((Get-ItemProperty $classicKey).Flevert -eq '1') 'the previous release switched the classic menu on'
-    Assert (-not (UpdateCheckEnabled)) 'the previous release turned the check for new versions off'
-    $previousFiles = InstalledFiles
+    $oldState = Get-Content "$oldAppData\update\state.json" -Raw | ConvertFrom-Json
+    Assert (-not $oldState.enabled) 'the previous release turned the check for new versions off'
+    Assert (@(MenuKeys 'Flevert').Count -gt 0) 'the previous release registered its menu'
+    $previousFiles = @(Get-ChildItem -LiteralPath $oldApp -Recurse -File -Force)
     Copy-Item $heic "$work\before-upgrade.heic"
-    $code = (RunFlevertHeadless @('run', 'image.to-jpg', "`"$work\before-upgrade.heic`"")).ExitCode
+    $env:FLEVERT_HEADLESS = '1'
+    try { $code = (Start-Process "$oldApp\flevert.exe" -ArgumentList @('run', 'image.to-jpg', "`"$work\before-upgrade.heic`"") -PassThru -WindowStyle Hidden -Wait).ExitCode }
+    finally { Remove-Item Env:\FLEVERT_HEADLESS }
     Assert ($code -eq 0 -and (Test-Path "$work\before-upgrade.jpg")) "the previous release converts a picture (exit $code)"
+    Assert (Test-Path "$oldAppData\logs") 'the previous release wrote its logs'
 
     Install | Out-Null
     Assert ((Get-FileHash "$app\flevert.exe").Hash -eq $freshExe) 'flevert.exe is the new version'
     Assert ((Get-ItemProperty $classicKey -ErrorAction SilentlyContinue).Flevert -eq '1') 'upgrading without /CLASSICMENU keeps the classic menu'
+    Assert ($null -eq (Get-ItemProperty $classicKey).PSObject.Properties['Flevert']) "the classic-menu key no longer carries Flevert's marker"
+    Assert (-not (Test-Path $oldApp)) "Flevert's program folder is gone ($oldApp)"
+    Assert (-not (Test-Path $oldAppData)) "Flevert's app data is gone ($oldAppData)"
+    $oldKeys = @(MenuKeys 'Flevert')
+    Assert ($oldKeys.Count -eq 0) "no Flevert menu keys are left ($(($oldKeys | ForEach-Object { $_.PSChildName }) -join ', '))"
+    Assert ((Get-ItemProperty $arpKey).InstallLocation -eq "$app\") 'Installed apps has one entry, for Flevert'
+    Assert ((Get-ItemProperty $arpKey).DisplayName -eq 'Flevert') 'that entry is named Flevert'
     Assert (-not (UpdateCheckEnabled)) 'upgrading without /UPDATECHECK keeps the check for new versions off'
     Assert (Test-Path "$associations\.pdf\shell\Flevert") 'the menu now has an entry for .pdf'
     Assert (@(MenuCommands '.pdf' | Where-Object { $_ -like '* run pdf.rotate-right *' }).Count -eq 1) 'the .pdf menu rotates PDFs'
@@ -421,6 +443,8 @@ finally {
     StopInstalledFlevert
     try {
         if (Test-Path "$app\unins000.exe") { Uninstall }
+        # A failed upgrade scenario may leave Flevert 0.1.0 installed.
+        if (Test-Path "$oldApp\unins000.exe") { Start-Process "$oldApp\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait }
         if (Test-Path $classicKey) { Remove-Item $classicKey -Recurse -Force }
         $item = Get-Item $app -Force -ErrorAction SilentlyContinue
         # Delete a junction itself, never what it points to.
