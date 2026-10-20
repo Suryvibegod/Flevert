@@ -37,7 +37,9 @@ Test đầu-cuối installer: `scripts/test-installer.ps1` (10 kịch bản; k�
 
 Module core, image, installer xong và qua kiểm phát hành ([release/todo.md](release/todo.md)). Bản đầu tiên tải được trên GitHub Releases là 0.2.0.
 
-## v0.2.0 (pdf): đã xong
+## v0.2.0 (pdf): đã phát hành 2026-10-20
+
+https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.0 (latest, immutable). Kiểm trước khi publish: CI ×3 xanh, hash và attestation khớp, `test-installer.ps1` đạt trên file của bản nháp, Defender sạch, VirusTotal 0/68. Sau khi publish: cài bản tải về, chạy thật cả 30 thao tác (ảnh, PDF, mật khẩu qua hộp thoại) và menu Explorer cho JPG, HEIC, PDF, đều đúng; đã gỡ. `get-previous-setup.ps1` ghim 0.2.0 nên lần phát hành sau chạy kịch bản nâng cấp.
 
 Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile: [pdf/todo.md](pdf/todo.md). Spec: [docs/specs/pdf.md](../docs/specs/pdf.md). ADR: 0007 (tiến độ trong file, output thư mục, N→1), 0008 (pdfium + qpdf, deps ghim hash).
 

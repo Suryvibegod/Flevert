@@ -64,9 +64,9 @@ public sealed class PreviousSetupScriptTests : IDisposable
     }
 
     [Fact]
-    public void Without_a_pinned_release_nothing_is_fetched_and_the_upgrade_scenario_is_told_so()
+    public void Against_the_pinned_release_a_file_with_another_hash_is_refused_and_the_upgrade_scenario_runs()
     {
-        // 0.2.0 is the first release: until one is pinned, there is nothing to upgrade from.
+        // No -Version or -Sha256: the pin itself, which no file of this test matches.
         var given = _dir.File("Flevert-Setup-1.0.0.exe", "pretend setup");
         var destination = _dir.Combine("previous");
 
@@ -74,9 +74,9 @@ public sealed class PreviousSetupScriptTests : IDisposable
         var pinned = PowerShellScript.Run("get-previous-setup.ps1", ["-IsPinned"]);
 
         Assert.NotEqual(0, run.ExitCode);
-        Assert.Contains("No previous release is pinned yet", run.Output, StringComparison.Ordinal);
+        Assert.Contains("SHA256 mismatch", run.Output, StringComparison.Ordinal);
         Assert.False(Directory.Exists(destination));
-        Assert.Equal("False", pinned.Output.Trim());
+        Assert.Equal("True", pinned.Output.Trim());
     }
 
     private static string Sha256(string path) => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));

@@ -36,9 +36,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # the progress bar makes Invoke-WebRequest many times slower
 
-# The pin: none yet (0.2.0 is the first release).
-$pinnedVersion = ''
-$pinnedSha256 = ''
+# The pin: the release before the one being tested.
+$pinnedVersion = '0.2.0'
+$pinnedSha256 = '893cef4f8579c1af01c09473f5a7bc72eaefe0379376de35d0c6ad59a58ec1f1'
 if ($IsPinned) { return [bool]($pinnedVersion -and $pinnedSha256) }
 if (-not $Version) { $Version = $pinnedVersion }
 if (-not $Sha256) { $Sha256 = $pinnedSha256 }
