@@ -41,9 +41,9 @@ public sealed class PdfFlatten : IOperation
 {
     internal const string NothingMessage = "This PDF has no filled forms or comments to lock.";
 
+    // For every refusal: letters qpdf cannot write, a field of several lines, or an answer with no drawing.
     internal const string CannotRedrawMessage =
-        "This form has answers Flevert cannot redraw: they have letters its PDF tool cannot write (such as Vietnamese ones), " +
-        "and the PDF holds no drawing of them, so it was left as it is. Open the PDF in a PDF viewer, save it there, and try again.";
+        "This form has answers Flevert cannot draw as they are: open it in a PDF reader, save it, and try again.";
 
     // A text field's flag (/Ff) for several lines: bit 13.
     private const long MultiLine = 1 << 12;

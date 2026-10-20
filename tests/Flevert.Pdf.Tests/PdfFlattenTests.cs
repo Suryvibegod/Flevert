@@ -68,7 +68,7 @@ public sealed class PdfFlattenTests : IDisposable
         var ex = await Assert.ThrowsAsync<PdfException>(() => Op().RunAsync(input, CancellationToken.None));
 
         Assert.Equal(PdfError.CannotRedrawForm, ex.Error);
-        Assert.StartsWith("This form has answers Flevert cannot redraw", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(PdfFlatten.CannotRedrawMessage, ex.Message);
         Assert.Equal(["Tờ khai.pdf"], FileNames(_dir.Path));
     }
 
@@ -99,6 +99,20 @@ public sealed class PdfFlattenTests : IDisposable
         var ex = await Assert.ThrowsAsync<PdfException>(() => Op().RunAsync(input, CancellationToken.None));
 
         Assert.Equal(PdfError.CannotRedrawForm, ex.Error);
+        Assert.Equal(["form.pdf"], FileNames(_dir.Path));
+    }
+
+    [Fact]
+    public async Task An_answer_with_no_drawing_in_a_form_that_does_not_ask_to_be_drawn_fails_with_a_message_that_fits_it()
+    {
+        // Plain ASCII: the message must not blame letters the answer does not have.
+        var input = _dir.Combine("form.pdf");
+        ToolPdf.WriteFilledForm(input, "Nguyen Van A", needAppearances: false, drawn: null);
+
+        var ex = await Assert.ThrowsAsync<PdfException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfError.CannotRedrawForm, ex.Error);
+        Assert.Equal("This form has answers Flevert cannot draw as they are: open it in a PDF reader, save it, and try again.", ex.Message);
         Assert.Equal(["form.pdf"], FileNames(_dir.Path));
     }
 
