@@ -18,6 +18,7 @@ Visitors judge a project by its branch list, its open pull requests and its root
 2. **Pull requests:** every Dependabot pull request is merged or closed with a reason (see [Dependency updates](#dependency-updates)); none stays open across a release.
 3. **Files:** `git status --ignored` shows only build output, `deps/` and local files under `.claude/` (worktrees, `settings.local.json`, locks); nothing stray is tracked at the root (notes, probes, logs, personal files such as `AGENTS.md`). `git grep -i -e convertanything -e "ca\.exe"` finds only this line and the deliberate history note in `tasks/todo.md`.
 4. **Docs:** README, CHANGELOG, `docs/install.md` and the specs describe the release as shipped; `tasks/HANDOFF.md` marks the finished module as done and drops notes that no longer apply.
+   - **No hand-over traces** (the maintainer's rule): `tasks/HANDOFF.md` keeps only the goal, the process, the state and the next task. Sections written to move work between machines or sessions go: which computer the work moved to, tables of `wip/*` branches, "stopped mid-way" notes, agent and worktree instructions tied to one session, local folder names. `git grep -n -i -e "wip/" -e "bàn giao giữa chừng" -e "máy văn phòng" -e "máy PC" -e "worktree-agent" -- tasks/HANDOFF.md` prints nothing. The per-module `todo.md` files stay as the work's history.
 5. **After publishing:** delete local build output (`artifacts/`) and stale branches that appeared during the release (a Dependabot branch, a fix branch).
 
 ## Tag and check the draft
