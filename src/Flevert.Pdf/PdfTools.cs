@@ -2,26 +2,26 @@ using Flevert.Core;
 
 namespace Flevert.Pdf;
 
-/// <summary>The headed groups of the PDF tools window (docs/specs/pdf.md, v0.2.2), in window order.</summary>
+/// <summary>The kinds of PDF tool (docs/specs/pdf.md, v0.2.2): on the pages, added to the pages, taken out of the PDF.</summary>
 public enum PdfToolGroup { Pages, AddToPages, Extract }
 
 /// <summary>What the user gives an option: one of its choices, or text.</summary>
 public enum PdfToolOptionKind { Choice, Text }
 
 /// <summary>
-/// An option of a tool: its key in <see cref="PdfTools.Create"/>'s options, the label the window shows, its kind, the
+/// An option of a tool: its key in <see cref="PdfTools.Create"/>'s options, the label a dialog would show, its kind, the
 /// values it may take (<see cref="PdfToolOptionKind.Choice"/>; empty for text), the value it has when not given, and
 /// the most characters it holds (<see cref="PdfToolOptionKind.Text"/>; 0 for a choice).
 /// </summary>
 public sealed record PdfToolOption(string Key, string Label, PdfToolOptionKind Kind, IReadOnlyList<string> Choices, string Default, int MaxLength);
 
-// Icon: a Fluent UI System Icons name such as "document_page_number"; A maps names to .ico files.
-/// <summary>A tool of the PDF tools window: its operation, short name, one sentence saying what it gives, group, icon and options.</summary>
+// Icon: a Fluent UI System Icons name such as "document_page_number". The menu draws its own (MenuOperations.Looks).
+/// <summary>A PDF tool of Flevert PDF tools: its operation, short name, one sentence saying what it gives, group, icon and options.</summary>
 public sealed record PdfTool(string OperationId, string Name, string Description, PdfToolGroup Group, string Icon, IReadOnlyList<PdfToolOption> Options);
 
 /// <summary>
-/// The tools of the "Flevert — PDF tools" window (docs/specs/pdf.md, v0.2.2), and the operation each runs with the options
-/// the user chose. Every tool also runs headless with its defaults (<c>flevert.exe run &lt;op-id&gt; &lt;file&gt;</c>):
+/// The tools of the second PDF menu, Flevert PDF tools (docs/specs/pdf.md, v0.2.2; placed by <see cref="PdfToolMenu"/>),
+/// and the operation each runs with the options given. Every tool also runs headless with its defaults (<c>flevert.exe run &lt;op-id&gt; &lt;file&gt;</c>):
 /// <see cref="Operations"/> are in flevert.exe's catalog, without a menu path.
 /// </summary>
 public static class PdfTools
@@ -43,7 +43,7 @@ public static class PdfTools
     private static readonly IReadOnlyList<string> Styles = [NumberStyle, OfTotalStyle, WordsStyle];
 
     /// <summary>
-    /// In window order: Pages (Remove blank pages, 2 pages per sheet, 4 pages per sheet, Fit pages to A4, Split into parts
+    /// In order of group: Pages (Remove blank pages, 2 pages per sheet, 4 pages per sheet, Fit pages to A4, Split into parts
     /// under 10 MB, … 25 MB), AddToPages (Add watermark, Add page numbers, Flatten forms and comments), Extract (Extract
     /// text, Extract images).
     /// </summary>

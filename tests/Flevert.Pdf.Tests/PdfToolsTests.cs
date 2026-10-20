@@ -3,7 +3,7 @@ using Flevert.Core;
 namespace Flevert.Pdf.Tests;
 
 /// <summary>
-/// <see cref="PdfTools"/>: the tools of the PDF tools window, the contract the window codes against (docs/specs/pdf.md,
+/// <see cref="PdfTools"/>: the PDF tools, the contract the menu Flevert PDF tools codes against (docs/specs/pdf.md,
 /// v0.2.2), and the operations each gives.
 /// </summary>
 public sealed class PdfToolsTests
@@ -13,7 +13,7 @@ public sealed class PdfToolsTests
     private static readonly string[] WorkerTools = ["pdf.remove-blank-pages", "pdf.n-up-2", "pdf.fit-a4", "pdf.watermark", "pdf.page-numbers", "pdf.extract-images"];
 
     [Fact]
-    public void The_tools_are_in_window_order_by_group()
+    public void The_tools_are_in_order_by_group()
     {
         Assert.Equal(
             [
@@ -40,7 +40,7 @@ public sealed class PdfToolsTests
             Assert.EndsWith(".", tool.Description, StringComparison.Ordinal);
             Assert.Matches("^[a-z0-9_]+$", tool.Icon);
         });
-        // The window must say a watermark does not stop editing (docs/specs/pdf.md, "Add watermark").
+        // It must be said that a watermark does not stop editing (docs/specs/pdf.md, "Add watermark").
         Assert.Contains("does not stop", PdfTools.All.Single(tool => tool.OperationId == "pdf.watermark").Description, StringComparison.Ordinal);
     }
 

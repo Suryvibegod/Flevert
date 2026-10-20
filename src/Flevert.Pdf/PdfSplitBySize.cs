@@ -47,7 +47,7 @@ public sealed class PdfSplitBySize : IOperation
 
     public string Id { get; }
 
-    /// <summary>Not in the right-click menu: the PDF tools window runs it (<see cref="PdfTools"/>).</summary>
+    /// <summary>No menu path of its own: <see cref="PdfToolMenu"/> places it in Flevert PDF tools (<see cref="PdfTools"/>).</summary>
     public string MenuPath => "";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];

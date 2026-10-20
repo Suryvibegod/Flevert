@@ -75,7 +75,7 @@ public sealed class PdfPageNumbers : IOperation
 
     public string Id => "pdf.page-numbers";
 
-    /// <summary>Not in the right-click menu: the PDF tools window runs it (<see cref="PdfTools"/>).</summary>
+    /// <summary>No menu path of its own: <see cref="PdfToolMenu"/> places it in Flevert PDF tools (<see cref="PdfTools"/>).</summary>
     public string MenuPath => "";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
@@ -98,12 +98,12 @@ public sealed class PdfPageNumbers : IOperation
 /// </summary>
 /// <remarks>
 /// The text is required, at most <see cref="PdfEdit.MaxWatermarkLength"/> characters, without line breaks. Flevert asks
-/// for it in the PDF tools window; without it (the operation in the catalog, run headless) each file fails at once.
+/// for it when the user chooses Add watermark… (<see cref="PdfWatermarkMenu"/>); without it each file fails at once.
 /// </remarks>
 public sealed class PdfWatermark : IOperation
 {
     internal const string NoTextMessage =
-        "Add watermark needs the text to write on the pages, which Flevert asks for in its PDF tools window; it was run without one here, so this PDF was left as it is.";
+        "Add watermark needs the text to write on the pages, which Flevert asks for when you choose Add watermark… in Flevert PDF tools; it was run without one here, so this PDF was left as it is.";
 
     internal const string NoArialMessage = "The watermark is written in the Arial font of Windows, and Arial is missing from this computer.";
 
@@ -134,7 +134,7 @@ public sealed class PdfWatermark : IOperation
 
     public string Id => "pdf.watermark";
 
-    /// <summary>Not in the right-click menu: the PDF tools window runs it (<see cref="PdfTools"/>).</summary>
+    /// <summary>No menu path of its own: <see cref="PdfToolMenu"/> places it in Flevert PDF tools (<see cref="PdfTools"/>).</summary>
     public string MenuPath => "";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
@@ -187,7 +187,7 @@ public sealed class PdfNUp : IOperation
 
     public string Id { get; }
 
-    /// <summary>Not in the right-click menu: the PDF tools window runs it (<see cref="PdfTools"/>).</summary>
+    /// <summary>No menu path of its own: <see cref="PdfToolMenu"/> places it in Flevert PDF tools (<see cref="PdfTools"/>).</summary>
     public string MenuPath => "";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
@@ -225,7 +225,7 @@ public sealed class PdfFitA4 : IOperation
 
     public string Id => "pdf.fit-a4";
 
-    /// <summary>Not in the right-click menu: the PDF tools window runs it (<see cref="PdfTools"/>).</summary>
+    /// <summary>No menu path of its own: <see cref="PdfToolMenu"/> places it in Flevert PDF tools (<see cref="PdfTools"/>).</summary>
     public string MenuPath => "";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
@@ -277,7 +277,7 @@ public sealed class PdfRemoveBlankPages : IOperation
 
     public string Id => "pdf.remove-blank-pages";
 
-    /// <summary>Not in the right-click menu: the PDF tools window runs it (<see cref="PdfTools"/>).</summary>
+    /// <summary>No menu path of its own: <see cref="PdfToolMenu"/> places it in Flevert PDF tools (<see cref="PdfTools"/>).</summary>
     public string MenuPath => "";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
@@ -374,7 +374,7 @@ public sealed class PdfExtractImages : IOperation
 
     public string Id => "pdf.extract-images";
 
-    /// <summary>Not in the right-click menu: the PDF tools window runs it (<see cref="PdfTools"/>).</summary>
+    /// <summary>No menu path of its own: <see cref="PdfToolMenu"/> places it in Flevert PDF tools (<see cref="PdfTools"/>).</summary>
     public string MenuPath => "";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];

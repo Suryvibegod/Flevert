@@ -38,7 +38,7 @@ public sealed class PdfFlatten : IOperation
 
     public string Id => "pdf.flatten";
 
-    /// <summary>Not in the right-click menu: the PDF tools window runs it (<see cref="PdfTools"/>).</summary>
+    /// <summary>No menu path of its own: <see cref="PdfToolMenu"/> places it in Flevert PDF tools (<see cref="PdfTools"/>).</summary>
     public string MenuPath => "";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];

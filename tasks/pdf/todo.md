@@ -584,7 +584,7 @@ Phần A (menu mới, icon, cửa sổ "PDF tools", thao tác `pdf.tools`) làm 
 
 ## Còn mở
 
-- Phần A: nối `PdfTools.Create` vào cửa sổ; icon Fluent là tên đề xuất (`document_dismiss`, `layout_column_two`, `grid`, `page_fit`, `cut`, `stamp`, `document_page_number`, `layer`, `document_text`, `image_multiple`), phần A chọn biến thể và kiểm có trong repo Fluent.
+- ~~Phần A: nối `PdfTools.Create` vào cửa sổ~~: đã nối vào menu thứ hai `Flevert PDF tools` (không có cửa sổ, xem phần A dưới). Icon menu do phần A chọn (`MenuOperations.Looks`); `PdfTool.Icon` (`grid`, `document_text`, `stamp`…) hiện không được menu dùng.
 - Watermark: ký tự Arial không có (chữ Hán, emoji) hiện thành ô vuông; chưa kiểm trước.
 - Chưa đo thời gian thật trên PDF lớn (2 000 trang) cho watermark/n-up; ngân sách worker như render (60 s + 2 s/trang).
 - Review ba bối cảnh trống, MenuProbe, installer: bước Verify của bản phát hành.

@@ -27,7 +27,7 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath, Fu
     /// A separator goes between two entries of different groups.</param>
     public void Install(IEnumerable<IMenuOperation> operations, IReadOnlyDictionary<string, MenuEntryLook>? looks = null)
     {
-        // An operation without a menu path is run by its id only (the PDF tools window's): nothing of it goes in the menu.
+        // An operation without a menu path is run by its id only: nothing of it goes in the menu.
         var ops = operations.Where(op => op.MenuPath.Length > 0).ToList();
         looks ??= new Dictionary<string, MenuEntryLook>();
         foreach (var op in ops)
