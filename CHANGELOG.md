@@ -4,6 +4,10 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Changed
+
+- **Split into pages** writes to a folder named `report (split)`, no longer `report (pages)`, the name **Convert** > JPG pages and PNG pages give their pictures of the same PDF.
+
 ## [0.2.0] - 2026-10-20
 
 PDFs: turn photos into one, and convert, merge, split, rotate, compress or password-protect PDF files.

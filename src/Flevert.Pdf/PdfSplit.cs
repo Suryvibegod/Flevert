@@ -5,8 +5,9 @@ namespace Flevert.Pdf;
 
 /// <summary>
 /// <c>Split into pages</c> (docs/specs/pdf.md): each page becomes a PDF of its own, <c>&lt;name&gt; 001.pdf</c>…, in a
-/// folder <c>&lt;name&gt; (pages)</c> beside the original, written whole or not at all (ADR-0007). A one-page PDF still
-/// gives a folder with its one page, so the result has the same shape whatever the input.
+/// folder <c>&lt;name&gt; (split)</c> beside the original, written whole or not at all (ADR-0007). A one-page PDF still
+/// gives a folder with its one page, so the result has the same shape whatever the input. The folder is not
+/// <c>(pages)</c>, the name Convert gives its pictures of the same pages (it was until 0.2.0).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -28,7 +29,7 @@ namespace Flevert.Pdf;
 /// </remarks>
 public sealed class PdfSplit : IOperation
 {
-    private const string FolderSuffix = " (pages)";
+    private const string FolderSuffix = " (split)";
     private const int MaxFileNameLength = 255;
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(200);
 

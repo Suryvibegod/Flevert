@@ -56,7 +56,7 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 |---|---|
 | **Convert** > JPG pages, PNG pages | a folder `report (pages)` with `report 001.jpg`, … |
 | **Merge PDFs** | `report (merged).pdf`, in name order |
-| **Split into pages** | a folder `report (pages)` with one PDF per page |
+| **Split into pages** | a folder `report (split)` with one PDF per page |
 | **Rotate** > 90° right, 90° left, 180° | `report (rotated).pdf` |
 | **Compress** | `report (compressed).pdf`, smaller with the same quality |
 | **Remove metadata** | `report (no metadata).pdf`, without author, dates, XMP, attachments or scripts |

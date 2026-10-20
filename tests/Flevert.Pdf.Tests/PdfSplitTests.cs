@@ -51,7 +51,7 @@ public sealed class PdfSplitTests : IDisposable
 
         var folder = await Op().RunAsync(input, CancellationToken.None);
 
-        Assert.Equal(_dir.Combine("report (pages)"), folder);
+        Assert.Equal(_dir.Combine("report (split)"), folder);
         Assert.Equal(["report 001.pdf", "report 002.pdf", "report 003.pdf", "report 004.pdf"], Entries(folder));
         Assert.Equal([[101], [102], [103], [104]], Entries(folder).Select(name => PageWidths(Path.Combine(folder, name))));
     }
@@ -105,8 +105,8 @@ public sealed class PdfSplitTests : IDisposable
         var first = await Op().RunAsync(input, CancellationToken.None);
         var second = await Op().RunAsync(input, CancellationToken.None);
 
-        Assert.Equal(_dir.Combine("report (pages)"), first);
-        Assert.Equal(_dir.Combine("report (pages) (1)"), second);
+        Assert.Equal(_dir.Combine("report (split)"), first);
+        Assert.Equal(_dir.Combine("report (split) (1)"), second);
         Assert.Equal(["report 001.pdf", "report 002.pdf"], Entries(second));
     }
 
@@ -120,7 +120,7 @@ public sealed class PdfSplitTests : IDisposable
 
         var folder = await Op().RunAsync(input, CancellationToken.None);
 
-        Assert.EndsWith(" (pages)", folder, StringComparison.Ordinal);
+        Assert.EndsWith(" (split)", folder, StringComparison.Ordinal);
         Assert.Equal(255, Path.GetFileName(folder).Length);
         var names = Entries(@"\\?\" + folder);
         Assert.Equal(3, names.Length);
@@ -287,7 +287,7 @@ public sealed class PdfSplitTests : IDisposable
 
         var output = await Op().RunAsync(input, CancellationToken.None);
 
-        Assert.Equal(Path.Combine(folder, "Hóa đơn \U0001F9FE (pages)"), output);
+        Assert.Equal(Path.Combine(folder, "Hóa đơn \U0001F9FE (split)"), output);
         Assert.Equal(["Hóa đơn \U0001F9FE 001.pdf", "Hóa đơn \U0001F9FE 002.pdf"], Entries(output));
     }
 
@@ -307,7 +307,7 @@ public sealed class PdfSplitTests : IDisposable
 
         var result = Assert.Single(outcome.Results);
         Assert.True(result.Succeeded, result.Error);
-        Assert.Equal(Path.Combine(folder, Path.GetFileNameWithoutExtension(input) + " (pages)"), result.Output);
+        Assert.Equal(Path.Combine(folder, Path.GetFileNameWithoutExtension(input) + " (split)"), result.Output);
         Assert.Equal(2, Directory.GetFiles(@"\\?\" + result.Output!).Length);
     }
 
@@ -350,7 +350,7 @@ public sealed class PdfSplitTests : IDisposable
 
             Assert.NotNull(held);
             Assert.Equal("Flevert could not remove its working copy of the pages: another program is using one of them. Try again.", ex.Message);
-            Assert.DoesNotContain("book (pages)", Entries(_dir.Path));
+            Assert.DoesNotContain("book (split)", Entries(_dir.Path));
         }
         finally
         {

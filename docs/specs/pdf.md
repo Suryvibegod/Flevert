@@ -29,7 +29,7 @@ Tên menu tiếng Anh, theo kiểu menu ảnh hiện có (`Flevert > <nhóm> > <
 | `pdf.to-jpg` | Convert > JPG pages | `.pdf` | 1 → N | thư mục `<tên> (pages)\<tên> 001.jpg` … |
 | `pdf.to-png` | Convert > PNG pages | `.pdf` | 1 → N | thư mục `<tên> (pages)\<tên> 001.png` … |
 | `pdf.merge` | Merge PDFs | `.pdf` (≥ 2 file) | N → 1 | `<tên đầu tiên> (merged).pdf` |
-| `pdf.split` | Split into pages | `.pdf` | 1 → N | thư mục `<tên> (pages)\<tên> 001.pdf` … |
+| `pdf.split` | Split into pages | `.pdf` | 1 → N | thư mục `<tên> (split)\<tên> 001.pdf` … (tới 0.2.0: `(pages)`) |
 | `pdf.rotate-right` / `-left` / `-180` | Rotate > 90° right / 90° left / 180° | `.pdf` | 1 → 1 | `<tên> (rotated).pdf` |
 | `pdf.compress` | Compress (thành Compress > Lossless nếu có `pdf.compress-sharing`) | `.pdf` | 1 → 1 | `<tên> (compressed).pdf`; không nhỏ hơn thì bỏ qua (skipped) |
 | `pdf.compress-sharing` | Compress > For sharing | `.pdf` | 1 → 1 | `<tên> (small).pdf`: ảnh > 150 DPI giảm còn 150 DPI, JPEG q80 |
