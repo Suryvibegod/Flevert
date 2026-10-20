@@ -391,11 +391,11 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 | `bomb-content` | ok 0.0 | ok 0.1 | ok 0.2 | NeedsTooMuchMemory 1.2 | NeedsTooMuchMemory 1.2 |
 | `bomb-double-flate` | ok 0.2 | ok 0.2 | ok 0.1 | ok 0.2 | ok 0.2 |
 | `bomb-double-flate-content` | ok 0.2 | ok 0.1 | ok 0.1 | NeedsTooMuchMemory 0.9 | NeedsTooMuchMemory 0.9 |
-| `bomb-image` | ok 0.1 | ok 0.1 | ok 0.2 | ok 1.3 | ok 0.2 |
+| `bomb-image` | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.3 | ok 0.2 |
 | `bomb-object-stream` | NeedsTooMuchMemory 0.5 | NeedsTooMuchMemory 0.7 | NeedsTooMuchMemory 0.5 | NeedsTooMuchMemory 0.9 | NeedsTooMuchMemory 1.2 |
 | `count-lie-high` | ok 0.1 | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.2 |
-| `count-lie-low` | TooManyPages 2.7 | TooManyPages 2.7 | TooManyPages 3.2 | ok 1.3 (pdfium tin /Count: 1 trang) | ok 1.3 |
-| `cycle-kids-loop` | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.0 | ok 1.3 | ok 0.2 |
+| `count-lie-low` | TooManyPages 2.7 | TooManyPages 2.7 | TooManyPages 3.2 | ok 0.3 (pdfium tin /Count: 1 trang) | ok 0.3 |
+| `cycle-kids-loop` | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.0 | ok 0.3 | ok 0.2 |
 | `cycle-kids-self` | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.0 | DamagedPage 0.1 | DamagedPage 0.1 |
 | `cycle-parent` | ok 0.0 | ok 0.0 | ok 0.1 | ok 0.5 | ok 0.2 |
 | `cycle-self-reference` | ok 0.0 | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.2 |
@@ -403,9 +403,9 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 | `encrypt-unknown-handler` | UnsupportedEncryption 0.0 | UnsupportedEncryption 0.0 | UnsupportedEncryption 0.2 | UnsupportedEncryption 0.1 | UnsupportedEncryption 0.1 |
 | `header-only` | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.2 | NotPdf 0.1 | NotPdf 0.1 |
 | `launch-action` | ok 0.1 | ok 0.1 | ok 0.1 | ok 0.2 | ok 0.2 |
-| `many-objects` (300 000) | ok 4.2 | ok 0.7 | ok 0.6 | ok 0.5 | ok 1.4 |
-| `nested-arrays` | ok 0.1 | ok 0.1 | ok 0.1 | ok 1.3 | ok 0.2 |
-| `nested-dictionaries` | ok 1.3 | ok 1.3 | ok 0.2 | ok 0.2 | ok 0.2 |
+| `many-objects` (300 000) | ok 4.2 | ok 0.7 | ok 0.6 | ok 0.5 | ok 0.4 |
+| `nested-arrays` | ok 0.1 | ok 0.1 | ok 0.1 | ok 0.3 | ok 0.2 |
+| `nested-dictionaries` | ok 0.3 | ok 0.3 | ok 0.2 | ok 0.2 | ok 0.2 |
 | `not-pdf-empty` | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.1 |
 | `not-pdf-png` | NotPdf 0.0 | NotPdf 0.2 | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.1 |
 | `not-pdf-zip` | NotPdf 0.1 | NotPdf 0.0 | NotPdf 0.0 | NotPdf 0.1 | NotPdf 0.1 |
@@ -415,10 +415,10 @@ Người dùng duyệt (2026-10-21): v0.2 phát hành không kèm T15–T17; là
 | `pages-100000` | TooManyPages 2.8 | TooManyPages 2.7 | TooManyPages 2.7 | TooManyPages 0.1 | TooManyPages 0.2 |
 | `pages-2001` | TooManyPages 0.1 | TooManyPages 0.1 | TooManyPages 0.1 | TooManyPages 0.1 | TooManyPages 0.1 |
 | `signed` | ok + ghi chú 0.0 | ok + ghi chú 0.1 | ok + ghi chú 0.1 | ok 0.2 | ok 0.2 |
-| `startxref-past-end` | ok 1.3 | ok 0.1 | ok 0.1 | ok 1.4 | ok 1.3 |
+| `startxref-past-end` | ok 0.3 | ok 0.1 | ok 0.1 | ok 0.4 | ok 0.3 |
 | `truncated` | ok 0.0 (qpdf sửa) | ok 0.1 | ok 0.1 | NotPdf 0.1 | NotPdf 0.1 |
 | `xref-missing` | ok 0.0 (qpdf sửa) | ok 0.1 | ok 0.5 | NotPdf 0.1 | NotPdf 0.2 |
-| `xref-wrong-offsets` | ok 0.0 | ok 0.0 | ok 0.1 | ok 1.4 | ok 0.2 |
+| `xref-wrong-offsets` | ok 0.0 | ok 0.0 | ok 0.1 | ok 0.4 | ok 0.2 |
 
   - Ngoài 10 s (spec cho phép: việc thật tỉ lệ với cỡ, dưới timeout qpdf 2 phút + 1 s/MB): PDF một triệu object (53 MB) xoay ~13 s; không có trong bảng, dùng làm đầu vào chậm cho test hủy/giết.
   - **Còn mở**: (1) T12/T13/T14 (agent song song) phải gọi `Qpdf.CountPagesAsync` và `PdfSignature`/`OutputNote` cho thao tác ghi PDF mới, và `--stream-data=preserve` khi không cần nén (compress cố ý giải nén: bom hai lớp Flate sẽ tốn ~15 s, cần giới hạn riêng); unlock không đếm trang được khi chưa có mật khẩu. (2) DD-M7 (mã thoát 3 sau khi qpdf sửa file hỏng: không báo "repaired") chưa làm. (3) R13/R15/R9 (symlink treo, FAT/SMB, USN) vẫn hoãn: máy này không tạo được symlink (cần Developer Mode). (4) SA-L1 (giới hạn tổng byte ảnh khi PDF → ảnh) chưa làm. (5) Ghi chú chữ ký dựa vào khóa `/ByteRange` trong byte file (khóa viết bằng `#` thoát bị bỏ sót). (6) pdfium tin `/Count` thấp: `count-lie-low` ra 1 ảnh (giới hạn công việc vẫn đúng). (7) Chưa chạy qua menu thật (bước verify trước T20).
@@ -647,7 +647,7 @@ Nhánh `review-v0.2.2` (từ `8f86956`), 2026-10-20. Quyết định của maint
 | 11. Tên cho người dùng thật | Should | Đồng ý | `9c220bd`: "Lock filled forms" (op-id và tên output giữ nguyên); README: Under 10 MB cho email (Gmail ~18 MB file, Outlook 20 MB), Under 25 MB cho chat; ảnh cần Combine into PDF trước khi đóng watermark |
 | 12. Phần thừa của cửa sổ công cụ đã bỏ | Should | Đúng: bộ lọc trong `Program` loại hết, `PdfTools.Operations` dựng mọi công cụ lần hai | `1272b90`: `PdfTool` chỉ còn op-id và tùy chọn, bỏ `PdfToolGroup`, nhãn tùy chọn, `PdfTools.Operations`; catalog = các mục menu; sửa comment `IOperation`, `MenuTests`, csproj; gộp hai test "không có đường menu"; sửa đầu phần B |
 | 13. Dòng spec v1.2.2 lệch code | Should | Đúng | `112dfad` (và `a53715f`, `4c8cc5d` cho mục trang trắng, font): Print layout/Fit A4 theo cách làm hiện tại (sau mục 6, dùng `FPDF_ImportNPagesToOne`, không phải `FPDF_NewXObjectFromPage`), Flatten bằng qpdf với quy tắc mục 1, số trang từ menu "1 / N", chia theo dung lượng |
-| 14. Hạ từ 1.2.2 về bản cũ để lại "Flevert PDF tools" trỏ vào khóa đã xóa | Low | Đúng | `2c41bcb`: CHANGELOG, Known issues: "uninstall first" |
+| 14. Hạ từ 0.2.2 về bản cũ để lại "Flevert PDF tools" trỏ vào khóa đã xóa | Low | Đúng | `2c41bcb`: CHANGELOG, Known issues: "uninstall first" |
 | 15. Trường thứ 7 của request phải rỗng cho việc không dùng; comment `Magic` sai | Low | Đúng | `9d74717`. Đỏ: hai request `blank`/`images` có tùy chọn không bị từ chối |
 | 16. Phụ thuộc dev của script icon không ghim hash | Low | Đúng | `8d69d19`: `scripts/make-menu-icons.requirements.txt` (mọi wheel Windows của resvg-py 0.5.0, Pillow 13.0.0, SHA256 từ PyPI), cài bằng `--require-hashes --only-binary=:all:` (đã thử `pip download` với Python 3.12) |
 | 17. Nit: icon "beside every entry", comment nhóm của `Looks`, tên output trong README | Low | Đúng | `d0f58cf`; tên output đã so với code cho mọi công cụ (`9c220bd` thêm tên phần) |
