@@ -125,6 +125,13 @@ internal sealed record PdfEdit(PdfEditKind Kind)
                 return WatermarkTextProblem.Invisible; // a lone surrogate: no character at all
         }
 
+        // Before normalizing, which throws on U+FFFE and U+FFFF.
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (IsNoncharacter(rune.Value))
+                return WatermarkTextProblem.Invisible;
+        }
+
         normal = text.Normalize(NormalizationForm.FormC).Trim();
         if (normal.Length == 0)
             return WatermarkTextProblem.Empty;
@@ -136,12 +143,15 @@ internal sealed record PdfEdit(PdfEditKind Kind)
 
         foreach (var rune in normal.EnumerateRunes())
         {
-            if (Rune.GetUnicodeCategory(rune) == UnicodeCategory.Format || rune.Value is 0xFFFE or 0xFFFF)
+            if (Rune.GetUnicodeCategory(rune) == UnicodeCategory.Format)
                 return WatermarkTextProblem.Invisible;
         }
 
         return new StringInfo(normal).LengthInTextElements > MaxWatermarkLength ? WatermarkTextProblem.TooLong : null;
     }
+
+    // The 66 Unicode noncharacters: U+FDD0 to U+FDEF, and the last two code points of every plane (U+FFFE, U+1FFFF…).
+    private static bool IsNoncharacter(int codePoint) => codePoint is >= 0xFDD0 and <= 0xFDEF || (codePoint & 0xFFFE) == 0xFFFE;
 }
 
 /// <summary>Why a text cannot be a watermark (<see cref="PdfEdit.Check"/>).</summary>

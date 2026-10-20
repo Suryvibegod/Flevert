@@ -116,6 +116,18 @@ public sealed class PdfWatermarkMenuTests
         Assert.Null(PdfEdit.WatermarkText(text));
     }
 
+    [Theory]
+    [InlineData("Bản﷐sao")]
+    [InlineData("Bản sao﷯")]
+    [InlineData("Bản sao￾")]
+    [InlineData("Bản sao🿾")]
+    [InlineData("Bản sao􏿿")]
+    public void Unicode_noncharacters_are_refused_as_invisible(string text)
+    {
+        Assert.Equal(WatermarkPrompts.InvisibleMessage, WatermarkPrompts.Problem(text));
+        Assert.Null(PdfEdit.WatermarkText(text));
+    }
+
     [Fact]
     public void A_lone_surrogate_is_refused_as_invisible()
     {
