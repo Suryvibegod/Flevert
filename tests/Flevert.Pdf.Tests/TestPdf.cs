@@ -84,4 +84,18 @@ internal static class TestPdf
     /// <summary>The files in <paramref name="folder"/>, by name, sorted.</summary>
     public static string[] FileNames(string folder) =>
         Directory.GetFiles(folder).Select(f => Path.GetFileName(f)!).Order(StringComparer.Ordinal).ToArray();
+
+    /// <summary>
+    /// <paramref name="path"/> with 8.3 names expanded, as the runner names a file (on CI, %TEMP% is
+    /// <c>C:\Users\RUNNER~1\…</c>), so a test can build a path of an exact length.
+    /// </summary>
+    public static string LongPath(string path)
+    {
+        var buffer = new char[short.MaxValue];
+        var length = GetLongPathNameW(path, buffer, (uint)buffer.Length);
+        return length == 0 || length >= buffer.Length ? throw new System.ComponentModel.Win32Exception() : new string(buffer, 0, (int)length);
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetLongPathNameW(string shortPath, char[] longPath, uint length);
 }

@@ -21,6 +21,19 @@ public sealed class QpdfTests : IDisposable
         Assert.Equal(TimeSpan.FromMinutes(2) + TimeSpan.FromSeconds(2048), Qpdf.TimeoutFor(PdfDocument.MaxFileBytes));
     }
 
+    [Theory]
+    [InlineData(@"C:\Users\me\in.pdf", @"\\?\C:\Users\me\in.pdf")]
+    [InlineData(@"\\?\C:\Users\me\in.pdf", @"\\?\C:\Users\me\in.pdf")]
+    [InlineData(@"\\server\share\in.pdf", @"\\?\UNC\server\share\in.pdf")]
+    [InlineData(@"\\.\C:\Users\me\in.pdf", @"\\?\C:\Users\me\in.pdf")]
+    // \\?\ turns off Windows' normalisation, so it is done first, as .NET does when it opens the same path.
+    [InlineData(@"C:\Users\me\..\you\.\in.pdf", @"\\?\C:\Users\you\in.pdf")]
+    [InlineData(@"C:/Users/me/in.pdf", @"\\?\C:\Users\me\in.pdf")]
+    public void Paths_reach_qpdf_in_the_extended_form_it_opens_at_any_length(string path, string extended)
+    {
+        Assert.Equal(extended, Qpdf.ToExtendedPath(path));
+    }
+
     [Fact]
     public async Task A_missing_qpdf_says_to_reinstall()
     {

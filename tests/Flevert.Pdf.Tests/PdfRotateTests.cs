@@ -177,6 +177,29 @@ public sealed class PdfRotateTests : IDisposable
     }
 
     [Fact]
+    public async Task Works_through_the_runner_on_a_path_just_under_260_characters()
+    {
+        // The runner gives an operation the plain form of a path under 260 characters (InputPin.Shorten), and the
+        // temporary output beside it is 51 characters longer; past 260, qpdf opens a path only with \\?\.
+        using var logs = new TempDir();
+        var folder = LongPath(_dir.Path);
+        while (folder.Length < 230)
+            folder = Path.Combine(folder, "thư mục");
+        Directory.CreateDirectory(folder);
+        var input = Path.Combine(folder, new string('a', 250 - folder.Length - ".pdf".Length - 1) + ".pdf");
+        File.Copy(Fixture("rotations.pdf"), input);
+        Assert.Equal(250, input.Length);
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Op("pdf.rotate-right"), [input], null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        Assert.Equal(Path.Combine(folder, Path.GetFileNameWithoutExtension(input) + " (rotated).pdf"), result.Output);
+        using var pdf = PdfDocument.Open(result.Output!);
+        Assert.Equal(Corner.TopRight, MarkCorner(pdf, 0));
+    }
+
+    [Fact]
     public async Task Cancelling_stops_qpdf_and_leaves_no_partial_file()
     {
         // About 5 s of qpdf work: long enough to cancel in the middle.

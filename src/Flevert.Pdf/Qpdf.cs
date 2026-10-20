@@ -49,8 +49,9 @@ public sealed class Qpdf
     /// </summary>
     /// <remarks>
     /// The two paths reach qpdf through standard input (<c>@-</c>, one argument per line), not its command line: qpdf's
-    /// C runtime expands wildcards in command-line arguments, which turns the <c>?</c> of a <c>\\?\</c> path (how the
-    /// runner names a file past 260 characters) into other file names. Lines read from <c>@-</c> are taken as they are.
+    /// C runtime expands wildcards in command-line arguments, which turns the <c>?</c> of a <c>\\?\</c> path into other
+    /// file names. Lines read from <c>@-</c> are taken as they are, and both are always given in the <c>\\?\</c> form
+    /// (<see cref="ToExtendedPath"/>), the only one qpdf opens past 260 characters.
     /// </remarks>
     /// <param name="inputPath">Fully qualified, so qpdf can never read it as an option (<c>-…</c>) or an option file (<c>@…</c>).</param>
     /// <param name="outputPath">Fully qualified, like <paramref name="inputPath"/>; usually the temporary path from <see cref="OutputPath.WriteAtomicallyAsync"/>.</param>
@@ -86,8 +87,8 @@ public sealed class Qpdf
             throw new QpdfException(run.ExitCode, detail);
         if (await RequiresPasswordAsync(inputPath, ct).ConfigureAwait(false))
             throw new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage);
-        // qpdf names the file it failed on; the output's name is a fresh temporary one that no input contains.
-        if (run.StandardError.Contains(outputPath, StringComparison.OrdinalIgnoreCase))
+        // qpdf names the file it failed on, as it was given; the output's name is a fresh temporary one no input contains.
+        if (run.StandardError.Contains(ToExtendedPath(outputPath), StringComparison.OrdinalIgnoreCase))
             throw new IOException($"qpdf could not write the output: {detail}", new QpdfException(run.ExitCode, detail));
         throw new PdfException(PdfError.NotPdf, PdfDocument.NotPdfMessage, new QpdfException(run.ExitCode, detail));
     }
@@ -102,8 +103,24 @@ public sealed class Qpdf
 
     private Task<ExternalToolResult> RunWithPathsAsync(string[] options, string[] paths, TimeSpan timeout, CancellationToken ct)
     {
-        var lines = Encoding.UTF8.GetBytes(string.Concat(paths.Select(path => path + "\n")));
+        var lines = Encoding.UTF8.GetBytes(string.Concat(paths.Select(path => ToExtendedPath(path) + "\n")));
         return ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, cancellationToken: ct);
+    }
+
+    /// <summary>
+    /// The <c>\\?\</c> form of a fully qualified path, which qpdf opens at any length; without it qpdf cannot open a path
+    /// past 260 characters (nor in the <c>\\.\</c> form; checked with 12.4.2), and the runner shortens an input under 260
+    /// characters while the temporary output beside it is 51 characters longer. The prefix turns off Windows'
+    /// normalisation, so the path is normalised first, as .NET does when it opens the same path.
+    /// </summary>
+    internal static string ToExtendedPath(string path)
+    {
+        if (path.StartsWith(@"\\?\", StringComparison.Ordinal))
+            return path;
+        var full = Path.GetFullPath(path);
+        if (full.StartsWith(@"\\.\", StringComparison.Ordinal))
+            return @"\\?\" + full[4..];
+        return full.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + full[2..] : @"\\?\" + full;
     }
 
     private void RequireExe()
