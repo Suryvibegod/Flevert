@@ -10,7 +10,9 @@ namespace Flevert.Pdf;
 
 /// <summary>
 /// What one worker is asked to do: render <see cref="InputPath"/>, which must be the file <see cref="Input"/>, into
-/// <see cref="Folder"/>. It travels on the worker's standard input, never its command line.
+/// <see cref="Folder"/>; or, when <see cref="Text"/> is set, write its text into the new file <see cref="Folder"/> names
+/// (<see cref="Format"/> and <see cref="Dpi"/> then say nothing). It travels on the worker's standard input, never its
+/// command line.
 /// </summary>
 /// <remarks>
 /// The fields are the raw UTF-16 code units of their text, each ended by U+0000, which no path can hold: a Windows name may
@@ -19,6 +21,9 @@ namespace Flevert.Pdf;
 /// </remarks>
 internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, string Folder, PdfPageImageFormat Format, double Dpi)
 {
+    /// <summary>Extract the text instead of rendering (<see cref="PdfExtractText"/>).</summary>
+    public bool Text { get; init; }
+
     /// <summary>Changes whenever the fields change, so a worker of another version refuses the request rather than misreading it.</summary>
     internal const string Magic = "flevert-pdf-worker/1";
 
@@ -31,7 +36,7 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
     {
         string[] fields =
         [
-            Magic, InputPath, Input.ToString(), Folder, Format == PdfPageImageFormat.Jpeg ? "jpeg" : "png",
+            Magic, InputPath, Input.ToString(), Folder, Text ? "text" : Format == PdfPageImageFormat.Jpeg ? "jpeg" : "png",
             Dpi.ToString("R", CultureInfo.InvariantCulture),
         ];
         if (fields.Any(field => field.Contains('\0', StringComparison.Ordinal)))
@@ -57,13 +62,13 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
             throw new FormatException("The request's paths must be fully qualified.");
         var imageFormat = format switch
         {
-            "jpeg" => PdfPageImageFormat.Jpeg,
+            "jpeg" or "text" => PdfPageImageFormat.Jpeg,
             "png" => PdfPageImageFormat.Png,
             _ => throw new FormatException($"Unknown image format: {format}"),
         };
         if (!double.TryParse(dpiText, NumberStyles.Float, CultureInfo.InvariantCulture, out var dpi) || !double.IsFinite(dpi) || dpi <= 0 || dpi > MaxDpi)
             throw new FormatException($"Not a DPI: {dpiText}");
-        return new PdfRenderRequest(input, FileIdentity.Parse(identity), folder, imageFormat, dpi);
+        return new PdfRenderRequest(input, FileIdentity.Parse(identity), folder, imageFormat, dpi) { Text = format == "text" };
     }
 }
 
@@ -79,8 +84,10 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
 /// <item><c>wrote &lt;n&gt;</c> once page n is written; <c>done &lt;count&gt;</c> at the end, exit code 0;</item>
 /// <item><c>error &lt;code&gt; &lt;message&gt;</c> as the last line when it cannot go on (a <see cref="PdfError"/> name;
 /// <c>Write</c> when a page could not be written, or the disk has not the room for them all; <c>Setup</c> when ImageMagick
-/// could not be set up), exit code 1.</item>
+/// could not be set up; <c>NoText</c> when a PDF has no text to extract), exit code 1.</item>
 /// </list>
+/// A text request says the same, with <c>page &lt;n&gt; 1 1</c> before page n is read and <c>wrote &lt;n&gt;</c> once
+/// its text is in the file; there is no <c>busy</c>.
 /// A request it cannot read, or an input that is not the file the request names, ends it with exit code 2 and nothing on
 /// standard output. Anything else (a crash in pdfium, a kill) is whatever the process ends with.
 /// </summary>
@@ -120,7 +127,10 @@ public static class PdfRenderWorker
 
         try
         {
-            Render(request, file!, lines);
+            if (request.Text)
+                ExtractText(request, file!, lines);
+            else
+                Render(request, file!, lines);
             return ExitDone;
         }
         catch (PdfException e)
@@ -144,6 +154,98 @@ public static class PdfRenderWorker
             lines.WriteLine($"error Setup {OneLine(e.Message)}");
             return ExitFailed;
         }
+        catch (NoTextException e)
+        {
+            lines.WriteLine($"error {NoTextCode} {OneLine(e.Message)}");
+            return ExitFailed;
+        }
+    }
+
+    /// <summary>The error code of a PDF without text: the parent skips the file rather than failing it.</summary>
+    internal const string NoTextCode = "NoText";
+
+    internal const string NoTextMessage =
+        "This PDF has no text to extract: it may be a scanned document (Flevert does not recognise text in pictures).";
+
+    /// <summary>The most text written for one PDF (docs/specs/pdf.md, P3).</summary>
+    internal const long MaxTextBytes = 100L * 1024 * 1024;
+
+    internal static readonly string TooMuchTextMessage = string.Create(CultureInfo.InvariantCulture,
+        $"The text of this PDF is larger than {MaxTextBytes >> 20} MB, the most Flevert writes.");
+
+    private static void ExtractText(PdfRenderRequest request, SafeFileHandle file, StreamWriter lines)
+    {
+        using var pdf = PdfDocument.Open(file, PdfLimits.Default);
+        var total = pdf.PageCount;
+        if (total == 0)
+            throw new PdfException(PdfError.NoPages, "This PDF has no pages.");
+        lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"pages {total}"));
+
+        bool anyText;
+        try
+        {
+            // CreateNew: the parent hands a fresh name beside the input, where others may be able to add entries.
+            using var stream = new FileStream(request.Folder, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            anyText = WriteText(pdf.GetText, total, stream, MaxTextBytes,
+                page => lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"page {page} 1 1")),
+                page => lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"wrote {page}")));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new PageWriteException($"Could not write the text: {e.Message}", e);
+        }
+
+        if (!anyText)
+            throw new NoTextException(NoTextMessage);
+        lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"done {total}"));
+    }
+
+    /// <summary>
+    /// Writes the text of <paramref name="total"/> pages to <paramref name="output"/>: UTF-8 with a byte order mark, so
+    /// Notepad of older Windows reads the accents right; lines ended by <c>\r\n</c>; a form feed before every page but
+    /// the first. Returns whether any page had text. Nothing goes past <paramref name="maxBytes"/>: the PDF fails as too
+    /// large, and the caller deletes what was written.
+    /// </summary>
+    /// <param name="pageText">The text of a page, by index, as pdfium gives it.</param>
+    internal static bool WriteText(Func<int, string> pageText, int total, Stream output, long maxBytes, Action<int> started, Action<int> wrote)
+    {
+        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+        long bytes = utf8.GetPreamble().Length;
+        var anyText = false;
+        using var writer = new StreamWriter(output, utf8, leaveOpen: true);
+        for (var index = 0; index < total; index++)
+        {
+            var page = index + 1;
+            started(page);
+            var text = PageText(pageText(index));
+            anyText |= text.Length > 0;
+            var block = (index == 0 ? "" : "\f") + text + "\r\n";
+            bytes += utf8.GetByteCount(block);
+            if (bytes > maxBytes)
+                throw new PdfException(PdfError.TooLarge, TooMuchTextMessage);
+            writer.Write(block);
+            writer.Flush();
+            wrote(page);
+        }
+
+        return anyText;
+    }
+
+    /// <summary>
+    /// A page's text as written: every line ended by <c>\r\n</c>, without NUL, form feeds of its own or the noncharacters
+    /// pdfium can give for a glyph without a meaning, and without the blank lines and spaces it ends with; empty for a page
+    /// with nothing but white space.
+    /// </summary>
+    internal static string PageText(string text)
+    {
+        var clean = new StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            if (c is not ('\0' or '\f' or '\uFFFE' or '\uFFFF'))
+                clean.Append(c);
+        }
+
+        return clean.ToString().ReplaceLineEndings("\r\n").TrimEnd();
     }
 
     private static void Render(PdfRenderRequest request, SafeFileHandle file, StreamWriter lines)
@@ -266,6 +368,9 @@ public static class PdfRenderWorker
 
     /// <summary>A page could not be written to the folder (disk full, access denied): not the PDF's fault.</summary>
     private sealed class PageWriteException(string message, Exception? inner) : Exception(message, inner);
+
+    /// <summary>The PDF has no text at all.</summary>
+    private sealed class NoTextException(string message) : Exception(message);
 
     /// <summary>ImageMagick could not be set up in the worker (its configuration folder could not be written).</summary>
     private sealed class SetupException(string message, Exception inner) : Exception(message, inner);

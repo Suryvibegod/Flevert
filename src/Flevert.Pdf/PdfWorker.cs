@@ -98,8 +98,43 @@ public sealed class PdfWorker
     public async Task<int> RenderAsync(
         string inputPath, string folder, PdfPageImageFormat format, double dpi, IProgress<FileProgress>? progress, CancellationToken ct)
     {
-        ArgumentException.ThrowIfNullOrEmpty(inputPath);
         ArgumentException.ThrowIfNullOrEmpty(folder);
+        var (total, run) = await RunAsync(inputPath, input => new PdfRenderRequest(inputPath, input, folder, format, dpi), "render", progress, ct)
+            .ConfigureAwait(false);
+        // Every page it said it wrote is there under its name; anything else in the folder was put there by someone else.
+        var stem = Path.GetFileNameWithoutExtension(inputPath);
+        for (var page = 1; page <= total; page++)
+        {
+            if (!File.Exists(Path.Combine(folder, PdfToImages.PageName(stem, page, total, format))))
+                throw new PdfException(PdfError.ReaderFailed, FailedMessage(page, "render"), new PdfWorkerException(run, $"page {page} is missing from the folder"));
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// Writes the text of every page of <paramref name="inputPath"/> into the new file <paramref name="outputPath"/>
+    /// (<see cref="PdfExtractText"/>), reporting each page as it starts, and returns the number of pages.
+    /// </summary>
+    /// <param name="outputPath">A path no file has yet: the worker creates it.</param>
+    /// <exception cref="OperationSkippedException">The PDF has no text (a scan).</exception>
+    /// <exception cref="PdfException">As for <see cref="RenderAsync"/>, and <see cref="PdfError.TooLarge"/> past 100 MB of text.</exception>
+    /// <exception cref="IOException">The text could not be written.</exception>
+    public async Task<int> ExtractTextAsync(string inputPath, string outputPath, IProgress<FileProgress>? progress, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+        var (total, run) = await RunAsync(inputPath, input => new PdfRenderRequest(inputPath, input, outputPath, PdfPageImageFormat.Jpeg, 72) { Text = true },
+            "read", progress, ct).ConfigureAwait(false);
+        if (!File.Exists(outputPath))
+            throw new PdfException(PdfError.ReaderFailed, FailedMessage(null, "read"), new PdfWorkerException(run, "the text file is missing"));
+        return total;
+    }
+
+    // Runs one worker on the request made for the pinned input; "render" or "read" is what the messages say it was doing.
+    private async Task<(int Total, ExternalToolResult Run)> RunAsync(
+        string inputPath, Func<FileIdentity, PdfRenderRequest> makeRequest, string doing, IProgress<FileProgress>? progress, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(inputPath);
         RequireExe();
 
         // Held until the worker has ended, sharing reading only, like the runner's pin: the worker reopens this path, and
@@ -108,9 +143,9 @@ public sealed class PdfWorker
         var length = RandomAccess.GetLength(pin);
         if (length > PdfDocument.MaxFileBytes)
             throw PdfDocument.TooLargeError(PdfDocument.MaxFileBytes);
-        var request = new PdfRenderRequest(inputPath, FileIdentity.Of(pin), folder, format, dpi).Encode();
+        var request = makeRequest(FileIdentity.Of(pin)).Encode();
 
-        using var session = new Session(this, StallTimeout + (PerHundredMegabytes * (length / 100_000_000.0)), progress, ct);
+        using var session = new Session(this, StallTimeout + (PerHundredMegabytes * (length / 100_000_000.0)), doing, progress, ct);
         var limits = new ExternalToolLimits { MaxMemoryBytes = MaxMemoryBytes, SingleProcess = true };
         ExternalToolResult run;
         try
@@ -135,17 +170,16 @@ public sealed class PdfWorker
             throw new PdfException(PdfError.ReaderFailed, session.FailedMessage(), e);
         }
 
-        var total = session.Outcome(run, MaxMemoryBytes);
-        // Every page it said it wrote is there under its name; anything else in the folder was put there by someone else.
-        var stem = Path.GetFileNameWithoutExtension(inputPath);
-        for (var page = 1; page <= total; page++)
-        {
-            if (!File.Exists(Path.Combine(folder, PdfToImages.PageName(stem, page, total, format))))
-                throw new PdfException(PdfError.ReaderFailed, session.FailedMessage(), new PdfWorkerException(run, $"page {page} is missing from the folder"));
-        }
-
-        return total;
+        return (session.Outcome(run, MaxMemoryBytes), run);
     }
+
+    private static string TooSlowMessage(int? page, string doing) => page is { } p
+        ? string.Create(CultureInfo.InvariantCulture, $"Page {p} of this PDF took too long to {doing}: it is too complex, or made to stall PDF readers.")
+        : "This PDF took too long to open: it is too complex, or made to stall PDF readers.";
+
+    private static string FailedMessage(int? page, string doing) => page is { } p
+        ? string.Create(CultureInfo.InvariantCulture, $"Flevert's PDF reader stopped on page {p} of this PDF without finishing: the PDF may be damaged, or made to crash PDF readers.")
+        : "Flevert's PDF reader stopped on this PDF without finishing: it may be damaged, or made to crash PDF readers.";
 
     /// <summary>
     /// The changes to the environment the worker inherits from flevert.exe (ADR-0008): every <c>MAGICK_*</c> variable,
@@ -178,6 +212,7 @@ public sealed class PdfWorker
     private sealed class Session : IDisposable
     {
         private readonly PdfWorker _worker;
+        private readonly string _doing;
         private readonly IProgress<FileProgress>? _progress;
         private readonly CancellationToken _cancel;
         private readonly CancellationTokenSource _stall = new();
@@ -192,9 +227,10 @@ public sealed class PdfWorker
         private bool _done;
         private (string Code, string Message)? _error;
 
-        public Session(PdfWorker worker, TimeSpan openWindow, IProgress<FileProgress>? progress, CancellationToken cancel)
+        public Session(PdfWorker worker, TimeSpan openWindow, string doing, IProgress<FileProgress>? progress, CancellationToken cancel)
         {
             _worker = worker;
+            _doing = doing;
             _progress = progress;
             _cancel = cancel;
             _linked = CancellationTokenSource.CreateLinkedTokenSource(cancel, _stall.Token, _budget.Token);
@@ -313,6 +349,8 @@ public sealed class PdfWorker
                         throw new InvalidOperationException(message, new PdfWorkerException(run, null));
                     if (code == nameof(PdfError.PasswordRequired))
                         throw new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage);
+                    if (code == PdfRenderWorker.NoTextCode)
+                        throw new OperationSkippedException(PdfRenderWorker.NoTextMessage);
                     if (Enum.TryParse<PdfError>(code, ignoreCase: false, out var error) && Enum.IsDefined(error) && !code.Any(char.IsDigit))
                         throw new PdfException(error, message, new PdfWorkerException(run, null));
                 }
@@ -335,21 +373,13 @@ public sealed class PdfWorker
         public string TooSlowMessage()
         {
             lock (_gate)
-            {
-                return PageAt() is { } page
-                    ? string.Create(CultureInfo.InvariantCulture, $"Page {page} of this PDF took too long to render: it is too complex, or made to stall PDF readers.")
-                    : "This PDF took too long to open: it is too complex, or made to stall PDF readers.";
-            }
+                return PdfWorker.TooSlowMessage(PageAt(), _doing);
         }
 
         public string FailedMessage()
         {
             lock (_gate)
-            {
-                return PageAt() is { } page
-                    ? string.Create(CultureInfo.InvariantCulture, $"Flevert's PDF reader stopped on page {page} of this PDF without finishing: the PDF may be damaged, or made to crash PDF readers.")
-                    : "Flevert's PDF reader stopped on this PDF without finishing: it may be damaged, or made to crash PDF readers.";
-            }
+                return PdfWorker.FailedMessage(PageAt(), _doing);
         }
     }
 

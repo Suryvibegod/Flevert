@@ -30,7 +30,7 @@ public sealed class PdfMenuTests
             _registry.Children(@"Flevert.Menu.pdf\shell")
                 .Select(verb => _registry.GetValue($@"{verb}\command", ""))
                 .OfType<string>());
-        Assert.Equal(["JPG pages", "PNG pages"], Labels(@"Flevert.Menu.pdf\Convert\shell"));
+        Assert.Equal(["JPG pages", "PNG pages", "Text"], Labels(@"Flevert.Menu.pdf\Convert\shell"));
         Assert.Equal(["90° right", "90° left", "180°"], Labels(@"Flevert.Menu.pdf\Rotate\shell"));
         Assert.Equal(
             ["pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180"],

@@ -91,11 +91,11 @@ public sealed class PdfToImages : IOperation
 }
 
 /// <summary>
-/// The pdfium render operations (<c>pdf.to-jpg</c>, <c>pdf.to-png</c>). A list of its own beside the qpdf operations, so
-/// the catalog adds both.
+/// The operations that read a PDF with pdfium, in the worker (<c>pdf.to-jpg</c>, <c>pdf.to-png</c>,
+/// <c>pdf.extract-text</c>): the Convert submenu. A list of its own beside the qpdf operations, so the catalog adds both.
 /// </summary>
 public static class PdfRenderOperations
 {
     public static IReadOnlyList<IOperation> All { get; } =
-        [new PdfToImages(PdfPageImageFormat.Jpeg), new PdfToImages(PdfPageImageFormat.Png)];
+        [new PdfToImages(PdfPageImageFormat.Jpeg), new PdfToImages(PdfPageImageFormat.Png), new PdfExtractText()];
 }

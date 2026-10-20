@@ -168,6 +168,40 @@ public sealed class PdfDocument : IDisposable
         }
     }
 
+    /// <summary>
+    /// The text of page <paramref name="pageIndex"/>, in the order pdfium reads it, lines ended as pdfium ends them
+    /// (<c>\r\n</c>); an empty string for a page without text (a scan).
+    /// </summary>
+    public unsafe string GetText(int pageIndex)
+    {
+        lock (Pdfium.Gate)
+        {
+            ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
+            using var page = PageHandle.Load(_handle, pageIndex);
+            var text = PdfiumNative.FPDFText_LoadPage(page.DangerousGetHandle());
+            if (text == 0)
+                throw new PdfException(PdfError.DamagedPage, $"Page {pageIndex + 1} of this PDF is damaged and its text cannot be read.");
+            try
+            {
+                var count = PdfiumNative.FPDFText_CountChars(text);
+                if (count < 0)
+                    throw new PdfException(PdfError.DamagedPage, $"Page {pageIndex + 1} of this PDF is damaged and its text cannot be read.");
+                if (count == 0)
+                    return "";
+                var buffer = new char[count + 1];
+                int written;
+                fixed (char* first = buffer)
+                    written = PdfiumNative.FPDFText_GetText(text, 0, count, (ushort*)first);
+                // The NUL pdfium ends it with is not text.
+                return new string(buffer, 0, Math.Clamp(written - 1, 0, count));
+            }
+            finally
+            {
+                PdfiumNative.FPDFText_ClosePage(text);
+            }
+        }
+    }
+
     public void Dispose() => _handle.Dispose();
 
     internal static PdfRenderSize Fit(PdfPageSize page, double dpi, int maxPixels)

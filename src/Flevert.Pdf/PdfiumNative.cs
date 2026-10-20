@@ -88,6 +88,23 @@ internal static unsafe partial class PdfiumNative
     [LibraryImport(Library)]
     public static partial void FPDF_RenderPageBitmap(nint bitmap, nint page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
 
+    // Reading text: fpdf_text.h.
+
+    [LibraryImport(Library)]
+    public static partial nint FPDFText_LoadPage(nint page);
+
+    [LibraryImport(Library)]
+    public static partial void FPDFText_ClosePage(nint textPage);
+
+    /// <summary>The number of characters on the page, or -1 on an error.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFText_CountChars(nint textPage);
+
+    /// <summary>Writes <paramref name="count"/> UTF-16 code units and a terminating NUL into <paramref name="result"/>,
+    /// which holds at least <paramref name="count"/> + 1; returns how many it wrote, the NUL included.</summary>
+    [LibraryImport(Library)]
+    public static partial int FPDFText_GetText(nint textPage, int startIndex, int count, ushort* result);
+
     // Creating documents: fpdf_edit.h, fpdf_save.h.
 
     public const int BitmapBgr = 2;
