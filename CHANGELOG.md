@@ -4,6 +4,10 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+### Fixed
+
+- Starting two different picture actions at the same moment (for example **Convert > PNG** on some files and **Compress** on others) no longer makes one of them fail with "Access to the path is denied". This also affected v0.1.0.
+
 ## [0.1.0] - 2026-10-20
 
 The first release: pictures, and an installer.

@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <!-- LibraryImport (ConfigurationFile checks ImageMagick's configuration files without following links). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Flevert.Core\Flevert.Core.csproj" />
     <PackageReference Include="Magick.NET-Q8-x64" Version="15.0.0" />

@@ -18,11 +18,25 @@ Use **Magick.NET-Q8-x64 15.0.0** (Apache-2.0, ImageMagick 7.1.2), one NuGet pack
 
 ImageMagick reads many formats, including scripts and formats that reach other files (MSL, MVG, TEXT, URL, `@file` lists), so it is locked down before first use:
 
-- A `policy.xml` written on every start that denies all coders, delegates and filters, then allows only the formats this module reads or writes; `@*` and `fd:*` paths are denied. The folder holding it (and ImageMagick's temp files) is restricted to the user, SYSTEM and Administrators, so another account cannot relax the policy.
+- A `policy.xml` checked on every start that denies all coders, delegates and filters, then allows only the formats this module reads or writes; `@*` and `fd:*` paths are denied. The folder holding it (and ImageMagick's temp files) is restricted to the user, SYSTEM and Administrators, so another account cannot relax the policy. Each configuration file is kept only when it holds Flevert's exact bytes in a file of its own that only those accounts can change; anything else is replaced atomically (see the amendment below).
 - Resource limits: 40 000 px per side, 400 MP per image, 2 GB memory, 4 GB disk, 1000 frames, 120 s.
 - ImageMagick never guesses a format. The module picks the decoder from the file's signature when it matches an allowed format (misnamed downloads are common), otherwise from the extension, so a `.jpg` that holds a script is an error.
 - ImageMagick also reads `policy.xml` and `delegates.xml` from the working directory, `MAGICK_HOME`, `MAGICK_CONFIGURE_PATH`, `%LOCALAPPDATA%\ImageMagick` and the XDG/HOME config folders, and applies them after ours (a planted one can redirect the pixel cache or enable delegates). The module refuses to run if any ImageMagick configuration file exists in the user folders (also `%APPDATA%` and `%USERPROFILE%`), initialises with its own folder as the working directory, and then proves MVG, MSL and TEXT are refused by the coder rule. Files ImageMagick loads lazily after initialisation (colors, thresholds, type) are still looked up in the current working directory; flevert.exe always runs with its install folder as the working directory, and any other host must do the same.
 - ImageMagick never sees a path: files are read and written through streams the module opens, because it reads `%d`, `[0]` and similar in names as patterns.
+
+## Amendment (2026-10-20): configuration files kept when already exact
+
+v0.1.0 replaced all eleven configuration files on every start (write a temporary file, then rename it over the old one). ImageMagick opens these files without delete sharing while it loads them, and Windows refuses to rename over a file that is open that way. When two different image operations started together (two batch leaders, for example Convert > PNG on some files and Compress on others), one process often failed with `UnauthorizedAccessException: Access to the path is denied` in `MagickSetup.WriteConfiguration` (11 of 20 rounds of six simultaneous processes in the reproduction).
+
+Decision: compare before writing. A file is kept as it is when it holds exactly the bytes Flevert would write, and it is a file of its own: opened without following links, not a reparse point, one hard link, owned by and writable only by this user, SYSTEM or Administrators. The comparison reads with read and delete sharing, so it never blocks another process. Anything else (missing, stale, tampered, a link, permissions another account could use) is replaced as before, through a unique temporary file and an atomic rename; while the rename is refused because another flevert.exe is loading the file, the start retries for up to 5 seconds, accepting the file as soon as another process has put the exact bytes there. If it still cannot be replaced, the start fails and the stale file is not used; the temporary file is removed.
+
+Why the security properties hold: before, Flevert wrote the bytes and ImageMagick read them a moment later; only accounts that can change the folder (the user, SYSTEM, Administrators) could act in between. Now Flevert reads and checks the bytes and ImageMagick reads them a moment later, with the same window and the same accounts. The link and permission checks keep what the rename used to guarantee as a side effect: the file Flevert accepts is one only those accounts can change, not a link to a file elsewhere with its own permissions. The probes of MVG, MSL and TEXT still run after loading.
+
+Alternatives considered:
+
+- **Rename with retry only:** every start would still rewrite eleven files and wait for whichever process is reading them, so simultaneous starts would keep contending; retry is kept only for the rare case where a file really must change (first run, update, tampering).
+- **A named mutex for the session:** it would serialise writes, but ImageMagick loads some files (colors, type) lazily, after initialisation and outside any lock, so a writer could still meet a reader; holding the lock for a whole run would serialise every image operation.
+- **Reading with delete sharing:** ImageMagick opens the files itself; Flevert cannot change how.
 
 ## Alternatives Considered
 

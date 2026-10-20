@@ -352,7 +352,10 @@ Ba reviewer bối cảnh trống, chỉ đọc, trên nhánh `t11a` (JpegSegment
 ## Giai đoạn 6: hoàn thiện và phát hành
 
 ### T17b: Lỗi có từ v0.1 tìm thấy khi làm T11
-- [ ] Vài thao tác ảnh **khác nhau** khởi động cùng lúc: một tiến trình có thể hỏng ở `MagickSetup.WriteConfiguration` vì tiến trình khác đang giữ `policy.xml`. Test tái hiện trước (nhiều tiến trình thật, mỗi cái một thao tác), rồi sửa (ví dụ ghi qua file tạm + đổi tên, hoặc khóa có tên toàn phiên, hoặc chấp nhận file đã đúng nội dung).
+- [x] Vài thao tác ảnh **khác nhau** khởi động cùng lúc: một tiến trình có thể hỏng ở `MagickSetup.WriteConfiguration` vì tiến trình khác đang giữ `policy.xml`. Test tái hiện trước (nhiều tiến trình thật, mỗi cái một thao tác), rồi sửa (ví dụ ghi qua file tạm + đổi tên, hoặc khóa có tên toàn phiên, hoặc chấp nhận file đã đúng nội dung).
+  - Tái hiện: 6 `flevert.exe` thật (to-png, compress-light, to-webp, strip-metadata, compress-strong, to-bmp) cùng lúc, 11/20 vòng có tiến trình lỗi `System.UnauthorizedAccessException: Access to the path is denied` tại `File.Move` trong `WriteConfiguration` (ImageMagick mở file không chia sẻ quyền xóa). Test: `CliIntegrationTests.Different_image_operations_started_together_all_succeed` (4 tiến trình × 6 vòng, policy bị làm cũ mỗi vòng để mọi tiến trình phải thay) và bốn test `MagickSetupTests` giữ file mở như ImageMagick (đỏ trước khi sửa).
+  - Sửa (`ConfigurationFile`): giữ file đã đúng từng byte nếu là file riêng chỉ người dùng/SYSTEM/Administrators sửa được; còn lại thay nguyên tử, thử lại tối đa 5 s. ADR-0004 bổ sung, spec image.md. Sau sửa: 0/130 vòng lỗi (50 vòng thường + 80 vòng policy cũ, 6 tiến trình), test tái hiện xanh 6 lần liên tiếp.
+  - Còn lại: bản v0.1.0 để rơi file `*.xml.<guid>.tmp` trong `%LOCALAPPDATA%\Flevert\magick` mỗi lần lỗi này xảy ra (vô hại, gỡ cài đặt xóa cả thư mục); chưa dọn tự động.
 - [ ] Kiểm tay trong Explorer thật: chọn lẫn JPG + HEIC → Combine into PDF ra một PDF (MenuProbe chỉ kiểm từng loại file).
 - [ ] README: bảng menu thêm Combine into PDF và ghi HEIC/HEIF không còn Convert > GIF (giới hạn 16 mục của Explorer) — làm cùng T20.
 

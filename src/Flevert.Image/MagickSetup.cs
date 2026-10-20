@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text;
 using Flevert.Core;
 using ImageMagick;
 using ImageMagick.Configuration;
@@ -39,13 +41,19 @@ public static class MagickSetup
 
     public static string ConfigurationDirectory { get; } = Path.Combine(AppData.Root, AppData.MagickFolder);
 
+    /// <summary>How long a start waits for other flevert.exe processes to finish loading a file it must replace.</summary>
+    private static readonly TimeSpan ReplacePatience = TimeSpan.FromSeconds(5);
+
     /// <summary>
-    /// Writes ImageMagick's configuration files, always replacing what is there. MagickNET.Initialize(files, path) keeps
-    /// existing files, so a stale or tampered policy.xml would otherwise survive. Each file is replaced atomically, so
+    /// Puts ImageMagick's configuration files in place, byte for byte. MagickNET.Initialize(files, path) keeps existing
+    /// files, so a stale or tampered policy.xml would otherwise survive. A file that already holds the exact bytes, in a
+    /// file of its own only this user, SYSTEM and Administrators can change, is kept: another flevert.exe may be loading
+    /// it, and Windows refuses to replace a file ImageMagick has open (T17b). Anything else is replaced atomically, so
     /// processes initialising at the same moment never see a half-written policy.
     /// </summary>
-    internal static void WriteConfiguration(string directory)
+    internal static void WriteConfiguration(string directory, TimeSpan? patience = null)
     {
+        var elapsed = Stopwatch.StartNew();
         var files = ConfigurationFiles.Default;
         files.Policy.Data = Policy;
         foreach (var file in new[]
@@ -54,10 +62,9 @@ public static class MagickSetup
                      files.Mime, files.Policy, files.Thresholds, files.Type, files.TypeGhostscript,
                  })
         {
-            var target = Path.Combine(directory, file.FileName);
-            var temp = $"{target}.{Guid.NewGuid():N}.tmp";
-            File.WriteAllText(temp, file.Data);
-            File.Move(temp, target, overwrite: true);
+            // The bytes File.WriteAllText wrote before T17b (UTF-8, no byte order mark), so existing files still match.
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(file.Data);
+            ConfigurationFile.Ensure(Path.Combine(directory, file.FileName), bytes, elapsed, patience ?? ReplacePatience);
         }
     }
 

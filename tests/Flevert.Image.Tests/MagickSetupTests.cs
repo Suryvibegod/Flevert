@@ -1,5 +1,8 @@
 using System.Diagnostics;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using ImageMagick;
+using Flevert.Core;
 
 namespace Flevert.Image.Tests;
 
@@ -7,7 +10,12 @@ public sealed class MagickSetupTests : IDisposable
 {
     private readonly TempDir _dir = new();
 
-    public MagickSetupTests() => MagickSetup.EnsureInitialized();
+    public MagickSetupTests()
+    {
+        MagickSetup.EnsureInitialized();
+        // As the real configuration folder: files created here can be changed only by this user, SYSTEM and Administrators.
+        SecureDirectory.RestrictToOwnerAndAdmins(_dir.Path);
+    }
 
     public void Dispose() => _dir.Dispose();
 
@@ -168,6 +176,109 @@ public sealed class MagickSetupTests : IDisposable
 
         var policy = File.ReadAllText(Path.Combine(_dir.Path, "policy.xml"));
         Assert.Contains("""<policy domain="coder" rights="none" pattern="*" />""", policy, StringComparison.Ordinal);
+    }
+
+    // ImageMagick opens its configuration files for reading without delete sharing (the C runtime's default), so while
+    // one flevert.exe initialises, another cannot replace them. Before T17b every start replaced them and failed with
+    // "UnauthorizedAccessException: Access to the path is denied" when two image operations started together.
+    private static FileStream OpenLikeImageMagick(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+    [Fact]
+    public void A_policy_that_is_already_right_is_kept_while_another_process_reads_it()
+    {
+        MagickSetup.WriteConfiguration(_dir.Path);
+        var policy = Path.Combine(_dir.Path, "policy.xml");
+        var expected = File.ReadAllBytes(policy);
+
+        using (OpenLikeImageMagick(policy))
+            MagickSetup.WriteConfiguration(_dir.Path);
+
+        Assert.Equal(expected, File.ReadAllBytes(policy));
+    }
+
+    [Fact]
+    public async Task A_stale_policy_another_process_is_reading_is_replaced_once_it_lets_go()
+    {
+        var policy = Path.Combine(_dir.Path, "policy.xml");
+        File.WriteAllText(policy, "<policymap></policymap>");
+        var reader = OpenLikeImageMagick(policy);
+        var release = Task.Delay(300).ContinueWith(_ => reader.Dispose(), TaskScheduler.Default);
+
+        try
+        {
+            MagickSetup.WriteConfiguration(_dir.Path);
+        }
+        finally
+        {
+            await release;
+        }
+
+        Assert.Contains("""<policy domain="coder" rights="none" pattern="*" />""", File.ReadAllText(policy), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_stale_policy_that_cannot_be_replaced_is_an_error_and_leaves_no_temporary_file()
+    {
+        var policy = Path.Combine(_dir.Path, "policy.xml");
+        File.WriteAllText(policy, "<policymap></policymap>");
+
+        using (OpenLikeImageMagick(policy))
+            Assert.ThrowsAny<IOException>(() => MagickSetup.WriteConfiguration(_dir.Path, TimeSpan.FromMilliseconds(200)));
+
+        Assert.Equal("<policymap></policymap>", File.ReadAllText(policy));
+        Assert.Empty(Directory.GetFiles(_dir.Path, "*.tmp"));
+    }
+
+    [Fact]
+    public void A_right_policy_another_account_may_change_is_replaced()
+    {
+        MagickSetup.WriteConfiguration(_dir.Path);
+        var policy = new FileInfo(Path.Combine(_dir.Path, "policy.xml"));
+        var users = new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null);
+        var acl = policy.GetAccessControl();
+        acl.AddAccessRule(new FileSystemAccessRule(users, FileSystemRights.Write, AccessControlType.Allow));
+        policy.SetAccessControl(acl);
+
+        MagickSetup.WriteConfiguration(_dir.Path);
+
+        var rules = new FileInfo(policy.FullName).GetAccessControl()
+            .GetAccessRules(true, true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>();
+        Assert.DoesNotContain(rules, r => r.IdentityReference.Equals(users));
+    }
+
+    [Fact]
+    public void A_right_policy_reached_through_a_hard_link_is_replaced_by_a_file_of_its_own()
+    {
+        // The link's target keeps its own permissions, which other accounts may be able to change; only a file created
+        // in the protected folder is trusted, even when its bytes are right today.
+        var right = _dir.Combine("right");
+        Directory.CreateDirectory(right);
+        MagickSetup.WriteConfiguration(right);
+        var outside = _dir.Combine("outside.xml");
+        File.Copy(Path.Combine(right, "policy.xml"), outside);
+        var config = _dir.Combine("config");
+        Directory.CreateDirectory(config);
+        MagickSetup.WriteConfiguration(config);
+        var policy = Path.Combine(config, "policy.xml");
+        File.Delete(policy);
+        var hardLink = new ProcessStartInfo("cmd.exe", $"/c mklink /H \"{policy}\" \"{outside}\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            CreateNoWindow = true,
+        };
+        using (var mklink = Process.Start(hardLink)!)
+        {
+            mklink.StandardOutput.ReadToEnd();
+            mklink.WaitForExit();
+            Assert.Equal(0, mklink.ExitCode);
+        }
+
+        MagickSetup.WriteConfiguration(config);
+        File.WriteAllText(outside, "<policymap></policymap>");
+
+        Assert.Equal(File.ReadAllBytes(Path.Combine(right, "policy.xml")), File.ReadAllBytes(policy));
     }
 
     [Fact]
