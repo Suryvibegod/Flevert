@@ -128,26 +128,38 @@ public sealed class RunnerFileProgressTests : IDisposable
         var file = _dir.File("report.txt");
         var split = new DevSplit(pages: 5, pageDelay: TimeSpan.FromMilliseconds(150));
 
-        // While the pages are written one by one, find the temporary folder and plant the second page's name.
+        // While the pages are written one by one, find the temporary folder and plant the next page's name. CreateNew, and
+        // the first name not written yet: a planter starved past one page's delay plants a later page instead of
+        // overwriting one the writer already made (which would let the run succeed).
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var plant = Task.Run(async () =>
         {
             while (!cts.IsCancellationRequested)
             {
                 var partial = Directory.EnumerateDirectories(_dir.Path, ".flevert-*").FirstOrDefault();
-                var firstPage = partial is null ? null : Path.Combine(partial, "report 1.txt");
-                if (firstPage is not null && File.Exists(firstPage))
+                if (partial is not null && File.Exists(Path.Combine(partial, "report 1.txt")))
                 {
-                    File.WriteAllText(Path.Combine(partial!, "report 2.txt"), "planted");
-                    return;
+                    for (var page = 2; page <= 5; page++)
+                    {
+                        try
+                        {
+                            using var planted = new FileStream(Path.Combine(partial, $"report {page}.txt"), FileMode.CreateNew);
+                            return page;
+                        }
+                        catch (IOException) { }
+                    }
+
+                    return 0;
                 }
 
                 await Task.Delay(10, CancellationToken.None);
             }
+
+            return 0;
         }, CancellationToken.None);
 
         var run = Assert.ThrowsAnyAsync<IOException>(() => split.RunAsync(file, CancellationToken.None));
-        await plant;
+        Assert.NotEqual(0, await plant);
         await run;
 
         // The failed run leaves nothing beside the input.

@@ -29,7 +29,16 @@ internal static class Junction
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         })!;
-        mklink.WaitForExit();
+        // Read both streams so a full pipe cannot stall mklink, and never wait forever on it.
+        var output = mklink.StandardOutput.ReadToEndAsync();
+        var errors = mklink.StandardError.ReadToEndAsync();
+        if (!mklink.WaitForExit(TimeSpan.FromSeconds(30)))
+        {
+            mklink.Kill();
+            return false;
+        }
+
+        Task.WaitAll(output, errors);
         return mklink.ExitCode == 0;
     }
 
@@ -41,7 +50,8 @@ internal static class Junction
     /// </summary>
     public static int TryConvert(string directory, string target)
     {
-        using var handle = CreateFileW(@"\\?\" + directory, FileWriteAttributes, ShareAll, 0, OpenExisting,
+        var extended = directory.StartsWith(@"\\?\", StringComparison.Ordinal) ? directory : @"\\?\" + directory;
+        using var handle = CreateFileW(extended, FileWriteAttributes, ShareAll, 0, OpenExisting,
             FileFlagBackupSemantics | FileFlagOpenReparsePoint, 0);
         if (handle.IsInvalid)
             return Marshal.GetLastPInvokeError();

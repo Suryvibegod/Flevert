@@ -535,7 +535,8 @@ public sealed class OutputPathTests : IDisposable
     {
         using var cts = new CancellationTokenSource();
         FileStream? scanner = null;
-        var timer = System.Diagnostics.Stopwatch.StartNew();
+        // Timed from the cancel, not from the start: writing the pages can be slow on a busy machine.
+        var timer = new System.Diagnostics.Stopwatch();
         try
         {
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
@@ -543,6 +544,7 @@ public sealed class OutputPathTests : IDisposable
                 await WritePages(2)(temp, ct);
                 scanner = new FileStream(Path.Combine(temp, "1.txt"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                 cts.CancelAfter(200);
+                timer.Start();
             }, cts.Token));
             timer.Stop();
 
