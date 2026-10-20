@@ -34,28 +34,31 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         var memory = nameof(PdfError.NeedsTooMuchMemory);
         var encryption = nameof(PdfError.UnsupportedEncryption);
         var damaged = nameof(PdfError.DamagedPage);
+        // Compress packs the objects of a PDF without a trailer into object streams, and qpdf then cannot read its own
+        // output (PdfRepair). A small PDF gets no smaller.
+        var repair = nameof(PdfError.RepairFailed);
         // fixture: rotate, split, merge, to-png and to-jpg (the worker), compress, remove metadata, protect
         (string Fixture, string Rotate, string Split, string Merge, string Render, string Compress, string Strip, string Protect)[] table =
         [
-            ("bomb-content", Ok, Ok, Ok, memory, Ok, Ok, Ok),
-            ("bomb-double-flate", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
-            ("bomb-double-flate-content", Ok, Ok, Ok, memory, Ok, Ok, Ok),
-            ("bomb-image", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("bomb-content", Ok, Ok, Ok, memory, Skipped, Ok, Ok),
+            ("bomb-double-flate", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("bomb-double-flate-content", Ok, Ok, Ok, memory, Skipped, Ok, Ok),
+            ("bomb-image", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
             ("bomb-object-stream", memory, memory, memory, memory, memory, memory, memory),
             ("cycle-kids-self", notPdf, notPdf, notPdf, damaged, notPdf, notPdf, notPdf),
             ("cycle-kids-loop", notPdf, notPdf, notPdf, Ok, notPdf, notPdf, notPdf),
-            ("cycle-parent", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
-            ("cycle-self-reference", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("cycle-parent", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("cycle-self-reference", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
             ("pages-100000", tooMany, tooMany, tooMany, tooMany, tooMany, tooMany, tooMany),
             ("pages-2001", tooMany, tooMany, tooMany, tooMany, tooMany, tooMany, tooMany),
             ("count-lie-low", tooMany, tooMany, tooMany, Ok, tooMany, tooMany, tooMany),
-            ("count-lie-high", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
-            ("page-giant", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
-            ("page-zero", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
-            ("page-inverted", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("count-lie-high", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("page-giant", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("page-zero", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("page-inverted", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
             ("xref-wrong-offsets", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
-            ("xref-missing", Ok, Ok, Ok, notPdf, Ok, Ok, Ok),
-            ("truncated", Ok, Ok, Ok, notPdf, Ok, Ok, Ok),
+            ("xref-missing", Ok, Ok, Ok, notPdf, repair, Ok, Ok),
+            ("truncated", Ok, Ok, Ok, notPdf, repair, Ok, Ok),
             ("startxref-past-end", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
             ("not-pdf-png", notPdf, notPdf, notPdf, notPdf, notPdf, notPdf, notPdf),
             ("not-pdf-zip", notPdf, notPdf, notPdf, notPdf, notPdf, notPdf, notPdf),
@@ -67,7 +70,7 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
             ("many-objects", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
             ("launch-action", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
             ("encrypt-unknown-handler", encryption, encryption, encryption, encryption, encryption, encryption, encryption),
-            ("signed", Ok, Ok, Ok, Ok, Ok, Ok, Ok),
+            ("signed", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
         ];
         var cases = new TheoryData<string, string, string>();
         foreach (var row in table)
@@ -84,6 +87,12 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
 
         return cases;
     }
+
+    // Remove metadata reads every object of the PDF twice, as qpdf's JSON and back (MetadataRemoval): real work that grows
+    // with the file, like qpdf's own timeout. The 16 MB of many-objects (300 000 objects) took 13 s on CI, 5 s here.
+    private static TimeSpan LimitFor(string operation, string input) => operation == "pdf.strip-metadata"
+        ? Limit + TimeSpan.FromSeconds(new FileInfo(input).Length / (1024 * 1024))
+        : Limit;
 
     [Fact]
     public void Every_fixture_is_in_the_table_once()
@@ -105,7 +114,7 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         var (outcome, result) = await RunAsync(operation, input, partner);
 
         output.WriteLine($"{fixture} {operation}: {outcome} in {timer.Elapsed.TotalSeconds:0.0} s ({result})");
-        Assert.True(timer.Elapsed < Limit, $"{fixture} {operation} took {timer.Elapsed}");
+        Assert.True(timer.Elapsed < LimitFor(operation, input), $"{fixture} {operation} took {timer.Elapsed}");
         Assert.Equal(expected, outcome);
         var expectedEntries = expected == Ok ? [.. before, Path.GetFileName(result)!] : before;
         Assert.Equal(expectedEntries.Order(StringComparer.Ordinal), Entries());

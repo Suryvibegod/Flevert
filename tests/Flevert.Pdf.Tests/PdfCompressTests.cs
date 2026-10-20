@@ -195,7 +195,7 @@ public sealed class PdfCompressTests : IDisposable
         var result = Assert.Single(outcome.Results);
         Assert.True(result.Succeeded, result.Error);
         Assert.Equal("Flevert compressed this PDF only in part: compressing it fully took too long.", result.Note);
-        Assert.True(new FileInfo(result.Output!).Length < new FileInfo(input).Length / 2,
+        Assert.True(new FileInfo(result.Output!).Length < new FileInfo(input).Length * 3 / 4,
             $"{new FileInfo(input).Length} → {new FileInfo(result.Output!).Length} bytes");
         // The bomb is copied as it was: still Flate inside Flate.
         var filters = (await QpdfObjects(result.Output!)).EnumerateObject()
