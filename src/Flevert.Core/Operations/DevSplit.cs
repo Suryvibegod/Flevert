@@ -39,7 +39,11 @@ public sealed class DevSplit(int pages, TimeSpan pageDelay) : IOperation
                 progress?.Report(new FileProgress("page", page, pages));
                 await Task.Delay(pageDelay, token).ConfigureAwait(false);
                 var name = PageName(stem, page.ToString("D" + digits, CultureInfo.InvariantCulture));
-                await File.WriteAllTextAsync(Path.Combine(folder, name), $"Page {page} of {pages}\r\n", token).ConfigureAwait(false);
+                // CreateNew, no sharing: never overwrite or follow something already at the page's name (a link or file
+                // another account planted in the output folder), the way PdfToImages writes its pages.
+                var stream = new FileStream(Path.Combine(folder, name), FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                await using (stream.ConfigureAwait(false))
+                    await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes($"Page {page} of {pages}\r\n"), token).ConfigureAwait(false);
             }
         }, ct);
     }

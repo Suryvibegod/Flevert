@@ -120,6 +120,41 @@ public sealed class RunnerFileProgressTests : IDisposable
         Assert.Equal(255, second.Length);
     }
 
+    // A page must never overwrite or follow something already at its name: another account with write access to the output
+    // folder could plant a link or a file at the next page's name. The writer opens each page CreateNew, FileShare.None.
+    [Fact]
+    public async Task Dev_split_fails_rather_than_overwrite_an_entry_planted_at_a_page_name()
+    {
+        var file = _dir.File("report.txt");
+        var split = new DevSplit(pages: 5, pageDelay: TimeSpan.FromMilliseconds(150));
+
+        // While the pages are written one by one, find the temporary folder and plant the second page's name.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var plant = Task.Run(async () =>
+        {
+            while (!cts.IsCancellationRequested)
+            {
+                var partial = Directory.EnumerateDirectories(_dir.Path, ".flevert-*").FirstOrDefault();
+                var firstPage = partial is null ? null : Path.Combine(partial, "report 1.txt");
+                if (firstPage is not null && File.Exists(firstPage))
+                {
+                    File.WriteAllText(Path.Combine(partial!, "report 2.txt"), "planted");
+                    return;
+                }
+
+                await Task.Delay(10, CancellationToken.None);
+            }
+        }, CancellationToken.None);
+
+        var run = Assert.ThrowsAnyAsync<IOException>(() => split.RunAsync(file, CancellationToken.None));
+        await plant;
+        await run;
+
+        // The failed run leaves nothing beside the input.
+        Assert.Equal(["report.txt"], _dir.FileNames());
+        Assert.Empty(Directory.GetDirectories(_dir.Path));
+    }
+
     [Fact]
     public async Task Cancelling_midway_through_a_folder_output_leaves_no_folder_behind()
     {
