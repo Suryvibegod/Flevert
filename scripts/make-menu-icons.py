@@ -33,7 +33,7 @@ ACCENT = "#2F80ED"
 BACKGROUNDS = ["#F9F9F9", "#2C2C2C"]
 FLUENT_INK = 'fill="#212121"'
 
-# Fluent name and variant. The file is assets/menu/<name>.ico; MenuOperations and the PDF tools window use the name.
+# Fluent name and variant. The file is assets/menu/<name>.ico; MenuOperations.Looks and MenuCascade use the name.
 ICONS = [
     # The right-click menu (docs/specs/pdf.md, "Icon").
     ("arrow_swap", "filled"),              # Convert to
@@ -45,20 +45,16 @@ ICONS = [
     ("lock_open", "filled"),               # Remove password
     ("shield", "color"),                   # Remove hidden info
     ("document_pdf", "filled"),            # Combine into PDF
-    ("toolbox", "color"),                  # More PDF tools…
-    # The PDF tools window: the names PdfTools.All gives (Add watermark's "stamp" exists only as a thin 32 px outline,
-    # so the window draws draw_text for it).
+    ("toolbox", "color"),                  # Flevert PDF tools, the second PDF menu
+    # The second PDF menu, Flevert PDF tools (its own entry shows toolbox).
     ("document_dismiss", "filled"),        # Remove blank pages
-    ("layout_column_two", "filled"),       # 2 pages per sheet
-    ("grid", "filled"),                    # 4 pages per sheet
-    ("page_fit", "filled"),                # Fit pages to A4
-    ("cut", "filled"),                     # Split into parts under 10 MB / 25 MB
-    ("draw_text", "filled"),               # Add watermark
     ("document_page_number", "filled"),    # Add page numbers
+    ("draw_text", "filled"),               # Add watermark…
+    ("layout_column_two", "filled"),       # Print layout
+    ("page_fit", "filled"),                # Fit pages to A4
     ("layer", "filled"),                   # Flatten forms and comments
-    ("document_text", "color"),            # Extract text
+    ("cut", "filled"),                     # Split by size
     ("image_multiple", "filled"),          # Extract images
-    ("document", "color"),                 # any tool whose icon is not here
 ]
 
 # Every SVG used, with its SHA256 at COMMIT.
@@ -113,9 +109,6 @@ SOURCES = {
     "assets/Layout Column Two/SVG/ic_fluent_layout_column_two_20_filled.svg": "664f6866af3d1dd15c07c2966a43cbc90b1e855edbf91b5f0966dcfca8fb37dd",
     "assets/Layout Column Two/SVG/ic_fluent_layout_column_two_24_filled.svg": "225e80dad188509a0c685b2b572c8c62df56bd4a558b7bbfe0175f0baf041352",
     "assets/Layout Column Two/SVG/ic_fluent_layout_column_two_32_filled.svg": "9b446fa7596540e7768d7f43f24f05ffab400d0087eb57f0319653a468c45c4f",
-    "assets/Grid/SVG/ic_fluent_grid_16_filled.svg": "0c6f587cf8b463a79dbddeb2218f1aad870a4a5ec8e3856779942326c8cf77dd",
-    "assets/Grid/SVG/ic_fluent_grid_20_filled.svg": "f89f679798e60fc3ea13a42e1ec70e6cdb65958b8a84d73819a22257d75c1bf3",
-    "assets/Grid/SVG/ic_fluent_grid_24_filled.svg": "ca423fb466fa08a32a38ad28ab689bd25d3809b70cdecb719bdf0c052bc843dd",
     "assets/Page Fit/SVG/ic_fluent_page_fit_16_filled.svg": "1f5321bd8333f1a3a68f4a9bdc14f591aacbd25518fe842366b58995fb461be5",
     "assets/Page Fit/SVG/ic_fluent_page_fit_20_filled.svg": "4f6ceeb1876ec03a97dd2cfe7597e95a178f4fe2e7137969912e069ff0c2832e",
     "assets/Page Fit/SVG/ic_fluent_page_fit_24_filled.svg": "880fb8fab27cf7054d3ad2f00fdc44a0d43cc148f19dc2757d211bfd82fabde1",
@@ -130,21 +123,11 @@ SOURCES = {
     "assets/Document Page Number/SVG/ic_fluent_document_page_number_24_filled.svg": "1c50cc1a8f3cfd3e92a5b96bbcbd2331844e0e29b80867396df483bc8eb59190",
     "assets/Layer/SVG/ic_fluent_layer_20_filled.svg": "e49594a1aec88b5ccde1e75423971691c7fcaac8fbb9aede0ccbc94957db2162",
     "assets/Layer/SVG/ic_fluent_layer_24_filled.svg": "fd4ccc33686ae06945c60d238347140eff9e8a7ab06737083f7a73412fe4084f",
-    "assets/Document Text/SVG/ic_fluent_document_text_16_color.svg": "a00ac30babd468d547d210350a3cec81b6602092c019a9ec3368ad2ecd29b1cc",
-    "assets/Document Text/SVG/ic_fluent_document_text_20_color.svg": "9df57509806ec890591a494edecb96860bacc64eb7c471f292d143c56eeb83a1",
-    "assets/Document Text/SVG/ic_fluent_document_text_24_color.svg": "6c6654a8db202201af9d8709f841dacd27ab74001655601bdb8e9314feb97374",
-    "assets/Document Text/SVG/ic_fluent_document_text_32_color.svg": "64e3d2e0006b5789b896d0c04432414ec2a959916436740ea8667f81871722ac",
-    "assets/Document Text/SVG/ic_fluent_document_text_48_color.svg": "a0f5e47363db1434001dbdebba42c73617d2e4089759ed0db55a7bf839f79446",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_16_filled.svg": "fe5ebb1e154264b9736ce4a23754d9fcd4e19b8df4a4e3369a9c45d7f1438b88",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_20_filled.svg": "102f8a7e476ed0c49dbb28ac9837546ce4a64cdb78957c963db70ca7af773291",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_24_filled.svg": "095e0446adef1be2e40b0bb79548109398e45d478fbaed2e6d07e52c6cd8d717",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_32_filled.svg": "16d2103eef3fff8f99543d1b460e6aff7643c21dd012139345ad87da3bacbe86",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_48_filled.svg": "45ed2703baff95e741edfb73d9f39d16863a5061ae7fb1212248241610290ccb",
-    "assets/Document/SVG/ic_fluent_document_16_color.svg": "625602d2d144d041e97ad6b18d7dcfcbea930b7f05237112656cc7554d0fd03e",
-    "assets/Document/SVG/ic_fluent_document_20_color.svg": "71107a8b524eb835a5612be0d75e507db6a4198447eb105761580dfb6873fecb",
-    "assets/Document/SVG/ic_fluent_document_24_color.svg": "3219a365c3b637a5ae5f695ee541189236e8780696507e78a811bd3684eee5ee",
-    "assets/Document/SVG/ic_fluent_document_32_color.svg": "502bc697023901d3d726009ab3f51695a598f85d09aa6fa16c5ef1080e368819",
-    "assets/Document/SVG/ic_fluent_document_48_color.svg": "806eaefed45088137496309ce60c9b5d994059f55ed386f92e323ed4752d5d0c",
 }
 
 

@@ -32,7 +32,7 @@ $classicKey = "$classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"
 $heic = Join-Path $root 'tests\Flevert.Image.Tests\fixtures\gradient-320x240.heic'
 $rotationsPdf = Join-Path $root 'tests\Flevert.Pdf.Tests\fixtures\rotations.pdf'
 # Every folder flevert.exe writes under app data (AppData.Subfolders); the uninstaller deletes exactly these.
-$appDataFolders = 'logs', 'pipes', 'magick', 'update', 'settings'
+$appDataFolders = 'logs', 'pipes', 'magick', 'update'
 # Each "notices" entry of deps.json: files from deps\ the installer ships, with the title their licences carry.
 $bundled = @(([IO.File]::ReadAllText((Join-Path $root 'scripts\deps.json')) | ConvertFrom-Json).notices)
 $bundledFiles = @($bundled | ForEach-Object { $_.files } | Sort-Object -Unique)
@@ -46,8 +46,9 @@ function Assert([bool]$Condition, [string]$Message) {
 
 function MenuKeys {
     # Every key named after the app, not only the ones today's code writes, so a new kind of key cannot be left behind.
+    # Flevert, and Flevert PDF tools (shell\Flevert.Tools) for PDFs; any other shell key named after the app counts too.
     @(Get-ChildItem $associations -ErrorAction SilentlyContinue |
-        Where-Object { Test-Path "$($_.PSPath)\shell\Flevert" }) +
+        Where-Object { @(Get-ChildItem "$($_.PSPath)\shell" -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'Flevert*' }).Count -gt 0 }) +
     @(Get-ChildItem $classes -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'Flevert*' })
 }
 
@@ -254,10 +255,11 @@ try {
     Assert (UpdateCheckEnabled) 'the check for new versions is on by default'
     Assert (@(MenuCommands '.pdf' | Where-Object { $_ -like '* run pdf.rotate-right *' }).Count -eq 1) 'the .pdf menu rotates PDFs'
     Assert (@(MenuCommands '.jpg' | Where-Object { $_ -like '* run pdf.from-images *' }).Count -eq 1) 'the .jpg menu combines pictures into a PDF'
-    Assert (@(MenuCommands '.pdf' | Where-Object { $_ -like '* run pdf.tools *' }).Count -eq 1) 'the .pdf menu opens More PDF tools'
-    # Every entry at the top of the menu has an icon, installed beside flevert.exe (docs/specs/pdf.md, v0.2.2).
-    $icons = @(Get-ChildItem "$classes\Flevert.Menu.pdf\shell" | ForEach-Object { $_.GetValue('Icon') })
-    Assert ($icons.Count -gt 0 -and @($icons | Where-Object { -not ($_ -and (Test-Path -LiteralPath ($_ -replace '^"(.*)",0$', '$1'))) }).Count -eq 0) "every .pdf menu entry shows an icon from $app\icons"
+    Assert ((Get-ItemProperty "$associations\.pdf\shell\Flevert.Tools" -ErrorAction SilentlyContinue).MUIVerb -eq 'Flevert PDF tools') 'PDFs have the second menu, Flevert PDF tools'
+    Assert (@(MenuCommands '.pdf.tools' | Where-Object { $_ -like '* run pdf.remove-blank-pages *' }).Count -eq 1) 'Flevert PDF tools removes blank pages'
+    # Every entry at the top of both PDF menus has an icon, installed beside flevert.exe (docs/specs/pdf.md, v0.2.2).
+    $icons = @(Get-ChildItem "$classes\Flevert.Menu.pdf\shell", "$classes\Flevert.Menu.pdf.tools\shell" | ForEach-Object { $_.GetValue('Icon') })
+    Assert ($icons.Count -gt 0 -and @($icons | Where-Object { -not ($_ -and (Test-Path -LiteralPath ($_ -replace '^"(.*)",0$', '$1'))) }).Count -eq 0) "every entry of the .pdf menus shows an icon from $app\icons"
     $menuCount = @(MenuKeys).Count
 
     AssertConversions "$work\fresh"

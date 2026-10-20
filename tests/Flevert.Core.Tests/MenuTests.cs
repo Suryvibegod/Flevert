@@ -127,6 +127,52 @@ public sealed class MenuTests
     }
 
     [Fact]
+    public void An_operation_placed_in_the_pdf_tools_menu_gets_a_second_top_level_entry_with_its_own_entries()
+    {
+        new MenuInstaller(_registry, Exe, iconExists: _ => true).Install(
+            [new FakeOp("pdf.merge", "Merge PDFs", ".pdf"), new PlacedOp("pdf.flatten", "Flatten forms and comments", ".pdf")]);
+
+        var tools = @"SystemFileAssociations\.pdf\shell\Flevert.Tools";
+        Assert.Equal("Flevert PDF tools", _registry.GetValue(tools, "MUIVerb"));
+        Assert.Equal("Flevert.Menu.pdf.tools", _registry.GetValue(tools, "ExtendedSubCommandsKey"));
+        Assert.Equal("Player", _registry.GetValue(tools, "MultiSelectModel"));
+        Assert.Equal(@"""C:\Program Files\Flevert\icons\toolbox.ico"",0", _registry.GetValue(tools, "Icon"));
+        Assert.Equal(["Flatten forms and comments"], _registry.KeysUnder(@"Flevert.Menu.pdf.tools\shell").Select(k => _registry.GetValue(k, "MUIVerb")));
+        Assert.Equal(["Merge PDFs"], _registry.KeysUnder(@"Flevert.Menu.pdf\shell").Select(k => _registry.GetValue(k, "MUIVerb")));
+        Assert.Equal($"\"{Exe}\" run pdf.flatten \"%1\"", _registry.GetValue($@"{_registry.KeysUnder(@"Flevert.Menu.pdf.tools\shell")[0]}\command", ""));
+        // A type with no tool gets no second entry.
+        Assert.Null(_registry.GetValue(@"SystemFileAssociations\.jpg\shell\Flevert.Tools", "MUIVerb"));
+    }
+
+    [Fact]
+    public void The_second_menu_shows_flevert_s_own_icon_when_its_icon_is_missing()
+    {
+        Install(new PlacedOp("pdf.flatten", "Flatten forms and comments", ".pdf"));
+
+        Assert.Equal($"\"{Exe}\",0", _registry.GetValue(@"SystemFileAssociations\.pdf\shell\Flevert.Tools", "Icon"));
+    }
+
+    [Fact]
+    public void Uninstall_removes_both_menus_and_nothing_else()
+    {
+        _registry.SetValue(@"SystemFileAssociations\.pdf\shell\SomeoneElse", "MUIVerb", "Keep me");
+        Install(new FakeOp("pdf.merge", "Merge PDFs", ".pdf"), new PlacedOp("pdf.flatten", "Flatten forms and comments", ".pdf"));
+
+        new MenuInstaller(_registry, Exe).Uninstall();
+
+        Assert.Equal([@"SystemFileAssociations\.pdf\shell\SomeoneElse"], _registry.Snapshot().Keys);
+    }
+
+    [Fact]
+    public void An_operation_placed_in_a_menu_flevert_does_not_know_is_refused()
+    {
+        // Uninstall removes only the menus it knows (MenuCascade.All); another would be left behind.
+        var stray = new PlacedOp("pdf.flatten", "Flatten", ".pdf", new MenuCascade("Flevert.Other", "Other", ".other", null));
+
+        Assert.Throws<ArgumentException>(() => Install(stray));
+    }
+
+    [Fact]
     public void An_operation_without_a_menu_path_is_left_out_of_the_menu()
     {
         // A PDF tool the PDF tools window runs, or flevert.exe run, under its id.
@@ -480,6 +526,15 @@ public sealed class MenuTests
     }
 
     private void Install(params IMenuOperation[] ops) => new MenuInstaller(_registry, Exe).Install(ops);
+
+    private sealed class PlacedOp(string id, string menuPath, string extension, MenuCascade? cascade = null) : IOperation, IMenuPlacement
+    {
+        public string Id => id;
+        public string MenuPath => menuPath;
+        public MenuCascade Cascade => cascade ?? MenuCascade.PdfTools;
+        public IReadOnlyCollection<string> Extensions => [extension];
+        public Task<string> RunAsync(string inputPath, CancellationToken ct) => throw new NotSupportedException();
+    }
 
     private sealed class FakeOp(string id, string menuPath, params string[] extensions) : IOperation
     {

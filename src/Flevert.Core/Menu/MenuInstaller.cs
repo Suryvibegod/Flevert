@@ -39,24 +39,47 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath, Fu
                 throw new ArgumentException($"Icon name '{look.Icon}' must match {IconName()}.", nameof(looks));
         }
 
-        foreach (var ext in ops.SelectMany(op => op.Extensions).Distinct(StringComparer.OrdinalIgnoreCase))
-            MenuNode.Build(ops.Where(op => op.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase)));
+        foreach (var op in ops)
+        {
+            if (!MenuCascade.All.Contains(CascadeOf(op)))
+                throw new ArgumentException($"'{op.Id}' is in a menu Flevert does not know, so uninstall would not remove it.", nameof(operations));
+        }
+
+        foreach (var cascade in MenuCascade.All)
+        {
+            var inCascade = ops.Where(op => CascadeOf(op) == cascade).ToList();
+            foreach (var ext in inCascade.SelectMany(op => op.Extensions).Distinct(StringComparer.OrdinalIgnoreCase))
+                MenuNode.Build(inCascade.Where(op => op.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase)));
+        }
 
         Uninstall();
 
-        foreach (var ext in ops.SelectMany(op => op.Extensions).Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var cascade in MenuCascade.All)
         {
-            var menuKey = MenuKeyPrefix + ext;
-            var entry = $@"{Associations}\{ext}\shell\{Title}";
-            registry.SetValue(entry, "MUIVerb", Title);
-            registry.SetValue(entry, "Icon", $"\"{exePath}\",0");
-            registry.SetValue(entry, "ExtendedSubCommandsKey", menuKey);
-            registry.SetValue(entry, "MultiSelectModel", "Player");
+            var inCascade = ops.Where(op => CascadeOf(op) == cascade).ToList();
+            foreach (var ext in inCascade.SelectMany(op => op.Extensions).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var menuKey = MenuKeyPrefix + ext + cascade.KeySuffix;
+                var entry = $@"{Associations}\{ext}\shell\{cascade.Verb}";
+                registry.SetValue(entry, "MUIVerb", cascade.Title);
+                registry.SetValue(entry, "Icon", cascade.Icon is { } name && IconPath(name) is { } icon ? $"\"{icon}\",0" : $"\"{exePath}\",0");
+                registry.SetValue(entry, "ExtendedSubCommandsKey", menuKey);
+                registry.SetValue(entry, "MultiSelectModel", "Player");
 
-            var nodes = MenuNode.Build(ops.Where(op => op.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase)));
-            WriteMenu(menuKey, nodes);
-            WriteLooks(menuKey, nodes, looks);
+                var nodes = MenuNode.Build(inCascade.Where(op => op.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase)));
+                WriteMenu(menuKey, nodes);
+                WriteLooks(menuKey, nodes, looks);
+            }
         }
+    }
+
+    private static MenuCascade CascadeOf(IMenuOperation op) => op is IMenuPlacement placed ? placed.Cascade : MenuCascade.Main;
+
+    // The icon file beside flevert.exe, or null when it is missing (a development build without icons).
+    private string? IconPath(string name)
+    {
+        var icon = Path.Combine(Path.GetDirectoryName(exePath) ?? "", IconsFolder, name + ".ico");
+        return _iconExists(icon) ? icon : null;
     }
 
     // Only the top of the menu: a format in Convert to (JPG, PNG…) has no icon of its own, which would only clutter a long list.
@@ -72,8 +95,7 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath, Fu
                 continue;
             }
 
-            var icon = Path.Combine(Path.GetDirectoryName(exePath) ?? "", IconsFolder, look.Icon + ".ico");
-            if (_iconExists(icon))
+            if (IconPath(look.Icon) is { } icon)
                 registry.SetValue(verb, "Icon", $"\"{icon}\",0");
             if (previousGroup is { } group && group != look.Group)
                 registry.SetDword(verb, "CommandFlags", SeparatorBefore);
@@ -85,8 +107,11 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath, Fu
     {
         foreach (var ext in registry.SubKeyNames(Associations))
         {
-            if (registry.SubKeyNames($@"{Associations}\{ext}\shell").Contains(Title, StringComparer.OrdinalIgnoreCase))
-                registry.DeleteTree($@"{Associations}\{ext}\shell\{Title}");
+            foreach (var cascade in MenuCascade.All)
+            {
+                if (registry.SubKeyNames($@"{Associations}\{ext}\shell").Contains(cascade.Verb, StringComparer.OrdinalIgnoreCase))
+                    registry.DeleteTree($@"{Associations}\{ext}\shell\{cascade.Verb}");
+            }
         }
 
         foreach (var key in registry.SubKeyNames(""))

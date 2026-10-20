@@ -23,7 +23,6 @@ internal sealed class BatchUi : ApplicationContext
     private bool _checkAnswered; // set by the continuation itself: the task completes a moment before it runs
     private bool _askingQuestion;
     private bool _revealWhenAnswered;
-    private bool _endQuietly;
 
     private BatchUi(IMenuOperation operation, int pending, RunLog log,
         Func<IProgress<BatchProgress>, CancellationToken, Task<BatchOutcome>> batch, Task<UpdateFound?> update,
@@ -46,11 +45,7 @@ internal sealed class BatchUi : ApplicationContext
                 _revealWhenAnswered = false;
                 RevealLater(work!);
             }
-        }, () =>
-        {
-            _endQuietly = true;
-            _cancellation.Cancel();
-        }, _form.Retitle));
+        }));
         var progress = new Progress<BatchProgress>(report =>
         {
             _form.Report(report);
@@ -98,7 +93,7 @@ internal sealed class BatchUi : ApplicationContext
     /// <param name="batch">Runs the batch with the window's progress and Cancel: the runner over the leader's files, for
     /// either kind of operation.</param>
     /// <param name="update">The check for a new version started with the batch; asked about after it if it finds one in time.</param>
-    /// <param name="question">What the operation asks in a window (passwords, the PDF tool), shown on this window's
+    /// <param name="question">What the operation asks in a window (passwords, a watermark's text), shown on this window's
     /// thread; <c>null</c> when it asks nothing.</param>
     public static bool Run(IMenuOperation operation, int pending, RunLog log,
         Func<IProgress<BatchProgress>, CancellationToken, Task<BatchOutcome>> batch, Task<UpdateFound?> update,
@@ -113,17 +108,6 @@ internal sealed class BatchUi : ApplicationContext
 
     private void Finish(BatchOutcome outcome)
     {
-        if (_endQuietly)
-        {
-            // Cancel in the PDF tools window: nothing was done, and that is what the user asked for. No notification,
-            // no update question; a success for whoever started flevert.exe.
-            NoFailures = true;
-            _form.Finishing = true;
-            _form.Close();
-            ExitThread();
-            return;
-        }
-
         // Scheduled first: whatever fails below, the process still exits. BalloonTipClosed is not raised when the system
         // suppresses the balloon (e.g. Focus Assist), so the timer is also the normal way out in that case.
         var exit = new System.Windows.Forms.Timer { Interval = (int)NotificationLifetime.TotalMilliseconds };

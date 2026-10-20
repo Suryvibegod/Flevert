@@ -1,8 +1,8 @@
 using Flevert.Core;
 
 // TEMPORARY stand-in for src/Flevert.Pdf/PdfTools.cs of part B of v0.2.2 (branch v022-b, commit 581ce32): the same
-// public API and tool list, so the PDF tools window builds and runs before the tools are merged. Only Extract text
-// runs; the other tools fail with "not built yet". Delete this file when PdfTools.cs arrives.
+// public API and tool list, so the PDF tools menu builds and runs before the tools are merged. Only Extract text runs;
+// the other tools fail with "not built yet". Delete this file when PdfTools.cs arrives.
 namespace Flevert.Pdf;
 
 /// <summary>The headed groups of the PDF tools window (docs/specs/pdf.md, v0.2.2), in window order.</summary>
@@ -39,10 +39,8 @@ public static class PdfTools
     public const string OfTotalStyle = "1 / N";
     public const string WordsStyle = "Page 1 of N";
 
-    /// <summary>Option key of Add watermark: the text, required, at most <see cref="MaxWatermarkLength"/> characters.</summary>
+    /// <summary>Option key of Add watermark: the text, required, at most 100 characters.</summary>
     public const string Text = "text";
-
-    public const int MaxWatermarkLength = 100;
 
     private static readonly IReadOnlyList<string> Positions = [BottomCenter, BottomRight, TopRight];
     private static readonly IReadOnlyList<string> Styles = [NumberStyle, OfTotalStyle, WordsStyle];
@@ -62,7 +60,7 @@ public static class PdfTools
         new("pdf.split-25mb", "Split into parts under 25 MB", "Splits the PDF into parts for apps that take files up to 25 MB.", PdfToolGroup.Pages, "cut", []),
         new("pdf.watermark", "Add watermark", "Writes your text across every page to mark what a copy is for. It does not stop anyone from editing the PDF.",
             PdfToolGroup.AddToPages, "stamp",
-            [new(Text, "Text", PdfToolOptionKind.Text, [], "", MaxWatermarkLength)]),
+            [new(Text, "Text", PdfToolOptionKind.Text, [], "", 100)]),
         new("pdf.page-numbers", "Add page numbers", "Numbers every page, at the bottom or at the top right.", PdfToolGroup.AddToPages, "document_page_number",
             [
                 new(Position, "Position", PdfToolOptionKind.Choice, Positions, BottomCenter, 0),

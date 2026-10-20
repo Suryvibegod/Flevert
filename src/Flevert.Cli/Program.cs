@@ -42,8 +42,9 @@ internal static class Program
         if (command is PdfWorkerCommand)
             return PdfRenderWorker.Run(Console.OpenStandardInput(), Console.OpenStandardOutput());
 
-        // The PDF tools have no menu path: the menu installer leaves them out, and run finds them by id.
-        var catalog = new OperationCatalog([.. MenuOperations.All, .. PdfTools.Operations, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
+        // The PDF tools are in the menu (Flevert PDF tools) with their defaults; any the menu leaves out still runs by id.
+        var catalog = new OperationCatalog([.. MenuOperations.All, .. PdfTools.Operations.Where(tool => !MenuOperations.All.Any(op => op.Id == tool.Id)),
+            new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);
@@ -196,13 +197,12 @@ internal static class Program
             operation = asking = needsPassword.WithPrompt(passwords);
         }
 
-        // More PDF tools… asks once for the batch which tool to run; without windows it fails each file at once.
-        DialogPdfToolPrompt? toolPrompt = null;
-        PdfToolsOperation? choosing = null;
-        if (!headless && operation is PdfToolsOperation needsTool)
+        // Add watermark… asks for the text the same way; without windows it fails each file at once.
+        DialogWatermarkPrompt? watermarks = null;
+        if (!headless && operation is PdfWatermarkMenu needsText)
         {
-            toolPrompt = new DialogPdfToolPrompt(PdfTools.All, new PdfToolSettings(PdfToolSettings.DefaultPath));
-            operation = choosing = needsTool.WithPrompt(toolPrompt);
+            watermarks = new DialogWatermarkPrompt();
+            operation = needsText.WithPrompt(watermarks);
         }
 
         try
@@ -228,12 +228,11 @@ internal static class Program
             if (headless)
                 return batch(null, CancellationToken.None).GetAwaiter().GetResult().NoFailures ? Ok : SomeFilesFailed;
             // Alongside the batch, so it costs no time; asked about after the batch, if a newer version is out.
-            return BatchUi.Run(operation, leader.Pending, log, batch, UpdateOffer.Start(), (IBatchQuestion?)passwords ?? toolPrompt) ? Ok : SomeFilesFailed;
+            return BatchUi.Run(operation, leader.Pending, log, batch, UpdateOffer.Start(), (IBatchQuestion?)passwords ?? watermarks) ? Ok : SomeFilesFailed;
         }
         finally
         {
             asking?.Dispose(); // wipes the passwords it still holds
-            choosing?.Dispose();
             leader.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }

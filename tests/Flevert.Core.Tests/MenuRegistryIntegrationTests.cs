@@ -43,6 +43,33 @@ public sealed class MenuRegistryIntegrationTests : IDisposable
         Assert.Equal(0x20, second.GetValue("CommandFlags"));
     }
 
+    [Fact]
+    public void Install_and_uninstall_of_both_menus_leave_nothing_behind()
+    {
+        var installer = new MenuInstaller(_registry, @"C:\flevert.exe");
+
+        installer.Install([new DevCopy(), new ToolOp()]);
+        using (var tools = Registry.CurrentUser.OpenSubKey($@"{TestRoot}\SystemFileAssociations\.txt\shell\Flevert.Tools"))
+        {
+            Assert.NotNull(tools);
+            Assert.Equal("Flevert.Menu.txt.tools", tools.GetValue("ExtendedSubCommandsKey"));
+        }
+
+        installer.Uninstall();
+
+        // SystemFileAssociations itself is shared with other apps and stays.
+        Assert.DoesNotContain(AllKeyPaths(TestRoot), k => k.Contains("Flevert", StringComparison.OrdinalIgnoreCase) || k.Contains(".txt", StringComparison.Ordinal));
+    }
+
+    private sealed class ToolOp : IOperation, IMenuPlacement
+    {
+        public string Id => "dev.tool";
+        public string MenuPath => "Tool";
+        public MenuCascade Cascade => MenuCascade.PdfTools;
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+        public Task<string> RunAsync(string inputPath, CancellationToken ct) => throw new NotSupportedException();
+    }
+
     private sealed class OtherOp : IOperation
     {
         public string Id => "dev.other";

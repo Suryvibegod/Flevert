@@ -14,76 +14,108 @@ public sealed class PdfMenuTests
         new MenuInstaller(_registry, Exe, iconExists: _ => true).Install(MenuOperations.All, MenuOperations.Looks);
 
     [Fact]
-    public void A_pdf_gets_the_menu_of_v0_2_2_most_used_first_ending_with_more_pdf_tools()
+    public void A_pdf_gets_the_flevert_menu_of_v0_2_2_most_used_first()
     {
         Assert.Equal("Flevert.Menu.pdf", _registry.GetValue(@"SystemFileAssociations\.pdf\shell\Flevert", "ExtendedSubCommandsKey"));
         // docs/specs/pdf.md, v0.2.2, "Menu PDF".
         Assert.Equal(
-            ["Compress", "Merge PDFs", "Split into pages", "Convert to", "Rotate", "Protect with password", "Remove password", "Remove hidden info", "More PDF tools…"],
+            ["Compress", "Merge PDFs", "Split into pages", "Convert to", "Rotate", "Protect with password", "Remove password", "Remove hidden info"],
             Labels(@"Flevert.Menu.pdf\shell"));
-        Assert.Equal(
-            ["pdf.merge", "pdf.split", "pdf.protect", "pdf.unlock", "pdf.strip-metadata", "pdf.tools"],
-            _registry.Children(@"Flevert.Menu.pdf\shell")
-                .Select(verb => _registry.GetValue($@"{verb}\command", ""))
-                .OfType<string>()
-                .Select(Id));
+        Assert.Equal(["pdf.merge", "pdf.split", "pdf.protect", "pdf.unlock", "pdf.strip-metadata"], Commands(@"Flevert.Menu.pdf\shell"));
         Assert.Equal(["Smaller, same quality", "Smallest, for sharing"], Labels(@"Flevert.Menu.pdf\Compress\shell"));
         Assert.Equal(["pdf.compress", "pdf.compress-sharing"], Commands(@"Flevert.Menu.pdf\Compress\shell"));
-        Assert.Equal(["JPG images", "PNG images"], Labels(@"Flevert.Menu.pdf\Convert to\shell"));
-        Assert.Equal(["pdf.to-jpg", "pdf.to-png"], Commands(@"Flevert.Menu.pdf\Convert to\shell"));
+        Assert.Equal(["JPG images", "PNG images", "Text"], Labels(@"Flevert.Menu.pdf\Convert to\shell"));
+        Assert.Equal(["pdf.to-jpg", "pdf.to-png", "pdf.extract-text"], Commands(@"Flevert.Menu.pdf\Convert to\shell"));
         Assert.Equal(["Right 90°", "Left 90°", "180°"], Labels(@"Flevert.Menu.pdf\Rotate\shell"));
         Assert.Equal(["pdf.rotate-right", "pdf.rotate-left", "pdf.rotate-180"], Commands(@"Flevert.Menu.pdf\Rotate\shell"));
-        // All 16 entries Explorer shows.
+        // All 16 entries Explorer shows of one cascade.
         Assert.Equal(16, CountEntries(@"Flevert.Menu.pdf\shell"));
     }
 
     [Fact]
-    public void Extract_text_and_the_pdf_tools_stay_out_of_the_menu_but_flevert_can_run_them_by_id()
+    public void A_pdf_gets_a_second_menu_flevert_pdf_tools_with_its_own_entries()
     {
-        // docs/specs/pdf.md, v0.2.2: Convert > Text moved into the PDF tools window, under the same id.
-        var inMenu = _registry.ValuesUnder("Flevert.Menu.pdf").Where(v => v.StartsWith($"\"{Exe}\" run ", StringComparison.Ordinal)).Select(Id).ToList();
-        foreach (var tool in PdfTools.All)
-        {
-            Assert.DoesNotContain(tool.OperationId, inMenu);
-            Assert.Single(Catalog, op => op.Id == tool.OperationId);
-        }
+        // Explorer's 16 entries are per cascade: the tools have a top-level entry of their own beside Flevert.
+        var entry = @"SystemFileAssociations\.pdf\shell\Flevert.Tools";
+        Assert.Equal("Flevert PDF tools", _registry.GetValue(entry, "MUIVerb"));
+        Assert.Equal("Flevert.Menu.pdf.tools", _registry.GetValue(entry, "ExtendedSubCommandsKey"));
+        Assert.Equal("Player", _registry.GetValue(entry, "MultiSelectModel"));
+        Assert.Equal(@"""C:\Program Files\Flevert\icons\toolbox.ico"",0", _registry.GetValue(entry, "Icon"));
 
-        Assert.Contains("pdf.extract-text", PdfTools.All.Select(t => t.OperationId));
-        Assert.Equal(Catalog.Count, Catalog.Select(op => op.Id).Distinct().Count());
+        Assert.Equal(
+            ["Remove blank pages", "Add page numbers", "Add watermark…", "Print layout", "Fit pages to A4", "Flatten forms and comments", "Split by size", "Extract images"],
+            Labels(@"Flevert.Menu.pdf.tools\shell"));
+        Assert.Equal(
+            ["pdf.remove-blank-pages", "pdf.page-numbers", "pdf.watermark", "pdf.fit-a4", "pdf.flatten", "pdf.extract-images"],
+            Commands(@"Flevert.Menu.pdf.tools\shell"));
+        Assert.Equal(["2 pages per sheet", "4 pages per sheet"], Labels(@"Flevert.Menu.pdf.tools\Print layout\shell"));
+        Assert.Equal(["pdf.n-up-2", "pdf.n-up-4"], Commands(@"Flevert.Menu.pdf.tools\Print layout\shell"));
+        Assert.Equal(["Under 10 MB", "Under 25 MB"], Labels(@"Flevert.Menu.pdf.tools\Split by size\shell"));
+        Assert.Equal(["pdf.split-10mb", "pdf.split-25mb"], Commands(@"Flevert.Menu.pdf.tools\Split by size\shell"));
+        Assert.Equal(12, CountEntries(@"Flevert.Menu.pdf.tools\shell"));
     }
 
     [Fact]
-    public void Every_entry_at_the_top_of_a_menu_has_an_icon_and_formats_have_none()
+    public void Only_a_pdf_gets_the_second_menu()
     {
-        foreach (var extension in MenuOperations.All.SelectMany(op => op.Extensions).Distinct())
+        foreach (var extension in ImageFile.ReadableExtensions)
+            Assert.Null(_registry.GetValue($@"SystemFileAssociations\{extension}\shell\Flevert.Tools", "MUIVerb"));
+    }
+
+    [Fact]
+    public void Every_pdf_tool_is_in_a_menu_and_flevert_runs_each_id_once()
+    {
+        var inMenus = _registry.ValuesUnder("Flevert.Menu.pdf").Concat(_registry.ValuesUnder("Flevert.Menu.pdf.tools")).Where(v => v.StartsWith($"\"{Exe}\" run ", StringComparison.Ordinal)).Select(Id).ToList();
+        foreach (var tool in PdfTools.All)
         {
-            foreach (var verb in _registry.Children($@"Flevert.Menu{extension}\shell"))
+            Assert.Contains(tool.OperationId, inMenus);
+            Assert.Single(Catalog, op => op.Id == tool.OperationId);
+        }
+    }
+
+    [Fact]
+    public void Add_page_numbers_from_the_menu_writes_them_at_the_bottom_centre_as_1_of_n()
+    {
+        Assert.Equal(PdfTools.BottomCenter, PdfToolMenu.PageNumbers[PdfTools.Position]);
+        Assert.Equal(PdfTools.OfTotalStyle, PdfToolMenu.PageNumbers[PdfTools.Style]);
+        // The choices the tool takes.
+        var numbers = PdfTools.All.Single(t => t.OperationId == "pdf.page-numbers");
+        Assert.All(PdfToolMenu.PageNumbers, option => Assert.Contains(option.Value, numbers.Options.Single(o => o.Key == option.Key).Choices));
+    }
+
+    [Fact]
+    public void Every_entry_at_the_top_of_a_menu_has_an_icon_and_the_choices_inside_have_none()
+    {
+        foreach (var menu in _registry.SubKeyNames("").Where(key => key.StartsWith("Flevert.Menu", StringComparison.Ordinal) && !key.Contains('\\', StringComparison.Ordinal)))
+        {
+            foreach (var verb in _registry.Children($@"{menu}\shell"))
             {
                 var label = _registry.GetValue(verb, "MUIVerb");
                 Assert.True(_registry.GetValue(verb, "Icon") is { } icon && icon.StartsWith(@"""C:\Program Files\Flevert\icons\", StringComparison.Ordinal),
-                    $"{extension}: {label} has no icon");
+                    $"{menu}: {label} has no icon");
                 if (_registry.GetValue(verb, "ExtendedSubCommandsKey") is { } submenu)
-                    Assert.All(_registry.Children($@"{submenu}\shell"), format => Assert.Null(_registry.GetValue(format, "Icon")));
+                    Assert.All(_registry.Children($@"{submenu}\shell"), choice => Assert.Null(_registry.GetValue(choice, "Icon")));
             }
         }
     }
 
     [Fact]
-    public void Every_icon_the_menu_and_the_pdf_tools_name_is_built_beside_flevert()
+    public void Every_icon_the_menus_name_is_built_beside_flevert()
     {
         // The build copies assets/menu/*.ico into icons\ beside flevert.exe, and the installer packs that folder.
         var icons = Path.Combine(Path.GetDirectoryName(TestPdf.FlevertExe)!, MenuInstaller.IconsFolder);
-        foreach (var name in MenuOperations.Looks.Values.Select(look => look.Icon).Concat(PdfTools.All.Select(tool => PdfToolPicker.IconFile(tool.Icon))).Append("document"))
+        foreach (var name in MenuOperations.Looks.Values.Select(look => look.Icon).Concat(MenuCascade.All.Select(c => c.Icon).OfType<string>()))
             Assert.True(File.Exists(Path.Combine(icons, name + ".ico")), $"{name}.ico is not in assets/menu");
     }
 
     [Fact]
-    public void Separators_split_the_pdf_menu_into_converting_protecting_and_more_and_the_image_menu_before_remove_hidden_info()
+    public void Separators_group_the_entries_of_each_menu()
     {
         // ECF_SEPARATORBEFORE; separators do not count toward Explorer's 16 entries (measured with MenuProbe).
-        Assert.Equal(["Protect with password", "More PDF tools…"], SeparatedBefore(".pdf"));
-        Assert.Equal(["Remove hidden info"], SeparatedBefore(".jpg"));
-        Assert.Equal(["Remove hidden info"], SeparatedBefore(".heic"));
+        Assert.Equal(["Protect with password"], SeparatedBefore("Flevert.Menu.pdf"));
+        Assert.Equal(["Print layout", "Extract images"], SeparatedBefore("Flevert.Menu.pdf.tools"));
+        Assert.Equal(["Remove hidden info"], SeparatedBefore("Flevert.Menu.jpg"));
+        Assert.Equal(["Remove hidden info"], SeparatedBefore("Flevert.Menu.heic"));
     }
 
     [Fact]
@@ -96,15 +128,15 @@ public sealed class PdfMenuTests
     }
 
     [Fact]
-    public void No_file_type_gets_more_menu_entries_than_explorer_shows()
+    public void No_menu_gets_more_entries_than_explorer_shows()
     {
         // Seen on Windows 11 with MenuProbe: Explorer shows at most 16 entries of a static cascade, submenus and the
         // commands in them all counted, and silently drops the rest (Remove metadata vanished from HEIC when Combine into
-        // PDF made its 17th entry).
-        foreach (var extension in MenuOperations.All.SelectMany(op => op.Extensions).Distinct())
+        // PDF made its 17th entry). Each top-level entry (Flevert, Flevert PDF tools) has its own 16.
+        foreach (var menu in _registry.SubKeyNames("").Where(key => key.StartsWith("Flevert.Menu", StringComparison.Ordinal)))
         {
-            var entries = CountEntries($@"Flevert.Menu{extension}\shell");
-            Assert.True(entries <= 16, $"{extension}: {entries} entries in the Flevert menu");
+            var entries = CountEntries($@"{menu}\shell");
+            Assert.True(entries <= 16, $"{menu}: {entries} entries");
         }
     }
 
@@ -139,16 +171,17 @@ public sealed class PdfMenuTests
         Assert.Equal(16, CountEntries(@"Flevert.Menu.heic\shell"));
     }
 
-    // What flevert.exe can run (Program): the menu's operations and the PDF tools.
-    private static List<IMenuOperation> Catalog => [.. MenuOperations.All, .. PdfTools.Operations];
+    // What flevert.exe can run (Program): the menus' operations and any PDF tool they leave out.
+    private static List<IMenuOperation> Catalog =>
+        [.. MenuOperations.All, .. PdfTools.Operations.Where(tool => !MenuOperations.All.Any(op => op.Id == tool.Id))];
 
     private static string Id(string command) => command[$"\"{Exe}\" run ".Length..].Split(' ')[0];
 
     private string[] Commands(string shellKey) =>
-        [.. _registry.Children(shellKey).Select(verb => Id(_registry.GetValue($@"{verb}\command", "")!))];
+        [.. _registry.Children(shellKey).Select(verb => _registry.GetValue($@"{verb}\command", "")).OfType<string>().Select(Id)];
 
-    private string[] SeparatedBefore(string extension) =>
-        [.. _registry.Children($@"Flevert.Menu{extension}\shell")
+    private string[] SeparatedBefore(string menuKey) =>
+        [.. _registry.Children($@"{menuKey}\shell")
             .Where(verb => _registry.GetValue(verb, "CommandFlags") == "32")
             .Select(verb => _registry.GetValue(verb, "MUIVerb")!)];
 

@@ -53,9 +53,6 @@ internal sealed class ProgressForm : Form
         CancelButton = _cancel;
     }
 
-    /// <summary>Names the window after what the batch does, once that is known (the tool chosen in the PDF tools window).</summary>
-    public void Retitle(string title) => Text = $"Flevert — {title}";
-
     /// <summary>Set before the batch closes the window itself, so only a user close counts as Cancel.</summary>
     [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool Finishing { get; set; }

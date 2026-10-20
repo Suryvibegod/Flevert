@@ -100,13 +100,12 @@ Source: "{#SourceDir}\Magick.Native-*.dll"; DestDir: "{code:InstallFolder}"; Fla
 Type: files; Name: "{app}\mscordaccore_amd64_amd64_*.dll"
 
 [UninstallDelete]
-; What flevert.exe writes under %LOCALAPPDATA%\Flevert: logs, batch keys, the ImageMagick policy, the update check and
-; the PDF tool chosen last. Named one by one, so files someone else keeps in a folder of the same name survive.
+; What flevert.exe writes under %LOCALAPPDATA%\Flevert: logs, batch keys and the ImageMagick policy. Named one by one,
+; so files someone else keeps in a folder of the same name survive.
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\logs"
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\pipes"
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\magick"
 Type: filesandordirs; Name: "{localappdata}\{#AppName}\update"
-Type: filesandordirs; Name: "{localappdata}\{#AppName}\settings"
 Type: dirifempty; Name: "{localappdata}\{#AppName}"
 ; Inno removes only folders it created; this also removes an empty install folder that existed before.
 Type: dirifempty; Name: "{app}"
@@ -525,9 +524,11 @@ begin
     for I := 0 to GetArrayLength(Names) - 1 do
     begin
       Ext := Classes + '\SystemFileAssociations\' + Names[I];
-      if RegKeyExists(HKCU, Ext + '\shell\{#AppName}') then
+      // The Flevert menu, and the second one PDFs have (Flevert PDF tools).
+      if RegKeyExists(HKCU, Ext + '\shell\{#AppName}') or RegKeyExists(HKCU, Ext + '\shell\{#AppName}.Tools') then
       begin
         RegDeleteKeyIncludingSubkeys(HKCU, Ext + '\shell\{#AppName}');
+        RegDeleteKeyIncludingSubkeys(HKCU, Ext + '\shell\{#AppName}.Tools');
         RegDeleteKeyIfEmpty(HKCU, Ext + '\shell');
         RegDeleteKeyIfEmpty(HKCU, Ext);
       end;

@@ -3,8 +3,8 @@ using Flevert.Core;
 namespace Flevert.Pdf;
 
 /// <summary>
-/// <c>Extract text</c> (docs/specs/pdf.md, P3; in the PDF tools window since v0.2.2): writes <c>&lt;name&gt;.txt</c>
-/// beside the PDF with the text of every page, in the order pdfium reads it: UTF-8 with a byte order mark (older Notepad then reads Vietnamese right), lines
+/// <c>Convert to/Text</c> (docs/specs/pdf.md, P3): writes <c>&lt;name&gt;.txt</c> beside the PDF with the text of every
+/// page, in the order pdfium reads it: UTF-8 with a byte order mark (older Notepad then reads Vietnamese right), lines
 /// ended by <c>\r\n</c>, and a form feed between pages. A PDF with no text at all, a scan, is skipped: Flevert does not
 /// recognise text in pictures.
 /// </summary>
@@ -26,8 +26,7 @@ public sealed class PdfExtractText : IOperation
 
     public string Id => "pdf.extract-text";
 
-    /// <summary>Not in the right-click menu since v0.2.2: the PDF tools window runs it (Extract text), under the same id.</summary>
-    public string MenuPath => "";
+    public string MenuPath => "Convert to/Text";
 
     public IReadOnlyCollection<string> Extensions { get; } = [".pdf"];
 

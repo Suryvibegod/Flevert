@@ -53,7 +53,7 @@ if (Get-ItemProperty -LiteralPath $k -Name Flevert -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{8B7A3F52-2C64-4F0B-9E3D-5A1C7E2B9D40}_is1' -ErrorAction SilentlyContinue
 # The program, its logs and settings (rmdir removes a junction itself, never what it points to)
 cmd /d /c 'rmdir /s /q "%LOCALAPPDATA%\Programs\Flevert" 2>nul'
-cmd /d /c 'for %d in (logs pipes magick update settings) do @rmdir /s /q "%LOCALAPPDATA%\Flevert\%d" 2>nul'
+cmd /d /c 'for %d in (logs pipes magick update) do @rmdir /s /q "%LOCALAPPDATA%\Flevert\%d" 2>nul'
 cmd /d /c 'rmdir "%LOCALAPPDATA%\Flevert" 2>nul'
 if (Test-Path -LiteralPath "$env:LOCALAPPDATA\Programs\Flevert") { 'Not fully removed: wait for any conversion to finish, then run these lines again.' }
 ```
