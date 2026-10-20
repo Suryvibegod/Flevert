@@ -102,10 +102,13 @@ for STAGE in $STAGES; do
     fi
     cp -L "$archive" "$WORK/source/libraries/$STAGE.tar.xz"
     # Licence files anywhere in the library's source: at its top, and those of the code it bundles (vendored Rust
-    # crates, third_party/ and subprojects/ folders), which are linked into ffmpeg too (doubt-driven review, DD-6).
-    # Never from its history or its test data.
-    mapfile -t licences < <(tar -tJf "$archive" | grep -iE '(^|/)(COPYING|COPYRIGHT|LICEN[CS]E|NOTICE|UNLICENSE)[^/]*$' \
-        | grep -viE '/\.git/|/(tests?|testdata|test-data)/' || true)
+    # crates, third_party/ and subprojects/ folders), which are linked into ffmpeg too (doubt-driven review, DD-6); the
+    # texts of a LICENSES/ folder (the REUSE layout) and FreeType's, which its LICENSE.TXT only points to (re-check
+    # review, RC-4). Never source files named so (notice.c, license.rs), nor the library's history or test data.
+    mapfile -t licences < <(tar -tJf "$archive" \
+        | grep -iE '(^|/)(COPYING|COPYRIGHT|LICEN[CS]E|NOTICE|UNLICENSE)[^/]*$|(^|/)LICEN[CS]ES/[^/]+$|(^|/)docs/(FTL|GPLv2)\.TXT$' \
+        | grep -viE '/\.git/|/(tests?|testdata|test-data)/|\.(c|cc|cpp|cxx|h|hh|hpp|rs|py|js|ts|go|java|m|mm|s|asm|pl|rb|sh|cmake|am|ac|in)$' \
+        || true)
     if [[ ${#licences[@]} -eq 0 ]]; then
         # Some keep their licence only in their source files' headers (nv-codec-headers): a person reads those.
         missing+=("$STAGE")

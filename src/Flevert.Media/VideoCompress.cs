@@ -67,7 +67,7 @@ public sealed class VideoCompress : IOperation
         return await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
         {
             await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", info.Duration, MediaJob.MaxOutputBytes(inputPath, estimate, desired),
-                MediaJob.Percent(progress), token, VideoEncoding.Slowness(video)).ConfigureAwait(false);
+                MediaJob.Percent(progress), token, VideoEncoding.Slowness(video), VideoEncoding.DecoderThreads, boundTime: true).ConfigureAwait(false);
             // Thrown before the output is committed: WriteAtomicallyAsync deletes the temporary file.
             var outputBytes = new FileInfo(temp).Length;
             if (outputBytes >= inputBytes)
@@ -184,10 +184,11 @@ public sealed class VideoCompressUnder : IOperation
             var log = Path.Combine(passes, "x264");
             // The same frames in both passes (FrameTimes), or the statistics of the first do not fit the second.
             string[] picture =
-                [.. VideoEncoding.Filters(video, size), .. VideoEncoding.FrameTimes, "-c:v", "libx264", "-preset", "medium", "-passlogfile", log];
+                [.. VideoEncoding.Filters(video, size), .. VideoEncoding.FrameTimes, "-c:v", "libx264", "-preset", "medium", .. VideoEncoding.EncoderThreads,
+                    "-passlogfile", log];
             // The first pass only measures the picture: no sound, nothing written.
             await _ffmpeg.EncodeAsync(inputPath, ["-map", $"0:{video.Index}", .. picture, "-b:v", Kbps(budget.VideoKbps), "-pass", "1"], null, "null",
-                info.Duration, 0, MediaJob.Percent(progress, 0, 0.5), ct, slowness).ConfigureAwait(false);
+                info.Duration, 0, MediaJob.Percent(progress, 0, 0.5), ct, slowness, VideoEncoding.DecoderThreads, boundTime: true).ConfigureAwait(false);
             // One for every attempt, so a retry does not take the bar back from 100 % to 50 %.
             var secondHalf = MediaJob.Percent(progress, 0.5, 1);
             return await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
@@ -204,7 +205,7 @@ public sealed class VideoCompressUnder : IOperation
                     // -fs at the limit: an output that reaches it is too large anyway (EncodeAsync reports it).
                     try
                     {
-                        await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", info.Duration, LimitBytes, secondHalf, token, slowness)
+                        await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", info.Duration, LimitBytes, secondHalf, token, slowness, VideoEncoding.DecoderThreads, boundTime: true)
                             .ConfigureAwait(false);
                         if (new FileInfo(temp).Length is var written && written < LimitBytes)
                         {

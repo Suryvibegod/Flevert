@@ -64,7 +64,7 @@ public sealed class VideoToGif : IOperation
         ];
         var output = await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _ffmpeg.EncodeAsync(
             inputPath, options, temp, "gif", duration, MediaJob.MaxOutputBytes(inputPath, estimate, desired), MediaJob.Percent(progress), token,
-            VideoEncoding.Slowness(video)), ct)
+            VideoEncoding.Slowness(video), VideoEncoding.DecoderThreads, boundTime: true), ct)
             .ConfigureAwait(false);
         if (cut)
             OutputNote.Add(FirstSecondsNote);

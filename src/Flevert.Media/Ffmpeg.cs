@@ -132,17 +132,24 @@ public sealed class Ffmpeg
     /// <param name="maxOutputBytes">ffmpeg stops writing past this (<c>-fs</c>); an output that reached it is an error.</param>
     /// <param name="slowness">How many times the duration the pass may take, beyond its minute (<see cref="TimeoutFor"/>).</param>
     /// <exception cref="MediaException">ffmpeg failed, took longer than <see cref="TimeoutFor"/>, or the output reached <paramref name="maxOutputBytes"/>.</exception>
+    /// <param name="decoding">Options for the input, before it (the decoder's thread count).</param>
+    /// <param name="boundTime">Stop at <see cref="MaxTime"/>: for a video encode, where x264's statistics and the time grow
+    /// with every frame. Sound and stream copies need not: <paramref name="maxOutputBytes"/> bounds them, and a raw AAC or
+    /// several recordings joined have a duration ffprobe only estimates.</param>
     internal async Task EncodeAsync(
         string inputPath, IEnumerable<string> options, string? outputPath, string format, TimeSpan duration, long maxOutputBytes,
-        IProgress<double>? progress, CancellationToken ct, double slowness = DefaultSlowness)
+        IProgress<double>? progress, CancellationToken ct, double slowness = DefaultSlowness, IEnumerable<string>? decoding = null,
+        bool boundTime = false)
     {
         RequireTool(FfmpegPath);
+        var maxTime = MaxTime(duration, new FileInfo(inputPath).Length);
         // -n: never overwrite (the temporary output does not exist yet); -progress: key=value lines on stdout. -t before
         // the operation's options, which may shorten it (GIF).
         string[] arguments =
         [
-            "-hide_banner", "-nostdin", "-nostats", "-v", "error", "-n", "-progress", "pipe:1",
-            .. InputOptions(inputPath), "-t", MaxSeconds(duration), .. options,
+            "-hide_banner", "-nostdin", "-nostats", "-v", "error", "-n", "-progress", "pipe:1", .. decoding ?? [],
+            .. InputOptions(inputPath),
+            .. boundTime ? (string[])["-t", maxTime.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture)] : [], .. options,
             .. outputPath is null ? (string[])["-f", format, "-"] : ["-fs", maxOutputBytes.ToString(CultureInfo.InvariantCulture), "-f", format, FileUrl(outputPath)],
         ];
         var reader = new ProgressReader(duration, progress);
@@ -159,6 +166,12 @@ public sealed class Ffmpeg
         RequireMemory(run, "ffmpeg");
         if (run.ExitCode != 0)
             throw new MediaException(MediaException.ToolFailedMessage, new FfmpegException("ffmpeg", run.ExitCode, Detail(run)));
+        // Stopped by -t: the file holds more than it says, and a cut output must never pass for the whole (RC-1).
+        if (boundTime && reader.LastTime >= maxTime - TimeSpan.FromSeconds(0.5))
+        {
+            throw new MediaException(MediaException.LongerThanItSaysMessage,
+                new FfmpegException("ffmpeg", run.ExitCode, $"stopped at {maxTime.TotalSeconds:0.#} s; the file says {duration.TotalSeconds:0.#} s"));
+        }
         if (outputPath is not null && new FileInfo(outputPath) is var written && (!written.Exists || written.Length >= maxOutputBytes))
         {
             throw new MediaException(written.Exists ? MediaException.TooBigOutputMessage : MediaException.ToolFailedMessage,
@@ -167,19 +180,25 @@ public sealed class Ffmpeg
     }
 
     /// <summary>
-    /// How much of the input an output may hold (<c>-t</c>): the duration ffprobe read, which a file can understate (a
-    /// FLAC's header can say 2 s for an hour of sound), plus half and 10 s, since a VBR MP3 without a header only has an
-    /// estimate. Past it ffmpeg stops, so neither the output, nor x264's statistics, nor the time can grow with what the
-    /// file hides beyond what was checked (security review, SEC-1).
+    /// How much of the input a video encode may take in (<c>-t</c>), so neither x264's statistics nor the time grow with
+    /// what a file hides beyond what was checked (security review, SEC-1). The duration ffprobe read plus half and 10 s,
+    /// or as long as the file's bytes last at 8 kbit/s, whichever is longer: ffprobe estimates the length of joined MPEG-TS
+    /// recordings from the first (50 s read as 20 s), and a real file must never be cut (re-check review, RC-1). No video
+    /// with its sound comes near 8 kbit/s; a file that holds more stops there, and fails
+    /// (<see cref="MediaException.LongerThanItSaysMessage"/>) rather than pass a cut output for the whole.
     /// </summary>
-    internal static string MaxSeconds(TimeSpan duration) =>
-        (duration.TotalSeconds * 1.5 + 10).ToString("0.###", CultureInfo.InvariantCulture);
+    internal static TimeSpan MaxTime(TimeSpan duration, long inputBytes) =>
+        TimeSpan.FromSeconds(Math.Max(duration.TotalSeconds * 1.5 + 10, inputBytes * 8.0 / 8_000));
 
     /// <summary>
     /// The longest one pass may take: <paramref name="slowness"/> times the duration, plus a minute. Six by default
     /// (docs/specs/media.md: a slow machine encodes 1080p with preset medium at 1–2 times real time); VP9 is slower.
     /// </summary>
-    public static TimeSpan TimeoutFor(TimeSpan duration, double slowness = DefaultSlowness) => duration * slowness + TimeSpan.FromMinutes(1);
+    public static TimeSpan TimeoutFor(TimeSpan duration, double slowness = DefaultSlowness) =>
+        // Never more than two days: a crafted header (12 hours of 8K) would otherwise wait for weeks (RC-5).
+        TimeSpan.FromTicks(Math.Min((duration * slowness + TimeSpan.FromMinutes(1)).Ticks, MaxTimeout.Ticks));
+
+    internal static readonly TimeSpan MaxTimeout = TimeSpan.FromDays(2);
 
     internal const double DefaultSlowness = 6;
 
@@ -222,17 +241,28 @@ public sealed class Ffmpeg
     {
         private double _last = -1;
 
+        /// <summary>How far into the output ffmpeg last said it was.</summary>
+        public TimeSpan LastTime { get; private set; }
+
         public void OnLine(string line)
         {
-            if (progress is null)
-                return;
             double done;
             if (line == "progress=end")
+            {
                 done = 1;
+            }
             else if (line.StartsWith("out_time_us=", StringComparison.Ordinal)
                      && long.TryParse(line.AsSpan("out_time_us=".Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out var us) && us >= 0)
+            {
+                LastTime = TimeSpan.FromMicroseconds(us);
                 done = Math.Clamp(us / (duration.TotalMilliseconds * 1000), 0, 1);
+            }
             else
+            {
+                return;
+            }
+
+            if (progress is null)
                 return;
             // Never backwards: a stream ffmpeg starts late can report an earlier time for a moment.
             if (done <= _last)

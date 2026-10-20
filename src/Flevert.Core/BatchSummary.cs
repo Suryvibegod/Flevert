@@ -101,6 +101,7 @@ public sealed record BatchSummary(string Text, bool HasFailures, bool ShowsLog)
     /// </summary>
     public static string SizeText(long bytes) => bytes switch
     {
+        < 1_000 => "<1 KB",
         < 1_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1_000} KB"),
         < 100_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 100_000 / 10.0:0.#} MB"),
         < 1_000_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1_000_000} MB"),

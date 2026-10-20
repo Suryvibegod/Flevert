@@ -70,7 +70,7 @@ public sealed class VideoStripMetadata : IOperation
         MediaJob.RequireSpace(desired, inputBytes);
         string[] options =
         [
-            .. VideoEncoding.Maps(info, audio), "-c", "copy", .. video.Codec == "h264" ? DropSei : [],
+            .. VideoEncoding.Maps(info, audio), "-c", "copy", .. video.Codec == "h264" && Avchd.Contains(extension) ? DropSei : [],
             "-map_metadata", "-1", "-map_chapters", "-1",
             .. info.Tags.TryGetValue("creation_time", out var date) && date.Length > 0 && !date.Contains('\0', StringComparison.Ordinal)
                 ? (string[])["-metadata", $"creation_time={date}"]
@@ -84,12 +84,16 @@ public sealed class VideoStripMetadata : IOperation
     }
 
     /// <summary>
-    /// H.264's SEI messages: what decoding does not need, and where an encoder signs its settings and AVCHD camcorders
-    /// keep the camera, the time and, with GPS, the place (Sony and Panasonic's "MDPM"), none of which ffprobe shows as
-    /// tags (security review, SEC-2). The pictures decode the same without them; the packets are no longer byte for
-    /// byte the input's. HEVC keeps its SEI: it carries the HDR mastering data, and phones do not put places there.
+    /// H.264's SEI messages, where AVCHD camcorders keep the camera, the time and, with GPS, the place (Sony and
+    /// Panasonic's "MDPM"), none of which ffprobe shows as tags (security review, SEC-2). ffmpeg can only drop them all,
+    /// and with them the recovery points a stream without keyframes (a dashcam's intra refresh) is seeked by (re-check
+    /// review, RC-3): so only for AVCHD, whose streams have keyframes. Pictures decoded from the start are the same;
+    /// the packets are no longer byte for byte the input's. Elsewhere, and in HEVC (whose SEI holds the HDR mastering
+    /// data), the stream is copied whole.
     /// </summary>
     private static readonly string[] DropSei = ["-bsf:v", "filter_units=remove_types=6"];
+
+    private static readonly HashSet<string> Avchd = new(StringComparer.OrdinalIgnoreCase) { ".mts", ".m2ts" };
 
     // Containers and streams that can hold what ffprobe does not show as tags: XMP and makers' own boxes in MOV and MP4
     // (a dashcam's GPS track), an AVCHD camcorder's data in its H.264 stream. Such a file always gets its copy, rather

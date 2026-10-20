@@ -36,8 +36,11 @@ public sealed class MediaException : Exception
     internal const string NeedsTooMuchMemoryMessage =
         "This file needs more memory than Flevert allows its video tool (4 GB): it is too large, or made to exhaust memory.";
 
+    internal const string LongerThanItSaysMessage =
+        "This file holds far more than its header says, so Flevert stopped: it may be damaged, or made to fill the disk.";
+
     internal const string TooBigOutputMessage =
-        "The converted file would be far larger than expected for this file, so Flevert stopped: the file may be damaged.";
+        "The converted file grew far larger than expected, or than the free disk space allows, so Flevert stopped: the file may be damaged.";
 
     internal static string NotEnoughSpaceMessage(long neededBytes) => string.Create(CultureInfo.InvariantCulture,
         $"Not enough free disk space: converting this file needs about {Math.Ceiling(neededBytes / 1_000_000.0):0} MB.");

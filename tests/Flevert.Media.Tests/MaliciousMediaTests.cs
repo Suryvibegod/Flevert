@@ -151,10 +151,10 @@ public sealed class MaliciousMediaTests : IDisposable
     }
 
     [Fact]
-    public async Task A_file_holding_far_more_than_its_header_claims_stops_soon_after_the_claimed_length()
+    public async Task A_sound_file_holding_far_more_than_its_header_claims_converts_whole_within_the_size_limit()
     {
-        // A FLAC whose STREAMINFO says 2 s over 60 s of sound: ffprobe reads 2 s, which the space check and the size
-        // limit are computed from (security review, SEC-1). ffmpeg stops at 1.5 times that plus 10 s.
+        // A FLAC whose STREAMINFO says 2 s over 60 s of sound: ffprobe reads 2 s. Sound is never cut by time (a raw AAC's
+        // length is only an estimate, RC-1); -fs, at most the free disk, bounds what it can write (SEC-1).
         var input = _dir.Combine("short.flac");
         await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100:duration=60", "-c:a", "flac", "-f", "flac", input);
         var bytes = await File.ReadAllBytesAsync(input);
@@ -168,8 +168,28 @@ public sealed class MaliciousMediaTests : IDisposable
 
         var output = await Op("audio.to-wav").RunAsync(input, CancellationToken.None);
 
-        var seconds = (await TestFfmpeg.Instance.ProbeAsync(output, CancellationToken.None)).Duration.TotalSeconds;
-        Assert.InRange(seconds, 12, 13.1);
+        Assert.Equal(60, (await TestFfmpeg.Instance.ProbeAsync(output, CancellationToken.None)).Duration.TotalSeconds, 0);
+    }
+
+    [Fact]
+    public async Task A_video_encode_stopped_at_its_time_bound_fails_rather_than_pass_a_cut_output_for_the_whole()
+    {
+        // ffmpeg says it got as far as the bound (as it does when -t stops it): the file held more than it claimed.
+        var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mp4");
+        var output = _dir.Combine("out.partial");
+        var bound = Ffmpeg.MaxTime(TimeSpan.FromSeconds(4), new FileInfo(input).Length);
+        var stopped = new Ffmpeg(TestFfmpeg.Instance.FfmpegPath, TestFfmpeg.Instance.FfprobePath, async (tool, arguments, timeout, line, ct) =>
+        {
+            var run = await TestFfmpeg.Instance.Run(tool, arguments, timeout, line, ct);
+            line?.Invoke($"out_time_us={(long)bound.TotalMicroseconds}");
+            return run;
+        });
+
+        var e = await Assert.ThrowsAsync<MediaException>(() => stopped.EncodeAsync(
+            input, ["-c:v", "libx264", "-preset", "ultrafast"], output, "mp4", TimeSpan.FromSeconds(4), 100_000_000, null, CancellationToken.None,
+            boundTime: true));
+
+        Assert.Equal(MediaException.LongerThanItSaysMessage, e.Message);
     }
 
     [Fact]

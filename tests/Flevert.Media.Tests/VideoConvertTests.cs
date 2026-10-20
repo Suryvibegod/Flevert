@@ -144,6 +144,23 @@ public sealed class VideoConvertTests : IDisposable
         Assert.Equal(reports.Order(), reports);
     }
 
+    [Fact]
+    public async Task Recordings_joined_byte_by_byte_convert_whole_though_ffprobe_reads_the_first_one()
+    {
+        // The usual way to join a camcorder's .mts pieces ("copy /b"): ffprobe reads the length from the first (RC-1).
+        var piece = _dir.Combine("piece.ts");
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "testsrc2=size=320x180:rate=25:duration=20", "-f", "lavfi", "-i", "sine=duration=20",
+            "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-f", "mpegts", piece);
+        var input = _dir.Combine("joined.mts");
+        var bytes = await File.ReadAllBytesAsync(piece);
+        await File.WriteAllBytesAsync(input, [.. bytes, .. bytes, .. bytes]);
+        File.Delete(piece);
+
+        var output = await Op("video.to-mp4").RunAsync(input, CancellationToken.None);
+
+        Assert.True((await Probe(output)).Duration > 55, $"{(await Probe(output)).Duration} s of 60");
+    }
+
     [Theory]
     [InlineData(1920, 1080, 0, null, 1920, 1080)]
     [InlineData(1920, 1080, 90, null, 1080, 1920)]
@@ -160,6 +177,27 @@ public sealed class VideoConvertTests : IDisposable
         var video = new VideoTrack(0, "h264", width, height, rotation, false, 30);
 
         Assert.Equal((expectedWidth, expectedHeight), VideoEncoding.OutputSize(video, maxShortSide));
+    }
+
+    [Theory]
+    [InlineData(1920, 1080, 30, false, 1, 6)]
+    [InlineData(1280, 720, 30, false, 1, 6)] // never below six times
+    [InlineData(3840, 2160, 60, false, 1, 48)]
+    [InlineData(3840, 2160, 60, true, 1, 96)]
+    [InlineData(1920, 1080, 30, false, 2, 12)] // VP9
+    [InlineData(8192, 4320, 239, true, 1, VideoEncoding.MaxSlowness)]
+    public void A_pass_may_take_longer_for_more_pixels_a_second_and_for_hdr_within_bounds(
+        int width, int height, double fps, bool hdr, double factor, double slowness)
+    {
+        Assert.Equal(slowness, VideoEncoding.Slowness(new VideoTrack(0, "h264", width, height, 0, hdr, fps), factor), 6);
+        Assert.Equal(Ffmpeg.MaxTimeout, Ffmpeg.TimeoutFor(TimeSpan.FromHours(12), VideoEncoding.MaxSlowness));
+    }
+
+    [Fact]
+    public void A_video_encode_takes_in_half_as_much_again_as_ffprobe_read_or_what_its_bytes_hold_at_8_kbit_s()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(70), Ffmpeg.MaxTime(TimeSpan.FromSeconds(40), 10_000));
+        Assert.Equal(TimeSpan.FromSeconds(1000), Ffmpeg.MaxTime(TimeSpan.FromSeconds(40), 1_000_000));
     }
 
     [Fact]

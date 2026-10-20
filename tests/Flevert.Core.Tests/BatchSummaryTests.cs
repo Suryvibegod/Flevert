@@ -38,6 +38,7 @@ public sealed class BatchSummaryTests
     }
 
     [Theory]
+    [InlineData(999, "<1 KB")]
     [InlineData(850_000, "850 KB")]
     [InlineData(999_999, "999 KB")]
     [InlineData(1_000_000, "1 MB")]

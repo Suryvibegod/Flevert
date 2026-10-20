@@ -80,11 +80,14 @@ internal static class VideoEncoding
     /// that for HDR, which is tone mapped in floating point, and <paramref name="factor"/> times that for a slower encoder.
     /// A timeout only stops a run that is stuck; Cancel stops the others.
     /// </summary>
+    internal const double MaxSlowness = 200;
+
     public static double Slowness(VideoTrack video, double factor = 1)
     {
         var fps = video.FrameRate is > 0 and < 240 ? video.FrameRate : 30;
         var pixelRate = (double)video.Width * video.Height * fps / (1920.0 * 1080 * 30);
-        return Ffmpeg.DefaultSlowness * factor * Math.Max(1, pixelRate) * (video.IsHdr ? 2 : 1);
+        // Bounded: a header claiming 8K at 239 fps would otherwise wait for years (re-check review, RC-5).
+        return Math.Min(MaxSlowness, Ffmpeg.DefaultSlowness * factor * Math.Max(1, pixelRate) * (video.IsHdr ? 2 : 1));
     }
 
     /// <summary>The picture, then the sound, by their index in the input.</summary>
@@ -93,7 +96,17 @@ internal static class VideoEncoding
 
     /// <summary>x264 at preset <c>medium</c> with constant quality <paramref name="crf"/>: plays on every phone and PC.</summary>
     public static string[] H264(int crf) =>
-        ["-c:v", "libx264", "-preset", "medium", "-crf", crf.ToString(CultureInfo.InvariantCulture)];
+        ["-c:v", "libx264", "-preset", "medium", "-crf", crf.ToString(CultureInfo.InvariantCulture), .. EncoderThreads];
+
+    /// <summary>
+    /// x264's threads: 1.5 per core as it chooses itself, but at most 12. Each holds frames, so memory grows with them: 3 s
+    /// of 4K60 HLG peaked at 4.5 GB with the 24 x264 and 13 decoder threads a 16-thread PC gets, past the
+    /// <see cref="Ffmpeg.MaxMemoryBytes"/> cap, and at 3.2 GB with 12 and 8, as fast (re-check review, RC-2, 2026-10-20).
+    /// </summary>
+    public static string[] EncoderThreads => ["-threads", Math.Clamp(Environment.ProcessorCount * 3 / 2, 1, 12).ToString(CultureInfo.InvariantCulture)];
+
+    /// <summary>The decoder's threads, before the input: one per core as ffmpeg chooses, but at most 8 (<see cref="EncoderThreads"/>).</summary>
+    public static string[] DecoderThreads => ["-threads", Math.Clamp(Environment.ProcessorCount, 1, 8).ToString(CultureInfo.InvariantCulture)];
 
     /// <summary>AAC at <paramref name="kbps"/> for each sound stream.</summary>
     public static string[] Aac(int kbps) => ["-c:a", "aac", "-b:a", string.Create(CultureInfo.InvariantCulture, $"{kbps}k")];

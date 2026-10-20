@@ -72,6 +72,6 @@ public sealed class VideoConvert : IOperation
         ];
         return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _ffmpeg.EncodeAsync(
             inputPath, options, temp, _format.Muxer, info.Duration, MediaJob.MaxOutputBytes(inputPath, estimate, desired), MediaJob.Percent(progress), token,
-            VideoEncoding.Slowness(video, _format.Slowness)), ct).ConfigureAwait(false);
+            VideoEncoding.Slowness(video, _format.Slowness), VideoEncoding.DecoderThreads, boundTime: true), ct).ConfigureAwait(false);
     }
 }

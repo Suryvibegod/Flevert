@@ -78,6 +78,22 @@ public sealed class AudioConvertTests : IDisposable
         Assert.Equal(10, (await Probe(output)).Duration, 1);
     }
 
+    [Theory]
+    [InlineData("estimate.aac", "-c:a aac -f adts")]
+    [InlineData("estimate.mp3", "-c:a libmp3lame -q:a 2 -write_xing 0 -f mp3")]
+    public async Task A_file_whose_length_ffprobe_only_estimates_is_converted_whole(string name, string make)
+    {
+        // A loud start and a quiet rest: ffprobe guesses the length of a raw AAC, or of an MP3 without a VBR header, from
+        // the first frames (5 minutes read as 30 s or 100 s). Nothing may cut it there (re-check review, RC-1).
+        var input = _dir.Combine(name);
+        await TestFfmpeg.RunRawAsync(["-f", "lavfi", "-i", "anoisesrc=d=20:a=0.8,apad=whole_dur=300", "-ar", "44100", "-ac", "2", .. make.Split(' '), input]);
+        Assert.True((await TestFfmpeg.Instance.ProbeAsync(input, CancellationToken.None)).Duration < TimeSpan.FromSeconds(200));
+
+        var output = await Op("audio.to-wav").RunAsync(input, CancellationToken.None);
+
+        Assert.Equal(300, (await Probe(output)).Duration, 0);
+    }
+
     [Fact]
     public async Task Aac_becomes_m4a_without_being_encoded_again()
     {
