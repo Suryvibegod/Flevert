@@ -15,19 +15,33 @@ public sealed class ExternalToolLineTests
     [Fact]
     public async Task Each_line_reaches_the_callback_while_the_tool_still_runs()
     {
-        // ping waits about two seconds between the two echoes.
-        var lines = new List<(string Line, TimeSpan At)>();
-        var timer = Stopwatch.StartNew();
+        // The tool waits for the callback to have seen its first line before it writes the second, so the proof does not
+        // depend on how busy the machine is: had the line arrived only at the end, the tool would report that it waited
+        // in vain.
+        var seen = Path.Combine(Path.GetTempPath(), $"flevert-line-{Guid.NewGuid():N}");
+        var lines = new List<string>();
+        try
+        {
+            var script = "[Console]::Out.WriteLine('first'); [Console]::Out.Flush(); $t = [Diagnostics.Stopwatch]::StartNew(); " +
+                $"while (-not (Test-Path -LiteralPath '{seen}') -and $t.Elapsed.TotalSeconds -lt 20) {{ Start-Sleep -Milliseconds 20 }}; " +
+                $"if (Test-Path -LiteralPath '{seen}') {{ [Console]::Out.WriteLine('second') }} else {{ [Console]::Out.WriteLine('waited in vain') }}";
+            var result = await ExternalTool.RunAsync(PowerShell, ["-NoProfile", "-NonInteractive", "-Command", script], Generous,
+                standardOutputLine: line =>
+                {
+                    lines.Add(line);
+                    if (line == "first")
+                        File.WriteAllText(seen, "");
+                });
 
-        var result = await ExternalTool.RunAsync(Cmd, ["/c", "echo first& ping -n 3 127.0.0.1 >nul& echo second"], Generous,
-            standardOutputLine: line => lines.Add((line, timer.Elapsed)));
-        var finished = timer.Elapsed;
-
-        Assert.Equal(0, result.ExitCode);
-        Assert.Equal(["first", "second"], lines.Select(l => l.Line));
-        Assert.True(finished - lines[0].At > TimeSpan.FromSeconds(1), $"the first line came {finished - lines[0].At} before the end");
-        // The lines are still in the captured output.
-        Assert.Equal("first\r\nsecond\r\n", result.StandardOutput);
+            Assert.Equal(0, result.ExitCode);
+            Assert.Equal(["first", "second"], lines);
+            // The lines are still in the captured output.
+            Assert.Equal("first\r\nsecond\r\n", result.StandardOutput);
+        }
+        finally
+        {
+            File.Delete(seen);
+        }
     }
 
     [Fact]
