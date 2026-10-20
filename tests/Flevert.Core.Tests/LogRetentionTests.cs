@@ -17,7 +17,7 @@ public sealed class LogRetentionTests : IDisposable
 
         new RunLog(_logs.Path).Prune(TimeSpan.FromDays(7), today: new DateOnly(2026, 10, 19));
 
-        Assert.Equal(["notes.txt", "flevert-20261013.log", "flevert-20261019.log"], _logs.FileNames());
+        Assert.Equal(["flevert-20261013.log", "flevert-20261019.log", "notes.txt"], _logs.FileNames());
     }
 
     [Fact]
