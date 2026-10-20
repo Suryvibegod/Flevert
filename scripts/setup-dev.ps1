@@ -145,6 +145,9 @@ if (-not $isMaintainer) {
     Write-Warning 'claude CLI not found; install the plugin from Claude Code with /plugin install agent-skills@addy-agent-skills'
 }
 
+Step 'Third-party tools (pdfium, qpdf), pinned by SHA256'
+& (Join-Path $PSScriptRoot 'fetch-deps.ps1')
+
 Step 'Build and test'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 & dotnet build Flevert.sln -c Debug

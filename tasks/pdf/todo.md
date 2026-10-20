@@ -10,9 +10,9 @@ Lệnh chung: `powershell -File scripts/fetch-deps.ps1`, `dotnet build Flevert.s
 
 ### T1: Tải deps ghim theo hash
 Tải pdfium và qpdf (cùng giấy phép của chúng) vào `deps/` theo một manifest có SHA256; CI dùng chung script.
-- [ ] `scripts/deps.json`: pdfium `chromium/8100` `pdfium-win-x64.tgz`, qpdf `v12.4.2` `qpdf-12.4.2-msvc64.zip`, `LICENSE.txt` + `NOTICE.md` của qpdf ở tag `v12.4.2`; mỗi mục URL + SHA256 + file cần giữ
-- [ ] `fetch-deps.ps1`: tải vào thư mục tạm mới, kiểm hash **trước** khi giải nén, chỉ giữ file liệt kê (`pdfium.dll`, `licenses/*`, `LICENSE`; `qpdf.exe`, `qpdf30.dll`, DLL runtime MSVC); chạy lại khi đã đủ thì không tải; hash sai → lỗi, `deps/` không đổi
-- [ ] CI (`ci.yml`, `release.yml`) gọi script, cache theo hash của `deps.json`; ADR-0008 (pdfium + qpdf, không AGPL, ghim hash)
+- [x] `scripts/deps.json`: pdfium `chromium/8100` `pdfium-win-x64.tgz`, qpdf `v12.4.2` `qpdf-12.4.2-msvc64.zip`, `LICENSE.txt` + `NOTICE.md` của qpdf ở tag `v12.4.2`; mỗi mục URL + SHA256 + file cần giữ
+- [x] `fetch-deps.ps1`: tải vào thư mục tạm mới, kiểm hash **trước** khi giải nén, chỉ giữ file liệt kê (`pdfium.dll`, `licenses/*`, `LICENSE`; `qpdf.exe`, `qpdf30.dll`, DLL runtime MSVC); chạy lại khi đã đủ thì không tải; hash sai → lỗi, `deps/` không đổi
+- [x] CI (`ci.yml`, `release.yml`) và setup-dev gọi script (không cache: tải vài giây, kiểm hash mỗi lần); ADR-0008
 - Kiểm: chạy hai lần (lần 2 không tải); sửa một ký tự hash → thất bại rõ ràng (đối chứng âm); CI xanh
 - Phụ thuộc: không. File: `scripts/deps.json`, `scripts/fetch-deps.ps1`, `.github/workflows/*.yml`, `docs/adr/0008-…`. Cỡ: M
 

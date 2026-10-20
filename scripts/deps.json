@@ -1,0 +1,42 @@
+{
+  "comment": "Third-party binaries fetched into deps/ by scripts/fetch-deps.ps1, never committed. Each download is pinned by SHA256 (GitHub publishes a digest for every release asset). Change a version here, then run the script and the tests. docs/adr/0008-pdf-engines-pdfium-and-qpdf.md",
+  "items": [
+    {
+      "name": "pdfium",
+      "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8100/pdfium-win-x64.tgz",
+      "sha256": "51621bcc1d9be9ea448f4b84b0516862b928e3968d3fca899af1a6d6e2848d6d",
+      "kind": "tgz",
+      "strip": "",
+      "keep": ["bin/pdfium.dll", "LICENSE", "licenses/*"]
+    },
+    {
+      "name": "qpdf",
+      "url": "https://github.com/qpdf/qpdf/releases/download/v12.4.2/qpdf-12.4.2-msvc64.zip",
+      "sha256": "db87077e683630c1217e0e8f9a20a9749d952ab676e881c3689187763a5de25d",
+      "kind": "zip",
+      "strip": "qpdf-12.4.2-msvc64/",
+      "keep": ["bin/qpdf.exe", "bin/*.dll"]
+    },
+    {
+      "name": "qpdf-licence",
+      "url": "https://raw.githubusercontent.com/qpdf/qpdf/v12.4.2/LICENSE.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "kind": "file",
+      "target": "qpdf/licenses/qpdf-LICENSE.txt"
+    },
+    {
+      "name": "qpdf-notice",
+      "url": "https://raw.githubusercontent.com/qpdf/qpdf/v12.4.2/NOTICE.md",
+      "sha256": "b207f65a9e5491195ded63b2941199b19a4d30148871f2742c88eae7bfc513a6",
+      "kind": "file",
+      "target": "qpdf/licenses/qpdf-NOTICE.md"
+    },
+    {
+      "name": "openssl-licence",
+      "url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.4/LICENSE.txt",
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "kind": "file",
+      "target": "qpdf/licenses/openssl-LICENSE.txt"
+    }
+  ]
+}
