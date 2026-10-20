@@ -236,6 +236,16 @@ public sealed class InstallerScriptTests
     }
 
     [Fact]
+    public void Setup_tells_how_to_reach_the_menu_from_a_picture_or_a_pdf()
+    {
+        // Since v0.2 the menu is on PDFs too; setup's last page and its failure text should not say pictures only.
+        var hints = Regex.Matches(Script, @"Right-click a [^,']+").Select(m => m.Value).ToList();
+
+        Assert.NotEmpty(hints);
+        Assert.All(hints, hint => Assert.StartsWith("Right-click a picture or a PDF", hint, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void An_upgrade_removes_the_runtime_file_named_after_the_previous_runtime_version()
     {
         // The self-contained runtime ships mscordaccore_amd64_amd64_<runtime version>.dll beside mscordaccore.dll, and

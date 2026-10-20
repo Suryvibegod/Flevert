@@ -492,16 +492,16 @@ begin
       'See ' + FailureHelp
   else if ClassicMenuFailed then
     Text := 'Setup has finished installing Flevert, but could not switch to the classic right-click menu. ' +
-      'See ' + FailureHelp + #13#10#13#10 + 'Right-click a picture, choose "Show more options", then Flevert.'
+      'See ' + FailureHelp + #13#10#13#10 + 'Right-click a picture or a PDF, choose "Show more options", then Flevert.'
   else
   begin
     Text := 'Setup has finished installing Flevert.' + #13#10#13#10;
     if ClassicMenuChosen then
-      Text := Text + 'Right-click a picture and choose Flevert. The classic menu appears after you sign out and back in, or restart your PC.'
+      Text := Text + 'Right-click a picture or a PDF and choose Flevert. The classic menu appears after you sign out and back in, or restart your PC.'
     else if IsWindows11 then
-      Text := Text + 'Right-click a picture, choose "Show more options", then Flevert.'
+      Text := Text + 'Right-click a picture or a PDF, choose "Show more options", then Flevert.'
     else
-      Text := Text + 'Right-click a picture and choose Flevert.';
+      Text := Text + 'Right-click a picture or a PDF and choose Flevert.';
   end;
   WizardForm.FinishedLabel.Caption := Text + #13#10#13#10 + SetupMessage(msgClickFinish);
   // The label was sized for the default text; without this longer text is cut off.
