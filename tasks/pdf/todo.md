@@ -27,10 +27,11 @@ Chạy công cụ ngoài an toàn: đường dẫn tuyệt đối, `ArgumentList
 
 ### T3: Lát đầu: xoay PDF (`pdf.rotate-right`/`-left`/`-180`)
 Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
-- [ ] `src/Flevert.Pdf` + `tests/Flevert.Pdf.Tests` (thêm vào sln, CI, release, setup-dev, tài liệu lệnh test); `Qpdf` tìm `qpdf.exe` cạnh `flevert.exe` (bản build: `deps/qpdf`)
-- [ ] Output `<tên> (rotated).pdf`, mọi trang xoay đúng góc (đọc lại bằng `qpdf --json`); file gốc không đổi; PDF có mật khẩu → lỗi "This PDF needs a password: use Remove password first"
-- [ ] Fixture: `make_pdf_fixtures.py` (thư viện chuẩn) + README nguồn gốc
+- [x] `src/Flevert.Pdf` + `tests/Flevert.Pdf.Tests` (thêm vào sln, CI, release, setup-dev, tài liệu lệnh test); `Qpdf` tìm `qpdf.exe` cạnh `flevert.exe` (bản build: `deps/qpdf`)
+- [x] Output `<tên> (rotated).pdf`, mọi trang xoay đúng góc (đọc lại bằng `qpdf --json`); file gốc không đổi; PDF có mật khẩu → lỗi "This PDF needs a password: use Remove password first"
+- [x] Fixture: `make_pdf_fixtures.py` (thư viện chuẩn) + README nguồn gốc
 - Kiểm: test đỏ trước; `flevert.exe run pdf.rotate-right` thật; `install-menu --dev --allow-insecure-location` → MenuProbe thấy `Flevert > Rotate > 90° right` trên `.pdf`; `uninstall-menu`
+- Đã làm (2026-10-20): `Qpdf` (`TransformAsync`, `NextToApp`, `TimeoutFor`), `PdfRotate`, `PdfOperations.All` (đăng ký trong `Program.cs`; `Flevert.Cli` tham chiếu `Flevert.Pdf`). csproj của Flevert.Pdf chép `deps/qpdf/bin/*` vào output của mọi project tham chiếu nó (như `pdfium.dll`), thiếu thì build báo "run fetch-deps"; `dotnet publish` cũng có đủ. 28 test đỏ với stub, rồi xanh; thêm 2 test cho tùy chọn có ký tự đại diện (đỏ trước), tổng 61/61 xanh. Phát hiện khi chạy test đường dẫn dài: C runtime của qpdf **mở rộng ký tự đại diện** trong đối số dòng lệnh, nên `\\?\C:\…\x.pdf` thành `\\x.pdf`, và qpdf không mở được đường dẫn > 260 ký tự nếu thiếu `\\?\` (cả `\\.\`): hai đường dẫn đi qua stdin bằng `@-` (dòng đọc từ đó không bị mở rộng), tùy chọn vẫn trên dòng lệnh; `--` không phải dấu kết thúc tùy chọn của qpdf, nên đường dẫn bắt buộc tuyệt đối, không xuống dòng. Mã thoát 3 (cảnh báo, ví dụ trang thiếu `/Resources`) = xong; mã 2 → hỏi `--requires-password` (mã thoát có tài liệu) → thông báo mật khẩu, stderr nhắc output → `IOException`, còn lại "not a PDF, or damaged" với chi tiết qpdf trong log. `MaxParallel = 4` (lý do trong spec mục 8 và `PdfRotate`). Test tiến trình thật: `flevert.exe run pdf.rotate-right` headless; giết `flevert.exe` (không giết cây) khi qpdf đang chạy PDF 500 000 trang → qpdf chết trong ≤ 3 s (đối chứng âm: bỏ `KILL_ON_JOB_CLOSE` thì test đỏ; bản đầu với 200 000 trang và chờ 5 s vẫn xanh khi bỏ cờ, vì qpdf kịp xong: đã sửa). MenuProbe: `.pdf` → `Flevert > Rotate > 90° right / 90° left / 180°`, `.jpg` không có mục PDF; `invoke "Flevert/Rotate/90° right"` (với `FLEVERT_HEADLESS=1` để không hiện cửa sổ) → `Hóa đơn (rotated).pdf`, `/Rotate` 0,90,180,270 → 90,180,270,0; đã `uninstall-menu`. Khởi động tiến trình phụ (R2R, `measure-startup.ps1`, 3 lượt × 15): trung vị 71–75 ms không có catalog PDF, 74–76 ms có (≈ +3%, dưới ngưỡng 10%). Chưa giới hạn số trang cho thao tác qpdf (T18).
 - Phụ thuộc: T1, T2. Cỡ: M
 
 ### T4: Đóng gói qpdf và pdfium
@@ -38,6 +39,7 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 - [ ] Check-location của setup không giải nén qpdf vào thư mục tạm
 - [ ] `test-installer.ps1`: có `qpdf.exe`, notices đủ; xoay một PDF bằng bản đã cài; giới hạn kích thước 80 MB; gỡ sạch
 - Kiểm: build bộ cài, `test-installer.ps1` PASS, ghi kích thước bộ cài vào todo
+- Lưu ý từ T3: `Flevert.iss` gói cả thư mục publish (`{#SourceDir}\*`), nên từ T3 bộ cài **đã** chứa `qpdf.exe`, `qpdf30.dll`, DLL runtime MSVC và `pdfium.dll`, nhưng `THIRD-PARTY-NOTICES.txt` chưa có giấy phép của chúng: không phát hành trước khi T4 xong.
 - Phụ thuộc: T3. Cỡ: S
 
 ### Checkpoint 1
@@ -111,6 +113,7 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 ### T14: `pdf.protect`, `pdf.unlock` + hộp thoại mật khẩu
 - [ ] Hộp thoại WinForms: che ký tự, nhập lại (protect), "Use this password for all N files"; Cancel = bỏ qua
 - [ ] Mật khẩu chỉ qua stdin (`@-`, `--password-file=-`), `char[]` ghi đè sau khi dùng; AES-256; sai mật khẩu → lỗi file đó, file khác vẫn chạy
+- Lưu ý từ T3: `Qpdf.TransformAsync` đã dùng stdin cho hai đường dẫn (`@-`); mật khẩu phải đi cùng luồng `@-` đó, hoặc kiểm trước rằng `--password-file=-` vẫn đọc được phần sau các dòng `@-`
 - [ ] Test rò rỉ: mật khẩu đánh dấu không có trong log, dòng lệnh tiến trình con (WMI), file tạm
 - Kiểm: chạy thật qua menu; ảnh chụp hộp thoại (báo trước); UI Automation tên trợ năng
 - Phụ thuộc: T2, T3. Cỡ: M
