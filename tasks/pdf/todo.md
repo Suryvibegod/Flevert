@@ -44,7 +44,84 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 
 ### Checkpoint 1
 - [ ] Mọi test xanh, CI xanh, bộ cài chạy xoay PDF thật
-- [ ] Review ba góc (code, bảo mật, doubt) cho T1–T4; reconcile
+- [x] Review ba góc (code, bảo mật, doubt) cho T1–T3 (gộp vào review vòng 1 dưới đây, phạm vi T1–T10); T4 review khi xong
+
+## Review vòng 1 (T1, T2, T3, T5, T7, T9, T10; `v0.1.0..0888ccb`, 2026-10-20): reconcile
+
+Ba reviewer bối cảnh trống, chỉ đọc. Ký hiệu: CR = code-reviewer, SA = security-auditor, DD = doubt-driven. Kết luận: cả ba "request changes"; không làm thêm thao tác đọc PDF trước khi xong F1–F5 và quyết định F6.
+
+| Finding | Mức | Phân loại | Xử lý |
+|---|---|---|---|
+| CR-1, SA-H1, DD-L2: `DeleteTree` không kiểm gốc `.partial`; người khác đổi tên thư mục tạm rồi đặt junction cùng tên giữa hai trang → dọn dẹp xóa nội dung đích (Documents của nạn nhân); `finally` còn xóa tên GUID vừa trống sau khi move | High, Required | Hợp lệ | **F1** |
+| CR-3, DD-H1: đổi tên thư mục thất bại (access denied) khi Defender/indexer/Explorer đang mở một file bên trong; chỉ thử lại khi trùng tên → mất hết trang đã render | High/Medium, Required | Hợp lệ (DD đã probe) | **F1**: thử lại có giới hạn khi access denied/sharing violation; thư mục tạm Hidden + NotContentIndexed |
+| DD-M1: "không để lại gì" chỉ đúng khi Cancel, không đúng khi crash; `.partial` không ẩn; hủy thật phụ thuộc tiến trình còn sống ~6 s | Medium, Required (ghi + sửa rẻ) | Hợp lệ | **F1** (ẩn thư mục tạm); quét `.partial` cũ: Optional, T18 |
+| CR nit: thư mục `<tên> (pages)` bị cắt mất hậu tố khi stem 248–251 ký tự | Nit | Hợp lệ | **F1** |
+| CR-2: input < 260 ký tự nhưng output tạm ≥ 260 → qpdf không ghi được (runner bỏ `\\?\`) | Medium, Required | Hợp lệ | **F2**: luôn đưa qpdf đường dẫn `\\?\`; test qua `Shorten` |
+| SA-M1, DD-L3: tên có surrogate lẻ → `Encoding.UTF8` thay bằng U+FFFD → qpdf mở file khác (vượt ghim) | Medium, Required | Hợp lệ | **F2**: UTF-8 nghiêm ngặt, lỗi rõ |
+| CR nit: tùy chọn qpdf bắt đầu bằng `@`; `Detail()` cắt đôi cặp surrogate | Nit | Hợp lệ | **F2** |
+| CR-5, SA-L2: qpdf kế thừa `OPENSSL_CONF/MODULES/ENGINES` | Low, Optional | Hợp lệ | **F2**: bỏ các biến này khỏi môi trường của qpdf (rẻ) |
+| SA-M2, DD-M3: qpdf không giới hạn bộ nhớ (4 song song, timeout 2 phút) | Medium, Required trước phát hành | Hợp lệ | **F3**: `JOB_OBJECT_LIMIT_PROCESS_MEMORY` + `ACTIVE_PROCESS = 1` tùy chọn theo lần gọi; lỗi cấp phát → "too complex" |
+| DD-M2, CR-8: tool thoát trước `AssignProcessToJobObject` → "Access is denied" | Medium/Low, Optional | Hợp lệ (DD đã probe) | **F3**: đã thoát thì bỏ qua lỗi gán, trả kết quả |
+| CR-9: reader stdout/stderr không dispose | Low, Optional | Hợp lệ | **F3** |
+| DD-H4: không gì chặn kỹ thuật một bản phát hành chứa pdfium/qpdf mà thiếu notices (hotfix 0.1.x từ `main`) | High, Required | Hợp lệ | **F4**: `build-installer.ps1` lỗi khi thư mục publish có binary native không có trong danh sách notices |
+| SA-M4: `fetch-deps.ps1` kiểm hash rồi giải nén trong `%TEMP%` mà nhóm sandbox ghi được; `Remove-Item -Recurse` có thể đi theo junction | Medium, Required (máy dev) | Hợp lệ (SA đã `icacls`) | **F4**: thư mục làm việc DACL chỉ chủ/SYSTEM/Admins; xóa không đi theo link |
+| CR nit, DD-L4, SA-L3: "up to date" chỉ kiểm thư mục, không kiểm từng file | Low, Optional | Hợp lệ | **F4**: kiểm từng file giữ lại có mặt (hash từng file: Optional) |
+| SA-M5: checkout cho `Authenticated Users` quyền sửa (kế thừa từ `D:\`) → tài khoản khác thay `qpdf.exe`/hook git | Medium, Required (môi trường) | Hợp lệ | **F4**: `setup-dev.ps1` cảnh báo và in lệnh `icacls` sửa; người dùng tự chạy (đổi quyền là việc của máy) |
+| DD-H3: N→1 chỉ kiểm với `FLEVERT_BATCH_IDLE_MS=3000`; ở cửa sổ 1 s thật, tiến trình đến muộn thành chủ lô mới → PDF thiếu trang, im lặng | High, Required | Hợp lệ | **F5**: cửa sổ rảnh riêng cho N→1 dài hơn; tiến trình đến muộn sau khi lô N→1 cùng thao tác vừa đóng → từ chối có thông báo nêu file, không bao giờ ra output thứ hai im lặng; test ở cửa sổ thật khi máy bận |
+| CR-7: lô hoàn tất trong 2 s ân hạn khi hủy → output có mà báo "Cancelled", không log | Low, Optional | Hợp lệ | **F5** |
+| CR nit: lô N→1 không nhận file nào báo "Done: 0 files"; hai constructor `BatchInputException` dễ nhầm | Nit | Hợp lệ | **F5** |
+| DD-H2, SA-M3, CR-4: pdfium cùng tiến trình: không timeout/hủy trong `FPDF_LoadPage`/`RenderPageBitmap`, bộ nhớ riêng không giới hạn, crash giết chủ lô (file còn lại mất im lặng) → không đạt tiêu chí 6 | High, Required (quyết định trước T11) | Hợp lệ | **F6**: quyết định ADR-0008 (2026-10-20): **đọc PDF không tin cậy chạy trong tiến trình worker** (`flevert.exe` dưới job của `ExternalTool`: giới hạn bộ nhớ, timeout theo trang, hủy = giết); tạo PDF từ ảnh (T11) ở lại trong tiến trình vì input là ảnh đã qua Magick và JPEG chỉ được pdfium đọc header. Task mới **T9b**, trước T15/T17 và trước phát hành |
+| CR-10: test vẫn xanh khi code sai: tên dài 240 ký tự không chạm nhánh rút gọn; chất lượng JPEG 90/4:2:0 không kiểm; không chứng minh qpdf thoát mã 3; đường bỏ rơi 2 s khi hủy chưa test | Low, Required | Hợp lệ | **F7** (PdfToImages, PdfRotate); đường bỏ rơi 2 s: **F5** |
+| CR nit: `PdfError.NoPages`; mã rút gọn tên trang lặp ở `PdfToImages`/`DevSplit` | Nit | Hợp lệ | **F7** (`NoPages`); gộp mã rút gọn: Optional, làm khi đụng lại |
+| DD-M4: Checkpoint 1 bị bỏ qua; T10 chưa chạy thật qua `flevert.exe`/menu; tiến độ "page N of M" chỉ kiểm bằng `dev.split` | Medium, Required (quy trình) | Hợp lệ | Review này thay Checkpoint 1 cho T1–T3; T10 đã chạy thật (ghi ở T10); tiến độ với PDF thật: kiểm ở T9b (worker báo tiến độ) |
+| DD-M5: pdfium không có API ghi Info → `Producer: Flevert` cần qpdf hoặc đổi spec | Medium, Required trước T11 | Hợp lệ | T11a (đang làm): quyết định và ghi ADR-0008 |
+| DD-M6: qpdf đọc `@-` tới hết stdin, `--password-file=-` sau đó không dùng được; lỗi của qpdf có thể lặp lại mật khẩu | Medium, Optional (ghi ngay) | Hợp lệ (chưa kiểm) | Ghi chú T14: mật khẩu là dòng `--password=` trong `@-`; test stderr/log không chứa mật khẩu; stdin bằng byte[] xóa sau khi dùng (CR nit) |
+| DD-M7: mã thoát 3 của qpdf luôn là thành công; sửa file hỏng có thể mất nội dung | Medium, Optional | Hợp lệ | T18: so số trang (`--show-npages`) hoặc thông báo "repaired" |
+| CR-6, DD-L5: DLL runtime MSVC của qpdf nằm cạnh `flevert.exe` | Low, Optional | Hợp lệ | T4: cân nhắc thư mục con `qpdf\` |
+| SA-L1: PDF → ảnh có thể làm đầy đĩa (2 000 trang × 100 MP) | Low, Optional | Hợp lệ | T18: giới hạn tổng byte/pixel mỗi file, kiểm chỗ trống |
+| SA-L4: output N→1 nằm cạnh file đầu; chọn từ nhiều thư mục có thể ghi PDF riêng tư vào thư mục chung | Low, Optional | Hợp lệ | T6/T11: quyết định trong spec (đề xuất: từ chối khi input ở nhiều thư mục) |
+| SA-L5: ghim hash không nói ai build | Low, Optional | Hợp lệ | RELEASING (kiểm hằng tháng): xem provenance upstream khi đổi ghim |
+| CR-11, CR-12: trang 10 000 px giữ nhiều hơn mức dùng; buffer mới mỗi trang | Low, Optional | Hợp lệ | T9b (worker tự quản buffer) |
+| CR nit: thanh tiến độ một file đứng ở 0 | Nit, Optional | Hợp lệ | T9b (tiến độ trong file nối vào thanh) |
+| DD-L1: test `NaturalOrder` chỉ so `StrCmpLogicalW` với chính nó | Low, Optional | Hợp lệ (DD đã probe khớp Explorer trên máy này) | Không đổi; ghi nhận probe |
+| DD-L6: tài liệu lệch (bảng HANDOFF, `plan.md` nói CI cache deps, số task, `IProgress<double>` trong spec) | Low, Optional | Hợp lệ | Sửa cùng commit reconcile |
+| SA Info: PNG/JPEG trang có thể mang `date:*`/`tIME`; `{tmp}` của Inno trong `%TEMP%` (T4) | Info | Ghi nhận | T18 (exiftool); T4 |
+
+### F1: Ghi thư mục an toàn trước junction và trình quét (Core)
+- [ ] Giữ handle thư mục tạm (không `FILE_SHARE_DELETE`) suốt lúc ghi, kiểm qua handle không phải reparse point, đổi tên qua handle; dọn dẹp chỉ khi chưa move, gốc là link thì chỉ gỡ link, không đệ quy
+- [ ] Thử lại đổi tên có giới hạn khi access denied/sharing violation (tên đích trống); thư mục tạm Hidden + NotContentIndexed, bỏ Hidden sau khi đổi tên
+- [ ] Không cắt hậu tố ` (pages)` khi stem dài
+- Kiểm: test thay gốc `.partial` bằng junction rồi lỗi trang → đích không mất gì (đỏ với mã cũ); file bên trong đang mở lúc move → vẫn xong; thuộc tính Hidden lúc ghi
+- File: `src/Flevert.Core/OutputPath.cs`, test Core. Cỡ: M
+
+### F2: Đường dẫn và môi trường cho qpdf
+- [ ] Luôn `\\?\` (`\\?\UNC\`) cho đường dẫn đưa qpdf; UTF-8 nghiêm ngặt (surrogate lẻ → lỗi rõ); tùy chọn bắt đầu bằng `@` bị từ chối; `Detail()` không cắt đôi surrogate; bỏ `OPENSSL_*` khỏi môi trường qpdf
+- Kiểm: input ~250 ký tự qua `Shorten` → xoay được (đỏ trước); tên có `\uD800` → lỗi "file name" chứ không mở file khác
+- File: `src/Flevert.Pdf/Qpdf.cs`, `ExternalTool` (tham số môi trường). Cỡ: S
+
+### F3: Giới hạn cho tiến trình con
+- [ ] `ExternalTool`: giới hạn bộ nhớ mỗi tiến trình và số tiến trình đang chạy (tùy chọn theo lần gọi); qpdf dùng cả hai; tool thoát trước khi gán job → trả kết quả; dispose reader
+- Kiểm: tiến trình con xin quá giới hạn bị dừng (đỏ trước); tool thoát ngay không còn "Access is denied"
+- File: `src/Flevert.Core/ExternalTool.cs`, `Qpdf.cs`. Cỡ: S
+
+### F4: Script: notices, `%TEMP%`, checkout
+- [ ] `build-installer.ps1` lỗi khi publish có binary native (pdfium, qpdf, runtime MSVC) chưa có notices; `fetch-deps.ps1` thư mục làm việc DACL riêng, xóa không theo link, "up to date" kiểm từng file; `setup-dev.ps1` cảnh báo checkout người khác ghi được và in lệnh sửa
+- Kiểm: build bộ cài hiện tại lỗi rõ (đỏ đúng mong muốn cho tới T4); thiếu `pdfium.dll` → fetch-deps tải lại
+- File: `scripts/*.ps1`. Cỡ: M
+
+### F5: Lô N→1 không bao giờ thiếu file im lặng
+- [ ] Cửa sổ rảnh N→1 riêng (dài hơn); tiến trình đến muộn sau lô N→1 vừa đóng → thông báo nêu file, không output thứ hai; kết quả xong trong ân hạn hủy được báo và log; "Done: 0 files" không xảy ra
+- Kiểm: 12 và 100 tiến trình ở cửa sổ thật khi máy bận (đỏ trước nếu tái hiện được); test đường bỏ rơi 2 s
+- File: `src/Flevert.Core/Runner.cs`, batch. Cỡ: M
+
+### F6 → T9b: pdfium đọc PDF trong tiến trình worker
+- [ ] Lệnh ẩn `flevert.exe pdf-worker`: nhận handle/đường dẫn đã ghim và thư mục tạm của cha, render + mã hóa trang, báo tiến độ từng dòng; cha chạy qua `ExternalTool` (giới hạn bộ nhớ, không có tiến độ quá N s → giết, hủy = giết); `pdf.to-jpg/png` chuyển sang worker
+- Kiểm: fixture trang treo/bom → bị từ chối ≤ 10 s, chủ lô sống, file khác trong lô vẫn xong; tiến độ "page N of M" với PDF thật
+- Phụ thuộc: F1, F3. Cỡ: L
+
+### F7: Test chứng minh đúng điều chúng nói (Pdf)
+- [ ] Tên dài chạm nhánh rút gọn (stem 251); kiểm quality 90 và 4:2:0; chứng minh qpdf thoát mã 3 trong test tương ứng; `PdfError.NoPages`
+- File: `tests/Flevert.Pdf.Tests/*`, `PdfToImages.cs`. Cỡ: S
 
 ## Giai đoạn 2: thao tác nhiều file
 
@@ -88,7 +165,7 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 ### T10: `pdf.to-jpg`, `pdf.to-png`
 - [x] 150 DPI, JPEG q90; thư mục `<tên> (pages)`; tiến độ theo trang (đóng gói `pdfium.dll` + notices chuyển sang T4, làm chung với qpdf)
 - Kiểm: PDF 200 trang (fixture sinh) → 200 ảnh, hủy giữa chừng sạch; test-installer kiểm `pdfium.dll` và notices
-- Đã làm (2026-10-20): `PdfToImages` (`pdf.to-jpg`, `pdf.to-png`, `MaxParallel = 1`) trong `src/Flevert.Pdf/PdfToImages.cs`, công khai qua `PdfRenderOperations.All` (danh sách riêng cạnh `PdfOperations.All` của T3). **Chưa vào catalog**: dòng đăng ký trong `Program.cs` thêm lúc merge với T3 (T10 không sửa `Program.cs`, bộ cài, `build-installer.ps1`); chạy thật qua `flevert.exe`/menu làm lúc đó. Pixel BGRA của pdfium → `MagickImage.ReadPixels` (không coder nào parse gì) → JPEG q90 4:2:0 / PNG RGB, ghi DPI thật; mỗi trang xin `MemoryBudget.Shared` 3 × `GetRenderSize(...).Bytes` trước khi render. Trang hỏng → cả file lỗi, thông báo nêu số trang; PDF 0 trang → "This PDF has no pages.". 17 test (`PdfToImagesTests`), đỏ cả 16 với stub (`NotImplementedException`) rồi xanh; đột biến bỏ xin bộ nhớ / bỏ số chữ số tối thiểu → test tương ứng đỏ (bỏ `Alpha(Off)` thì không: bộ mã PNG tự bỏ alpha khi mọi điểm ảnh đục). Thời gian (máy dev, cả bộ test chạy cùng): 200 trang Letter trống 150 DPI → JPEG 5,6 s, PNG 11,5 s; 1 000 trang ở 2 DPI 0,6 s.
+- Đã làm (2026-10-20): `PdfToImages` (`pdf.to-jpg`, `pdf.to-png`, `MaxParallel = 1`) trong `src/Flevert.Pdf/PdfToImages.cs`, công khai qua `PdfRenderOperations.All` (danh sách riêng cạnh `PdfOperations.All` của T3). **Chưa vào catalog**: dòng đăng ký trong `Program.cs` thêm lúc merge với T3 (T10 không sửa `Program.cs`, bộ cài, `build-installer.ps1`); chạy thật qua `flevert.exe`/menu làm lúc đó. Pixel BGRA của pdfium → `MagickImage.ReadPixels` (không coder nào parse gì) → JPEG q90 4:2:0 / PNG RGB, ghi DPI thật; mỗi trang xin `MemoryBudget.Shared` 3 × `GetRenderSize(...).Bytes` trước khi render. Trang hỏng → cả file lỗi, thông báo nêu số trang; PDF 0 trang → "This PDF has no pages.". 17 test (`PdfToImagesTests`), đỏ cả 16 với stub (`NotImplementedException`) rồi xanh; đột biến bỏ xin bộ nhớ / bỏ số chữ số tối thiểu → test tương ứng đỏ (bỏ `Alpha(Off)` thì không: bộ mã PNG tự bỏ alpha khi mọi điểm ảnh đục). Thời gian (máy dev, cả bộ test chạy cùng): 200 trang Letter trống 150 DPI → JPEG 5,6 s, PNG 11,5 s; 1 000 trang ở 2 DPI 0,6 s. Chạy thật (2026-10-20, theo DD-M4 vòng 1): `flevert.exe run pdf.to-jpg/pdf.to-png` headless trên `Hóa đơn.pdf` (3 trang) → `Hóa đơn (pages)` và `Hóa đơn (pages) (1)` đúng 3 ảnh; `huge-page.pdf` → ảnh 10000×100 px; PDF có mật khẩu → thoát 1, log "This PDF needs a password: use Remove password first". MenuProbe sau `install-menu --allow-insecure-location`: `.pdf` → `Flevert > Convert > JPG pages / PNG pages`, `Rotate > …`; `invoke "Flevert/Convert/JPG pages"` → `Hóa đơn (pages) (2)`; đã `uninstall-menu`, mục Flevert biến mất.
 - Phụ thuộc: T7, T9. Cỡ: M
 
 ### T11: `pdf.from-images` (ảnh → một PDF)
@@ -115,6 +192,7 @@ Project `Flevert.Pdf`, wrapper `Qpdf`, ba thao tác xoay, `.pdf` vào menu.
 - [ ] Hộp thoại WinForms: che ký tự, nhập lại (protect), "Use this password for all N files"; Cancel = bỏ qua
 - [ ] Mật khẩu chỉ qua stdin (`@-`, `--password-file=-`), `char[]` ghi đè sau khi dùng; AES-256; sai mật khẩu → lỗi file đó, file khác vẫn chạy
 - Lưu ý từ T3: `Qpdf.TransformAsync` đã dùng stdin cho hai đường dẫn (`@-`); mật khẩu phải đi cùng luồng `@-` đó, hoặc kiểm trước rằng `--password-file=-` vẫn đọc được phần sau các dòng `@-`
+- Lưu ý từ review vòng 1 (DD-M6, CR nit): qpdf đọc `@-` tới hết stdin khi phân tích đối số, nên nhiều khả năng mật khẩu phải là dòng `--password=` trong `@-` (kiểm bằng probe trước); stdin dựng bằng `byte[]` xóa sau khi dùng, không qua `string`; test stderr/log/`Detail` không bao giờ chứa mật khẩu (kể cả khi qpdf báo "unrecognized argument")
 - [ ] Test rò rỉ: mật khẩu đánh dấu không có trong log, dòng lệnh tiến trình con (WMI), file tạm
 - Kiểm: chạy thật qua menu; ảnh chụp hộp thoại (báo trước); UI Automation tên trợ năng
 - Phụ thuộc: T2, T3. Cỡ: M
