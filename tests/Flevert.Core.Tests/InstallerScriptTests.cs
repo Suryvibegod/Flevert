@@ -235,6 +235,17 @@ public sealed class InstallerScriptTests
         Assert.Contains("does not exist", stderr, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void An_upgrade_removes_the_runtime_file_named_after_the_previous_runtime_version()
+    {
+        // The self-contained runtime ships mscordaccore_amd64_amd64_<runtime version>.dll beside mscordaccore.dll, and
+        // each release moves to the newest .NET patch (RELEASING): Inno never deletes what an earlier version installed,
+        // so every upgrade would leave the previous one behind. Deleted before the new files are copied.
+        var section = Regex.Match(Script, @"(?ms)^\[InstallDelete\]\r?$(.*?)^\[").Groups[1].Value;
+
+        Assert.Contains(@"Type: files; Name: ""{app}\mscordaccore_amd64_amd64_*.dll""", section, StringComparison.Ordinal);
+    }
+
     private sealed record FilesEntry(string Source, string[] Excludes, string DestDir);
 
     private static List<FilesEntry> FilesEntries()

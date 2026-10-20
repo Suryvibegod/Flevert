@@ -92,6 +92,11 @@ Source: "{#SourceDir}\vcruntime140_1.dll"; DestDir: "{code:InstallFolder}"; Flag
 Source: "{#SourceDir}\openssl.cnf"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
 Source: "{#SourceDir}\Magick.Native-*.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
 
+[InstallDelete]
+; The runtime names this copy of mscordaccore.dll after its own version, and each release moves to the newest .NET patch:
+; Inno never removes what an earlier version installed, so delete the old one before the new files are copied.
+Type: files; Name: "{app}\mscordaccore_amd64_amd64_*.dll"
+
 [UninstallDelete]
 ; What flevert.exe writes under %LOCALAPPDATA%\Flevert: logs, batch keys and the ImageMagick policy. Named one by one,
 ; so files someone else keeps in a folder of the same name survive.
