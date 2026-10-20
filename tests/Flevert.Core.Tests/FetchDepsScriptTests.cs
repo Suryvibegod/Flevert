@@ -145,6 +145,9 @@ public sealed class FetchDepsScriptTests : IDisposable
         };
         foreach (var argument in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-Manifest", manifest, "-Destination", deps })
             start.ArgumentList.Add(argument);
+        // Under PowerShell 7 (the CI runner's shell) PSModulePath lists its own modules, which Windows PowerShell cannot
+        // load: Get-FileHash and the like would be "not found". Let powershell.exe use its own default.
+        start.Environment.Remove("PSModulePath");
         using var process = Process.Start(start)!;
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();

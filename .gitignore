@@ -488,3 +488,6 @@ $RECYCLE.BIN/
 
 # Third-party tools fetched by scripts (ffmpeg and the like, from v0.2); never committed.
 deps/
+
+# Git worktrees that Claude Code agents work in.
+.claude/worktrees/
