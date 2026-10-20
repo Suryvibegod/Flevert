@@ -10,7 +10,7 @@ Video quay điện thoại quá nặng để gửi, định dạng không mở �
 
 ### User stories (ưu tiên từ trên xuống)
 
-1. Video 2 phút quay iPhone (MOV, HEVC, 400 MB) → **Compress > Under 25 MB** → MP4 dưới 25 MB, gửi được qua Gmail/Messenger, xem được trên mọi máy.
+1. Video 2 phút quay iPhone (MOV, HEVC, 400 MB) → **Compress > Under 25 MB** → MP4 dưới 25 MB, gửi được qua Messenger hay Discord, xem được trên mọi máy. (Gmail tính giới hạn 25 MB sau khi mã hóa base64, nên file gốc chỉ nên tới khoảng 18 MB: gửi email là việc của "For email" ở v0.3.1.)
 2. MOV/MKV/WEBM không mở được → **Convert to > MP4** (H.264 + AAC, chạy mọi nơi).
 3. Lấy nhạc/tiếng từ video → **Extract audio > MP3**.
 4. Đổi định dạng audio: FLAC/WAV/M4A/OGG/OPUS/WMA → MP3, M4A, FLAC, WAV…
@@ -194,3 +194,178 @@ docs/adr/0009-…                → bản dựng ffmpeg (GPL hay LGPL) và ngh�
 1. **GPL hay LGPL: đã chốt GPL** (người dùng duyệt 2026-10-20). Lý do: "Under N MB" cần mã hóa 2 lượt và CRF của x264 để vừa dung lượng mà vẫn đẹp; bản LGPL phải dùng `h264_mf`, không CRF, không 2 lượt, chất lượng tùy bộ mã hóa của từng máy (khó test, khó hứa). Cả hai bản đều phải kèm mã nguồn, nên GPL chỉ làm asset mã nguồn lớn hơn, và asset đó sinh tự động. ffmpeg chạy tiến trình riêng nên Flevert vẫn MIT.
 2. Kích thước: bản GPL static khoảng 80–130 MB giải nén; có cần tải ffmpeg lúc cài (bộ cài nhỏ) thay vì đóng gói? Mặc định: đóng gói (offline, không tải gì lúc chạy hay lúc cài).
 3. Mã hóa phần cứng (NVENC/QSV/AMF) cho máy yếu: để sau v0.3 trừ khi đo thấy preset `medium` quá chậm (> 3× thời gian thực ở 1080p trên máy 4 nhân).
+
+---
+
+# v0.3.1: công cụ video và âm thanh thêm
+
+Trạng thái: **đã chốt** (2026-10-20). Người dùng giao maintainer tự quyết, nên các quyết định được ghi ngay trong spec, không qua bước hỏi.
+
+**Nhánh:** `feat/v0.3.1-media`, tạo từ `main` sau khi v0.3.0 được gộp. Dùng lại cửa sổ chọn công cụ của v0.2.2 (pdf.md, mục "Cửa sổ Flevert — PDF tools").
+
+**Thứ tự phát hành:** v0.2.1 → v0.2.2 → v0.3.0 → v0.3.1. Mọi quy tắc của v0.3.0 vẫn áp dụng: tiến trình riêng, whitelist giao thức và demuxer, chọn luồng, bỏ GPS, giới hạn, `.partial`.
+
+## Objective (v0.3.1)
+
+Người dùng điện thoại ở Việt Nam hay làm vài việc với video và ghi âm mà v0.3.0 chưa có:
+- cắt lấy đoạn cần gửi;
+- xoay video quay ngang;
+- bỏ tiếng nền;
+- làm đều âm lượng bản ghi âm bài giảng;
+- lấy một khung hình làm ảnh bìa;
+- ghép mấy clip một chuyến đi thành một video;
+- nén đúng giới hạn của nơi sẽ gửi.
+
+v0.3.1 thêm các việc đó, vẫn bằng chuột phải và preset, chạy trên máy.
+
+## Nguồn tham khảo (khảo sát 2026-10-20)
+
+Đọc giấy phép bằng `gh api`, hoặc đọc file LICENSE khi API không báo giấy phép. Quy tắc dùng lại:
+- **Lấy được code** (giữ thông báo giấy phép, ghi nguồn): MIT, BSD, Apache-2.0, Zlib, ISC, Unlicense.
+- **Chỉ lấy tham số hoặc ý tưởng:** GPL, AGPL.
+- **Không dùng gì:** giấy phép phi thương mại.
+
+| Repo | Giấy phép | Lấy gì |
+|---|---|---|
+| [slhck/ffmpeg-normalize](https://github.com/slhck/ffmpeg-normalize) | MIT | Cách chuẩn hóa âm lượng 2 lượt EBU R128 và preset (podcast −16 LUFS, LRA 7, TP −2; video −14 LUFS). Ghi thông báo MIT nếu chép |
+| [sowahq/compress.lol](https://github.com/sowahq/compress.lol) | Apache-2.0 (không có file NOTICE) | Dữ liệu giới hạn theo nơi gửi, kèm nguồn và ngày kiểm (`src/lib/compression/presets.json`). Ghi trong `THIRD-PARTY-NOTICES.txt` nếu lấy dữ liệu |
+| [cdgriffith/FastFlix](https://github.com/cdgriffith/FastFlix) | MIT | Cách xoay/lật, đổi tốc độ, dựng lệnh ghép |
+| [WyattBlue/auto-editor](https://github.com/WyattBlue/auto-editor) | Unlicense | Ngưỡng cắt khoảng lặng |
+| [ZhiQiu-Kinsey/AppleLivePhotoConvert](https://github.com/ZhiQiu-Kinsey/AppleLivePhotoConvert) | MIT, C# | Để sau (Motion Photo thuộc module ảnh) |
+| [HandBrake/HandBrake](https://github.com/HandBrake/HandBrake) | GPL-2.0 | **Chỉ tham số**: bậc độ phân giải theo thời lượng của preset "Social 25 MB" (30 s 1080p, 1 phút 720p, 2 phút 540p, 5 phút 360p) |
+| [Tichau/FileConverter](https://github.com/Tichau/FileConverter), [mifi/lossless-cut](https://github.com/mifi/lossless-cut), [paulpacifico/shutter-encoder](https://github.com/paulpacifico/shutter-encoder) | GPL | Chỉ ý tưởng: xoay, đổi tốc độ, cắt, tắt tiếng, chụp khung hình, ghép |
+| [ImageOptim/gifski](https://github.com/ImageOptim/gifski), compressO, VERT, ConvertX, video2x | AGPL | Chỉ ý tưởng |
+| [JMS1717/8mb.local](https://github.com/JMS1717/8mb.local) | CC BY-NC 4.0 | Không dùng |
+
+Ghi nguồn ở ADR của media và trong commit message khi lấy tham số hay code.
+
+## Sửa cho v0.3.0 (làm trong nhánh v0.3.0 nếu chưa phát hành, không thì ở v0.3.1)
+
+**Gmail tính giới hạn 25 MB sau khi mã hóa base64**, tức file tăng khoảng một phần ba, nên file gốc chỉ nên tới khoảng **18 MB**. Nguồn: fast.io, compresto.app, compress.lol, kiểm 2026-10-20. Gmail không báo lỗi khi vượt: nó thay file đính kèm bằng link Google Drive.
+
+Hệ quả cho v0.3.0:
+- User story 1 và mọi lời nhắc tới Gmail không hứa "Under 25 MB gửi được qua Gmail". Ví dụ đúng là Messenger hay Discord.
+- Gửi email là việc của mục "For email" ở v0.3.1.
+
+## Menu (≤ 16 mục) và cửa sổ "Flevert — Video tools"
+
+Theo nguyên tắc menu của v0.2.2: việc hay làm đứng trên, tên là lời thường, có icon Fluent.
+
+```
+Video:
+[icon] Compress ▸        Light · Balanced · Strong · Under 10 MB · Under 25 MB · Under 100 MB   (7)
+[icon] Convert to ▸      MP4 · MOV · WEBM · GIF (bỏ đích trùng nguồn)                          (≤ 5)
+[icon] Trim…                         (mở cửa sổ ở công cụ Trim)                                  (1)
+[icon] Extract audio (MP3)           (thay submenu 3 mục; M4A chuyển vào cửa sổ)                (1)
+──────
+[icon] Remove hidden info                                                                        (1)
+[icon] More video tools…                                                                         (1)   ≤ 16
+Audio:
+[icon] Convert to ▸      MP3 · M4A · WAV · FLAC · OGG · Opus (bỏ đích trùng nguồn)              (≤ 7)
+[icon] Make volume even                                                                          (1)
+[icon] Merge into one file           (cần ≥ 2 file; 1 file → lỗi rõ như Merge PDFs)            (1)
+[icon] More audio tools…                                                                         (1)   ≤ 10
+```
+
+- op-id `video.extract-mp3` không đổi, chỉ đổi nhãn; `video.extract-m4a` vào cửa sổ.
+
+**Cửa sổ "Flevert — Video tools":** cùng thành phần với PDF tools (dùng chung code, chỉ khác danh sách công cụ). Các nhóm:
+- **Edit:** Trim · Rotate right / left / 180° · Flip · Merge selected videos (chỉ hiện khi chọn ≥ 2 file) · Speed 2× / 0.5×
+- **Sound:** Remove sound · Make volume even · Extract audio as M4A
+- **Share:** For email (18 MB) · For WhatsApp (16 MB) · For Messenger (25 MB)
+- **Pictures:** Save a frame as JPG · GIF from a part
+
+**Cửa sổ "Flevert — Audio tools":** Trim · Cut silence at start and end · Small file for voice.
+
+## Yêu cầu
+
+Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy được bằng `flevert.exe run` với tùy chọn mặc định (headless). **Thời gian người dùng gõ** (mm:ss hoặc giây) được Flevert phân tích thành số và ghi ra bằng văn hóa bất biến. Chữ gõ vào **không bao giờ** đi thẳng vào tham số của ffmpeg.
+
+| op-id | Tên | Output | Cách làm |
+|---|---|---|---|
+| `video.trim` | Trim… | `<tên> (trimmed).mp4` | Xem mục "Trim" ngay dưới bảng. |
+| `video.rotate-right` / `-left` / `-180`, `video.flip` | Rotate / Flip | `<tên> (rotated).<đuôi>` | Mặc định **không mã hóa lại**: tùy chọn đầu vào `-display_rotation`/`-display_hflip` với `-c copy`, tính từ góc ffprobe đọc được. MKV/AVI/WEBM: mã hóa lại bằng `transpose`/`hflip,vflip`. Tùy chọn "Re-encode" cho ứng dụng cũ bỏ qua metadata xoay. |
+| `video.mute` | Remove sound | `<tên> (no sound).<đuôi>` | `-map 0:v:0 -an -c:v copy`, giữ quy tắc bỏ GPS. Video không có tiếng → skipped. |
+| `video.normalize`, `audio.normalize` | Make volume even | `<tên> (even volume).<đuôi>` | Xem mục "Make volume even" ngay dưới bảng. |
+| `video.frame-jpg` | Save a frame as JPG | `<tên> (frame).jpg` | Xem mục "Save a frame" ngay dưới bảng. |
+| `video.merge`, `audio.merge` | Merge into one | `<tên đầu> (merged).mp4` / `.m4a` | Xem mục "Merge into one" ngay dưới bảng. |
+| `video.share-email` / `-whatsapp` / `-messenger` | For email / WhatsApp / Messenger | `<tên> (for email).mp4` … | Dùng engine "Under N MB" với giới hạn 18 / 16 / 25 MB. Bậc độ phân giải theo thời lượng lấy từ tham số HandBrake Social. Mỗi preset ghi nguồn và ngày kiểm. Zalo chưa rõ giới hạn nên chưa có preset. |
+| `video.speed-2x`, `video.speed-half` | Speed 2× / 0.5× | `<tên> (2x).mp4` | `setpts=PTS/2,fps=30` + `atempo=2.0`; `setpts=2*PTS` + `atempo=0.5`. |
+| `video.gif-part` | GIF from a part | `<tên> (part).gif` | Bắt đầu tại thời điểm chọn, dài 3/5/10 s. `palettegen=stats_mode=diff`, `paletteuse=dither=sierra2_4a:diff_mode=rectangle`, thu bằng `lanczos`, tối đa 480 px. |
+| `audio.trim` | Trim | `<tên> (trimmed).<đuôi>` | Như `video.trim`. |
+| `audio.trim-silence` | Cut silence at start and end | `<tên> (trimmed).<đuôi>` | Lượt 1 `silencedetect=n=-50dB:d=0.5` để tìm thời điểm, lượt 2 cắt bằng `-ss/-to`. **Không** dùng `areverse` (giữ cả luồng trong bộ nhớ). |
+| `audio.voice-small` | Small file for voice | `<tên> (voice).mp3` | `-ac 1 -c:a libmp3lame -b:a 48k`, `highpass=f=80`. |
+
+**Trim** (`video.trim`):
+- Cửa sổ có ô "Start" và "End" (mm:ss), cùng các nút nhanh: 15/30/60 s đầu; bỏ 5 s đầu; bỏ 5 s cuối.
+- Mặc định **chính xác** (mã hóa lại theo chuỗi MP4 của v0.3.0, `-ss` đặt trước `-i`).
+- Tùy chọn "Fast" (`-c copy`): nói rõ là chỉ cắt được ở keyframe, có thể lệch một giây hoặc hơn.
+
+**Make volume even** (`video.normalize`, `audio.normalize`):
+- Lượt 1: `loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json -f null`, rồi đọc JSON.
+- Lượt 2: cùng filter, thêm `measured_*`, `offset` và `linear=true`, cộng `aresample=48000` (không có thì loudnorm đổi sang 192 kHz).
+- Video giữ `-c:v copy`.
+- Preset: giọng nói −16 LUFS (mặc định), video −14 LUFS. Nguồn: ffmpeg-normalize (MIT).
+
+**Save a frame** (`video.frame-jpg`):
+- Tùy chọn vị trí: start, middle (mặc định), "best" (`thumbnail=n=100`).
+- Lệnh: `-ss T -i file:… -frames:v 1 -update 1 -q:v 2`; xoay đúng chiều; HDR thì tone-map như v0.3.0.
+- **Muxer image2 đọc `%` trong tên output**, nên luôn ghi ra tên tạm cố định rồi đổi tên. Không bao giờ để tên file của người dùng nằm trong mẫu tên.
+
+**Merge into one** (`video.merge`, `audio.merge`):
+- **Không dùng demuxer `concat`**: nó chép whitelist sang file nó mở, và một input độc có thể là một danh sách concat khác.
+- Mỗi file là một `-i file:` riêng, cùng whitelist và cùng bước kiểm ffprobe, rồi ghép bằng filter `concat=n=N:v=1:a=1` trong `-filter_complex`.
+- Trước khi ghép, chuẩn hóa từng file: `scale+pad+setsar=1,fps=30,format=yuv420p` và `aresample=48000,aformat=channel_layouts=stereo`. File không có tiếng thì chèn khoảng lặng.
+- **Thứ tự:** sắp theo `creation_time` (thời điểm quay), rồi theo tên. Thứ tự Explorer gửi file không đáng tin.
+- **Giới hạn:** tối đa 50 file và 12 giờ tổng; timeout bằng tổng thời lượng × 6 + 60 s.
+
+## Bảo mật (thêm cho v0.3.1)
+
+- Tên file có `%` (image2, segment): luôn ghi ra tên tạm cố định rồi đổi tên. Test với file tên `50%off.mp4`.
+- Ghép nhiều file: filter concat với nhiều `-i`, không bao giờ dùng demuxer concat hay danh sách file. Giới hạn số file, tổng thời lượng và bộ nhớ (trần job 2 GB).
+- Thời gian gõ vào: chỉ chữ số, `:` và `.`. Phân tích thành số; ngoài khoảng [0, thời lượng] thì báo lỗi ngay trong cửa sổ.
+- Không dùng filter đọc file (`subtitles=`, `movie=`), nên **burn phụ đề** để sau. Cách an toàn duy nhất là Flevert tự đọc SRT rồi vẽ bằng `drawtext`.
+- `loudnorm`, `silencedetect`: đọc kết quả JSON và log của ffmpeg có giới hạn kích thước (1 MB như mọi output của `ExternalTool`).
+
+## Ngoài phạm vi v0.3.1 (để sau)
+
+- Split thành nhiều phần (v0.3.2).
+- MP4 nhanh không mã hóa lại khi nguồn đã là H.264/AAC: cải tiến nội bộ, xét ở bản hiệu năng.
+- Nhạc chuông `.m4r`.
+- Motion Photo → MP4 (module ảnh).
+- Đổi độ phân giải (trùng Compress > Strong).
+- Burn phụ đề.
+- Tìm chất lượng theo VMAF.
+- Giữ HDR, AI upscale.
+
+## Testing Strategy (v0.3.1)
+
+- Test viết trước và thấy đỏ.
+- Fixture sinh bằng ffmpeg (`lavfi`), không dùng video cá nhân:
+  - clip 10 s có tiếng nói giả (sine thay đổi biên độ);
+  - clip quay dọc (rotation 90);
+  - 3 clip khác độ phân giải, fps, có và không có tiếng (cho Merge);
+  - audio có 2 s im lặng ở đầu và cuối;
+  - file tên `50%off.mp4`;
+  - input độc của v0.3.0 (HLS, concat) cho mọi công cụ mới.
+- Kiểm bằng ffprobe:
+  - thời lượng ±0,1 s;
+  - xoay đúng;
+  - không còn luồng audio (mute);
+  - loudness đạt −16 ± 1 LUFS (đo lại bằng `ebur128`);
+  - output ghép dài bằng tổng và đúng thứ tự;
+  - cỡ < giới hạn của preset;
+  - không còn GPS.
+- Cửa sổ Video/Audio tools: test logic không cần UI; UI Automation cho tên trợ năng; MenuProbe ≤ 16 mục.
+- Đo tốc độ, ghi vào todo: xoay không mã hóa lại ≤ 2 s cho 400 MB; trim chính xác 30 s ≤ 2× thời gian thực.
+
+## Success Criteria (v0.3.1)
+
+1. Menu video ≤ 16 và menu audio ≤ 10 đúng bố cục, có icon. Cửa sổ Video/Audio tools chạy được mọi công cụ cho 1 file và cho nhiều file.
+2. Trim chính xác: đoạn 00:10–00:40 ra dài 30,0 ± 0,1 s. Fast mode báo rõ có thể lệch.
+3. Xoay video quay dọc: không mã hóa lại (gói video trùng hash), trình xem Windows hiện đúng chiều.
+4. Make volume even: output đạt −16 ± 1 LUFS; video không bị mã hóa lại.
+5. Merge 3 clip khác thông số: một video, thời lượng bằng tổng ± 0,2 s, theo thứ tự thời điểm quay. Không có demuxer concat trong mọi lệnh ffmpeg (test đọc dòng lệnh).
+6. For email / WhatsApp / Messenger: output < 18 / 16 / 25 × 1 000 000 byte.
+7. File tên `50%off.mp4`: mọi công cụ ra đúng tên output.
+8. Mọi công cụ: bảng input độc của v0.3.0 đạt. CI xanh 3 lần. `test-installer.ps1` đạt (gồm nâng cấp từ bản đã ghim). Ba review bối cảnh trống không còn Critical/High/Required.
