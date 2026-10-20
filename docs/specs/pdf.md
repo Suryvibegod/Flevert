@@ -252,7 +252,7 @@ Người dùng: PDF scan 20 trang 25 MB, cần gửi qua Zalo/email.
 3. **Split** ra thư mục `<tên> (split)\<tên> 001.pdf` thay cho `<tên> (pages)` (trùng tên với Convert > JPG/PNG pages). Ghi ở CHANGELOG mục **Changed**.
 4. **Merge**: lỗi quá 2 000 trang sau khi đếm lại output nói "Together these PDFs have more than 2000 pages…" (không phải lời của một file); probe mật khẩu hết giờ trong merge nêu file.
 5. **Test còn thiếu**: đếm lại trang của merge; guard `secret` + `outputLine` của `Qpdf.RunWithLinesAsync`; lỗi I/O của bước kiểm chữ ký trong merge nêu file.
-6. **SA-L1:** PDF → ảnh: trước khi render, ước lượng output (tổng pixel các trang ở DPI đã chọn × 0,5 byte cho JPG, × 3 byte cho PNG) và so với chỗ trống ổ đích; thiếu → lỗi "There is not enough free space…"; tổng pixel > 4 000 MP → lỗi "too large to convert".
+6. **SA-L1:** PDF → ảnh: trước khi render, ước lượng output (tổng pixel các trang ở DPI đã chọn × 0,5 byte cho JPG, × 1 byte cho PNG, cộng 64 MB để dành) và so với chỗ trống ổ đích; thiếu → lỗi "There is not enough free space…"; tổng pixel > 5 000 MP → lỗi "too large to convert". (Ban đầu 3 byte/px cho PNG và trần 4 000 MP; review trước phát hành: từ chối cả chuyển đổi vừa đĩa và PDF A4 ~1 835–2 000 trang mà 0.2.0 chuyển được; maintainer đổi 2026-10-20: 2 000 trang A4 ở 150 DPI là 4 350 MP.)
 
 ### P7. Bảo trì
 

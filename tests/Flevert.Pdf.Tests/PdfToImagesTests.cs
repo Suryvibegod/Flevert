@@ -117,28 +117,32 @@ public class PdfToImagesTests(ITestOutputHelper output)
     [Theory]
     [InlineData(PdfPageImageFormat.Jpeg)]
     [InlineData(PdfPageImageFormat.Png)]
-    public async Task Pages_of_more_than_4000_megapixels_in_all_are_refused_before_any_is_drawn(PdfPageImageFormat format)
+    public async Task Pages_of_more_than_5000_megapixels_in_all_are_refused_before_any_is_drawn(PdfPageImageFormat format)
     {
-        // 41 pages that each render at 10 000 x 10 000 px: 4 100 megapixels, each page within the limit of one.
+        // 51 pages that each render at 10 000 x 10 000 px: 5 100 megapixels, each page within the limit of one.
         using var dir = new TempDir();
         var input = dir.Combine("posters.pdf");
-        TestPdf.WriteSquarePages(input, 41, 14_400);
+        TestPdf.WriteSquarePages(input, 51, 14_400);
         var timer = Stopwatch.StartNew();
 
         var ex = await Assert.ThrowsAsync<PdfException>(() => new PdfToImages(format, PdfToImages.Dpi, TestPdf.Worker).RunAsync(input, CancellationToken.None));
 
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), $"took {timer.Elapsed}");
         Assert.Equal(PdfError.TooLarge, ex.Error);
-        Assert.Equal("This PDF is too large to convert to pictures: its pages together would be more than 4000 megapixels.", ex.Message);
+        Assert.Equal("This PDF is too large to convert to pictures: its pages together would be more than 5000 megapixels.", ex.Message);
         Assert.Equal(["posters.pdf"], Directory.GetFileSystemEntries(dir.Path).Select(Path.GetFileName));
     }
 
+    // What the disk keeps free on top of the estimate (PdfRenderBudget): 64 MB.
+    private const long Margin = 64L << 20;
+
     [Theory]
-    [InlineData(1_000_000L, PdfPageImageFormat.Jpeg, 500_000L, null)]
-    [InlineData(1_000_000L, PdfPageImageFormat.Jpeg, 499_999L, "about 1 MB, and 1 MB is free")]
-    [InlineData(1_000_000_000L, PdfPageImageFormat.Png, 2_000_000_000L, "about 2.8 GB, and 1.9 GB is free")]
-    [InlineData(4_000_000_000L, PdfPageImageFormat.Png, null, null)]
-    public void The_pictures_need_half_a_byte_a_pixel_as_jpeg_and_three_as_png(long pixels, PdfPageImageFormat format, long? free, string? lacking)
+    [InlineData(1_000_000L, PdfPageImageFormat.Jpeg, 500_000L + Margin, null)]
+    [InlineData(1_000_000L, PdfPageImageFormat.Jpeg, 500_000L + Margin - 1, "about 64 MB, and 64 MB is free")]
+    [InlineData(1_000_000_000L, PdfPageImageFormat.Png, 1_000_000_000L + Margin, null)]
+    [InlineData(1_000_000_000L, PdfPageImageFormat.Png, 1_000_000_000L + Margin - 1, "about 1017 MB, and 1017 MB is free")]
+    [InlineData(5_000_000_000L, PdfPageImageFormat.Png, null, null)]
+    public void The_pictures_need_half_a_byte_a_pixel_as_jpeg_and_one_as_png_and_a_margin(long pixels, PdfPageImageFormat format, long? free, string? lacking)
     {
         var problem = PdfRenderBudget.Check(pixels, format, free);
 
@@ -148,10 +152,19 @@ public class PdfToImagesTests(ITestOutputHelper output)
             Assert.Equal($"There is not enough free space for the pictures of this PDF: they need {lacking}.", problem);
     }
 
-    [Fact]
-    public void Past_4000_megapixels_nothing_is_converted_whatever_the_disk()
+    [Theory]
+    [InlineData(PdfPageImageFormat.Jpeg)]
+    [InlineData(PdfPageImageFormat.Png)]
+    public void Two_thousand_a4_pages_at_150_dpi_are_not_too_large(PdfPageImageFormat format)
     {
-        var ex = Assert.Throws<PdfException>(() => PdfRenderBudget.Check(4_000_000_001L, PdfPageImageFormat.Jpeg, long.MaxValue));
+        // 0.2.0 converted them: 2 000 x 1240 x 1754 px, 4 350 megapixels.
+        Assert.Null(PdfRenderBudget.Check(2_000L * 1240 * 1754, format, long.MaxValue));
+    }
+
+    [Fact]
+    public void Past_5000_megapixels_nothing_is_converted_whatever_the_disk()
+    {
+        var ex = Assert.Throws<PdfException>(() => PdfRenderBudget.Check(5_000_000_001L, PdfPageImageFormat.Jpeg, long.MaxValue));
 
         Assert.Equal(PdfError.TooLarge, ex.Error);
     }
