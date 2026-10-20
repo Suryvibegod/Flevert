@@ -437,6 +437,33 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task Two_installs_running_the_same_operation_at_once_each_form_their_own_single_batch()
+    {
+        // Another copy of Flevert (a second install, a development build) refuses our processes as peers. When both used
+        // the same batch key they kept refusing each other and rotating it, and their batches split. Seen on a machine
+        // where several worktrees ran their test suites at the same time.
+        using var install = new TempDir();
+        foreach (var file in Directory.GetFiles(Path.GetDirectoryName(FlevertExe)!))
+            File.Copy(file, Path.Combine(install.Path, Path.GetFileName(file)));
+        var otherExe = Path.Combine(install.Path, "flevert.exe");
+        using var otherFiles = new TempDir();
+        var ours = Enumerable.Range(1, 8).Select(i => _dir.File($"ảnh {i}.txt", $"{i}\r\n")).ToList();
+        var theirs = Enumerable.Range(1, 8).Select(i => otherFiles.File($"ảnh {i}.txt", $"{i}\r\n")).ToList();
+
+        var processes = ours.Zip(theirs).SelectMany(pair => new[]
+        {
+            StartFlevert("dev.join", pair.First),
+            StartFlevertVia(otherExe, "dev.join", pair.Second),
+        }).ToList();
+        await ExitAllOk(processes);
+
+        // One joined file in each folder, and nothing else: no second batch on either side.
+        string[] Expected(IEnumerable<string> inputs) => [.. inputs.Select(f => Path.GetFileName(f)).Append("ảnh 1 (+7).txt").Order(StringComparer.Ordinal)];
+        Assert.Equal(Expected(ours), _dir.FileNames());
+        Assert.Equal(Expected(theirs), otherFiles.FileNames());
+    }
+
+    [Fact]
     public async Task A_joining_batch_with_a_file_it_cannot_use_writes_nothing_and_only_its_leader_exits_with_failure()
     {
         // Exit codes as docs/specs/core.md has them: the leader reports the batch, the others exit 0 once delivered.

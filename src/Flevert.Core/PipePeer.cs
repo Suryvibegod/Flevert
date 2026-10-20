@@ -50,6 +50,9 @@ internal static partial class PipePeer
 
     private static readonly Lazy<string?> OwnImagePath = new(() => ImagePath(GetCurrentProcess()));
 
+    /// <summary>This process's executable as the kernel reports it (junctions and subst drives resolved), or null.</summary>
+    public static string? OwnImage => OwnImagePath.Value;
+
     private static string? ImagePath(nint process)
     {
         var buffer = new char[32768];

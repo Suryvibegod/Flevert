@@ -72,7 +72,22 @@ public static class Batch
 
     internal static string PipeName(string operationId) => PipeName(operationId, ReadOrCreateSecret(SecretPath(operationId)));
 
-    internal static string SecretPath(string operationId) => Path.Combine(AppData.Root, AppData.PipesFolder, operationId + ".key");
+    internal static string SecretPath(string operationId) =>
+        Path.Combine(AppData.Root, AppData.PipesFolder, $"{operationId}.{Scope.Value}.key");
+
+    /// <summary>
+    /// Which flevert.exe this is: a hash of the executable's path as the kernel reports it, plus the session. Two copies
+    /// (another install, a development build) refuse each other as peers anyway; with a shared key they also kept
+    /// rotating it under each other's batches and split them. A launch through a junction or a subst drive still
+    /// resolves to the same path, as in the peer check.
+    /// </summary>
+    private static readonly Lazy<string> Scope = new(() =>
+    {
+        var image = PipePeer.OwnImage ?? Environment.ProcessPath ?? "";
+        var hash = SHA256.HashData(System.Text.Encoding.Unicode.GetBytes(image.ToUpperInvariant()));
+        using var self = Process.GetCurrentProcess();
+        return $"{Convert.ToHexString(hash, 0, 8)}-{self.SessionId}";
+    });
 
     /// <summary>
     /// A random part of the pipe name, readable only by this user at medium integrity or above, and replaced whenever a
