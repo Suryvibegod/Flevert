@@ -4,6 +4,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Fetched by scripts/fetch-deps.ps1, pinned by SHA256 (ADR-0008); never committed. -->
     <PdfiumDll>$(MSBuildThisFileDirectory)..\..\deps\pdfium\bin\pdfium.dll</PdfiumDll>
+    <QpdfBin>$(MSBuildThisFileDirectory)..\..\deps\qpdf\bin\</QpdfBin>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,14 +16,24 @@
     <InternalsVisibleTo Include="Flevert.Pdf.Tests" />
   </ItemGroup>
 
-  <!-- Copied next to every assembly that references this one (the tests now, flevert.exe later). -->
+  <!-- Copied next to every assembly that references this one (flevert.exe and the tests). -->
   <ItemGroup Condition="Exists('$(PdfiumDll)')">
     <None Include="$(PdfiumDll)" Link="pdfium.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <!-- qpdf.exe, qpdf30.dll and the MSVC runtime it ships with: Qpdf looks for qpdf.exe next to the running program.
+       Only qpdf imports these runtime DLLs (pdfium and Magick link theirs statically). -->
+  <ItemGroup Condition="Exists('$(QpdfBin)qpdf.exe')">
+    <None Include="$(QpdfBin)*.exe;$(QpdfBin)*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
   <!-- Fail early and say how to fix it, rather than build something that fails at run time. -->
   <Target Name="RequirePdfium" BeforeTargets="BeforeBuild" Condition="!Exists('$(PdfiumDll)')">
     <Error Text="deps\pdfium\bin\pdfium.dll is missing. Run: powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1" />
+  </Target>
+
+  <Target Name="RequireQpdf" BeforeTargets="BeforeBuild" Condition="!Exists('$(QpdfBin)qpdf.exe')">
+    <Error Text="deps\qpdf\bin\qpdf.exe is missing. Run: powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1" />
   </Target>
 
 </Project>
