@@ -13,7 +13,13 @@ public sealed record FileResult(string Input, string? Output, string? Error, boo
 
     /// <summary>What the operation noted about the output (<see cref="OutputNote"/>), or <c>null</c>.</summary>
     public string? Note { get; init; }
+
+    /// <summary>The input's and the output's size, when the operation reported them (<see cref="OutputNote.AddSizes"/>).</summary>
+    public SizeChange? Sizes { get; init; }
 }
+
+/// <summary>How large a file was and how large its output is, in bytes.</summary>
+public readonly record struct SizeChange(long OriginalBytes, long OutputBytes);
 
 /// <param name="Current">The file just started, or the file <paramref name="Within"/> is about; <c>null</c> when a file finished.</param>
 /// <param name="Within">How far <paramref name="Current"/> is inside, when its operation reports it ("page 37 of 200").</param>
@@ -205,7 +211,7 @@ public sealed class Runner(RunLog log)
         try
         {
             running = operation.RunAsync([.. inputs.Select(i => i.Real)], within, ct);
-            result = new FileResult(first, await running.WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text };
+            result = new FileResult(first, await running.WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text, Sizes = notes.Sizes };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -220,7 +226,7 @@ public sealed class Runner(RunLog log)
             }
 
             // It had already written its output when it stopped: the file exists, so report and log it like any other.
-            result = new FileResult(first, running.Result, null) { Note = notes.Text };
+            result = new FileResult(first, running.Result, null) { Note = notes.Text, Sizes = notes.Sizes };
         }
         catch (OperationSkippedException ex)
         {
@@ -386,7 +392,7 @@ public sealed class Runner(RunLog log)
             // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned.
             result = reason is not null
                 ? new FileResult(file, null, reason)
-                : new FileResult(file, await operation.RunAsync(realPath, within, ct).WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text };
+                : new FileResult(file, await operation.RunAsync(realPath, within, ct).WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text, Sizes = notes.Sizes };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
