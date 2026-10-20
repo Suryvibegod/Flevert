@@ -24,6 +24,10 @@ Since 2026-10-20 the user wants the work built first and verified at the end, no
 
 ## Conventions
 
+- **Reuse before writing** (the maintainer's rule, to ship features faster): before building a feature, look for a maintained library or open-source repository that already does it, and record what was considered in the spec or ADR (`source-driven-development`).
+  - Only licences compatible with Flevert's MIT: MIT, BSD, Apache-2.0, Zlib, ISC. Never copy GPL, AGPL or LGPL source into Flevert; a GPL tool may only run as a separate process (like ffmpeg in the media spec).
+  - Prefer taking it as a dependency (NuGet, or a binary pinned by SHA256 in `scripts/deps.json`) over copying code, so security fixes keep coming. When code is copied, keep its copyright header and licence, add it to the third-party notices (with the NOTICE file for Apache-2.0), and say where it came from in the commit message.
+  - Flevert opens files from strangers: check that the source is maintained and has no unfixed security advisories, and review copied code like our own.
 - UI, README, commit messages: English. Specs and plans: Vietnamese.
 - One logical change per commit; the message explains why. Commit identity is set by the setup script on the maintainer's machines; never commit with a personal email address.
 - Run the two test projects one after the other, not `dotnet test Flevert.sln`: run together, the image encodes starve the process-batching tests of CPU (CI runs them one at a time too).
