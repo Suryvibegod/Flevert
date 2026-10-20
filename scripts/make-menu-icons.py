@@ -55,6 +55,8 @@ ICONS = [
     ("layer", "filled"),                   # Lock filled forms
     ("cut", "filled"),                     # Split by size
     ("image_multiple", "filled"),          # Extract images
+    # The video menu (docs/specs/media.md, "Menu"); Compress, Convert to and Remove hidden info share the icons above.
+    ("music_note_2", "filled"),            # Extract audio
 ]
 
 # Every SVG used, with its SHA256 at COMMIT.
@@ -128,6 +130,9 @@ SOURCES = {
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_24_filled.svg": "095e0446adef1be2e40b0bb79548109398e45d478fbaed2e6d07e52c6cd8d717",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_32_filled.svg": "16d2103eef3fff8f99543d1b460e6aff7643c21dd012139345ad87da3bacbe86",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_48_filled.svg": "45ed2703baff95e741edfb73d9f39d16863a5061ae7fb1212248241610290ccb",
+    "assets/Music Note 2/SVG/ic_fluent_music_note_2_16_filled.svg": "073c9dbc1a768e0281f7bbe2640c68e33c430c8ea3e357582703c9c7aa5cbd10",
+    "assets/Music Note 2/SVG/ic_fluent_music_note_2_20_filled.svg": "9dd38c62dac5532a5ee8c0bf2b6d153c7511f768d8dac47a18b02cbe34471cef",
+    "assets/Music Note 2/SVG/ic_fluent_music_note_2_24_filled.svg": "7bbe41434729ca7a48c7c06a2d9798356ec9efaeaef343f1357a8650bfdba461",
 }
 
 
