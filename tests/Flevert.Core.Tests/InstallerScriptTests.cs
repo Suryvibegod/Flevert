@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Flevert.Core.Menu;
 
@@ -114,6 +115,51 @@ public sealed class InstallerScriptTests
     // GitHub's heading anchors: lower case, spaces to hyphens, punctuation dropped.
     private static string Slug(string heading) =>
         Regex.Replace(heading.ToLowerInvariant().Replace(' ', '-'), @"[^a-z0-9\-_]", "");
+
+    [SkippableFact]
+    public void The_installer_does_not_compile_from_a_folder_without_the_third_party_notices()
+    {
+        // build-installer.ps1 writes THIRD-PARTY-NOTICES.txt (write-notices.ps1) before compiling, but ISCC run by hand
+        // on a plain dotnet publish folder would package pdfium, qpdf and the MSVC runtime without their licences.
+        string[] candidates =
+        [
+            .. (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+                .Select(folder => Path.Combine(folder.Trim('"'), "ISCC.exe")),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Inno Setup 6\ISCC.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"Inno Setup 6\ISCC.exe"),
+        ];
+        var iscc = candidates.FirstOrDefault(File.Exists);
+        Skip.If(iscc is null, "Inno Setup is not installed (scripts\\setup-dev.ps1 installs it).");
+        using var dir = new TempDir();
+        var source = Directory.CreateDirectory(dir.Combine("publish")).FullName;
+        // Any program with a version resource stands in for flevert.exe, which the script reads its version from.
+        File.Copy(Environment.ProcessPath!, Path.Combine(source, "flevert.exe"));
+
+        var without = Compile(iscc!, source, dir.Combine("out"));
+        File.WriteAllText(Path.Combine(source, "THIRD-PARTY-NOTICES.txt"), "notices");
+        var with = Compile(iscc!, source, dir.Combine("out"));
+
+        Assert.True(without.ExitCode != 0, without.Output);
+        Assert.Contains("THIRD-PARTY-NOTICES.txt not found", without.Output, StringComparison.Ordinal);
+        Assert.True(with.ExitCode == 0, with.Output);
+    }
+
+    private static (int ExitCode, string Output) Compile(string iscc, string source, string output)
+    {
+        var start = new ProcessStartInfo(iscc) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var argument in new[] { "/Qp", $"/DSourceDir={source}", $"/O{output}", Path.Combine(RepositoryRoot(), "installer", "Flevert.iss") })
+            start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(120_000))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException("ISCC did not finish in 2 minutes");
+        }
+
+        return (process.ExitCode, stdout.Result + stderr.Result);
+    }
 
     [Fact]
     public void Uninstall_removes_each_folder_flevert_writes_under_local_app_data()

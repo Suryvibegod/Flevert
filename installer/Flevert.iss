@@ -19,6 +19,10 @@
   #error flevert.exe not found in SourceDir; run scripts\build-installer.ps1.
 #endif
 #define AppVersion Copy(FileVersion, 1, RPos(".", FileVersion) - 1)
+; [Files] packs the whole folder, pdfium, qpdf and the MSVC runtime included: their licences must go with them.
+#if !FileExists(AddBackslash(SourceDir) + "THIRD-PARTY-NOTICES.txt")
+  #error THIRD-PARTY-NOTICES.txt not found in SourceDir; run scripts\build-installer.ps1, which writes it.
+#endif
 
 [Setup]
 AppId={{8B7A3F52-2C64-4F0B-9E3D-5A1C7E2B9D40}
