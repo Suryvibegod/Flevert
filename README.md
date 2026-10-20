@@ -22,6 +22,7 @@ HEIC to JPG, smaller files, a GPS-free copy to share: straight from Windows Expl
 - 🪶 **Photos that fit**: shrink them for chat and email, or under 500 KB, 1 MB or 5 MB.
 - 🔁 **Seven formats**: JPG, PNG, WebP, AVIF, GIF, BMP and TIFF.
 - 📍 **Share without your location**: strip GPS and camera details first.
+- 📄 **PDF tools**: photos and scans into one PDF, PDF pages to pictures, merge, split, rotate, compress, passwords.
 - ⚡ **Up to 100 files at once**, with one notification at the end.
 - 🛡️ **Originals untouched**: results land next to them, and nothing is overwritten.
 
@@ -42,9 +43,24 @@ For `.jpg .jpeg .png .webp .heic .heif .avif .gif .bmp .tif .tiff`:
 | **Convert** > JPG, PNG, WEBP, AVIF, GIF, BMP, TIFF | `photo.jpg`, upright; animations stay animated in GIF and WebP |
 | **Compress** > Light, Balanced, Strong | `photo (compressed).jpg`, usually in the same format |
 | **Compress** > Under 500 KB, 1 MB, 5 MB | `photo (under 1 MB).jpg`, the best quality that fits |
+| **Combine into PDF** | one `photo (+11).pdf` from all the selected pictures, in name order, the right way up, without GPS or camera details |
 | **Remove metadata** | `photo (no metadata).jpg`, without GPS, camera details, XMP or comments |
 
-Batches longer than two seconds show a progress window with **Cancel**.
+HEIC and HEIF photos have no **Convert > GIF**: Explorer shows at most 16 entries in a menu like this one.
+
+For `.pdf`:
+
+| Flevert > | You get |
+|---|---|
+| **Convert** > JPG pages, PNG pages | a folder `report (pages)` with `report 001.jpg`, … |
+| **Merge PDFs** | one `report (merged).pdf` from the selected PDFs, in name order |
+| **Split into pages** | a folder `report (pages)` with one PDF per page |
+| **Rotate** > 90° right, 90° left, 180° | `report (rotated).pdf` |
+| **Compress** | `report (compressed).pdf`, smaller without losing quality |
+| **Remove metadata** | `report (no metadata).pdf`, without author, dates, XMP, attachments or scripts |
+| **Protect with password**, **Remove password** | `report (protected).pdf` (AES-256), `report (unlocked).pdf` |
+
+PDFs are read in a separate, limited process, so a damaged or hostile file cannot take Flevert down with it. Batches longer than two seconds show a progress window with **Cancel**.
 
 <p align="center">
 <img src="assets/screenshots/progress.png" width="420" alt="The Flevert progress window converting twelve photos to JPG: 8 of 12 done, with a Cancel button">
@@ -56,7 +72,7 @@ No account, no telemetry, no upload. At most once a day, after a conversion, Fle
 
 ## Coming next
 
-**0.2** brings PDF: photos to one PDF, PDF to pictures, merge, split, rotate, compress, passwords. **0.3** brings video and audio. See the [CHANGELOG](CHANGELOG.md), and share ideas in [issues](https://github.com/Suryvibegod/Flevert/issues).
+**0.2.1** adds more PDF tools: shrink scanned PDFs for sharing, reverse page order, repair, and extract text or pictures. **0.3** brings video and audio. See the [CHANGELOG](CHANGELOG.md), and share ideas in [issues](https://github.com/Suryvibegod/Flevert/issues).
 
 ## Troubleshooting
 
