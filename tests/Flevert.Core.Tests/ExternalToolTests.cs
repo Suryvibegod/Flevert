@@ -161,6 +161,32 @@ public sealed class ExternalToolTests : IDisposable
     }
 
     [Fact]
+    public async Task The_pipes_from_the_tool_are_closed_when_the_run_returns()
+    {
+        // Process.Dispose leaves a redirected stream open once it has been read synchronously (the caller may still hold
+        // it), so each run would leak two pipe handles until a garbage collection.
+        StreamReader? stdout = null, stderr = null;
+
+        await ExternalTool.RunAsync(Cmd, ["/c", "echo out& echo err 1>&2"], Generous, default, null,
+            afterStart: process => (stdout, stderr) = (process.StandardOutput, process.StandardError), CancellationToken.None);
+
+        Assert.False(stdout!.BaseStream.CanRead, "stdout is still open");
+        Assert.False(stderr!.BaseStream.CanRead, "stderr is still open");
+    }
+
+    [Fact]
+    public async Task The_pipe_to_the_tool_is_closed_even_when_the_tool_exits_without_reading_it()
+    {
+        // Writing 5 MB to a tool that has exited fails: the pipe must still be closed, not left to the finalizer.
+        StreamWriter? stdin = null;
+
+        await ExternalTool.RunAsync(Cmd, ["/c", "exit 3"], Generous, new byte[5 * 1024 * 1024], null,
+            afterStart: process => stdin = process.StandardInput, CancellationToken.None);
+
+        Assert.False(stdin!.BaseStream.CanWrite, "stdin is still open");
+    }
+
+    [Fact]
     public async Task Runs_in_the_tools_own_folder_by_default()
     {
         var result = await ExternalTool.RunAsync(Cmd, ["/c", "cd"], Generous);

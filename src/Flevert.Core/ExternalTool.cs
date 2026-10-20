@@ -99,9 +99,14 @@ public static partial class ExternalTool
             throw;
         }
 
+        // Process.Dispose leaves a redirected stream open once it has been read (the caller could still hold it), so the
+        // pipes are closed here when the run ends; a read still waiting on a tool that escaped the job then stops too.
+        using var outputPipe = process.StandardOutput;
+        using var errorPipe = process.StandardError;
+
         // Started together: a tool that fills one pipe while nobody reads it would stop and never exit.
-        var output = ReadCappedAsync(process.StandardOutput.BaseStream);
-        var error = ReadCappedAsync(process.StandardError.BaseStream);
+        var output = ReadCappedAsync(outputPipe.BaseStream);
+        var error = ReadCappedAsync(errorPipe.BaseStream);
         var input = WriteInputAsync(process.StandardInput, standardInput);
 
         using var timer = new CancellationTokenSource(timeout);
@@ -185,13 +190,30 @@ public static partial class ExternalTool
             // Through the raw pipe, so the bytes are neither re-encoded nor copied into a buffer the writer keeps.
             if (!bytes.IsEmpty)
                 await stdin.BaseStream.WriteAsync(bytes).ConfigureAwait(false);
-            stdin.Close();
         }
         catch (IOException)
         {
             // The tool exited without reading all of its input; its exit code says whether that was a failure.
         }
         catch (ObjectDisposedException)
+        {
+        }
+        finally
+        {
+            // Closing tells the tool its input has ended; Process.Dispose would not close it, since it was used.
+            CloseQuietly(stdin);
+        }
+    }
+
+    // The writer holds nothing (the bytes went to its stream), so closing only closes the pipe; a broken one may still
+    // complain.
+    private static void CloseQuietly(StreamWriter stdin)
+    {
+        try
+        {
+            stdin.Dispose();
+        }
+        catch (IOException)
         {
         }
     }
