@@ -60,7 +60,15 @@ internal static class SharingPdf
 
         image.GaussianBlur(0, 1);
         image.Strip();
-        return image;
+        // A scanner's sensor noise, a few levels either way: a page without it is far more compressible than any scan
+        // (87 KB a page instead of hundreds), and Compress for sharing would have little to gain.
+        var pixels = image.GetPixels().ToByteArray(PixelMapping.RGB)!;
+        for (var i = 0; i < pixels.Length; i++)
+            pixels[i] = (byte)Math.Clamp(pixels[i] + random.Next(-4, 5), 0, 255);
+        image.Dispose();
+        var noisy = new MagickImage();
+        noisy.ReadPixels(pixels, new PixelReadSettings(width, height, StorageType.Char, PixelMapping.RGB));
+        return noisy;
     }
 
     /// <summary>
