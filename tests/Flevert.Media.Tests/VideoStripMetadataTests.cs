@@ -78,6 +78,23 @@ public sealed class VideoStripMetadataTests : IDisposable
         Assert.Equal(await PicturesHash(input), await PicturesHash(output));
     }
 
+    [Theory]
+    [InlineData(65_536 - 10, "17ee8c60f84d11d98cd60800200c9a66", true)] // across two reads
+    [InlineData((8 * 1024 * 1024) - 100, "17ee8c60f84d11d98cd60800200c9a66", true)]
+    [InlineData((8 * 1024 * 1024) + (128 * 1024), "17ee8c60f84d11d98cd60800200c9a66", false)] // past the first 8 MB
+    [InlineData(1000, "", false)] // the four letters alone, as a picture may hold them by chance (RC3-3)
+    public void A_camcorders_data_is_looked_for_in_the_first_8_mb_of_an_h264_file(int offset, string uuid, bool drops)
+    {
+        var path = _dir.Combine("clip.mp4");
+        var bytes = new byte[offset + 1000];
+        byte[] data = [.. Convert.FromHexString(uuid), .. "MDPM"u8];
+        data.CopyTo(bytes, offset);
+        File.WriteAllBytes(path, bytes);
+
+        Assert.Equal(drops, VideoStripMetadata.DropsSei(path, ".mp4", new VideoTrack(0, "h264", 1920, 1080, 0, false, 50)));
+        Assert.False(VideoStripMetadata.DropsSei(path, ".mp4", new VideoTrack(0, "hevc", 1920, 1080, 0, false, 50)));
+    }
+
     [Fact]
     public async Task A_stream_seeked_by_its_recovery_points_keeps_its_sei()
     {

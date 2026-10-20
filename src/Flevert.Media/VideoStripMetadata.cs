@@ -96,9 +96,10 @@ public sealed class VideoStripMetadata : IOperation
 
     private static readonly HashSet<string> Avchd = new(StringComparer.OrdinalIgnoreCase) { ".mts", ".m2ts" };
 
-    // MDPM's payload begins with these bytes, which hold no two zero bytes H.264 would have to escape, so they appear in
-    // the file as they are. Camcorders write it in every GOP: the first megabytes show it.
-    private static readonly byte[] CamcorderData = "MDPM"u8.ToArray();
+    // The SEI user data AVCHD defines for MDPM: its UUID, then "MDPM". These bytes hold no two zero bytes H.264 would have
+    // to escape, so they appear in the file as they are, and no picture holds all 20 by chance (RC3-3). Camcorders write
+    // it in every GOP: the first megabytes show it, unless an MP4's index comes first and is larger (hours of video, RC3-2).
+    private static readonly byte[] CamcorderData = [.. Convert.FromHexString("17ee8c60f84d11d98cd60800200c9a66"), .. "MDPM"u8];
     private const int CamcorderDataWindow = 8 * 1024 * 1024;
 
     /// <summary>
@@ -111,7 +112,7 @@ public sealed class VideoStripMetadata : IOperation
             return false;
         if (Avchd.Contains(extension))
             return true;
-        using var file = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        using var file = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         var buffer = new byte[64 * 1024];
         var carried = 0;
         for (var read = 0; read < CamcorderDataWindow;)

@@ -97,15 +97,25 @@ public sealed class AudioConvert : IOperation
         var audio = (_fromVideo ? VideoEncoding.FirstAudio(info) : info.Audio) is [var first, ..]
             ? first
             : throw new MediaException(_fromVideo ? MediaException.NoSoundToExtractMessage : MediaException.NoSoundMessage);
-        // ffprobe only estimates the length of a raw AAC or an MP3 without a VBR header; no sound is coded below 32 kbit/s
-        // but speech, so the file's bytes say how long it at least may be (re-check review, RC2-4).
-        var duration = TimeSpan.FromSeconds(Math.Max(info.Duration.TotalSeconds, new FileInfo(inputPath).Length * 8.0 / 32_000));
-        var estimate = MediaJob.Bytes(duration, _format.BitsPerSecond(audio));
+        var (needed, bound) = Sizes(_format, audio, info.Duration, new FileInfo(inputPath).Length);
         var desired = MediaJob.Beside(inputPath, _format.Extension);
-        MediaJob.RequireSpace(desired, estimate);
+        MediaJob.RequireSpace(desired, needed);
         string[] options = ["-map", $"0:{audio.Index}", .. MediaJob.MetadataOptions(info, [audio]), .. _format.Codec(audio)];
         return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _ffmpeg.EncodeAsync(
-            inputPath, options, temp, _format.Muxer, info.Duration, MediaJob.MaxOutputBytes(inputPath, estimate, desired), MediaJob.Percent(progress), token),
+            inputPath, options, temp, _format.Muxer, info.Duration, MediaJob.MaxOutputBytes(inputPath, bound, desired), MediaJob.Percent(progress), token),
             ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The space the output needs, at the duration ffprobe read, and the size it may reach before ffmpeg stops it. ffprobe
+    /// only estimates the length of a raw AAC or an MP3 without a VBR header, and no sound but speech is coded below
+    /// 32 kbit/s, so the bound lets the file last as long as its bytes do at that rate (re-check review, RC2-4). Only the
+    /// bound: for a WAV, a FLAC or a whole film that is days, and asking for that much space would refuse them (RC3-1).
+    /// </summary>
+    internal static (long Needed, long Bound) Sizes(AudioFormat format, AudioTrack audio, TimeSpan duration, long inputBytes)
+    {
+        var bitsPerSecond = format.BitsPerSecond(audio);
+        var mayLast = TimeSpan.FromSeconds(Math.Max(duration.TotalSeconds, inputBytes * 8.0 / 32_000));
+        return (MediaJob.Bytes(duration, bitsPerSecond), MediaJob.Bytes(mayLast, bitsPerSecond));
     }
 }

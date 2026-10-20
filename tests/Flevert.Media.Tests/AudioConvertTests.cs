@@ -95,6 +95,18 @@ public sealed class AudioConvertTests : IDisposable
     }
 
     [Fact]
+    public void A_large_wav_needs_the_space_of_its_mp3_not_of_what_its_bytes_could_hold()
+    {
+        // 1 GB of CD sound lasts 5 669 s; at 32 kbit/s its bytes would last 69 hours, which only bounds the output (RC3-1).
+        var audio = new AudioTrack(0, "pcm_s16le", 2, 44_100, 1_411_200, true, null, new Dictionary<string, string>());
+
+        var (needed, bound) = AudioConvert.Sizes(AudioFormat.Mp3, audio, TimeSpan.FromSeconds(5669), 1_000_000_000);
+
+        Assert.Equal(5669L * 190_000 / 8, needed);
+        Assert.Equal(250_000L * 190_000 / 8, bound);
+    }
+
+    [Fact]
     public async Task Aac_becomes_m4a_without_being_encoded_again()
     {
         var input = _dir.Combine("radio.aac");
