@@ -135,6 +135,27 @@ public sealed class PdfWatermarkMenuTests
         Assert.Null(WatermarkPrompts.Problem("Bản sao – Ấn bản ₫ © ½"));
     }
 
+    [Fact]
+    public void Enter_counts_only_once_the_field_has_had_the_focus_a_moment_or_was_clicked()
+    {
+        long now = 1_000;
+        var guard = new EnterGuard(() => now);
+
+        Assert.False(guard.EnterCounts); // the field has not had the focus
+        guard.FieldFocused();
+        now += 200; // keys typed for another window, Enter among them
+        Assert.False(guard.EnterCounts);
+        now += 300;
+        Assert.True(guard.EnterCounts);
+
+        guard.FieldLeft();
+        Assert.False(guard.EnterCounts);
+        guard.FieldFocused();
+        Assert.False(guard.EnterCounts);
+        guard.FieldClicked();
+        Assert.True(guard.EnterCounts);
+    }
+
     private sealed class FakePrompt(WatermarkAnswer answer) : IWatermarkPrompt
     {
         private int _asked;

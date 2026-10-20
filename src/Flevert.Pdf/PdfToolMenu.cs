@@ -123,6 +123,38 @@ public static class WatermarkPrompts
 }
 
 /// <summary>
+/// When Enter may add the watermark: a dialog that opens while the user types in another window gets the rest of what
+/// they type, Enter included, and would add a watermark of stray letters. Enter counts only once the text field has had
+/// the focus for <see cref="Settle"/>, or the user has clicked in it; the mouse on the button always counts.
+/// </summary>
+/// <param name="clock">Milliseconds from any fixed start (<see cref="Environment.TickCount64"/>); tests give their own.</param>
+public sealed class EnterGuard(Func<long> clock)
+{
+    /// <summary>How long the field has the focus before Enter counts: longer than a burst of typing meant for elsewhere.</summary>
+    public static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(500);
+
+    private long? _focused;
+    private bool _clicked;
+
+    public EnterGuard()
+        : this(() => Environment.TickCount64)
+    {
+    }
+
+    /// <summary>The field got the focus; again after it lost it, the wait starts again.</summary>
+    public void FieldFocused() => _focused = clock();
+
+    /// <summary>The field lost the focus.</summary>
+    public void FieldLeft() => _focused = null;
+
+    /// <summary>The user clicked in the field: what they type next is meant for it.</summary>
+    public void FieldClicked() => _clicked = true;
+
+    /// <summary>Whether Enter adds the watermark now.</summary>
+    public bool EnterCounts => _clicked || (_focused is { } since && clock() - since >= (long)Settle.TotalMilliseconds);
+}
+
+/// <summary>
 /// The watermark texts of one batch, as <see cref="BatchPasswords"/> for passwords: one question at a time, and an answer
 /// given for N files serves the next N − 1 files without asking again.
 /// </summary>

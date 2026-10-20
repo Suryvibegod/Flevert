@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows.Forms.Automation;
 using Flevert.Core;
 using Flevert.Pdf;
@@ -13,6 +14,7 @@ internal sealed class DialogWatermarkPrompt : IWatermarkPrompt, IBatchQuestion
 {
     private BatchQuestionHost? _host;
     private BatchProgress? _latest;
+    private int _asked;
 
     public void Attach(BatchQuestionHost host) => _host = host;
 
@@ -28,7 +30,9 @@ internal sealed class DialogWatermarkPrompt : IWatermarkPrompt, IBatchQuestion
             {
                 ct.ThrowIfCancellationRequested();
                 host.Asking(true);
-                using var form = new WatermarkForm(question.InputPath, () => FilesLeft(question));
+                // The first question comes from the user's own click in the menu; a later one comes while they may be
+                // typing elsewhere, so it waits in the taskbar instead of taking their keys.
+                using var form = new WatermarkForm(question.InputPath, () => FilesLeft(question), activate: _asked++ == 0);
                 // The batch was cancelled meanwhile: the answer no longer matters.
                 using var cancel = ct.Register(() => host.Ui.Post(_ => form.Close(), null));
                 form.ShowDialog(host.Owner());
@@ -60,7 +64,7 @@ internal sealed class DialogWatermarkPrompt : IWatermarkPrompt, IBatchQuestion
 /// "Flevert — Add watermark": the text to write across every page, and "Use this text for all N files" when the batch has
 /// more than one. Built like the password dialog: on top, named for screen readers, Enter adds the watermark, Esc cancels.
 /// </summary>
-internal sealed class WatermarkForm : Form
+internal sealed partial class WatermarkForm : Form
 {
     // In 96-DPI pixels, scaled with LogicalToDeviceUnits (the font is already scaled for the screen, sizes are not).
     private const int FieldWidth = 380;
@@ -85,11 +89,15 @@ internal sealed class WatermarkForm : Form
     };
     private readonly System.Windows.Forms.Timer _count = new() { Interval = (int)CountRefresh.TotalMilliseconds };
     private int _shownFiles;
+    private readonly bool _activate;
+    private readonly EnterGuard _enter = new();
 
     /// <param name="filesLeft">How many files of the batch an answer could be for, read again while the dialog is open.</param>
-    public WatermarkForm(string inputPath, Func<int> filesLeft)
+    /// <param name="activate">Whether the dialog takes the focus when it opens; when not, it flashes in the taskbar.</param>
+    public WatermarkForm(string inputPath, Func<int> filesLeft, bool activate = true)
     {
         _filesLeft = filesLeft;
+        _activate = activate;
         Text = "Flevert — Add watermark";
         _heading.Text = $"Type the text to write across every page of {Path.GetFileName(inputPath)}, such as what the copy is for. " +
             "It marks the copy; anyone with a PDF editor can still remove it.";
@@ -114,6 +122,9 @@ internal sealed class WatermarkForm : Form
         _text.Margin = Pad(0, 0, 0, 0);
         _forAll.Margin = _problem.Margin = Pad(0, 8, 0, 0);
         _text.TextChanged += (_, _) => ClearProblem();
+        _text.GotFocus += (_, _) => _enter.FieldFocused();
+        _text.LostFocus += (_, _) => _enter.FieldLeft();
+        _text.MouseDown += (_, _) => _enter.FieldClicked();
 
         // No access key on the buttons: on a focused button a bare letter would press it. Enter is OK, Esc is Cancel.
         var ok = new Button { Text = "Add watermark", AutoSize = true };
@@ -187,6 +198,32 @@ internal sealed class WatermarkForm : Form
         DialogResult = DialogResult.OK;
     }
 
+    protected override bool ShowWithoutActivation => !_activate;
+
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        if (!_activate)
+        {
+            var flash = new FlashInfo
+            {
+                Size = (uint)Marshal.SizeOf<FlashInfo>(),
+                Window = Handle,
+                Flags = FlashTray | FlashUntilForeground,
+            };
+            FlashWindowEx(ref flash);
+        }
+    }
+
+    // Enter that comes before the field has settled is dropped: it was typed for another window (EnterGuard). The mouse on
+    // Add watermark still works.
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == Keys.Enter && !_enter.EnterCounts)
+            return true;
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
     private void ClearProblem()
     {
         if (_problem.Text.Length == 0)
@@ -208,4 +245,21 @@ internal sealed class WatermarkForm : Form
             _count.Dispose();
         base.Dispose(disposing);
     }
+
+    private const uint FlashTray = 0x2;
+    private const uint FlashUntilForeground = 0xC;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FlashInfo
+    {
+        public uint Size;
+        public nint Window;
+        public uint Flags;
+        public uint Count;
+        public uint Timeout;
+    }
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool FlashWindowEx(ref FlashInfo info);
 }
