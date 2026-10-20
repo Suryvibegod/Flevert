@@ -206,6 +206,8 @@ Merge PDFs · Split into pages · Remove metadata
 Protect with password · Remove password         (5)
 ```
 
+Sơ đồ trên cho biết **các mục theo nhóm**, không phải thứ tự. Thứ tự thật là thứ tự của v0.2.0, mục mới thêm vào nhóm của nó: `Convert ▸` (JPG pages, PNG pages, Text), `Merge PDFs`, `Split into pages`, `Rotate ▸`, `Compress ▸` (Lossless, For sharing), `Remove metadata`, `Protect with password`, `Remove password`. Maintainer quyết 2026-10-20 (review trước phát hành): v0.2.1 giữ thứ tự đã phát hành; menu được thiết kế lại ở v0.2.2.
+
 - **Repair** không có mục riêng: mọi thao tác ghi PDF mới bằng qpdf đã dựng lại bảng xref; thay vào đó Flevert **báo** khi đã phải sửa file (yêu cầu P4), và README nói "Compress > Lossless cũng sửa PDF hỏng nhẹ".
 - **Reverse page order**: chỉ có nếu spike Compress for sharing thất bại (khi đó `Compress` vẫn là một mục, còn chỗ cho `Reverse page order` ngay sau `Split into pages`, tổng 15).
 - **Extract images**: ra ngoài v0.2.1 (không đủ chỗ; ít người dùng). Ghi lại để xét ở bản sau, có thể bằng một cây menu thứ hai.
