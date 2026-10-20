@@ -129,8 +129,10 @@ public sealed class InstallerScriptTests
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Inno Setup 6\ISCC.exe"),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"Inno Setup 6\ISCC.exe"),
         ];
-        var iscc = candidates.FirstOrDefault(File.Exists);
-        Skip.If(iscc is null, "Inno Setup is not installed (scripts\\setup-dev.ps1 installs it).");
+        // Only a compiler the script accepts: an older one stops at the script's own version check before anything else
+        // (GitHub's Windows runners ship an older Inno Setup; release.yml installs 6.7.3 itself).
+        var iscc = candidates.Where(File.Exists).FirstOrDefault(AcceptsScriptVersion);
+        Skip.If(iscc is null, "Inno Setup 6.7.3 or later is not installed (scripts\\setup-dev.ps1 installs it).");
         using var dir = new TempDir();
         var source = Directory.CreateDirectory(dir.Combine("publish")).FullName;
         // Any program with a version resource stands in for flevert.exe, which the script reads its version from.
@@ -167,6 +169,34 @@ public sealed class InstallerScriptTests
 
     // What a conversion loads but flevert.exe check-location never does: pdfium, qpdf and its MSVC runtime (the files
     // listed under "notices" in scripts/deps.json), qpdf's OpenSSL configuration, and ImageMagick's native library.
+    /// <summary>
+    /// Whether this ISCC accepts installer/Flevert.iss's version check. ISCC carries no version resource and prints no
+    /// version, so compile a script with the same check and no output (Output=no).
+    /// </summary>
+    private static bool AcceptsScriptVersion(string iscc)
+    {
+        using var dir = new TempDir();
+        var probe = dir.Combine("probe.iss");
+        File.WriteAllText(probe, """
+            #if VER < EncodeVer(6, 7, 3)
+              #error too old
+            #endif
+            [Setup]
+            AppName=Probe
+            AppVersion=1
+            DefaultDirName=Probe
+            Output=no
+
+            """);
+        var start = new ProcessStartInfo(iscc) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        start.ArgumentList.Add("/Q");
+        start.ArgumentList.Add(probe);
+        using var process = Process.Start(start)!;
+        process.StandardOutput.ReadToEnd();
+        process.StandardError.ReadToEnd();
+        return process.WaitForExit(60_000) && process.ExitCode == 0;
+    }
+
     private static IEnumerable<string> ConversionOnlyFiles()
     {
         using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepositoryRoot(), "scripts", "deps.json")));
