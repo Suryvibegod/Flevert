@@ -57,7 +57,9 @@ public sealed class FfprobeTests : IDisposable
 
         Assert.Equal(MediaException.UnreadableMessage, e.Message);
         Assert.IsType<FfmpegException>(e.InnerException);
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(10), $"{stopwatch.Elapsed}");
+        // Refused at once, not at the probe's one-minute timeout: well under it, though a cold CI runner (a virus scanner
+        // reading ffprobe's DLLs on first use) took 11 s for one of these (run 39554760168).
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(30), $"{stopwatch.Elapsed}");
     }
 
     [Fact]
