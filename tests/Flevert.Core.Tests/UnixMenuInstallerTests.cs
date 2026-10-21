@@ -46,6 +46,37 @@ public sealed class UnixMenuInstallerTests : IDisposable
 
     [LinuxFact]
     [SupportedOSPlatform("linux")]
+    public void Uninstall_removes_the_bytecode_python_cached_for_the_extension_and_nothing_else()
+    {
+        // Python caches what Nautilus imported beside the extension; another extension's cache stays.
+        var installer = Installer();
+        installer.Install("{}", _dir.File("flevert_menu.py", "# the extension"));
+        var cache = Directory.CreateDirectory(_dir.Combine("extensions/__pycache__")).FullName;
+        File.WriteAllText(Path.Combine(cache, "flevert_menu.cpython-310.pyc"), "");
+        File.WriteAllText(Path.Combine(cache, "flevert_menu.cpython-312.opt-1.pyc"), "");
+        File.WriteAllText(Path.Combine(cache, "theirs.cpython-310.pyc"), "");
+
+        installer.Uninstall();
+
+        Assert.Equal(["theirs.cpython-310.pyc"], Directory.GetFiles(cache).Select(Path.GetFileName));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void Uninstall_leaves_no_empty_cache_folder_behind()
+    {
+        var installer = Installer();
+        installer.Install("{}", _dir.File("flevert_menu.py", "# the extension"));
+        var cache = Directory.CreateDirectory(_dir.Combine("extensions/__pycache__")).FullName;
+        File.WriteAllText(Path.Combine(cache, "flevert_menu.cpython-310.pyc"), "");
+
+        installer.Uninstall();
+
+        Assert.False(Directory.Exists(cache));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
     public void Installing_again_replaces_a_link_put_in_place_of_the_menu_never_what_it_points_to()
     {
         var installer = Installer();

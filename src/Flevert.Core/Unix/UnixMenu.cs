@@ -29,11 +29,22 @@ public sealed class UnixMenuInstaller(string dataDirectory, string extensionsDir
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
     }
 
-    /// <summary>Removes both files; a link at either name is removed itself.</summary>
+    /// <summary>
+    /// Removes both files, and the bytecode Python cached for the extension when Nautilus imported it (with the cache
+    /// folder once nothing else is in it); a link at any of these names is removed itself, never followed.
+    /// </summary>
     public void Uninstall()
     {
         File.Delete(Path.Combine(extensionsDirectory, ExtensionFileName));
         File.Delete(Path.Combine(dataDirectory, MenuFileName));
+
+        var cache = new DirectoryInfo(Path.Combine(extensionsDirectory, "__pycache__"));
+        if (!cache.Exists || cache.LinkTarget is not null)
+            return;
+        foreach (var compiled in cache.EnumerateFiles(Path.ChangeExtension(ExtensionFileName, ".*.pyc")))
+            compiled.Delete();
+        if (!cache.EnumerateFileSystemInfos().Any())
+            cache.Delete();
     }
 
     private static void Replace(string path, byte[] bytes, UnixFileMode mode)
