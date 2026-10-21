@@ -158,3 +158,36 @@ Kết luận lần 3: RC3-1 là mục Required duy nhất, đã sửa; còn lạ
 ### Review lại lần 4 (một reviewer gộp, bối cảnh trống)
 
 Không còn Critical/High/Required. RC4-1 (không test nào kiểm `RunAsync` truyền đúng `needed`/`bound`), RC4-2 (MP3 nói dưới 16 kbit/s bị ước lượng thiếu chạm `-fs`: báo lỗi, không cắt), RC4-3 (ffprobe ước lượng thừa có thể đòi thừa chỗ trống), RC4-5 ("8 MB" là 8 MiB): Low/Nit, **chấp nhận**. RC4-4 (ghi chú giới hạn RC3-1): **sửa**.
+
+## Review trước phát hành 1.3.0 (2026-10-21): ba review bối cảnh trống, chỉ đọc (code, security, doubt)
+
+Trên `git diff main...feat/v0.3-media` (trừ 1084 file giấy phép và icon). Mã: CR = code-reviewer, SA = security-auditor, DV = doubt-driven.
+
+| id | mức | việc | quyết định |
+|---|---|---|---|
+| DV-1, CR (blocker) | Required | Giấy phép thư viện ffmpeg chưa commit | **Sửa**: 1084 file từ artifact `ffmpeg-licences` (run 39491031755) vào `installer/notices/ffmpeg/`, `deps.json` liệt kê thư mục; Core/Image xanh với notices thật |
+| CR-1, DV-2 | Required | README còn mô tả 1.2: không video/audio, "Coming next 1.3", không nói ffmpeg GPL | **Sửa**: bảng menu Video, dòng Audio, đoạn ffmpeg GPL + link mã nguồn; Coming next = 1.3.1, 1.4 |
+| CR-2 | Required | Opus từ âm thanh 5.1(side) (AC-3, E-AC-3, DTS) lỗi "Invalid channel layout": WEBM từ phim MKV, FLAC 5.1 → Opus | **Sửa**: `aformat` về bố cục libopus nhận (`AudioFormat.OpusChannels`, cả WEBM). Tái hiện bằng ffmpeg 8.1 trước khi sửa. Test: FLAC 5.1(side) → Opus 6 kênh, MKV AC-3 5.1(side) → WEBM 6 kênh |
+| DV-3, CR-13 | Required | "iPhone HDR videos keep their colours" chưa kiểm trên video thật | **Sửa lời** (CHANGELOG/README: đổi sang màu chuẩn) **và đo**: ảnh SDR đổi đúng sang HLG/PQ (zscale, 203 nit) rồi qua Flevert: Hable cho độ sáng trung bình 103/126 (tối đi ~18%), npl=203 còn tối hơn (87), Mobius 122/126, Reinhard 117, clip 132. **Sửa**: tone map Mobius. Test: HLG và PQ giữ độ sáng trong ±8%. Kiểm bằng mắt trên video iPhone thật vẫn mở (không có mẫu; không dùng file cá nhân của người dùng khi chưa hỏi) |
+| DV-5, CR-3 | Required/Should | Video xen kẽ (AVCHD 1080i, DV) không khử xen kẽ | **Sửa**: `bwdif=mode=send_frame:deint=interlaced` đầu chuỗi lọc khi ffprobe báo `field_order` tt/bb/tb/bt (`VideoTrack.IsInterlaced`), cả GIF. Test: MTS 1080i tổng hợp → MP4 progressive |
+| CR-4 | Should | Under N tính bitrate lượt 2 theo thời lượng ffprobe (TS ghép đọc 20 s/60 s) → ~2,5× giới hạn, 3 lần mã hóa rồi báo không vừa | **Sửa**: `EncodeAsync` trả thời gian thật lượt 1 đi qua; dài hơn thì tính lại ngân sách, giữ cỡ hình của lượt 1. Test: TS ghép 3 × 20 s → dưới giới hạn, > 55 s |
+| CR-5, SA-L4, DV-12 | Should/Low | Spec ghi trần 2 GB, timeout ×6, output ≤ 4 × input; code khác | **Sửa spec** theo code và ADR-0009. Trần riêng thấp hơn cho ffprobe/âm thanh: **chấp nhận** (ffprobe giải mã vài khung 8K HEVC 10-bit nhiều luồng có thể cần > 1 GB; trần là commit tối đa, không phải dùng thật) |
+| CR-6 | Should | `creation_time` của Remove hidden info không giới hạn độ dài (40 KB → dòng lệnh quá dài) | **Sửa**: chỉ giữ khi là ngày hợp lệ ≤ 64 ký tự (`VideoStripMetadata.IsDate`), test |
+| CR-7, DV-6 | Should | GIF tone map trước khi bỏ khung và thu nhỏ | **Sửa**: fps → scale → tone map |
+| DV-7 | Should | ffprobe timeout 10 s làm hỏng file OneDrive chỉ-trên-mạng/ổ mạng chậm, báo "damaged" | **Sửa**: 1 phút (như qpdf) và câu riêng `ReadTooSlowMessage` gợi ý chép về máy |
+| DV-8 | Should | `DriveInfo` không đọc được UNC/`\?\` → không kiểm chỗ trống, đĩa đầy báo "damaged" | **Sửa**: `GetDiskFreeSpaceEx`; ffmpeg báo "No space left on device" → `DiskFullMessage`. Test bằng RunTool giả |
+| DV-9 | Should | `ffmpeg-source.yml` không bắt thư viện trong `licences-missing.txt` thiếu bản điều khoản viết tay | **Sửa**: mỗi dòng phải có `installer/notices/ffmpeg/<stage>-terms*.txt` |
+| DV-10 | Should | Notice ffmpeg không nói mã nguồn ở đâu (GPLv3 §6(d)) | **Sửa**: note trong `deps.json` có link Releases |
+| SA-M1 | Medium | `release.yml` tải artifact `ffmpeg-source` (do script bên thứ ba tạo) vào cùng thư mục setup, rồi đăng `installer/*` | **Sửa**: artifact nguồn vào `source/`, chỉ nhận tên `ffmpeg-source-…-N-of-M.tar` là file thường; job build xuất SHA256 của setup, job release so lại; đăng danh sách file tường minh |
+| SA-L1 | Low | `fetch-ffmpeg-source.sh`: tên member tar thành tùy chọn; `cp -L` theo symlink ra ngoài cache | **Sửa**: `--verbatim-files-from -T`; link chỉ được trỏ vào file trong cache; file giấy phép giải nén phải là file thường |
+| SA-M2 | Medium | Mọi decoder của ffmpeg mở được qua container hợp lệ, không sandbox quyền | **Mở cho bản sau** (ghi ADR-0009): `-codec_whitelist` cần đo trên file thật (tên decoder như `libdav1d`, `mp3float`, luồng phụ đề/dữ liệu), token quyền thấp |
+| SA-L2 | Low | Thống kê x264 lượt 1 không giới hạn cỡ với file độc nhiều khung tí hon | **Mở cho bản sau**: `-frames:v` theo thời lượng × fps; timeout và Cancel chặn |
+| SA-L3 | Low | File độc giữ ffmpeg chạy tới 2 ngày | **Chấp nhận**: ưu tiên thấp, Cancel dừng ngay |
+| DV-4 | High | Trần 4 GB và tốc độ đo trên Linux ffmpeg 6.1; 8K chưa đo | **Đo và sửa** (Windows, ffmpeg 8.1, 16 nhân, qua `flevert.exe`): 8K HLG → MP4 và Compress **vượt trần 4 GB sau 1,7 s** (xác nhận); 4K60 HLG đỉnh 3,4 GB, đạt. Ra 4K mà giữ luồng vẫn 4,1–4,6 GB; 2 luồng giải mã + 6 x264 → 3,3 GB. Sửa: `OutputSize` trần cạnh ngắn 2160, `DecoderThreadsFor`/`EncoderThreadsFor` cho ảnh > 4K. Đo lại: 8K → MP4 7,4 s đỉnh 3,3 GB, Compress 6,6 s 3,3 GB, GIF 1 GB. Test: kích thước 8K → 4K, số luồng |
+| DV-11 | Should | Luồng âm thanh đầu có thể là codec ffmpeg không giải mã được (APAC) | **Chấp nhận**: chưa có mẫu; lỗi rõ, không hỏng gì |
+| DV-13 | Nit | Spec nói Under 25 MB gửi Discord (miễn phí 10 MB) | **Sửa spec** |
+| DV-14 | Nit | libdvdcss trong bản dựng | **Chấp nhận**, ghi ADR-0009 (không demuxer DVD nào được phép) |
+| CR-8 | Nit | GIF bỏ qua tỉ lệ điểm ảnh (HDV 1440×1080) | **Mở cho bản sau** |
+| CR-9, CR-10 | Nit | Thanh tiến độ khi thử lại; so khớp chuỗi thông báo để thử lại | **Chấp nhận** |
+| CR-11 | Nit | `DeleteStaleRuns` dừng ở thư mục đầu không xóa được | **Sửa**: bắt lỗi từng thư mục |
+| CR-12 | Nit | Tham số `extra` của `Filters` không dùng | **Sửa**: bỏ |

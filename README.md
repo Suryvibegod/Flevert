@@ -3,8 +3,8 @@
 <h1 align="center">Flevert</h1>
 
 <p align="center">
-<b>Right-click a photo or a PDF, pick what you need, and the result appears next to it.</b><br>
-iPhone photos to JPG, smaller files, copies without GPS, photos into one PDF. Free, and your files stay on your PC.
+<b>Right-click a photo, a PDF, a video or a song, pick what you need, and the result appears next to it.</b><br>
+iPhone photos to JPG, videos small enough to send, copies without GPS, photos into one PDF. Free, and your files stay on your PC.
 </p>
 
 <p align="center">
@@ -22,6 +22,8 @@ iPhone photos to JPG, smaller files, copies without GPS, photos into one PDF. Fr
 - **Photos that fit**: compress them for chat and email, or to under 500 KB, 1 MB or 5 MB.
 - **Seven formats**: convert between JPG, PNG, WebP, AVIF, GIF, BMP and TIFF. Animations stay animated in GIF and WebP.
 - **No location in what you share**: remove GPS and camera details first.
+- **Videos that fit**: compress to under 10, 25 or 100 MB, convert to MP4, MOV, WEBM or GIF, take the sound out as MP3, or remove where it was filmed.
+- **Audio**: convert between MP3, M4A, WAV, FLAC, OGG and Opus.
 - **PDF tools**: photos into one PDF, pages into pictures, merge, split, rotate, compress, add or remove a password; remove blank pages, add page numbers or a watermark, print 2 or 4 pages per sheet.
 - **Up to 100 files at once**, with one notification at the end.
 - **Originals untouched**: results are saved beside them and never overwrite a file.
@@ -30,7 +32,7 @@ iPhone photos to JPG, smaller files, copies without GPS, photos into one PDF. Fr
 
 1. Download `Flevert-Setup-<version>.exe` from the [latest release](https://github.com/Suryvibegod/Flevert/releases/latest).
 2. Run it (no administrator rights needed). Flevert is not code-signed yet, so Windows says **Windows protected your PC**: [check your download](docs/install.md#check-your-download) if you like, then click **More info** and **Run anyway**. No such button? See [Smart App Control](#smart-app-control).
-3. Right-click a picture or a PDF and choose **Flevert**. On Windows 11 it is under **Show more options**, unless you chose the classic menu in setup.
+3. Right-click a picture, a PDF, a video or an audio file and choose **Flevert**. On Windows 11 it is under **Show more options**, unless you chose the classic menu in setup.
 
 For Windows 10 (1809 or later) and 11, 64-bit.
 
@@ -78,7 +80,22 @@ Less used PDF tools are one step away: hold **Shift** while you right-click a PD
 | **Convert to PNG images** | a folder `report (pages)` with `report 001.png`, …, lossless |
 | **Extract images** | a folder `report (images)` with `report 001.jpg`, `report 002.png`, …: photos exactly as they are in the PDF, other pictures as PNG |
 
-PDFs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
+**Videos** (`.mp4 .mov .m4v .mkv .webm .avi .wmv .3gp .mts .m2ts`):
+
+| Flevert > | You get |
+|---|---|
+| **Compress** > Light (best quality), Balanced, Strong (smallest) | `clip (compressed).mp4` (H.264 and AAC); Strong also brings it down to 720p |
+| **Compress** > Under 10 MB, 25 MB, 100 MB | `clip (under 25 MB).mp4`, always under that size, or a message that the video is too long to fit. **Under 10 MB** is the safe size for email |
+| **Convert to** > MP4, MOV, WEBM | `clip.mp4`, upright; HDR videos from iPhones are converted to standard colours so they look right everywhere, and an 8K video comes out at 4K |
+| **Convert to** > GIF | `clip.gif`, at most 480 pixels and the first 30 seconds |
+| **Extract audio** > MP3, M4A | `clip.mp3`, the video's first sound track |
+| **Remove hidden info** | `clip (no metadata).mp4`, without where it was filmed, the camera or the software; picture and sound copied as they are, in seconds |
+
+**Audio** (`.mp3 .wav .m4a .aac .flac .ogg .opus .wma .aiff .aif`): **Flevert > Convert to** > MP3, M4A, WAV, FLAC, OGG, Opus gives `song.mp3` beside it, with its title and artist.
+
+Video and audio are converted by [ffmpeg](https://ffmpeg.org/), included in the installer. It is free software under the GNU GPL, and each [release](https://github.com/Suryvibegod/Flevert/releases) has its complete source beside the setup (`ffmpeg-source-*.tar`).
+
+PDFs, videos and songs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
 
 <p align="center">
 <img src="assets/screenshots/progress.png" width="420" alt="The Flevert progress window converting twelve photos to JPG: 8 of 12 done, with a Cancel button">
@@ -90,7 +107,7 @@ No account, no telemetry, no uploads. At most once a day, after a conversion, Fl
 
 ## Coming next
 
-**1.3**: video and audio. Ideas are welcome in [issues](https://github.com/Suryvibegod/Flevert/issues); changes are in the [CHANGELOG](CHANGELOG.md).
+**1.3.1**: more video tools (trim, rotate, a still frame, merge) behind Shift + right-click, like the PDF ones. **1.4**: text from scans (OCR). Ideas are welcome in [issues](https://github.com/Suryvibegod/Flevert/issues); changes are in the [CHANGELOG](CHANGELOG.md).
 
 ## Troubleshooting
 
@@ -116,4 +133,4 @@ Free code signing provided by [SignPath.io](https://about.signpath.io/), certifi
 
 ## Contributing and license
 
-Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), or [SECURITY.md](SECURITY.md) for security problems. [MIT license](LICENSE); bundled components' licences are in `THIRD-PARTY-NOTICES.txt` in the install folder.
+Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), or [SECURITY.md](SECURITY.md) for security problems. [MIT license](LICENSE); bundled components' licences are in `THIRD-PARTY-NOTICES.txt` in the install folder (ffmpeg is GPL, see above).

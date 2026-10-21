@@ -29,7 +29,7 @@ Mỗi task: viết code cùng test (TDD khi rẻ), build + format + ba project t
 | image | Xong ([image/todo.md](image/todo.md), ADR-0004). Ngân sách bộ nhớ chung khi chạy song song. |
 | installer (v0.1) | Xong, review 5 vòng ([installer/todo.md](installer/todo.md)); menu cổ điển kiểm tay đạt (ADR-0005); trang "New versions" (`/UPDATECHECK`). |
 | pdf (v0.2) | Xong, phát hành 0.2.0 ([pdf/todo.md](pdf/todo.md), ADR-0007, ADR-0008). |
-| media (v1.3) | Spec đã chốt: [docs/specs/media.md](../docs/specs/media.md). Chưa có plan/code. |
+| media (v1.3) | Code xong trên nhánh `feat/v0.3-media` ([media/todo.md](media/todo.md), ADR-0009); review trước phát hành 1.3.0 và các bản sửa: bảng reconcile trong [media/todo.md](media/todo.md). |
 
 Test đầu-cuối installer: `scripts/test-installer.ps1` (10 kịch bản; kịch bản nâng cấp chạy khi `get-previous-setup.ps1` đã ghim một bản trước; chạy tay trên máy thật, `%LOCALAPPDATA%\Flevert` phải không tồn tại). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` + [docs/RELEASING.md](../docs/RELEASING.md).
 
