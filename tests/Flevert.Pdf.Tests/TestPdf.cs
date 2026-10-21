@@ -7,6 +7,19 @@ namespace Flevert.Pdf.Tests;
 
 internal static class TestPdf
 {
+    /// <summary>
+    /// A path from a test's data, written the Windows way, as this platform spells a fully qualified path: <c>C:\a\b</c>
+    /// stays on Windows and becomes <c>/a/b</c> on Linux. Works on whole requests too, where only paths hold backslashes.
+    /// </summary>
+    public static string Native(string windowsPath) =>
+        OperatingSystem.IsWindows() ? windowsPath : windowsPath.Replace(@"C:\", "/", StringComparison.Ordinal).Replace('\\', '/');
+
+    /// <summary>
+    /// A path a test makes long on purpose, in the form that reaches past 260 characters: <c>\\?\</c> before it on Windows,
+    /// as it is on Linux, which has no such limit.
+    /// </summary>
+    public static string Long(string path) => OperatingSystem.IsWindows() ? @"\\?\" + path : path;
+
     public static string Fixture(string name) => Path.Combine(AppContext.BaseDirectory, "fixtures", name);
 
     /// <summary>
@@ -357,7 +370,7 @@ internal static class TestPdf
     /// <summary>Each page object's own /Rotate, in page order, as qpdf reads it (0 when the page has none).</summary>
     public static async Task<int[]> ReadRotations(string path)
     {
-        var qpdf = Path.Combine(AppContext.BaseDirectory, "qpdf.exe");
+        var qpdf = Qpdf.NextToApp.ExePath;
         var run = await ExternalTool.RunAsync(qpdf, ["--json=2", "--json-key=pages", "--json-key=qpdf", path], TimeSpan.FromSeconds(30));
         Assert.True(run.ExitCode == 0, run.StandardError);
         using var json = JsonDocument.Parse(run.StandardOutput);
@@ -403,7 +416,7 @@ internal static class TestPdf
         return info.EnumerateObject().ToDictionary(entry => entry.Name, entry => entry.Value.ToString());
     }
 
-    private static string QpdfExe => Path.Combine(AppContext.BaseDirectory, "qpdf.exe");
+    private static string QpdfExe => Qpdf.NextToApp.ExePath;
 
     /// <summary>The files in <paramref name="folder"/>, by name, sorted.</summary>
     public static string[] FileNames(string folder) =>

@@ -87,7 +87,8 @@ public class PdfDocumentTests
         Assert.Equal(Red, TestPdf.Pixel(pdf.Render(0, 36), 10, 10));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Opens_a_pdf_at_a_long_path_given_with_the_extended_prefix()
     {
         using var dir = new TempDir();
@@ -199,7 +200,8 @@ public class PdfDocumentTests
         Assert.Throws<ObjectDisposedException>(() => pdf.Render(0, 72));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void The_file_can_be_read_but_not_replaced_while_the_document_is_open()
     {
         using var dir = new TempDir();

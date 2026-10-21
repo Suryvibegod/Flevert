@@ -190,7 +190,8 @@ public sealed class PdfRotateTests : IDisposable
         Assert.Equal(["Hóa đơn \U0001F9FE.pdf", "Hóa đơn ��.pdf"], FileNames(decoyFolder));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_name_with_a_lone_surrogate_is_refused_rather_than_opening_another_file()
     {
         // NTFS names are UTF-16 and may hold a lone surrogate, which UTF-8 cannot carry. Replaced by U+FFFD, the path
@@ -205,7 +206,8 @@ public sealed class PdfRotateTests : IDisposable
         Assert.Equal(["scan\uD800.pdf", "scan�.pdf"], FileNames(_dir.Path));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Works_on_a_pdf_at_a_long_path_given_with_the_extended_prefix()
     {
         var folder = @"\\?\" + _dir.Path;

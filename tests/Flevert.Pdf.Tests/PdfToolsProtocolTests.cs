@@ -22,7 +22,7 @@ public sealed class PdfToolsProtocolTests
     [MemberData(nameof(Tasks))]
     public void A_request_of_a_new_task_carries_its_options(string task, string options)
     {
-        var request = new PdfRenderRequest(@"C:\Hồ sơ\a.pdf", new FileIdentity(1, 2), @"C:\out", PdfPageImageFormat.Jpeg, 150) { Task = Enum.Parse<PdfWorkerTask>(task), Options = options };
+        var request = new PdfRenderRequest(TestPdf.Native(@"C:\Hồ sơ\a.pdf"), new FileIdentity(1, 2), TestPdf.Native(@"C:\out"), PdfPageImageFormat.Jpeg, 150) { Task = Enum.Parse<PdfWorkerTask>(task), Options = options };
 
         var decoded = PdfRenderRequest.Decode(request.Encode());
 
@@ -34,9 +34,9 @@ public sealed class PdfToolsProtocolTests
     [Fact]
     public void The_requests_of_the_tasks_before_keep_their_six_fields()
     {
-        var request = new PdfRenderRequest(@"C:\a.pdf", new FileIdentity(1, 2), @"C:\out", PdfPageImageFormat.Png, 150) { Options = "ignored" };
+        var request = new PdfRenderRequest(TestPdf.Native(@"C:\a.pdf"), new FileIdentity(1, 2), TestPdf.Native(@"C:\out"), PdfPageImageFormat.Png, 150) { Options = "ignored" };
 
-        Assert.Equal("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0", Encoding.Unicode.GetString(request.Encode()));
+        Assert.Equal(TestPdf.Native("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0"), Encoding.Unicode.GetString(request.Encode()));
     }
 
     [Theory]
@@ -49,7 +49,7 @@ public sealed class PdfToolsProtocolTests
     [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0blank\0150\0something\0")] // options for a task that takes none
     [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0images\0150\0something\0")]
     public void A_damaged_request_of_a_new_task_is_refused(string text) =>
-        Assert.Throws<FormatException>(() => PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(text)));
+        Assert.Throws<FormatException>(() => PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(TestPdf.Native(text))));
 
     private static PdfWorker.Session Session(PdfWorkerTask task, params string[] lines)
     {

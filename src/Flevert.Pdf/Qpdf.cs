@@ -719,6 +719,9 @@ public sealed partial class Qpdf
     /// </remarks>
     internal static string ToExtendedPath(string path)
     {
+        // Linux has no length limit to work around: the path goes as it is, made absolute.
+        if (!OperatingSystem.IsWindows())
+            return Path.GetFullPath(path);
         if (path.StartsWith(ExtendedPrefix, StringComparison.Ordinal))
             return path;
         if (path.StartsWith(@"\??\", StringComparison.Ordinal))

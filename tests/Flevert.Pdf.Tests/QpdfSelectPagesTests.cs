@@ -32,7 +32,7 @@ public sealed class QpdfSelectPagesTests : IDisposable
         var input = _dir.Combine("trang.pdf");
         WriteWidths(input, 101, 102, 103, 104, 105);
         var withAttachment = _dir.Combine("with info.pdf");
-        await Flevert.Core.ExternalTool.RunAsync(Path.Combine(AppContext.BaseDirectory, "qpdf.exe"),
+        await Flevert.Core.ExternalTool.RunAsync(Qpdf.NextToApp.ExePath,
             ["--add-attachment", input, "--", input, withAttachment], TimeSpan.FromSeconds(30));
         var output = _dir.Combine("out.pdf");
 
@@ -48,7 +48,7 @@ public sealed class QpdfSelectPagesTests : IDisposable
         var input = _dir.Combine("trang.pdf");
         WriteWidths(input, 101, 102, 103);
         var withAttachment = _dir.Combine("attached.pdf");
-        await Flevert.Core.ExternalTool.RunAsync(Path.Combine(AppContext.BaseDirectory, "qpdf.exe"),
+        await Flevert.Core.ExternalTool.RunAsync(Qpdf.NextToApp.ExePath,
             ["--add-attachment", input, "--", input, withAttachment], TimeSpan.FromSeconds(30));
         var output = _dir.Combine("out.pdf");
 

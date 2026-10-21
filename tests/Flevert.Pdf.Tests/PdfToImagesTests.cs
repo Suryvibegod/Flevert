@@ -311,7 +311,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         var stem = string.Concat(Enumerable.Repeat("Ảnh chụp ", 30))[..251];
         var input = dir.Combine("x.pdf");
         File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
-        var longInput = @"\\?\" + dir.Combine(stem + ".pdf");
+        var longInput = TestPdf.Long(dir.Combine(stem + ".pdf"));
         File.Move(input, longInput);
 
         var folder = await Jpg(10).RunAsync(longInput, CancellationToken.None);
@@ -331,7 +331,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         var stem = string.Concat(Enumerable.Repeat("Ảnh chụp ", 30))[..249];
         var input = dir.Combine("x.pdf");
         File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
-        var longInput = @"\\?\" + dir.Combine(stem + ".pdf");
+        var longInput = TestPdf.Long(dir.Combine(stem + ".pdf"));
         File.Move(input, longInput);
 
         var folder = await Jpg(10).RunAsync(longInput, CancellationToken.None);

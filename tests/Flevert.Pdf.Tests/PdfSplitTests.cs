@@ -115,14 +115,14 @@ public sealed class PdfSplitTests : IDisposable
     {
         // 251 + ".pdf" is the longest name a file can have; " 001.pdf" pushes a page name past 255, so it must be cut.
         var stem = string.Concat(Enumerable.Repeat("Ảnh chụp ", 30))[..251];
-        var input = @"\\?\" + _dir.Combine(stem + ".pdf");
+        var input = TestPdf.Long(_dir.Combine(stem + ".pdf"));
         WriteWidths(input, 100, 200, 300);
 
         var folder = await Op().RunAsync(input, CancellationToken.None);
 
         Assert.EndsWith(" (split)", folder, StringComparison.Ordinal);
         Assert.Equal(255, Path.GetFileName(folder).Length);
-        var names = Entries(@"\\?\" + folder);
+        var names = Entries(TestPdf.Long(folder));
         Assert.Equal(3, names.Length);
         Assert.All(names, name => Assert.Equal(255, name.Length));
         Assert.Equal([" 001.pdf", " 002.pdf", " 003.pdf"], names.Select(name => name[^8..]));
@@ -135,12 +135,12 @@ public sealed class PdfSplitTests : IDisposable
         // The cut falls between the two halves of an emoji: the name keeps neither, never half of one.
         var stem = new string('a', 246) + "\U0001F9FE" + "bbb";
         Assert.Equal(251, stem.Length);
-        var input = @"\\?\" + _dir.Combine(stem + ".pdf");
+        var input = TestPdf.Long(_dir.Combine(stem + ".pdf"));
         WriteWidths(input, 100);
 
         var folder = await Op().RunAsync(input, CancellationToken.None);
 
-        Assert.Equal([new string('a', 246) + " 001.pdf"], Entries(@"\\?\" + folder));
+        Assert.Equal([new string('a', 246) + " 001.pdf"], Entries(TestPdf.Long(folder)));
     }
 
     [WindowsFact]
@@ -310,7 +310,7 @@ public sealed class PdfSplitTests : IDisposable
         var result = Assert.Single(outcome.Results);
         Assert.True(result.Succeeded, result.Error);
         Assert.Equal(Path.Combine(folder, Path.GetFileNameWithoutExtension(input) + " (split)"), result.Output);
-        Assert.Equal(2, Directory.GetFiles(@"\\?\" + result.Output!).Length);
+        Assert.Equal(2, Directory.GetFiles(TestPdf.Long(result.Output!)).Length);
     }
 
     [Fact]

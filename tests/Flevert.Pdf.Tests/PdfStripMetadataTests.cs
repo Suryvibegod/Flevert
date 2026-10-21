@@ -207,7 +207,8 @@ public sealed class PdfStripMetadataTests : IDisposable
     [Fact]
     public async Task Works_on_a_pdf_at_a_long_path_whose_names_are_not_ascii()
     {
-        var folder = @"\\?\" + _dir.Path;
+        // \\?\ is how a Windows path goes past 260 characters; Linux needs no prefix.
+        var folder = (OperatingSystem.IsWindows() ? @"\\?\" : "") + _dir.Path;
         while (folder.Length < 320)
             folder = Path.Combine(folder, "thư mục con rất dài để vượt quá giới hạn MAX_PATH \U0001F34A");
         Directory.CreateDirectory(folder);

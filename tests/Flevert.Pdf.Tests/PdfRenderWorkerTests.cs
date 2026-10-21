@@ -19,6 +19,7 @@ public sealed class PdfRenderWorkerTests : IDisposable
     [InlineData(@"\\?\C:\long\path.pdf")]
     public void The_request_carries_any_path_exactly(string path)
     {
+        path = TestPdf.Native(path);
         var request = new PdfRenderRequest(path, new FileIdentity(0x1234_5678_9ABC_DEF0, UInt128.MaxValue - 5), path + " (pages)",
             PdfPageImageFormat.Png, 37.5);
 
@@ -40,13 +41,13 @@ public sealed class PdfRenderWorkerTests : IDisposable
     [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0extra\0")]
     public void A_damaged_request_is_refused(string text)
     {
-        Assert.Throws<FormatException>(() => PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(text)));
+        Assert.Throws<FormatException>(() => PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(TestPdf.Native(text))));
     }
 
     [Fact]
     public void A_request_of_this_version_is_read_and_written()
     {
-        var request = PdfRenderRequest.Decode(Encoding.Unicode.GetBytes("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0shrink\0150\0"));
+        var request = PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(TestPdf.Native("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0shrink\0150\0")));
 
         Assert.Equal(PdfWorkerTask.ShrinkImages, request.Task);
         Assert.StartsWith("flevert-pdf-worker/2\0", Encoding.Unicode.GetString(request.Encode()), StringComparison.Ordinal);
