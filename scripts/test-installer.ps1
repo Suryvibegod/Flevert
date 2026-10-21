@@ -366,9 +366,13 @@ try {
     Write-Host 'Scenario 6: uninstalling while flevert.exe runs is cancelled, never left half done'
     Install '0' | Out-Null
     $menuCount = @(MenuKeys).Count
-    # About 20 s of work (one second per file): long enough for a slow first start and the uninstaller's hand-over.
+    # About 20 s of work, long enough for a slow first start and the uninstaller's hand-over: slow copy runs 8 files at
+    # once, so 20 files of a second each took 3 s, and with ffmpeg just installed (Defender scanning it) the uninstaller
+    # took longer than that (1.3.0). Three rounds of 7 s.
     $inputs = 1..20 | ForEach-Object { $f = "$work\slow$_.txt"; Set-Content $f 'x'; "`"$f`"" }
-    $job = RunFlevertHeadless (@('run', 'dev.slow-copy') + $inputs) -NoWait
+    $env:FLEVERT_SLOW_COPY_MS = '7000'
+    try { $job = RunFlevertHeadless (@('run', 'dev.slow-copy') + $inputs) -NoWait }
+    finally { Remove-Item Env:\FLEVERT_SLOW_COPY_MS }
     # The uninstaller only sees flevert.exe once it holds the mutex; a fresh binary can take a while to start.
     $mutex = $null
     $deadline = (Get-Date).AddSeconds(15)
