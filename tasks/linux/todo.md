@@ -37,9 +37,10 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 ## Giai đoạn 2: phần nền tảng
 
 ### T4: Ghim file và quy tắc đường dẫn (Runner)
-- [ ] `UnixInputPin.TryPin`: `O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`, `fstat` chỉ file thường, `st_nlink == 1`, đường dẫn thật từ `/proc/self/fd/N`
-- [ ] Quy tắc đường dẫn Linux trong `Runner`/`InputPath`: tuyệt đối, bắt đầu bằng `/`, không có `\0`; tên có dấu chấm cuối, khoảng trắng cuối hay `:` là hợp lệ
+- [x] `UnixInputPin.TryPin`: `O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`, `fstat` chỉ file thường, `st_nlink == 1`, đường dẫn thật từ `/proc/self/fd/N`
+- [x] Quy tắc đường dẫn Linux trong `Runner`/`InputPath`: tuyệt đối, bắt đầu bằng `/`, không có `\0`; tên có dấu chấm cuối, khoảng trắng cuối hay `:` là hợp lệ
 - Kiểm: test âm cho symlink, hard link, FIFO (không treo), `/dev/zero`, thư mục, đường dẫn tương đối; thư mục cha là symlink → đường dẫn thật
+- Đã làm (2026-10-21): mở bằng `O_PATH|O_NOFOLLOW|O_CLOEXEC` thay cho `O_RDONLY|O_NONBLOCK` (không đọc gì, mở FIFO hay thiết bị không treo và không có tác dụng phụ; symlink cho fd của chính nó); `statx(AT_EMPTY_PATH)` thay cho `fstat` (layout cố định mọi kiến trúc); hằng số kiểm từ header glibc 2.35, `O_NOFOLLOW`/`O_DIRECTORY` chỉ khai cho x86-64 (kiến trúc khác ném `PlatformNotSupportedException`). `src/Flevert.Core/Unix/Libc.cs` gom P/Invoke libc. 11 test `UnixInputPinTests` (`[LinuxFact]`), đỏ với stub; đột biến bỏ `O_NOFOLLOW` hoặc kiểm `nlink` → test tương ứng đỏ. 15 test của `RunnerTests`/`RunnerBatchOperationTests` chỉ có nghĩa trên Windows (8.3, ADS, dấu chấm cuối, `\\?\`, thiết bị, named pipe, junction, hệ thống file không phân biệt hoa/thường, khóa không cho đổi tên) → `[WindowsFact]`; bản Linux tương ứng nằm trong `UnixInputPinTests`, trừ hai test khóa (Linux không có khóa bắt buộc: ADR-0010). **Lỗi tìm thấy:** `RunLog` nhờ `FileShare.Read` để các tiến trình ghi lần lượt; .NET trên Linux đổi thành `flock` chia sẻ nên hai luồng ghi cùng lúc làm mất dòng (`RunnerParallelTests` 6 → 5 dòng). Sửa: `FileShare.None` trên Linux, lỗi `EAGAIN` (HResult 11) là "đang bị giữ". Cần soát các chỗ khác dựa vào `FileShare` (T6/T7, review).
 - Phụ thuộc: T3. Cỡ: S
 
 ### T8: ExternalTool trên Linux (làm sớm: rủi ro cao)

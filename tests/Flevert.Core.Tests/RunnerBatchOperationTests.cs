@@ -209,7 +209,8 @@ public sealed class RunnerBatchOperationTests : IDisposable
             File.Delete(file); // released once the run is over
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task The_same_file_given_twice_is_joined_once()
     {
         var file = _dir.File("ảnh 1.txt");

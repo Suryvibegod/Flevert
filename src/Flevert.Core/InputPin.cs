@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
 
 namespace Flevert.Core;
@@ -28,6 +29,7 @@ internal static partial class InputPin
     private const uint FileTypeDisk = 1;
 
     /// <returns>A handle to keep open while processing, or <c>null</c> with <paramref name="reason"/> set.</returns>
+    [SupportedOSPlatform("windows")]
     public static SafeFileHandle? TryPin(string path, out string? reason, out string realPath)
     {
         realPath = path;

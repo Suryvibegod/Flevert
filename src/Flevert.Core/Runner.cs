@@ -441,6 +441,10 @@ public sealed class Runner(RunLog log)
     // following links.
     private static string? Reject(IMenuOperation operation, string file)
     {
+        // On Linux a name may end in a dot or a space or hold a colon, and no 8.3 names exist: only the shape is checked.
+        if (!OperatingSystem.IsWindows())
+            return IsPlainUnixPath(file) ? Unsupported(operation, file) : "Only absolute file paths are accepted.";
+
         // Paths also arrive over the batch pipe; accept only plain absolute file paths, not device namespaces. flevert.exe
         // keeps a relative path with a dotted name unresolved, so say what is actually wrong with it.
         if (!IsPlainFilePath(file))
@@ -467,6 +471,8 @@ public sealed class Runner(RunLog log)
             ? null
             : $"File type {extension} is not supported by {operation.Id}.";
     }
+
+    private static bool IsPlainUnixPath(string file) => file.StartsWith('/') && !file.Contains('\0', StringComparison.Ordinal);
 
     /// <summary>
     /// Allow-list, either slash: <c>C:\…</c>, <c>\\server\share\…</c>, <c>\\?\C:\…</c> or <c>\\?\UNC\…</c>. The share may not
@@ -499,7 +505,14 @@ public sealed class Runner(RunLog log)
 
     private static string? Pin(string file, out SafeFileHandle? pin, out string realPath)
     {
-        pin = InputPin.TryPin(file, out var reason, out realPath);
+        // Linux has no mandatory locks: the pin keeps the file open and checks it, but cannot stop a rename (ADR-0010).
+        string? reason;
+        if (OperatingSystem.IsWindows())
+            pin = InputPin.TryPin(file, out reason, out realPath);
+        else if (OperatingSystem.IsLinux())
+            pin = UnixInputPin.TryPin(file, out reason, out realPath);
+        else
+            throw new PlatformNotSupportedException();
         return reason;
     }
 

@@ -159,7 +159,8 @@ public sealed class RunnerTests : IDisposable
         Assert.Contains("absolute", result.Error, StringComparison.Ordinal);
     }
 
-    [Theory]
+    [WindowsTheory]
+    [SupportedOSPlatform("windows")]
     [InlineData("//./C:/x.txt")]
     [InlineData(@"\??\GLOBALROOT\Device\HarddiskVolume1\x.txt")]
     [InlineData("//?/GLOBALROOT/Device/HarddiskVolume1/x.txt")]
@@ -173,7 +174,8 @@ public sealed class RunnerTests : IDisposable
     }
 
     // Opening a pipe as a file connects to its server, which may then impersonate the user.
-    [Theory]
+    [WindowsTheory]
+    [SupportedOSPlatform("windows")]
     [InlineData(@"\\localhost\pipe\x.txt")]
     [InlineData(@"\\?\UNC\localhost\PIPE\x.txt")]
     [InlineData("//localhost/pipe/x.txt")]
@@ -188,7 +190,8 @@ public sealed class RunnerTests : IDisposable
     }
 
     // Win32 strips a trailing dot or space, so "a.txt." names another file than the one the user clicked.
-    [Theory]
+    [WindowsTheory]
+    [SupportedOSPlatform("windows")]
     [InlineData("a.txt.")]
     [InlineData("a.txt ")]
     public async Task Runner_rejects_names_ending_in_a_dot_or_space(string name)
@@ -203,7 +206,8 @@ public sealed class RunnerTests : IDisposable
     }
 
     // Win32 drops trailing dots from every folder in a path, so "sub.\x.txt" would be read from "sub\x.txt".
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Runner_rejects_a_folder_name_ending_in_a_dot()
     {
         var real = Directory.CreateDirectory(_dir.Combine("sub")).FullName;
@@ -218,7 +222,8 @@ public sealed class RunnerTests : IDisposable
         Assert.False(File.Exists(Path.Combine(real, "x (copy).txt")));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Runner_rejects_an_alternate_data_stream()
     {
         // "a.txt:s.txt" passes the extension check but names a hidden stream of a.txt, not a file.
@@ -231,7 +236,8 @@ public sealed class RunnerTests : IDisposable
         Assert.Contains("stream", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void The_pin_refuses_a_real_location_with_a_folder_ending_in_a_dot()
     {
         // A junction can lead a clean-looking path into "x."; the pin then sees "x." in the real path. The operation
@@ -246,7 +252,8 @@ public sealed class RunnerTests : IDisposable
         Assert.Contains("dot or space", reason, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void The_pin_refuses_anything_that_is_not_a_file_on_disk()
     {
         // Every pipe spelling is refused earlier; this is the last line if one ever gets through.
@@ -262,7 +269,8 @@ public sealed class RunnerTests : IDisposable
     }
 
     // The \\?\ prefix is dropped only where Win32 normalisation would leave the path unchanged.
-    [Theory]
+    [WindowsTheory]
+    [SupportedOSPlatform("windows")]
     [InlineData(@"\\?\C:\a\b.txt", @"C:\a\b.txt")]
     [InlineData(@"\\?\UNC\server\share\x.txt", @"\\server\share\x.txt")]
     [InlineData(@"\\?\C:\a\NUL", @"\\?\C:\a\NUL")]
@@ -273,7 +281,8 @@ public sealed class RunnerTests : IDisposable
         Assert.Equal(expected, InputPin.Shorten(final));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_relative_path_through_a_dotted_folder_is_refused_for_the_dot()
     {
         var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(
@@ -298,8 +307,10 @@ public sealed class RunnerTests : IDisposable
     }
 
     [SkippableFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_short_name_with_a_truncated_extension_is_judged_by_the_real_name()
     {
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows only");
         // 8.3 names cut 4-letter extensions (.webp -> .WEB, .jpeg -> .JPE, .heic -> .HEI). Normalisation expands them, but
         // not for \\?\ paths, which reach the runner as given.
         var file = _dir.File("averylongname.webp");
@@ -329,8 +340,10 @@ public sealed class RunnerTests : IDisposable
     }
 
     [SkippableFact]
+    [SupportedOSPlatform("windows")]
     public async Task Runner_checks_the_file_type_of_the_real_name_not_of_a_short_name()
     {
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows only");
         var file = _dir.File("abcdefghij.txtx");
         var buffer = new char[1024];
         var length = GetShortPathNameW(file, buffer, (uint)buffer.Length);
@@ -344,6 +357,7 @@ public sealed class RunnerTests : IDisposable
         Assert.Contains("not supported", Assert.Single(outcome.Results).Error, StringComparison.Ordinal);
     }
 
+    [SupportedOSPlatform("windows")]
     [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
     private static extern uint GetShortPathNameW(string longPath, [System.Runtime.InteropServices.Out] char[] shortPath, uint length);
 
@@ -418,7 +432,8 @@ public sealed class RunnerTests : IDisposable
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(2), $"took {timer.Elapsed}");
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Input_cannot_be_renamed_or_replaced_while_it_is_being_processed()
     {
         var file = _dir.File("a.txt");
@@ -429,7 +444,8 @@ public sealed class RunnerTests : IDisposable
         Assert.False(op.RenameSucceeded);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Operation_receives_the_real_location_when_the_path_goes_through_a_junction()
     {
         var real = Directory.CreateDirectory(_dir.Combine("real")).FullName;
@@ -459,7 +475,8 @@ public sealed class RunnerTests : IDisposable
         }
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_parent_folder_cannot_be_renamed_while_its_file_is_pinned()
     {
         // The operation is given the real path on the strength of this: with the input open without delete sharing,
@@ -477,7 +494,8 @@ public sealed class RunnerTests : IDisposable
         Directory.Move(parent, _dir.Combine("moved")); // control: possible once the pin is released
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Runner_rejects_a_file_with_more_than_one_hard_link()
     {
         var target = _dir.File("private.txt", "secret");
@@ -506,6 +524,7 @@ public sealed class RunnerTests : IDisposable
         Assert.True(Assert.Single(outcome.Results).Succeeded, outcome.Results[0].Error);
     }
 
+    [SupportedOSPlatform("windows")]
     [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
     private static extern bool CreateHardLinkW(string link, string existing, nint security);
 
