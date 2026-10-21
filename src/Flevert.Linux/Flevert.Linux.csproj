@@ -15,6 +15,11 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
+  <!-- The Nautilus extension, beside flevert in nautilus/: install-menu copies it where nautilus-python loads it from. -->
+  <ItemGroup>
+    <None Include="nautilus/flevert_menu.py" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Flevert.Core\Flevert.Core.csproj" />
     <ProjectReference Include="..\Flevert.Image\Flevert.Image.csproj" />

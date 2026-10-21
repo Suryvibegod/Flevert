@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using Flevert.Core;
+using Flevert.Core.Menu;
 using Flevert.Core.Operations;
 using Flevert.Pdf;
 
@@ -40,6 +41,14 @@ internal static class Program
                 // joined as it is: normalising "a/../b" by its text would name another file when "a" is a link.
                 return RunBatch(run with { Files = [.. run.Files.Select(f => Path.Combine(Environment.CurrentDirectory, f))] }, catalog, log);
 
+            case InstallMenuCommand install:
+                return InstallMenu(install, catalog);
+
+            case UninstallMenuCommand:
+                UnixMenuInstaller.ForThisUser().Uninstall();
+                Console.WriteLine("Flevert is out of the Nautilus menu once Nautilus restarts: nautilus -q");
+                return ExitCodes.Ok;
+
             case ListOpsCommand:
                 foreach (var op in catalog.All)
                     Console.WriteLine($"{op.Id}\t{op.MenuPath}\t{string.Join(' ', op.Extensions)}");
@@ -53,6 +62,52 @@ internal static class Program
                 Console.Error.WriteLine("This command is not available on Linux.");
                 return ExitCodes.BadUsage;
         }
+    }
+
+    // Where nautilus-python puts its loader, by distribution; one of them means the extension will be loaded.
+    private static readonly string[] NautilusPython =
+    [
+        "/usr/lib/x86_64-linux-gnu/nautilus/extensions-4/libnautilus-python.so",
+        "/usr/lib/x86_64-linux-gnu/nautilus/extensions-3.0/libnautilus-python.so",
+        "/usr/lib64/nautilus/extensions-4/libnautilus-python.so",
+        "/usr/lib64/nautilus/extensions-3.0/libnautilus-python.so",
+        "/usr/lib/nautilus/extensions-4/libnautilus-python.so",
+        "/usr/lib/nautilus/extensions-3.0/libnautilus-python.so",
+    ];
+
+    private static int InstallMenu(InstallMenuCommand install, OperationCatalog catalog)
+    {
+        var exe = Environment.ProcessPath!;
+        if (Path.GetFileName(exe) == "dotnet")
+        {
+            Console.Error.WriteLine("Run flevert itself; a menu that starts it through dotnet would not work.");
+            return ExitCodes.BadUsage;
+        }
+
+        if (!UnixInstallLocation.IsWritableOnlyByOwner(Path.GetDirectoryName(exe)!))
+        {
+            if (!install.AllowInsecureLocation)
+            {
+                Console.Error.WriteLine($"Refusing to put {exe} in the menu: other accounts can change its folder or a folder above it, or it is reached through a link, so they could run code as you. Install with install.sh instead.");
+                return ExitCodes.RefusedLocation;
+            }
+
+            Console.Error.WriteLine($"Warning: other accounts can change {Path.GetDirectoryName(exe)}, or it is reached through a link. Use --allow-insecure-location only on a machine you trust.");
+        }
+
+        var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));
+        UnixMenuInstaller.ForThisUser().Install(
+            NautilusMenu.Build(ops, exe, MaxFiles), Path.Combine(AppContext.BaseDirectory, "nautilus", UnixMenuInstaller.ExtensionFileName));
+        if (!NautilusPython.Any(File.Exists))
+        {
+            Console.Error.WriteLine("Nautilus loads the Flevert menu through nautilus-python, which is not installed. Install it, then restart Nautilus:");
+            Console.Error.WriteLine("  Ubuntu, Debian, Pop!_OS: sudo apt install python3-nautilus");
+            Console.Error.WriteLine("  Fedora: sudo dnf install nautilus-python");
+            Console.Error.WriteLine("  Arch: sudo pacman -S python-nautilus");
+        }
+
+        Console.WriteLine("Flevert is in the Nautilus menu once Nautilus restarts: nautilus -q");
+        return ExitCodes.Ok;
     }
 
     private static int RunBatch(RunCommand run, OperationCatalog catalog, RunLog log)

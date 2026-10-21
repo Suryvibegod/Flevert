@@ -97,13 +97,14 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T9. Cỡ: S
 
 ### T12: Menu Nautilus
-- [ ] `flevert install-menu`/`uninstall-menu` trên Linux: ghi `menu.json` (đường dẫn `flevert`, cây menu từ catalog: nhãn, nhóm, menu con `More PDF tools`, đuôi file) và chép `flevert_menu.py` vào `~/.local/share/nautilus-python/extensions/`; từ chối cài khi thư mục chứa `flevert` ghi được bởi người khác (như `InstallLocation` trên Windows)
-- [ ] `flevert_menu.py` (MIT): API 3.0 và 4.0, chỉ file cục bộ, lọc theo đuôi, gọi `flevert run <op> <files…>` bằng danh sách đối số, không shell; tối đa 1000 file
-- Kiểm: test C# cho `menu.json`; `python3 -m unittest` với module Nautilus giả (3.0, 4.0); cài từ bản build, `nautilus -q`, bấm thử
+- [x] `flevert install-menu`/`uninstall-menu` trên Linux: ghi `menu.json` (đường dẫn `flevert`, cây menu từ catalog: nhãn, nhóm, menu con `More PDF tools`, đuôi file) và chép `flevert_menu.py` vào `~/.local/share/nautilus-python/extensions/`; từ chối cài khi thư mục chứa `flevert` ghi được bởi người khác (như `InstallLocation` trên Windows)
+- [x] `flevert_menu.py` (MIT): API 3.0 và 4.0, chỉ file cục bộ, lọc theo đuôi, gọi `flevert run <op> <files…>` bằng danh sách đối số, không shell; tối đa 1000 file
+- Kiểm: test C# cho `menu.json`; `python3 -m unittest` với module Nautilus giả (3.0, 4.0); cài từ bản build, `nautilus -q`, bấm thử (cần `sudo apt install python3-nautilus`: hỏi người dùng ở bước kiểm cuối)
+- Đã làm (2026-10-21): `Core/Menu/NautilusMenu.cs` dựng cây **cho từng đuôi** bằng chính `MenuInstaller.MenuNode` (đổi `private` → `internal`, không đổi hành vi Windows), nên thứ tự giống hệt Windows; menu thứ hai (Shift trên Windows) thành menu con "More PDF tools" cuối menu Flevert; không icon, không đường kẻ (Nautilus không vẽ). Chọn nhiều loại file: cây của file đầu, chỉ giữ thao tác nhận *mọi* đuôi đã chọn. Extension đọc lại `menu.json` mỗi lần chuột phải (cài lại không cần khởi động lại Nautilus), chạy `flevert` qua `subprocess` không shell, luồng nền thu dọn tiến trình con (không zombie trong Nautilus). `Core/Unix/UnixMenu.cs`: ghi file tạm rồi `rename` (symlink đặt sẵn bị thay, không bị ghi xuyên); `UnixInstallLocation`: thư mục và mọi thư mục cha là thư mục thật (không symlink), của user hoặc root, không ai khác ghi được; thư mục cha người khác ghi được chỉ chấp nhận khi có sticky bit. Repo trên máy thử có quyền 775 (umask 002) → bản build dev cần `--allow-insecure-location`, như Windows. Thiếu nautilus-python → in lệnh cài theo distro. Test: 12 Python (API 3.0/4.0, lọc, chạy không shell, file menu hỏng, `flevert` không hợp lệ), 3 C# `menu.json` (chạy cả hai nền tảng), 8 cài/gỡ/vị trí (gồm `flevert install-menu` thật bị từ chối khi thư mục ghi được bởi người khác), 2 liên thông (catalog thật → `menu.json` → extension thật dựng menu PDF và ảnh). 5 test menu registry → `[WindowsFact]`.
 - Phụ thuộc: T9. Cỡ: M
 
 ### Mốc: ứng dụng
-- [ ] Ba project xanh; bấm thử trong Nautilus mỗi nhóm thao tác một lần
+- [ ] Ba project xanh; bấm thử trong Nautilus mỗi nhóm thao tác một lần (ba project: xem bảng cuối; bấm thử: bước kiểm cuối, cần `python3-nautilus`)
 
 ## Giai đoạn 4: đóng gói và tài liệu
 
