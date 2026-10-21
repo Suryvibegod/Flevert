@@ -109,6 +109,32 @@ public sealed class UnixExternalToolTests : IDisposable
         Assert.True(await WaitUntil(() => !IsRunning(left), TimeSpan.FromSeconds(2)), "the sleep started by the tool is still running");
     }
 
+    // The tool is set to die with flevert (PR_SET_PDEATHSIG), which Linux ties to the thread that started it: started
+    // from a thread that then ends (a thread-pool thread can retire while the tool runs), it would die with that thread.
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task A_tool_outlives_the_thread_that_asked_for_it()
+    {
+        // The thread ends only once the tool runs (its marker exists), so the death signal is surely set by then: a thread
+        // that ends sooner has its children handed to another thread, and the signal never comes.
+        var running = _dir.Combine("running");
+        Task<ExternalToolResult>? run = null;
+        var caller = new Thread(() =>
+        {
+            run = ExternalTool.RunAsync(Sh, ["-c", $"touch '{running}'; sleep 1; echo alive"], Generous);
+            var waited = Stopwatch.StartNew();
+            while (!File.Exists(running) && waited.Elapsed < TimeSpan.FromSeconds(20))
+                Thread.Sleep(10);
+        });
+        caller.Start();
+        caller.Join();
+
+        var result = await run!;
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("alive\n", result.StandardOutput);
+    }
+
     [LinuxFact]
     [SupportedOSPlatform("linux")]
     public async Task A_tool_refused_memory_past_its_limit_is_reported_as_over_the_limit()
@@ -128,6 +154,25 @@ public sealed class UnixExternalToolTests : IDisposable
         // Control: the same allocation without a limit succeeds, and nothing is reported.
         Assert.Equal("allocated", free.StandardOutput.Trim());
         Assert.False(free.MemoryLimitExceeded);
+    }
+
+    // pdfium says nothing when refused memory: its allocator aborts. Python stands in, taking most of the allowance and
+    // then dying of the same signal; a kill (as on cancel) or a crash with little memory taken is not about memory.
+    [SkippableTheory]
+    [SupportedOSPlatform("linux")]
+    [InlineData(330, "ABRT", true)]
+    [InlineData(330, "KILL", false)]
+    [InlineData(10, "ABRT", false)]
+    public async Task A_tool_that_dies_silently_near_its_limit_is_reported_as_over_the_limit(int megabytes, string signal, bool over)
+    {
+        Skip.IfNot(OperatingSystem.IsLinux() && File.Exists("/usr/bin/python3"), "Linux with Python only");
+        var script = $"import os, signal, time; b = bytearray({megabytes} << 20); time.sleep(0.5); os.kill(os.getpid(), signal.SIG{signal})";
+
+        var result = await ExternalTool.RunAsync("/usr/bin/python3", ["-I", "-c", script], Generous,
+            limits: new ExternalToolLimits { MaxMemoryBytes = 400 * 1024 * 1024 });
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Equal(over, result.MemoryLimitExceeded);
     }
 
     [LinuxFact]

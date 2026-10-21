@@ -176,9 +176,10 @@ public static partial class ExternalTool
             if (OperatingSystem.IsLinux())
             {
                 // No job: the tool leads a process group of its own (setsid), which is ended as the job would be.
-                using var tool = Process.Start(start) ?? throw new InvalidOperationException($"{start.FileName} did not start.");
+                using var tool = UnixStarter.Start(start);
                 afterStart?.Invoke(tool);
-                return await WaitAsync(tool, job: null, memoryReports: null, limits, cancellationToken).ConfigureAwait(false);
+                using var memory = limits?.MaxMemoryBytes is null ? null : new UnixMemoryWatch(tool.Id);
+                return await WaitAsync(tool, job: null, memoryReports: null, limits, cancellationToken, memory).ConfigureAwait(false);
             }
 
             using var memoryReports = limits?.MaxMemoryBytes is null ? null : CreateCompletionPort();
@@ -208,8 +209,10 @@ public static partial class ExternalTool
         }
 
         /// <param name="job">The tool's job on Windows; <c>null</c> on Linux, where its process group stands in for it.</param>
+        /// <param name="memory">On Linux, how much memory the tool took, when it runs under a limit.</param>
         private async Task<ExternalToolResult> WaitAsync(
-            Process process, SafeHandle? job, SafeHandle? memoryReports, ExternalToolLimits? limits, CancellationToken cancellationToken)
+            Process process, SafeHandle? job, SafeHandle? memoryReports, ExternalToolLimits? limits, CancellationToken cancellationToken,
+            UnixMemoryWatch? memory = null)
         {
             // Process.Dispose leaves a redirected stream open once it has been read (the caller could still hold it), so
             // the pipes are closed here when the run ends. A read already blocked on a process that escaped the job is not
@@ -231,6 +234,8 @@ public static partial class ExternalTool
             try
             {
                 await process.WaitForExitAsync(stop.Token).ConfigureAwait(false);
+                if (OperatingSystem.IsLinux())
+                    memory?.Dispose();
                 // A child it started may still hold the pipes open; it is part of this run and ends with it.
                 EndWhatIsLeft(process, job);
                 var (stdout, stdoutTruncated) = await output.WaitAsync(stop.Token).ConfigureAwait(false);
@@ -240,7 +245,9 @@ public static partial class ExternalTool
                 return new ExternalToolResult(process.ExitCode, stdout, stderr, stdoutTruncated, stderrTruncated)
                 {
                     MemoryLimitExceeded = OperatingSystem.IsLinux()
-                        ? limits?.MaxMemoryBytes is not null && UnixGroup.LooksOutOfMemory(process.ExitCode, stderr)
+                        ? limits?.MaxMemoryBytes is { } limit && process.ExitCode != 0
+                            && (UnixGroup.LooksOutOfMemory(stderr)
+                                || (memory is not null && UnixGroup.DiedNearItsLimit(process.ExitCode, memory.PeakBytes, limit)))
                         : ReportsMemoryLimit(memoryReports),
                 };
             }

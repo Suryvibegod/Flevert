@@ -627,7 +627,7 @@ public sealed class PdfWorkerException : Exception
             error = "…" + error[^MaxDetailChars..];
         var text = string.Create(CultureInfo.InvariantCulture, $"The PDF worker ended with exit code {run.ExitCode} (0x{run.ExitCode:X8})");
         if (run.MemoryLimitExceeded)
-            text += ", after Windows refused it memory past its limit";
+            text += OperatingSystem.IsWindows() ? ", after Windows refused it memory past its limit" : ", after it was refused memory past its limit";
         if (detail is not null)
             text += $": {detail}";
         return error.Length == 0 ? text + "." : $"{text}. {error}";
