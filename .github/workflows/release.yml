@@ -26,6 +26,9 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+    outputs:
+      # The setup's hash as this job wrote it: the release job checks the file it uploads against it.
+      setup-sha256: ${{ steps.checksums.outputs.sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -104,11 +107,13 @@ jobs:
         shell: pwsh
         run: ./scripts/test-build-paths.ps1 -Folder artifacts/publish
       - name: Write checksums
+        id: checksums
         shell: pwsh
         run: |
           $setup = Get-Item "artifacts/installer/Flevert-Setup-$($env:TAG.TrimStart('v')).exe" -ErrorAction Stop
-          (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant() + "  " + $setup.Name |
-            Out-File artifacts/installer/SHA256SUMS.txt -Encoding ascii
+          $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          $hash + "  " + $setup.Name | Out-File artifacts/installer/SHA256SUMS.txt -Encoding ascii
+          "sha256=$hash" | Out-File $env:GITHUB_OUTPUT -Append -Encoding ascii
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installer
@@ -145,7 +150,7 @@ jobs:
       contents: read
 
   release:
-    needs: [attest, ffmpeg-source]
+    needs: [build, attest, ffmpeg-source]
     runs-on: ubuntu-latest
     # Downloads the source archive (a gigabyte or more) and uploads it again with the setup.
     timeout-minutes: 30
@@ -160,10 +165,30 @@ jobs:
         with:
           name: installer
           path: installer
+      # In a folder of its own: the ffmpeg-source job runs third-party build scripts, and nothing it wrote may land beside
+      # the setup or replace it (security review, 2026-10-21).
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ffmpeg-source
-          path: installer
+          path: source
+      - name: Check what will be attached
+        env:
+          SETUP_SHA256: ${{ needs.build.outputs.setup-sha256 }}
+        run: |
+          version="${TAG#v}"
+          setup="installer/Flevert-Setup-$version.exe"
+          # The setup the build job hashed (and the attest job attested), and only it with its checksums.
+          [ "$(ls -A installer | LC_ALL=C sort | paste -sd ' ')" = "Flevert-Setup-$version.exe SHA256SUMS.txt" ] || { ls -la installer; echo "Unexpected files in the installer artifact"; exit 1; }
+          [ -n "$SETUP_SHA256" ] && [ "$(sha256sum "$setup" | cut -d' ' -f1)" = "$SETUP_SHA256" ] || { echo "$setup is not the file the build job wrote"; exit 1; }
+          # Only source parts, as regular files.
+          for file in source/* source/.[!.]*; do
+            [ -e "$file" ] || continue
+            name="${file#source/}"
+            if [[ ! "$name" =~ ^ffmpeg-source-[A-Za-z0-9.-]+-[0-9]+-of-[0-9]+\.tar$ ]] || [ -L "$file" ] || [ ! -f "$file" ]; then
+              echo "Unexpected file in the ffmpeg-source artifact: $name"; exit 1
+            fi
+          done
+          ls source/ffmpeg-source-*.tar > /dev/null
       - name: Write the release notes
         # This version's CHANGELOG section, then how to check the download before "Run anyway" (unsigned build).
         run: |
@@ -185,15 +210,15 @@ jobs:
 
           ## Source of the bundled ffmpeg
 
-          Flevert runs ffmpeg, which is free software under the GNU GPL version 3, as a separate program. The $(ls installer/ffmpeg-source-*.tar | wc -l) files \`ffmpeg-source-*.tar\` below are its complete corresponding source: FFmpeg, every library built into it, and the scripts that built it. Extract them all into one folder; the README.txt in each says what each holds.
+          Flevert runs ffmpeg, which is free software under the GNU GPL version 3, as a separate program. The $(ls source/ffmpeg-source-*.tar | wc -l) files \`ffmpeg-source-*.tar\` below are its complete corresponding source: FFmpeg, every library built into it, and the scripts that built it. Extract them all into one folder; the README.txt in each says what each holds.
           EOF
           cat notes.md
       - name: Add the source archive to the checksums
         # Built by third-party scripts in the ffmpeg-source job: their hashes beside the setup's lets anyone check the copy
         # they downloaded is one this run attached.
-        run: (cd installer && sha256sum ffmpeg-source-*.tar) >> installer/SHA256SUMS.txt
+        run: (cd source && sha256sum ffmpeg-source-*.tar) >> installer/SHA256SUMS.txt
       - name: Draft the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$TAG" installer/* --draft --notes-file notes.md --title "Flevert $TAG"
+        run: gh release create "$TAG" "installer/Flevert-Setup-${TAG#v}.exe" installer/SHA256SUMS.txt source/ffmpeg-source-*.tar --draft --notes-file notes.md --title "Flevert $TAG"

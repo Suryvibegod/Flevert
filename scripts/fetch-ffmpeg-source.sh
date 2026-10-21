@@ -104,7 +104,14 @@ for STAGE in $STAGES; do
         echo "download.sh wrote nothing for $STAGE." >&2
         exit 1
     fi
-    cp -L "$archive" "$WORK/source/libraries/$STAGE.tar.xz"
+    # The cache may hold a link, but only to a file in the cache: a container could leave one to a file of this machine,
+    # which would then be published (security review, 2026-10-21).
+    resolved=$(realpath -e "$archive")
+    if [[ "$resolved" != "$(realpath -e "$WORK/builds/.cache")"/* || ! -f "$resolved" ]]; then
+        echo "The download of $STAGE is not a file in the cache: $resolved" >&2
+        exit 1
+    fi
+    cp "$resolved" "$WORK/source/libraries/$STAGE.tar.xz"
     # Licence files anywhere in the library's source: at its top, and those of the code it bundles (vendored Rust
     # crates, third_party/ and subprojects/ folders), which are linked into ffmpeg too (doubt-driven review, DD-6); the
     # texts of a LICENSES/ folder (the REUSE layout) and FreeType's, which its LICENSE.TXT only points to (re-check
@@ -121,8 +128,13 @@ for STAGE in $STAGES; do
         continue
     fi
     mkdir -p "$WORK/licence/$STAGE"
-    tar -xJf "$archive" -C "$WORK/licence/$STAGE" "${licences[@]}"
+    # Names read from a file, as they are: a member named like an option (--to-command=…) stays a name.
+    tar -xJf "$archive" -C "$WORK/licence/$STAGE" --verbatim-files-from -T <(printf '%s\n' "${licences[@]}")
     for licence in "${licences[@]}"; do
+        if [[ -L "$WORK/licence/$STAGE/$licence" || ! -f "$WORK/licence/$STAGE/$licence" ]]; then
+            echo "$STAGE: $licence is not a plain file in the archive." >&2
+            exit 1
+        fi
         # Flattened: lame/COPYING of stage 50-libmp3lame becomes 50-libmp3lame-lame-COPYING.
         cp "$WORK/licence/$STAGE/$licence" "$OUT/licences/$STAGE-$(sed 's|^\./||; s|/|-|g' <<< "$licence")"
     done

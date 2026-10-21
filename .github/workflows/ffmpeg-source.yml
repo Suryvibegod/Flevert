@@ -56,6 +56,12 @@ jobs:
             relative="${file#/mnt/work/out/licences/}"
             if ! cmp -s "$file" "installer/notices/ffmpeg/$relative"; then echo "Not in installer/notices/ffmpeg as built: $relative"; status=1; fi
           done < <(find /mnt/work/out/licences -type f -print0)
+          # A library whose terms are only in its source files' headers needs them written out by hand (doubt review,
+          # 2026-10-21): otherwise a new one would pass with no licence at all.
+          while IFS= read -r stage; do
+            [ -n "$stage" ] || continue
+            if ! compgen -G "installer/notices/ffmpeg/$stage-terms*.txt" > /dev/null; then echo "No terms written out for $stage (installer/notices/ffmpeg/$stage-terms.txt)"; status=1; fi
+          done < <(cat /mnt/work/out/licences-missing.txt 2> /dev/null)
           exit $status
       - if: ${{ inputs.keep-source }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
