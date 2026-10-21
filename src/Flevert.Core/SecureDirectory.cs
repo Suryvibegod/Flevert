@@ -39,13 +39,47 @@ public static partial class SecureDirectory
     }
 
     /// <summary>
+    /// The Linux counterpart of <see cref="RestrictToOwnerAndAdmins"/>: mode 0700, for a folder this user owns.
+    /// </summary>
+    /// <exception cref="IOException">The folder is a link, not a folder, or another account's.</exception>
+    [SupportedOSPlatform("linux")]
+    public static void RestrictToOwner(string directory)
+    {
+        // Opened without following a link: a link put in place of the folder must not pass its target's mode on.
+        using var handle = Libc.Open(directory, Libc.OPath | Libc.ONofollow | Libc.ODirectory | Libc.OCloexec);
+        if (handle.IsInvalid)
+            throw new IOException($"{Libc.ErrorMessage(Marshal.GetLastPInvokeError())} ({directory})");
+        if (!Libc.TryStat(handle, out var stat) || stat.Type != Libc.SIfDir || stat.Uid != Libc.EffectiveUserId)
+            throw new IOException($"{directory} is not a folder of this user's own.");
+
+        // Through the handle that was checked, so what changes is that folder whatever happened to its name meanwhile.
+        File.SetUnixFileMode(Libc.HandlePath(handle), OwnerOnly);
+    }
+
+    [SupportedOSPlatform("linux")]
+    private const UnixFileMode OwnerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+    /// <summary>
     /// Restricts and labels the folder, creating it if needed. Never throws: it runs after a leader acknowledged other
     /// processes' files, and it is defence in depth only.
     /// </summary>
     public static void TrySecure(string directory)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            try
+            {
+                Directory.CreateDirectory(directory, OwnerOnly);
+                RestrictToOwner(directory);
+            }
+#pragma warning disable CA1031 // Defence in depth only, as on Windows.
+            catch (Exception) { }
+#pragma warning restore CA1031
+            return;
+        }
+
         if (!OperatingSystem.IsWindows())
-            throw new PlatformNotSupportedException("Securing a folder is not implemented on this OS yet.");
+            throw new PlatformNotSupportedException();
         try
         {
             Directory.CreateDirectory(directory);

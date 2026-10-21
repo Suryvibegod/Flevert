@@ -58,6 +58,7 @@ internal static partial class Libc
         [FieldOffset(20)] public uint Uid;
         [FieldOffset(28)] public ushort Mode;
         [FieldOffset(32)] public ulong Ino;
+        [FieldOffset(40)] public ulong Size;
         [FieldOffset(136)] public uint DevMajor;
         [FieldOffset(140)] public uint DevMinor;
 
@@ -94,7 +95,7 @@ internal static partial class Libc
     public static string? PathOf(SafeFileHandle handle)
     {
         var buffer = new byte[4096];
-        var length = readlink($"/proc/self/fd/{handle.DangerousGetHandle()}", buffer, buffer.Length);
+        var length = readlink(HandlePath(handle), buffer, buffer.Length);
         if (length <= 0 || length >= buffer.Length)
             return null;
         try
@@ -110,6 +111,14 @@ internal static partial class Libc
 
     public static string ErrorMessage(int errno) => Marshal.GetPInvokeErrorMessage(errno);
 
+    public static uint EffectiveUserId => geteuid();
+
+    /// <summary>
+    /// A path that reaches exactly what the handle is open on (the kernel's link for it), for the calls .NET only offers
+    /// by path; an <c>O_PATH</c> handle cannot be changed through directly.
+    /// </summary>
+    public static string HandlePath(SafeFileHandle handle) => $"/proc/self/fd/{handle.DangerousGetHandle()}";
+
     /// <summary>Sends <paramref name="signal"/> to a process, or to a process group when <paramref name="pid"/> is negative.</summary>
     public static int Kill(int pid, int signal) => kill(pid, signal);
 
@@ -123,6 +132,9 @@ internal static partial class Libc
 
     [LibraryImport("libc", SetLastError = true)]
     private static partial int kill(int pid, int signal);
+
+    [LibraryImport("libc")]
+    private static partial uint geteuid();
 
     [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     private static partial nint readlink(string path, byte[] buffer, nint size);
