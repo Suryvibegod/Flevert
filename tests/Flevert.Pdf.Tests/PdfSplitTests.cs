@@ -143,7 +143,8 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal([new string('a', 246) + " 001.pdf"], Entries(@"\\?\" + folder));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task The_pages_get_the_permissions_of_the_folder_like_any_new_file()
     {
         var input = Pdf("report.pdf", 100, 200);
@@ -156,6 +157,7 @@ public sealed class PdfSplitTests : IDisposable
             name => Assert.Equal(Rules(fresh), Rules(Path.Combine(folder, name))));
     }
 
+    [SupportedOSPlatform("windows")]
     private static string[] Rules(string path) => new FileInfo(path).GetAccessControl()
         .GetAccessRules(includeExplicit: true, includeInherited: true, typeof(SecurityIdentifier))
         .Cast<FileSystemAccessRule>()

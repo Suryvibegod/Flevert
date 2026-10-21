@@ -16,13 +16,36 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- [WindowsFact] and [WindowsTheory]: tests of Windows behaviour, skipped on Linux. -->
+    <Compile Include="..\Shared\PlatformFacts.cs" Link="PlatformFacts.cs" />
+    <Using Include="Flevert.Tests" />
+    <Using Include="System.Runtime.Versioning" />
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Flevert.Core\Flevert.Core.csproj" />
-    <!-- Build order only: ProcessBatchIntegrationTests launches the real flevert.exe. -->
-    <ProjectReference Include="..\..\src\Flevert.Cli\Flevert.Cli.csproj" ReferenceOutputAssembly="false" />
+    <!-- Build order only: ProcessBatchIntegrationTests launches the real flevert.exe (flevert on Linux). -->
+    <ProjectReference Include="..\..\src\Flevert.Cli\Flevert.Cli.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' == 'Windows_NT'" />
+    <ProjectReference Include="..\..\src\Flevert.Linux\Flevert.Linux.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' != 'Windows_NT'" />
+  </ItemGroup>
+
+  <!-- Windows only: batching across processes over pipes, the registry, the PowerShell scripts and the Inno Setup installer, 8.3 and \\?\ paths, the update offer (off on Linux). Not built on Linux (docs/specs/linux.md). -->
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+    <Compile Remove="BatchTests.cs" />
+    <Compile Remove="BuildPathsScriptTests.cs" />
+    <Compile Remove="CheckoutScriptTests.cs" />
+    <Compile Remove="FetchDepsScriptTests.cs" />
+    <Compile Remove="InstallerScriptTests.cs" />
+    <Compile Remove="LongPathTests.cs" />
+    <Compile Remove="MenuRegistryIntegrationTests.cs" />
+    <Compile Remove="NoticesScriptTests.cs" />
+    <Compile Remove="PowerShellScript.cs" />
+    <Compile Remove="PreviousSetupScriptTests.cs" />
+    <Compile Remove="ProcessBatchIntegrationTests.cs" />
+    <Compile Remove="ProcessFactsTests.cs" />
+    <Compile Remove="QpdfDepsTests.cs" />
+    <Compile Remove="UpdateCheckIntegrationTests.cs" />
   </ItemGroup>
 
 </Project>

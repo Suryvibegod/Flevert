@@ -14,7 +14,8 @@ public sealed class MagickSetupTests : IDisposable
     {
         MagickSetup.EnsureInitialized();
         // As the real configuration folder: files created here can be changed only by this user, SYSTEM and Administrators.
-        SecureDirectory.RestrictToOwnerAndAdmins(_dir.Path);
+        if (OperatingSystem.IsWindows())
+            SecureDirectory.RestrictToOwnerAndAdmins(_dir.Path);
     }
 
     public void Dispose() => _dir.Dispose();
@@ -149,7 +150,8 @@ public sealed class MagickSetupTests : IDisposable
         MagickSetup.VerifyPolicy();
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void The_folder_for_policy_and_decoded_image_caches_is_labelled_no_read_up()
     {
         // Pixel caches of decoded images live here; a low-integrity process of the same user must not read them.
@@ -167,7 +169,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.Contains("NR", output, StringComparison.Ordinal);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_stale_or_tampered_policy_on_disk_is_replaced_before_loading()
     {
         File.WriteAllText(Path.Combine(_dir.Path, "policy.xml"), "<policymap></policymap>");
@@ -184,7 +187,8 @@ public sealed class MagickSetupTests : IDisposable
     private static FileStream OpenLikeImageMagick(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_policy_that_is_already_right_is_kept_while_another_process_reads_it()
     {
         MagickSetup.WriteConfiguration(_dir.Path);
@@ -197,7 +201,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.Equal(expected, File.ReadAllBytes(policy));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_stale_policy_another_process_is_reading_is_replaced_once_it_lets_go()
     {
         var policy = Path.Combine(_dir.Path, "policy.xml");
@@ -217,7 +222,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.Contains("""<policy domain="coder" rights="none" pattern="*" />""", File.ReadAllText(policy), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_stale_policy_that_cannot_be_replaced_is_an_error_and_leaves_no_temporary_file()
     {
         var policy = Path.Combine(_dir.Path, "policy.xml");
@@ -230,7 +236,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.Empty(Directory.GetFiles(_dir.Path, "*.tmp"));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_right_policy_another_account_may_change_is_replaced()
     {
         MagickSetup.WriteConfiguration(_dir.Path);
@@ -247,7 +254,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.DoesNotContain(rules, r => r.IdentityReference.Equals(users));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_right_policy_reached_through_a_hard_link_is_replaced_by_a_file_of_its_own()
     {
         // The link's target keeps its own permissions, which other accounts may be able to change; only a file created
@@ -281,7 +289,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.Equal(File.ReadAllBytes(Path.Combine(right, "policy.xml")), File.ReadAllBytes(policy));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Policy_and_temporary_files_live_in_a_folder_only_this_user_and_admins_can_open()
     {
         using var me = System.Security.Principal.WindowsIdentity.GetCurrent();

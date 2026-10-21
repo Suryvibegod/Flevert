@@ -251,7 +251,8 @@ public sealed class PdfStripMetadataTests : IDisposable
         Assert.Equal(_dir.Combine("Báo cáo (no metadata).pdf"), result.Output);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void The_private_folder_is_only_for_this_user_system_and_administrators()
     {
         var folder = Path.Combine(_scratch.Path, "private");

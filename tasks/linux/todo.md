@@ -25,9 +25,10 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T1. Cỡ: M
 
 ### T3: Test chạy được trên Linux, lập bảng
-- [ ] Test project tham chiếu `Flevert.Linux` trên Linux; file chỉ dành cho Windows bỏ khỏi build trên Linux (có comment lý do)
-- [ ] Chạy ba project, ghi bảng: xanh / đỏ vì phần Linux chưa làm (task nào sửa) / bỏ qua vì chỉ có nghĩa trên Windows
+- [x] Test project tham chiếu `Flevert.Linux` trên Linux; file chỉ dành cho Windows bỏ khỏi build trên Linux (có comment lý do)
+- [x] Chạy ba project, ghi bảng: xanh / đỏ vì phần Linux chưa làm (task nào sửa) / bỏ qua vì chỉ có nghĩa trên Windows
 - Kiểm: ba project chạy hết (đỏ được phép, nhưng mỗi test đỏ có task nhận); không test nào bị xóa
+- Đã làm (2026-10-21): bảng ở cuối file. `tests/Shared/PlatformFacts.cs` (`[WindowsFact]`, `[WindowsTheory]`, link vào ba project) cho test lẻ, kèm `[SupportedOSPlatform("windows")]` để CA1416 vẫn kiểm thân test. Test chỉ sai vì dữ liệu đường dẫn Windows (`@"C:\x\p7.heic"` khi chỉ cần tên file) đổi sang `"C:/x/p7.heic"` (Windows cũng nhận `/`), không đổi ý nghĩa; `Repository.Root()` tách khỏi `InstallerScriptTests` để `UpdateCheckTests` dùng được trên Linux.
 - Phụ thuộc: T1, T2. Cỡ: M
 
 ### Mốc: nền
@@ -118,4 +119,28 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 
 ## Bảng test trên Linux (T3)
 
-(điền ở T3)
+Lần chạy đầu (2026-10-21, sau T2), mỗi project chạy riêng:
+
+| Project | Xanh | Đỏ | Bỏ qua |
+|---|---|---|---|
+| Core | 250 | 123 | 13 |
+| Image | 0 | 168 | 0 |
+| Pdf | 221 | 1094 | 3 |
+
+**Không build trên Linux** (chỉ có nghĩa trên Windows; `<Compile Remove>` có lý do trong csproj): Core: `BatchTests`, `ProcessBatchIntegrationTests`, `ProcessFactsTests` (gom lô qua pipe giữa nhiều tiến trình), `MenuRegistryIntegrationTests` (registry thật), `CheckoutScriptTests`, `FetchDepsScriptTests`, `PreviousSetupScriptTests`, `BuildPathsScriptTests`, `NoticesScriptTests`, `InstallerScriptTests`, `PowerShellScript`, `QpdfDepsTests` (script PowerShell, Inno Setup, DLL MSVC), `LongPathTests` (tên 8.3, `\\?\`), `UpdateCheckIntegrationTests` (báo bản mới tắt trên Linux). Pdf: `WatermarkWindowTests` (WinForms + UI Automation).
+
+**`[WindowsFact]`/`[WindowsTheory]`** (ACL Windows): 12 test `InstallLocation` trong `MenuTests`, 1 trong `OutputPathTests` (anchor bị từ chối bằng ACL), 8 trong `MagickSetupTests` (ACL của thư mục cấu hình, `icacls`), `PdfSplitTests.The_pages_get_the_permissions_of_the_folder_like_any_new_file`, `PdfStripMetadataTests.The_private_folder_is_only_for_this_user_system_and_administrators`. T6 viết bản Linux tương ứng (quyền 0700).
+
+**Đỏ, theo nguyên nhân → task:**
+
+| Nguyên nhân | Test (lớp: đỏ/tổng) | Task |
+|---|---|---|
+| `InputPin` (kernel32), quy tắc đường dẫn Windows trong `Runner` | Runner 22/54, RunnerBatchOperation 21/28, RunnerParallel 6/7, RunnerFileProgress 8/9, OutputNote 4/7 | T4 |
+| `NaturalOrder` (shlwapi) | NaturalOrder 8/8 (và các join sắp xếp đầu vào) | T5 |
+| `MagickSetup` chưa có bản Linux (chặn khởi tạo module test) | Image 168/168; Pdf: JpegSegments, PdfBuilder, ImagesToPdf, PdfCompressSharing… | T6 |
+| `PrivateFolder`, `FileIdentity`, `PdfRenderBudget` (kernel32) | PdfSplit, PdfStripMetadata, PdfFlatten, PdfRenderWorker, PdfToImages… | T6 |
+| `PartialFolder` (kernel32), junction | OutputPath 29/45, RunnerFileProgress | T7 |
+| `ExternalTool` chỉ chạy `.exe`, test dùng `cmd.exe`/`powershell.exe`/`findstr.exe` | ExternalTool 19/30, ExternalToolLine 4/4; Pdf: mọi lớp gọi qpdf (PdfHardening 644/646, Qpdf 18/48, PdfProtect, PdfRotate, PdfMerge…) | T8 |
+| Test tìm `qpdf.exe` cạnh test (`QpdfTests.Finds_qpdf…`, `QpdfSelectPagesTests`, `PdfFlattenTests`) | | T8 |
+| `flevert` thật (`FlevertExeTests`, `PackagingTests`, `PdfWorker*Tests`, `PasswordLeakTests`, `TestProcessesTests`) | | T9 |
+| Menu registry với đường dẫn exe kiểu Windows (`MenuTests` 2, `PdfMenuTests` 3) | | T12 |

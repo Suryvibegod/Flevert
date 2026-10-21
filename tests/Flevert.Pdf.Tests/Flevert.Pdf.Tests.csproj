@@ -6,7 +6,7 @@
     <!-- Sentence-style test names read as specifications. -->
     <NoWarn>$(NoWarn);CA1707</NoWarn>
     <!-- UI Automation (UIAutomationClient) for the watermark dialog test. -->
-    <UseWPF>true</UseWPF>
+    <UseWPF Condition="'$(OS)' == 'Windows_NT'">true</UseWPF>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- [WindowsFact] and [WindowsTheory]: tests of Windows behaviour, skipped on Linux. -->
+    <Compile Include="..\Shared\PlatformFacts.cs" Link="PlatformFacts.cs" />
+    <Using Include="Flevert.Tests" />
+    <Using Include="System.Runtime.Versioning" />
     <Using Include="Xunit" />
     <!-- UseWPF leaves System.IO out of the implicit usings. -->
     <Using Include="System.IO" />
@@ -24,8 +28,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Flevert.Pdf\Flevert.Pdf.csproj" />
-    <!-- Build order only: FlevertExeTests launches the real flevert.exe. -->
-    <ProjectReference Include="..\..\src\Flevert.Cli\Flevert.Cli.csproj" ReferenceOutputAssembly="false" />
+    <!-- Build order only: FlevertExeTests launches the real flevert.exe (flevert on Linux). -->
+    <ProjectReference Include="..\..\src\Flevert.Cli\Flevert.Cli.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' == 'Windows_NT'" />
+    <ProjectReference Include="..\..\src\Flevert.Linux\Flevert.Linux.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' != 'Windows_NT'" />
   </ItemGroup>
 
   <ItemGroup>
@@ -35,6 +40,11 @@
     <!-- Multi-page TIFFs as scanners write them (same README), for images to PDF. -->
     <None Include="..\Flevert.Image.Tests\fixtures\pages-with-thumbnails.tif" Link="fixtures\pages-with-thumbnails.tif" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Flevert.Image.Tests\fixtures\mixed-g4-colour.tif" Link="fixtures\mixed-g4-colour.tif" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Windows only: the WinForms watermark dialog, driven through UI Automation. Not built on Linux (docs/specs/linux.md). -->
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+    <Compile Remove="WatermarkWindowTests.cs" />
   </ItemGroup>
 
 </Project>

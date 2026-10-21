@@ -707,7 +707,8 @@ public sealed class OutputPathTests : IDisposable
 
     // A folder where this account may create folders but not files: the temporary folder is made, its anchor is refused.
     // The failure must say so (access denied, where), not claim that someone replaced the folder.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_reports_a_refused_anchor_as_the_access_error_it_is()
     {
         var beside = Directory.CreateDirectory(_dir.Combine("no files here"));

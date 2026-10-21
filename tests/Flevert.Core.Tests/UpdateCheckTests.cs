@@ -48,7 +48,7 @@ public sealed class ReleaseVersionTests
     public void The_running_version_is_the_one_the_release_is_tagged_with()
     {
         // release.yml refuses a tag that does not match <Version>; the check compares the release with this.
-        var props = System.Xml.Linq.XDocument.Load(Path.Combine(InstallerScriptTests.RepositoryRoot(), "Directory.Build.props"));
+        var props = System.Xml.Linq.XDocument.Load(Path.Combine(Repository.Root(), "Directory.Build.props"));
         var version = props.Descendants("Version").Single().Value;
 
         Assert.True(ReleaseVersion.TryParseTag("v" + version, out var expected), version);
@@ -65,7 +65,7 @@ public sealed class UpdateStateStoreTests : IDisposable
     [Fact]
     public void A_missing_file_means_enabled_and_never_checked()
     {
-        var state = new UpdateStateStore(_dir.Combine(@"update\state.json")).Load();
+        var state = new UpdateStateStore(_dir.Combine(Path.Combine("update", "state.json"))).Load();
 
         Assert.Equal(new UpdateState(Enabled: true, LastCheck: null, Skipped: null), state);
     }
@@ -133,7 +133,7 @@ public sealed class UpdateStateStoreTests : IDisposable
     [Fact]
     public void What_is_saved_is_loaded_back_and_no_temporary_file_is_left()
     {
-        var path = _dir.Combine(@"update\state.json");
+        var path = _dir.Combine(Path.Combine("update", "state.json"));
         var store = new UpdateStateStore(path);
         var saved = new UpdateState(false, new DateTimeOffset(2026, 10, 20, 8, 30, 0, TimeSpan.Zero), "0.2.0");
 
@@ -155,7 +155,7 @@ public sealed class UpdateCheckerTests : IDisposable
     private readonly FixedClock _clock = new(Now);
     private readonly UpdateStateStore _store;
 
-    public UpdateCheckerTests() => _store = new UpdateStateStore(_dir.Combine(@"update\state.json"));
+    public UpdateCheckerTests() => _store = new UpdateStateStore(_dir.Combine(Path.Combine("update", "state.json")));
 
     public void Dispose()
     {
@@ -297,7 +297,7 @@ public sealed class UpdateCheckerTests : IDisposable
         _github.Tag = "v0.3.0";
         var checker = Checker();
 
-        using (new FileStream(_dir.Combine(@"update\state.json"), FileMode.Open, FileAccess.Read, FileShare.None))
+        using (new FileStream(_dir.Combine(Path.Combine("update", "state.json")), FileMode.Open, FileAccess.Read, FileShare.None))
         {
             Assert.Null(await checker.CheckAsync(CancellationToken.None));
             checker.Skip(new ReleaseVersion(0, 3, 0));
