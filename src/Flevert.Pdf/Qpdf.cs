@@ -12,7 +12,13 @@ namespace Flevert.Pdf;
 /// </summary>
 public sealed partial class Qpdf
 {
-    public const string FileName = "qpdf.exe";
+    public static readonly string FileName = OperatingSystem.IsWindows() ? "qpdf.exe" : "qpdf";
+
+    /// <summary>
+    /// Where qpdf is below the folder of the running program. On Linux it keeps the bin/ and lib/ of its release, since
+    /// it finds libqpdf through $ORIGIN/../lib (scripts/deps-linux.json).
+    /// </summary>
+    internal static readonly string RelativePath = OperatingSystem.IsWindows() ? FileName : Path.Combine("qpdf", "bin", FileName);
 
     // qpdf's documented exit codes: 0 success, 2 error, 3 success with warnings.
     private const int ExitError = 2;
@@ -69,7 +75,7 @@ public sealed partial class Qpdf
     /// qpdf.exe in the folder of the running program: the install folder for flevert.exe (which setup checks only
     /// the user and administrators can change), or the build output, where the Flevert.Pdf project copies it.
     /// </summary>
-    public static Qpdf NextToApp { get; } = new(Path.Combine(AppContext.BaseDirectory, FileName));
+    public static Qpdf NextToApp { get; } = new(Path.Combine(AppContext.BaseDirectory, RelativePath));
 
     public string ExePath { get; }
 
@@ -729,12 +735,15 @@ public sealed partial class Qpdf
     private const string ExtendedPrefix = @"\\?\";
     private const string ExtendedUncPrefix = @"\\?\UNC\";
 
+    private static readonly string FetchDepsCommand =
+        OperatingSystem.IsWindows() ? @"scripts\fetch-deps.ps1" : "python3 -I scripts/fetch-deps-linux.py";
+
     private void RequireExe()
     {
         if (!File.Exists(ExePath))
         {
             throw new FileNotFoundException(
-                $"{FileName} is missing from {Path.GetDirectoryName(ExePath)}. Reinstall Flevert (in a source build, run scripts\\fetch-deps.ps1).",
+                $"{FileName} is missing from {Path.GetDirectoryName(ExePath)}. Reinstall Flevert (in a source build, run {FetchDepsCommand}).",
                 ExePath);
         }
     }

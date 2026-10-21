@@ -17,7 +17,7 @@ namespace Flevert.Pdf;
 /// </remarks>
 public sealed class PdfWorker
 {
-    public const string FileName = "flevert.exe";
+    public static readonly string FileName = OperatingSystem.IsWindows() ? "flevert.exe" : "flevert";
 
     /// <summary>The worker's command, hidden from the usage text (<see cref="PdfWorkerCommand"/>).</summary>
     internal const string Command = "pdf-worker";

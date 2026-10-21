@@ -17,10 +17,11 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: không. Cỡ: M
 
 ### T2: Deps cho Linux
-- [ ] `scripts/deps-linux.json`: `pdfium-linux-x64.tgz` (chromium/8100), `qpdf-12.4.2-bin-linux-x86_64.zip`, SHA256 từ digest của GitHub; giấy phép như bản Windows
-- [ ] `scripts/fetch-deps-linux.py` (thư viện chuẩn): tải vào thư mục tạm mới, kiểm hash **trước** khi giải nén, chỉ giữ file liệt kê, chạy lại khi đã đủ thì không tải; hash sai → lỗi, `deps/` không đổi
-- [ ] `Flevert.Pdf.csproj` chép `libpdfium.so` và qpdf (`bin/qpdf`, `lib/libqpdf.so*`) trên Linux; `Qpdf.FileName`, `PdfWorker.FileName` theo nền tảng; `ldd` không thiếu thư viện
+- [x] `scripts/deps-linux.json`: `pdfium-linux-x64.tgz` (chromium/8100), `qpdf-12.4.2-bin-linux-x86_64.zip`, SHA256 từ digest của GitHub; giấy phép như bản Windows
+- [x] `scripts/fetch-deps-linux.py` (thư viện chuẩn): tải vào thư mục tạm mới, kiểm hash **trước** khi giải nén, chỉ giữ file liệt kê, chạy lại khi đã đủ thì không tải; hash sai → lỗi, `deps/` không đổi
+- [x] `Flevert.Pdf.csproj` chép `libpdfium.so` và qpdf (`bin/qpdf`, `lib/libqpdf.so*`) trên Linux; `Qpdf.FileName`, `PdfWorker.FileName` theo nền tảng; `ldd` không thiếu thư viện
 - Kiểm: chạy hai lần (lần 2 không tải); sửa một ký tự hash → thất bại rõ (đối chứng âm); test Python cho script
+- Đã làm (2026-10-21): zip qpdf cho Linux kèm gnutls, nettle, libunistring, libidn2, p11-kit, libtasn1, libffi (phần lớn LGPL/GPL). Chỉ giữ `bin/qpdf`, `lib/libqpdf.so.30` (Apache-2.0) và `lib/libjpeg.so.8` (libjpeg-turbo 2.1.2, BSD/IJG; giấy phép ghim ở tag `2.1.2`); `libgnutls.so.30` và `libz.so.1` lấy từ hệ thống (có trên Ubuntu/Debian/Fedora): không phân phối lại thư viện LGPL nào. `ldd` không thiếu gì, `qpdf --version` = 12.4.2. pdfium chỉ cần libc/libm/libgcc. qpdf nằm ở `qpdf/bin/qpdf` + `qpdf/lib/` cạnh `flevert` (RUNPATH `$ORIGIN/../lib`), `Qpdf.RelativePath`. Script chỉ lấy file được liệt kê ra khỏi archive theo tên (không giải nén cả archive: tên có `..` không bao giờ được ghi), symlink trong archive thành bản sao của file nó trỏ tới (chỉ trong archive), giữ bit thực thi. 14 test `unittest` (`python3 -m unittest discover -s scripts -p 'test_*.py'`), 12 đỏ trước khi có script. Đối chứng âm: hash sai một ký tự → exit 1, `deps/` không đổi; bỏ bước kiểm hash trong script → test hash đỏ. Thiếu deps → build báo lệnh cần chạy. `FileName` của `Qpdf`/`PdfWorker` đổi từ `const` sang `static readonly` (theo nền tảng); bản Windows vẫn biên dịch. Test còn ghi `"qpdf.exe"` cứng: sửa ở T3.
 - Phụ thuộc: T1. Cỡ: M
 
 ### T3: Test chạy được trên Linux, lập bảng
