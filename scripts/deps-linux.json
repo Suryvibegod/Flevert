@@ -1,0 +1,68 @@
+{
+  "comment": "Third-party binaries of the Linux build, fetched into deps/ by scripts/fetch-deps-linux.py, never committed. Each download is pinned by SHA256 (GitHub publishes a digest for every release asset). Of qpdf's Linux zip only qpdf, libqpdf and libjpeg (libjpeg-turbo 2.1.2, BSD/IJG) are kept: libqpdf also needs libgnutls.so.30 and libz.so.1, which every supported distribution has, so no LGPL library is redistributed. 'notices' names every file the Linux package ships from deps/ and its licences. docs/specs/linux.md, docs/adr/0008-pdf-engines-pdfium-and-qpdf.md",
+  "items": [
+    {
+      "name": "pdfium",
+      "url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8100/pdfium-linux-x64.tgz",
+      "sha256": "1c1894a12d4d96ee01400c3874444126254180c5c7d2ab628576b67f8120320a",
+      "kind": "tgz",
+      "strip": "",
+      "keep": ["lib/libpdfium.so", "LICENSE", "licenses/*"]
+    },
+    {
+      "name": "qpdf",
+      "url": "https://github.com/qpdf/qpdf/releases/download/v12.4.2/qpdf-12.4.2-bin-linux-x86_64.zip",
+      "sha256": "db367d897829f22c4198ce1094143c9d467bd6ee7dfabc44ba6f02056b24f8b1",
+      "kind": "zip",
+      "strip": "",
+      "keep": ["bin/qpdf", "lib/libqpdf.so.30", "lib/libjpeg.so.8"]
+    },
+    {
+      "name": "qpdf-licence",
+      "url": "https://raw.githubusercontent.com/qpdf/qpdf/v12.4.2/LICENSE.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "kind": "file",
+      "target": "qpdf/licenses/qpdf-LICENSE.txt"
+    },
+    {
+      "name": "qpdf-notice",
+      "url": "https://raw.githubusercontent.com/qpdf/qpdf/v12.4.2/NOTICE.md",
+      "sha256": "b207f65a9e5491195ded63b2941199b19a4d30148871f2742c88eae7bfc513a6",
+      "kind": "file",
+      "target": "qpdf/licenses/qpdf-NOTICE.md"
+    },
+    {
+      "name": "libjpeg-turbo-licence",
+      "url": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/2.1.2/LICENSE.md",
+      "sha256": "7d8683a7f048e715e08b4cada8b7f0d9a6ab8afad88ed09c1143ef764ecbc0f2",
+      "kind": "file",
+      "target": "qpdf/licenses/libjpeg-turbo-LICENSE.md"
+    },
+    {
+      "name": "libjpeg-turbo-ijg",
+      "url": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/2.1.2/README.ijg",
+      "sha256": "4b7b9f8c03bb8d60270dfd12684e70ab21e4abfd27e73905cd1a7c4cae6f5cdb",
+      "kind": "file",
+      "target": "qpdf/licenses/libjpeg-turbo-README.ijg"
+    }
+  ],
+  "notices": [
+    {
+      "title": "PDFium chromium/8100, as built by bblanchon/pdfium-binaries",
+      "files": ["libpdfium.so"],
+      "note": "libpdfium.so contains PDFium and the libraries whose licences follow LICENSE, the licence of the build scripts.",
+      "licences": ["deps/pdfium/LICENSE", "deps/pdfium/licenses/*"]
+    },
+    {
+      "title": "qpdf 12.4.2",
+      "files": ["qpdf", "libqpdf.so.30"],
+      "licences": ["deps/qpdf/licenses/qpdf-LICENSE.txt", "deps/qpdf/licenses/qpdf-NOTICE.md"]
+    },
+    {
+      "title": "libjpeg-turbo 2.1.2, shipped with qpdf 12.4.2",
+      "files": ["libjpeg.so.8"],
+      "note": "This software is based in part on the work of the Independent JPEG Group.",
+      "licences": ["deps/qpdf/licenses/libjpeg-turbo-LICENSE.md", "deps/qpdf/licenses/libjpeg-turbo-README.ijg"]
+    }
+  ]
+}
