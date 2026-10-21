@@ -51,8 +51,9 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T3. Cỡ: M
 
 ### T5: Thứ tự tự nhiên như Nautilus
-- [ ] `NaturalOrder.Compare` trên Linux: dãy số so theo giá trị, không phân biệt hoa/thường, giống `g_utf8_collate_key_for_filename`
+- [x] `NaturalOrder.Compare` trên Linux: dãy số so theo giá trị, không phân biệt hoa/thường, giống `g_utf8_collate_key_for_filename`
 - Kiểm: test đối chiếu với thứ tự do GLib tính trên máy (`python3 -c` với `GLib.utf8_collate_key_for_filename` khi có, bỏ qua khi không)
+- Đã làm (2026-10-21): đo GLib trước: thứ tự theo luật collation của locale, không phải so sánh tự nhiên đơn giản (spec cập nhật). `Unix/UnixNaturalOrder.cs` gọi `g_utf8_collate_key_for_filename` (`libglib-2.0.so.0`, so khóa như `strcmp`) sau `setlocale(LC_COLLATE, "")` (.NET không tự gọi `setlocale`, khi đó libc sắp theo locale "C"); không có GLib → so sánh tự nhiên trong Flevert. Test: 30 tên (tiếng Việt, hoa/thường, số 20 chữ số, `.`/`-`/`(1)`) so với GLib qua `/usr/bin/python3 -I` cùng locale; đỏ trước khi làm; đột biến tắt GLib → đỏ. 3 test của Explorer (bỏ qua hoa/thường hoàn toàn, chữ có dấu cạnh chữ gốc, số quá 64 bit so như chữ) → `[WindowsFact]`; test đường dẫn đổi dữ liệu sang `C:/…`.
 - Phụ thuộc: T3. Cỡ: S
 
 ### T6: Thư mục riêng và native nhỏ
