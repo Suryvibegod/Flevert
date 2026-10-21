@@ -116,7 +116,7 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T12. Cỡ: M
 
 ### T14: Tài liệu
-- [ ] ADR-0010 (các quyết định và điểm yếu hơn Windows), README mục Linux, CHANGELOG `[Unreleased]`, CONTRIBUTING (lệnh Linux)
+- [x] ADR-0010 (các quyết định và điểm yếu hơn Windows), README mục Linux, CHANGELOG `[Unreleased]`, CONTRIBUTING (lệnh Linux)
 - Phụ thuộc: T13. Cỡ: S
 
 ### T15: CI Ubuntu (hỏi người dùng trước khi sửa `.github/`)

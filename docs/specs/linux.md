@@ -1,6 +1,6 @@
 # Spec: linux (bản Linux, menu chuột phải của Nautilus)
 
-Module `linux` trong [capability-map.md](capability-map.md). Phụ thuộc `core`, `image`, `pdf`. Trạng thái: **đã duyệt** (2026-10-21; người dùng chốt các đề xuất ở Open Questions). Người đóng góp: tài khoản `long89kev`, làm trên nhánh `feat/linux`; pull request mở sau, khi bản Linux chạy được trọn vẹn. Capability map trước đây ghi Linux là "ngoài phạm vi": spec này là đề xuất của người đóng góp, maintainer quyết định có nhận hay không khi xem PR.
+Module `linux` trong [capability-map.md](capability-map.md). Phụ thuộc `core`, `image`, `pdf`. Trạng thái: **đã duyệt** (2026-10-21; người dùng chốt các đề xuất ở Open Questions). Quyết định và đo đạc khi làm: [ADR-0010](../adr/0010-linux-nautilus-port.md). Người đóng góp: tài khoản `long89kev`, làm trên nhánh `feat/linux`; pull request mở sau, khi bản Linux chạy được trọn vẹn. Capability map trước đây ghi Linux là "ngoài phạm vi": spec này là đề xuất của người đóng góp, maintainer quyết định có nhận hay không khi xem PR.
 
 ## Objective
 
@@ -39,7 +39,7 @@ Explorer chạy **một `flevert.exe` cho mỗi file** đã chọn, nên Core c�
 | Thông báo | Shell notification | `org.freedesktop.Notifications` qua `gdbus call` (có sẵn trong GLib) |
 | Font của watermark | Arial của Windows (`C:\Windows\Fonts\arial.ttf`) | Font TrueType mà fontconfig chọn thay cho "Arial" có tiếng Việt (`/usr/bin/fc-match -s 'Arial:lang=vi:fontformat=TrueType'`, lấy file `.ttf` đầu tiên): Liberation Sans hoặc Arimo, cùng số đo với Arial, có sẵn trên Ubuntu/Fedora. Flevert vẫn không đóng gói font nào. Không có font: thông báo cần cài một font có chữ Việt (bổ sung 2026-10-21, lúc làm T6) |
 | pdfium, qpdf | `pdfium.dll`, `qpdf.exe` (ghim SHA256 trong `scripts/deps.json`) | `libpdfium.so` từ `bblanchon/pdfium-binaries` (`pdfium-linux-x64.tgz`, chromium/8100, sha256 `1c1894a1…320a`), `qpdf` từ `qpdf-12.4.2-bin-linux-x86_64.zip` (sha256 `db367d89…f8b1`), ghim trong `scripts/deps-linux.json` |
-| Cài đặt | Inno Setup, per-user | Tarball `Flevert-<version>-linux-x64.tar.gz` + `install.sh`: chép vào `~/.local/share/flevert/app`, gọi `flevert install-menu`, báo nếu thiếu `python3-nautilus` và cách cài; `flevert uninstall` gỡ sạch |
+| Cài đặt | Inno Setup, per-user | Tarball `Flevert-<version>-linux-x64.tar.gz` + `install.sh`: chép vào `~/.local/share/Flevert/app` (cùng thư mục dữ liệu 0700 của Flevert; sửa lúc làm T13), gọi `flevert install-menu`, báo nếu thiếu `python3-nautilus` và cách cài; `install.sh --uninstall` gỡ sạch |
 
 ### Tham khảo trước khi viết (CLAUDE.md, "Reuse before writing")
 

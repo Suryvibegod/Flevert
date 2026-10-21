@@ -1,0 +1,70 @@
+# ADR-0010: A Linux version with a Nautilus right-click menu
+
+## Status
+
+Proposed (a contributor's port, docs/specs/linux.md; the capability map listed Linux as out of scope until now)
+
+## Date
+
+2026-10-21
+
+## Context
+
+Linux desktop users have the same photos and PDFs to fix as Windows users. Core, image and pdf are .NET code that runs on Linux, but they lean on Windows in a few dozen places: the registry menu, WinForms, named pipes and job objects, ACLs and integrity labels, `CreateFileW` handles that lock files and folders, `StrCmpLogicalW`, and pdfium and qpdf built for Windows. The Windows app must not change.
+
+Everything below was measured on Pop!_OS 22.04 (Nautilus 42, glibc 2.35, x86-64) while porting; each Linux behaviour has a test, and each test of Windows-only behaviour is marked `[WindowsFact]` or left out of the Linux build, never deleted.
+
+## Decision
+
+### Build
+
+- `Directory.Build.props` targets `net10.0-windows` on Windows and `net10.0` elsewhere. `Flevert.Cli` and `MenuProbe` stay `net10.0-windows` everywhere (with `EnableWindowsTargeting`), so a Linux machine also catches Windows compile errors. `Flevert.Linux` (the `flevert` executable) is `net10.0` everywhere and is not built by the solution on its own: on Windows it could not reference the libraries built for Windows; the Linux tests build it through their references.
+- Windows-only types and members carry `[SupportedOSPlatform("windows")]`, the Linux ones `[SupportedOSPlatform("linux")]`, and shared code branches with `OperatingSystem.IsWindows()`/`IsLinux()`. CA1416 stays an error; nothing is silenced. The Linux side lives under `Unix/` folders.
+
+### One process per selection
+
+Nautilus hands every selected file to one call, so `flevert run` gets the whole batch at once and uses `BatchLeader.Alone`: no pipe, no census of processes, none of ADR-0002's coordination. More than 1000 files (a Windows batch's limit) are refused with a notification.
+
+### Files
+
+- **Inputs** are opened with `O_PATH|O_NOFOLLOW` and checked with `statx` (whose layout is the same on every architecture): only a regular file with one name is processed, never a link, FIFO, device or folder; `O_PATH` reads nothing, so a FIFO cannot block. The operation gets the path the kernel holds for the handle (`/proc/self/fd/N`).
+- **Folder outputs** (one-to-many) are made `mkdir 0700`, so nobody else can add to them while they are written; held open with `O_NOFOLLOW`; emptied through the handle (`unlinkat`); renamed only while their name still leads to the folder held (device and inode), with `renameat2(RENAME_NOREPLACE)`; then given the usual mode of a new folder (`0777` less the umask, read from `/proc/self/status`).
+- **Names** fit 255 bytes of UTF-8 on Linux (255 UTF-16 characters on Windows), cut between characters, through one `OutputPath.FitName` that replaced five copies of the rule.
+- Flevert's own folders are `0700`; ImageMagick's policy is written `0600` and kept only when it is a regular file of one name, owned by the user, writable by nobody else, with the exact bytes.
+- `RunLog` locks the log with `FileShare.None` on Linux: .NET maps sharing to `flock`, where `FileShare.Read` is shared, and two parallel writers overwrote each other's lines.
+
+### Tools (qpdf, the PDF worker, zenity)
+
+A tool runs as `setsid` → `setpriv --pdeathsig KILL` → `prlimit --data=<limit>` → the tool, each exec'ing the next in place, all found at fixed paths, never through PATH:
+
+- `setsid` gives it a process group of its own, killed when the run ends, is cancelled or times out: what the job object does on Windows.
+- `setpriv --pdeathsig KILL` ends it when flevert dies. Linux sends that signal when the **thread** that started the process ends, so every tool is started from one thread that lives as long as flevert (`UnixStarter`); started from a thread-pool thread, a tool would die when that thread retired. Before this, workers spinning on a malicious page kept running at full CPU for over ten minutes after their parent died.
+- `RLIMIT_DATA` limits memory, close to what a job counts as committed. `RLIMIT_AS` was tried first: .NET reserves tens of gigabytes of address space it never uses (35 GB with 27 MB resident), and the worker ran out under 2.5 GB.
+- A refused allocation is reported to nobody on Linux. A tool counts as over its limit when it says so (`Out of memory`, `bad_alloc`, `memory exhausted`) or dies of a signal other than SIGKILL after using three quarters of the limit, by `VmData` sampled every 50 ms: pdfium aborts without a word when refused (a 4 GiB content-stream bomb ended with SIGABRT at 2.5 GB).
+
+### PDF dependencies
+
+`libpdfium.so` from bblanchon/pdfium-binaries (same branch as Windows) and qpdf's Linux zip, pinned by SHA256 in `scripts/deps-linux.json` and fetched by `scripts/fetch-deps-linux.py` (the guarantees of `fetch-deps.ps1`, and files taken out of an archive by name only). Of qpdf's zip only `qpdf`, `libqpdf` (Apache-2.0) and `libjpeg` (libjpeg-turbo, BSD/IJG) are kept; gnutls and zlib come from the system, so no LGPL library is redistributed. qpdf keeps its `bin/` and `lib/` (it finds libqpdf through `$ORIGIN/../lib`).
+
+### Desktop
+
+- **Order of joined files**: GLib's `g_utf8_collate_key_for_filename`, which Nautilus sorts with, called from the system's `libglib-2.0` (linked, not shipped) after `setlocale(LC_COLLATE, "")`. Its order follows the locale's collation (in en_US "img_0011" sorts before "IMG_0009"); no natural comparison of our own reproduced it. Without GLib, a natural comparison.
+- **Watermark font**: the TrueType font fontconfig gives for Arial with Vietnamese (`fc-match`, Liberation Sans or Arimo, made to replace Arial). Flevert ships no font.
+- **Progress, questions, notifications**: zenity (`--progress`, `--forms` with masked fields) and `gdbus` to `org.freedesktop.Notifications`, all separate processes, with GVariant and Pango markup escaped. A password goes from zenity through a pipe into a buffer and characters that are wiped, never a string or a command line.
+- **Menu**: a nautilus-python extension (MIT, API 3.0 and 4.0) reads `menu.json`, which `flevert install-menu` builds for each extension with the Windows menu's own `MenuNode`, so the order is the same; the PDF tools Windows shows only with Shift are a submenu at the end, since Nautilus has no 16-entry limit. `install-menu` refuses a flevert whose folder or a folder above it others can change or reach through a link (a parent others can write is accepted only with the sticky bit).
+- **Package**: a tarball with `install.sh`, installing for the user into `~/.local/share/Flevert/app` (0700) without root; `--uninstall` removes everything.
+
+## Where Linux is weaker than Windows
+
+- **No mandatory locks.** A pinned input, or a parent of the output folder, can still be renamed or replaced by whoever can write its folder. The inputs are beside the user's own files, normally in their home; folders others can write are rare on a desktop, and `/tmp`'s sticky bit keeps others from renaming what is not theirs.
+- **Only the tool dies with flevert**: what a tool starts gets no death signal (qpdf and the worker start nothing).
+- **No single-process limit** for qpdf.
+- **Memory refusals are inferred**, not reported (above).
+- **The update check is off** on Linux: there is no Linux release to point to yet.
+
+## Consequences
+
+- Windows behaviour is unchanged; Windows-only tests are skipped on Linux with a reason, and Linux tests are skipped on Windows.
+- Linux needs, on the desktop: util-linux, GLib (`gdbus`), zenity, fontconfig, and nautilus-python for the menu (`install.sh` and `install-menu` say how to install what is missing).
+- x86-64 only for now: a few `open` flags differ on other architectures, and `Libc` refuses them rather than guess.
+- Nautilus 43 and later (nautilus-python 4.0) are covered only by tests with a stand-in; the machine the port was made on has Nautilus 42.
