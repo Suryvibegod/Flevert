@@ -120,7 +120,7 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T13. Cỡ: S
 
 ### T15: CI Ubuntu (hỏi người dùng trước khi sửa `.github/`)
-- [ ] Job `build-and-test-linux` trong `ci.yml`: fetch deps, build, format, ba project test lần lượt
+- [x] Job `build-and-test-linux` trong `ci.yml`: fetch deps, build, format, ba project test lần lượt (người dùng đồng ý 2026-10-21; thêm cài `fontconfig fonts-liberation2 python3-gi`, test Python, đóng gói; job Windows không đổi; chưa chạy được ở local, kiểm khi mở PR)
 - Phụ thuộc: T13. Cỡ: S
 
 ## Kiểm một lần trước PR

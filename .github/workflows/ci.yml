@@ -53,3 +53,41 @@ jobs:
           $report = dotnet list Flevert.sln package --vulnerable --include-transitive
           $report
           if ($report -match 'has the following vulnerable packages') { exit 1 }
+
+  # The Linux version (docs/specs/linux.md, ADR-0010): the same projects built for plain .NET, the Linux tests, the
+  # Python tests of the scripts, the Nautilus extension and install.sh, and the package.
+  build-and-test-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      # What the Linux side calls in the tests: fontconfig and a font with Vietnamese letters for the watermark, and
+      # GLib's Python bindings to check the order of names against GLib itself.
+      - name: System packages
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fontconfig fonts-liberation2 python3-gi
+      # pdfium and qpdf for Linux, each checked against the SHA256 in scripts/deps-linux.json before it is unpacked.
+      - name: Fetch third-party tools
+        run: python3 -I scripts/fetch-deps-linux.py
+      - id: build
+        run: dotnet build Flevert.sln -c Release
+      - run: dotnet format Flevert.sln --verify-no-changes
+      # One project at a time, as on Windows.
+      - run: dotnet test tests/Flevert.Core.Tests -c Release --no-build
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/Flevert.Image.Tests -c Release --no-build
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/Flevert.Pdf.Tests -c Release --no-build
+      - if: ${{ !cancelled() }}
+        name: Python tests
+        run: |
+          python3 -I -m unittest discover -s scripts -p 'test_*.py'
+          python3 -I -m unittest discover -s src/Flevert.Linux/nautilus -p 'test_*.py'
+          python3 -I -m unittest discover -s packaging/linux -p 'test_*.py'
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        name: Package
+        run: scripts/build-linux.sh
