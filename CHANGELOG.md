@@ -4,6 +4,8 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-21
+
 Video and audio: convert, compress to a size you choose, take the sound out of a video, and remove where it was filmed, on your PC.
 
 ### Added
@@ -141,7 +143,8 @@ The first release: pictures, and an installer.
 - A specially crafted TIFF file can make the bundled ImageMagick 7.1.2-33 overflow its stack ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity): Flevert then closes, and the rest of that batch is not converted. No code runs. It will be fixed by updating once a Magick.NET release includes ImageMagick 7.1.2-34.
 - Windows Smart App Control may block this unsigned release (see the README).
 
-[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/Suryvibegod/Flevert/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/Suryvibegod/Flevert/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/Suryvibegod/Flevert/compare/v0.2.1...v1.2.2
 [0.2.1]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...v0.2.1
