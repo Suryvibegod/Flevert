@@ -1,6 +1,9 @@
+using System.Runtime.Versioning;
 using Flevert.Core;
 using Flevert.Core.Operations;
 using Flevert.Pdf;
+
+[assembly: SupportedOSPlatform("linux")]
 
 namespace Flevert.Linux;
 
@@ -61,11 +64,14 @@ internal static class Program
             return ExitCodes.BadUsage;
         }
 
+        var headless = Environment.GetEnvironmentVariable("FLEVERT_HEADLESS") == "1";
         if (run.Files.Count > MaxFiles)
         {
             var refused = $"Flevert takes at most {MaxFiles} files at once; {run.Files.Count} were selected.";
             log.Write(run.OperationId, new FileResult($"({run.Files.Count} files)", null, refused), TimeSpan.Zero);
             Console.Error.WriteLine(refused);
+            if (!headless)
+                DesktopNotification.ShowAsync(new BatchSummary(refused, HasFailures: true, ShowsLog: false)).GetAwaiter().GetResult();
             return ExitCodes.BadUsage;
         }
 
@@ -84,7 +90,11 @@ internal static class Program
                     each, leader.ReadAllAsync(ct), () => leader.Pending, progress, ct, MaxParallelFor(each), leader.ReportRunning),
                 _ => throw new InvalidOperationException($"{operation.Id} is neither kind of operation."), // the catalog refuses it
             };
-            return batch(null, CancellationToken.None).GetAwaiter().GetResult().NoFailures ? ExitCodes.Ok : ExitCodes.Failed;
+            if (headless)
+                return batch(null, CancellationToken.None).GetAwaiter().GetResult().NoFailures ? ExitCodes.Ok : ExitCodes.Failed;
+            // An operation outside the menu (a tool run by its id) is named by its id.
+            var title = operation.MenuPath.Length > 0 ? operation.MenuPath.Replace('/', ' ') : operation.Id;
+            return UnixBatchUi.Run(title, log, batch) ? ExitCodes.Ok : ExitCodes.Failed;
         }
         finally
         {

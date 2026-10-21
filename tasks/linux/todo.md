@@ -84,9 +84,10 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T4–T8. Cỡ: M
 
 ### T10: Cửa sổ tiến độ và thông báo
-- [ ] `ZenityProgress`: hiện sau 2 s (như Windows), `NN` và `# text` từ `BatchProgress`; Cancel → hủy lô
-- [ ] `Notifier`: `gdbus call … org.freedesktop.Notifications.Notify` với `BatchSummary.Text`; không có D-Bus thì chỉ ghi log
-- Kiểm: test với zenity/gdbus giả (script ghi lại đối số và stdin); chạy thật một lô 20 ảnh
+- [x] `ZenityProgress`: hiện sau 2 s (như Windows), `NN` và `# text` từ `BatchProgress`; Cancel → hủy lô
+- [x] `Notifier`: `gdbus call … org.freedesktop.Notifications.Notify` với `BatchSummary.Text`; không có D-Bus thì chỉ ghi log
+- Kiểm: test với zenity/gdbus giả (script ghi lại đối số và stdin); chạy thật một lô 20 ảnh (để ở bước kiểm cuối, báo người dùng trước vì bật cửa sổ)
+- Đã làm (2026-10-21): `Core/Unix/UnixDesktop.cs`: `ZenityProgress` (zenity qua `setsid`/`setpriv`, chết theo flevert; chữ escape markup Pango; một dòng; 99% tối đa để `--auto-close` không đóng sớm), `DesktopNotification` (đối số GVariant có kiểu: `uint32 0`, `@as []`, `@a{sv} {}`, `int32 6000`; chuỗi trong `'…'` escape `\`, `'`, ký tự điều khiển; body escape markup), `UnixBatchUi` (cửa sổ sau 2 s, Cancel hủy lô, một thông báo). Đường dẫn zenity/gdbus truyền vào (test dùng script giả, không qua biến môi trường). 10 test; đột biến bỏ escape → 2 test đỏ; bỏ cờ "flevert tự đóng" lúc đầu **sống** (Dispose hủy `Process` trước khi luồng theo dõi thấy zenity thoát) → `Dispose` chờ luồng theo dõi, đột biến bị bắt. `Program`: headless như cũ, còn lại qua `UnixBatchUi`; quá 1 000 file có thông báo. `Flevert.Linux` khai `[assembly: SupportedOSPlatform("linux")]`, TFM `net10.0` cố định; `Flevert.sln` không tự build nó (trên Windows nó không tham chiếu được Core `net10.0-windows`), test trên Linux build nó qua tham chiếu.
 - Phụ thuộc: T9. Cỡ: M
 
 ### T11: Hộp thoại mật khẩu và watermark
