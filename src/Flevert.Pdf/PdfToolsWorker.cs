@@ -210,13 +210,15 @@ internal static class PdfToolsWorker
         lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"done {total}"));
     }
 
-    /// <summary>Windows' Arial (<c>%WINDIR%\Fonts\arial.ttf</c>), which has the Vietnamese letters; Flevert ships no font.</summary>
+    /// <summary>
+    /// The watermark's font (<see cref="SystemFont"/>: Windows' Arial, <c>%WINDIR%\Fonts\arial.ttf</c>), which has the
+    /// Vietnamese letters; Flevert ships no font.
+    /// </summary>
     private static byte[] ReadArial()
     {
-        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "arial.ttf");
         try
         {
-            return File.ReadAllBytes(path);
+            return File.ReadAllBytes(SystemFont.Path ?? throw new FileNotFoundException(PdfWatermark.NoArialMessage));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

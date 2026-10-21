@@ -57,10 +57,12 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T3. Cỡ: S
 
 ### T6: Thư mục riêng và native nhỏ
-- [ ] `SecureDirectory` trên Linux: tạo/đặt quyền 0700; `AppData.Root` = `~/.local/share/Flevert`
-- [ ] Pdf: `FileIdentity` (`st_dev`, `st_ino`), `PrivateFolder` (`mkdir` 0700, không theo symlink), `PdfRenderBudget.FreeBytes` (`statvfs`)
-- [ ] Image: `ConfigurationFile` mở không theo symlink
+- [x] `SecureDirectory` trên Linux: tạo/đặt quyền 0700; `AppData.Root` = `~/.local/share/Flevert`
+- [x] Pdf: `FileIdentity` (`st_dev`, `st_ino`), `PrivateFolder` (`mkdir` 0700, không theo symlink), `PdfRenderBudget.FreeBytes` (`statvfs`)
+- [x] Image: `ConfigurationFile` mở không theo symlink
+- [x] Font của watermark trên Linux (thêm lúc làm, xem spec)
 - Kiểm: test quyền 0700, test identity (cùng file qua hai tên → khác vì hard link bị từ chối ở T4; cùng file hai lần mở → bằng nhau)
+- Đã làm (2026-10-21), 4 commit: (1) `SecureDirectory.RestrictToOwner`: mở `O_PATH|O_NOFOLLOW|O_DIRECTORY`, kiểm là thư mục của chính user (`statx`, `geteuid`), `chmod 0700` qua `/proc/self/fd/N` của handle đã kiểm; `TrySecure` tạo 0700; 4 test, đột biến bỏ `O_NOFOLLOW` → đỏ. (2) ImageMagick: thư mục cấu hình 0700, file mới 0600, bản có sẵn chỉ giữ khi là file thường 1 tên, của user, không ai khác ghi được, đúng byte (mở `O_NOFOLLOW|O_NONBLOCK`); 5 test Linux + `A_stale_or_tampered…` chạy cả hai nền tảng; đột biến bỏ kiểm `nlink`/quyền ghi → 2 test đỏ. Toàn bộ Image chạy được trên Linux (229 xanh, trước là 0). (3) `PrivateFolder` = `mkdir(0700)` (lỗi nếu tên đã có, kể cả symlink), `FileIdentity` = (dev, ino) từ `statx`, `FreeBytes` = `DriveInfo` (đã đo: nhận thư mục bất kỳ trên Linux, khớp `df`). (4) `SystemFont`: Arial trên Windows, trên Linux `fc-match` (máy thử: Arimo, rồi Liberation Sans); test: file `.ttf` có đủ chữ Việt. `InternalsVisibleTo` Flevert.Image/Flevert.Pdf trong Core cho `Libc`.
 - Phụ thuộc: T3. Cỡ: M
 
 ### T7: Thư mục kết quả 1→N (PartialFolder)

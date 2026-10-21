@@ -105,7 +105,9 @@ public sealed class PdfWatermark : IOperation
     internal const string NoTextMessage =
         "Add watermark needs the text to write on the pages, which Flevert asks for when you choose Add watermark… in the Flevert menu; it was run without one here, so this PDF was left as it is.";
 
-    internal const string NoArialMessage = "The watermark is written in the Arial font of Windows, and Arial is missing from this computer.";
+    internal static readonly string NoArialMessage = OperatingSystem.IsWindows()
+        ? "The watermark is written in the Arial font of Windows, and Arial is missing from this computer."
+        : "The watermark needs a font with Vietnamese letters, such as Liberation Sans, and fontconfig found none on this computer.";
 
     private readonly Qpdf _qpdf;
     private readonly PdfWorker _worker;
@@ -147,7 +149,7 @@ public sealed class PdfWatermark : IOperation
     {
         if (Text.Length == 0)
             throw new InvalidOperationException(NoTextMessage);
-        if (!File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "arial.ttf")))
+        if (SystemFont.Path is not { } font || !File.Exists(font))
             throw new InvalidOperationException(NoArialMessage);
         return PdfWorkerEdits.RunAsync(_qpdf, _worker, inputPath, " (watermarked)", new PdfEdit(PdfEditKind.Watermark) { Text = Text }, pages => pages, progress, ct);
     }
