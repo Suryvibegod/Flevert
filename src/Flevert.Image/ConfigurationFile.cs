@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using Flevert.Core;
 using Microsoft.Win32.SafeHandles;
 
 namespace Flevert.Image;
@@ -15,7 +16,6 @@ namespace Flevert.Image;
 /// nothing but this user, SYSTEM and Administrators could have changed it; anything else is replaced atomically, waiting
 /// for readers to let go.
 /// </summary>
-[SupportedOSPlatform("windows")]
 internal static partial class ConfigurationFile
 {
     private const uint GenericRead = 0x80000000;
@@ -32,11 +32,11 @@ internal static partial class ConfigurationFile
     /// <exception cref="IOException">The file holds something else and could not be replaced in time.</exception>
     public static void Ensure(string path, byte[] expected, Stopwatch elapsed, TimeSpan patience)
     {
-        if (IsTrustedCopy(path, expected))
+        if (IsTrustedCopyHere(path, expected))
             return;
 
         var temp = $"{path}.{Guid.NewGuid():N}.tmp";
-        File.WriteAllBytes(temp, expected);
+        WriteNew(temp, expected);
         try
         {
             for (var attempt = 1; ; attempt++)
@@ -49,7 +49,7 @@ internal static partial class ConfigurationFile
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     // Usually another flevert.exe loading this file; it may also have just put the right bytes there.
-                    if (IsTrustedCopy(path, expected))
+                    if (IsTrustedCopyHere(path, expected))
                         return;
                     if (elapsed.Elapsed >= patience)
                         throw new IOException($"Could not replace ImageMagick's configuration file {path}.", ex);
@@ -63,11 +63,63 @@ internal static partial class ConfigurationFile
         }
     }
 
+    private static bool IsTrustedCopyHere(string path, byte[] expected) =>
+        OperatingSystem.IsWindows() ? IsTrustedCopy(path, expected)
+        : OperatingSystem.IsLinux() ? IsTrustedCopyOnLinux(path, expected)
+        : throw new PlatformNotSupportedException();
+
+    // Only this user can write it on Linux (0600); on Windows the folder's ACL decides.
+    private static void WriteNew(string path, byte[] bytes)
+    {
+        var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
+        if (!OperatingSystem.IsWindows())
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        using var stream = new FileStream(path, options);
+        stream.Write(bytes);
+    }
+
+    /// <summary>
+    /// The Linux counterpart of <see cref="IsTrustedCopy"/>: a regular file of a single name, owned by this user, that
+    /// nobody else can write, holding exactly <paramref name="expected"/>. Opened without following a link, and without
+    /// waiting, so a FIFO put in its place cannot block.
+    /// </summary>
+    [SupportedOSPlatform("linux")]
+    internal static bool IsTrustedCopyOnLinux(string path, byte[] expected)
+    {
+        const int othersMayWrite = 0x12; // S_IWGRP | S_IWOTH
+        using var handle = Libc.Open(path, Libc.ORdonly | Libc.ONonblock | Libc.ONofollow | Libc.OCloexec);
+        if (handle.IsInvalid)
+            return false;
+        if (!Libc.TryStat(handle, out var stat)
+            || stat.Type != Libc.SIfReg
+            || stat.Nlink != 1
+            || stat.Uid != Libc.EffectiveUserId
+            || (stat.Mode & othersMayWrite) != 0
+            || stat.Size != (ulong)expected.Length)
+        {
+            return false;
+        }
+
+        using var stream = new FileStream(handle, FileAccess.Read, bufferSize: 0);
+        var actual = new byte[expected.Length];
+        try
+        {
+            stream.ReadExactly(actual);
+        }
+        catch (EndOfStreamException)
+        {
+            return false;
+        }
+
+        return actual.AsSpan().SequenceEqual(expected);
+    }
+
     /// <summary>
     /// True when <paramref name="path"/> is a plain file (no link of any kind) holding exactly <paramref name="expected"/>,
     /// owned by and writable only by this user, SYSTEM or Administrators. Reads with read and delete sharing, so other
     /// processes can still load or replace it meanwhile.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     internal static bool IsTrustedCopy(string path, byte[] expected)
     {
         // Not following links: a symbolic link or junction here could lead to a file other accounts can change.
@@ -101,6 +153,7 @@ internal static partial class ConfigurationFile
         return actual.AsSpan().SequenceEqual(expected);
     }
 
+    [SupportedOSPlatform("windows")]
     private static bool OnlyTrustedAccountsCanChange(FileSecurity security)
     {
         using var me = WindowsIdentity.GetCurrent();

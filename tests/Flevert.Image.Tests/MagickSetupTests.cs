@@ -169,8 +169,7 @@ public sealed class MagickSetupTests : IDisposable
         Assert.Contains("NR", output, StringComparison.Ordinal);
     }
 
-    [WindowsFact]
-    [SupportedOSPlatform("windows")]
+    [Fact]
     public void A_stale_or_tampered_policy_on_disk_is_replaced_before_loading()
     {
         File.WriteAllText(Path.Combine(_dir.Path, "policy.xml"), "<policymap></policymap>");
@@ -301,5 +300,96 @@ public sealed class MagickSetupTests : IDisposable
             .Cast<System.Security.AccessControl.FileSystemAccessRule>();
 
         Assert.All(rules, r => Assert.Contains(r.IdentityReference.Value, allowed));
+    }
+
+    private const UnixFileMode OwnerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void Policy_and_temporary_files_live_in_a_folder_only_this_user_can_open_on_linux()
+    {
+        Assert.Equal(OwnerOnly, File.GetUnixFileMode(MagickSetup.ConfigurationDirectory));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_policy_is_written_for_this_user_only_on_linux()
+    {
+        MagickSetup.WriteConfiguration(_dir.Path);
+
+        var mode = File.GetUnixFileMode(Path.Combine(_dir.Path, "policy.xml"));
+        Assert.Equal(UnixFileMode.None, mode & (UnixFileMode.GroupWrite | UnixFileMode.OtherWrite));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_right_policy_other_users_may_change_is_replaced_on_linux()
+    {
+        MagickSetup.WriteConfiguration(_dir.Path);
+        var policy = Path.Combine(_dir.Path, "policy.xml");
+        var before = new FileInfo(policy);
+        File.SetUnixFileMode(policy, File.GetUnixFileMode(policy) | UnixFileMode.OtherWrite);
+        var inode = Inode(policy);
+
+        MagickSetup.WriteConfiguration(_dir.Path);
+
+        Assert.NotEqual(inode, Inode(policy));
+        Assert.Equal(UnixFileMode.None, File.GetUnixFileMode(policy) & (UnixFileMode.GroupWrite | UnixFileMode.OtherWrite));
+        Assert.Equal(before.Length, new FileInfo(policy).Length);
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_right_policy_reached_through_a_hard_link_is_replaced_by_a_file_of_its_own_on_linux()
+    {
+        // The link's target can be changed through its other name, which may be in a folder others can write.
+        var right = Directory.CreateDirectory(_dir.Combine("right")).FullName;
+        MagickSetup.WriteConfiguration(right);
+        var outside = _dir.Combine("outside.xml");
+        File.Copy(Path.Combine(right, "policy.xml"), outside);
+        var config = Directory.CreateDirectory(_dir.Combine("config")).FullName;
+        MagickSetup.WriteConfiguration(config);
+        var policy = Path.Combine(config, "policy.xml");
+        File.Delete(policy);
+        Run("ln", outside, policy);
+
+        MagickSetup.WriteConfiguration(config);
+        File.WriteAllText(outside, "<policymap></policymap>");
+
+        Assert.Equal(File.ReadAllBytes(Path.Combine(right, "policy.xml")), File.ReadAllBytes(policy));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_right_policy_reached_through_a_symbolic_link_is_replaced_by_a_file_of_its_own_on_linux()
+    {
+        var right = Directory.CreateDirectory(_dir.Combine("right")).FullName;
+        MagickSetup.WriteConfiguration(right);
+        var config = Directory.CreateDirectory(_dir.Combine("config")).FullName;
+        MagickSetup.WriteConfiguration(config);
+        var policy = Path.Combine(config, "policy.xml");
+        File.Delete(policy);
+        File.CreateSymbolicLink(policy, Path.Combine(right, "policy.xml"));
+
+        MagickSetup.WriteConfiguration(config);
+
+        Assert.Null(new FileInfo(policy).LinkTarget);
+    }
+
+    private static string Inode(string path)
+    {
+        var start = new ProcessStartInfo("stat", ["-c", "%i", path]) { UseShellExecute = false, RedirectStandardOutput = true };
+        using var stat = Process.Start(start)!;
+        var output = stat.StandardOutput.ReadToEnd().Trim();
+        stat.WaitForExit();
+        return output;
+    }
+
+    private static void Run(string program, params string[] arguments)
+    {
+        var start = new ProcessStartInfo(program, arguments) { UseShellExecute = false };
+        using var process = Process.Start(start)!;
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
     }
 }

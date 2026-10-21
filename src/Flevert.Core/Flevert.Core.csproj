@@ -7,6 +7,9 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Flevert.Core.Tests" />
+    <!-- The libc calls of the Linux side (Unix/Libc.cs), kept in one place. -->
+    <InternalsVisibleTo Include="Flevert.Image" />
+    <InternalsVisibleTo Include="Flevert.Pdf" />
   </ItemGroup>
 
 </Project>

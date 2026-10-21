@@ -52,7 +52,6 @@ public static class MagickSetup
     /// it, and Windows refuses to replace a file ImageMagick has open (T17b). Anything else is replaced atomically, so
     /// processes initialising at the same moment never see a half-written policy.
     /// </summary>
-    [SupportedOSPlatform("windows")]
     internal static void WriteConfiguration(string directory, TimeSpan? patience = null)
     {
         var elapsed = Stopwatch.StartNew();
@@ -82,14 +81,22 @@ public static class MagickSetup
             if (!Path.IsPathFullyQualified(ConfigurationDirectory))
                 throw new InvalidOperationException("Cannot locate the user's local application data folder.");
 
-            if (!OperatingSystem.IsWindows())
-                throw new PlatformNotSupportedException("Securing ImageMagick's configuration folder is not implemented on this OS yet.");
-
             // ImageMagick reads policy.xml from disk; a folder other accounts can write would let them relax it.
             Directory.CreateDirectory(ConfigurationDirectory);
-            SecureDirectory.RestrictToOwnerAndAdmins(ConfigurationDirectory);
-            // Also the pixel-cache folder for decoded images; flevert.exe labels the whole app-data folder, other hosts may not.
-            SecureDirectory.TryApplyNoReadUpLabel(ConfigurationDirectory);
+            if (OperatingSystem.IsWindows())
+            {
+                SecureDirectory.RestrictToOwnerAndAdmins(ConfigurationDirectory);
+                // Also the pixel-cache folder for decoded images; flevert.exe labels the whole app-data folder, other hosts may not.
+                SecureDirectory.TryApplyNoReadUpLabel(ConfigurationDirectory);
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                SecureDirectory.RestrictToOwner(ConfigurationDirectory);
+            }
+            else
+            {
+                throw new PlatformNotSupportedException();
+            }
 
             // ImageMagick also loads configuration from other folders and applies it after ours. A planted policy.xml can
             // redirect temporary files (decoded pixels) or enable delegates while the coder probes below still pass, so
