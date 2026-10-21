@@ -184,14 +184,16 @@ public static class UnixBatchUi
     /// <param name="operation">What the window's title names (the menu path, as on Windows).</param>
     /// <param name="batch">Runs the batch with the window's progress and Cancel.</param>
     /// <returns>Whether every file was processed and none failed.</returns>
+    /// <param name="question">What the operation asks in a dialog (a password, a watermark's text): the window waits while
+    /// it is open, then as long again as for a batch without questions, and it hears the batch's progress.</param>
     public static bool Run(
         string operation, RunLog log, Func<IProgress<BatchProgress>?, CancellationToken, Task<BatchOutcome>> batch,
-        string zenity = ZenityProgress.Zenity, string gdbus = DesktopNotification.Gdbus)
+        string zenity = ZenityProgress.Zenity, string gdbus = DesktopNotification.Gdbus, IUnixQuestion? question = null)
     {
         ArgumentNullException.ThrowIfNull(log);
         ArgumentNullException.ThrowIfNull(batch);
         using var cancel = new CancellationTokenSource();
-        var progress = new WindowProgress();
+        var progress = new WindowProgress(question);
         var work = Task.Run(async () =>
         {
             try
@@ -208,14 +210,25 @@ public static class UnixBatchUi
         });
 
         ZenityProgress? window = null;
-        if (!work.Wait(ShowProgressAfter))
+        var quiet = Stopwatch.StartNew();
+        while (!work.Wait(TimeSpan.FromMilliseconds(100)))
         {
+            if (question?.Asking == true)
+            {
+                quiet.Restart();
+                continue;
+            }
+
+            if (quiet.Elapsed < ShowProgressAfter)
+                continue;
             window = ZenityProgress.Start(operation, zenity);
             if (window is not null)
             {
                 progress.Show(window);
                 _ = window.Cancelled.ContinueWith(_ => cancel.Cancel(), TaskScheduler.Default);
             }
+
+            break;
         }
 
         var outcome = work.GetAwaiter().GetResult();
@@ -225,7 +238,7 @@ public static class UnixBatchUi
     }
 
     // Keeps the latest report, so a window shown late starts from where the batch is.
-    private sealed class WindowProgress : IProgress<BatchProgress>
+    private sealed class WindowProgress(IUnixQuestion? question) : IProgress<BatchProgress>
     {
         private readonly Lock _gate = new();
         private BatchProgress? _last;
@@ -240,6 +253,7 @@ public static class UnixBatchUi
                     _lastStarted = current;
                 _last = value;
                 _window?.Report(value, _lastStarted);
+                question?.Report(value);
             }
         }
 
@@ -252,5 +266,77 @@ public static class UnixBatchUi
                     window.Report(last, _lastStarted);
             }
         }
+    }
+}
+
+/// <summary>
+/// A question a batch asks in a window on Linux (a password, a watermark's text): the batch's progress tells it how many
+/// files an answer could be for, and the progress window waits while it is open.
+/// </summary>
+public interface IUnixQuestion
+{
+    /// <summary>A dialog of this question is open.</summary>
+    bool Asking { get; }
+
+    /// <summary>The batch's latest progress.</summary>
+    void Report(BatchProgress progress);
+}
+
+/// <summary>What a zenity dialog printed, held in a buffer of its own that <see cref="Dispose"/> wipes (it can be a
+/// password).</summary>
+public sealed class ZenityReply(int exitCode, byte[] buffer, int length) : IDisposable
+{
+    public int ExitCode { get; } = exitCode;
+
+    /// <summary>The bytes zenity wrote on standard output.</summary>
+    public ReadOnlySpan<byte> Output => buffer.AsSpan(0, length);
+
+    public void Dispose() => System.Security.Cryptography.CryptographicOperations.ZeroMemory(buffer);
+}
+
+/// <summary>Runs one zenity dialog, which dies with flevert, and reads its answer without ever making it a string.</summary>
+[SupportedOSPlatform("linux")]
+public static class ZenityDialog
+{
+    // Far more than a dialog of Flevert's prints: two passwords of 127 bytes, a watermark of a few hundred.
+    private const int MaxOutput = 64 * 1024;
+
+    /// <exception cref="OperationCanceledException">The batch was cancelled; the dialog was closed.</exception>
+    /// <exception cref="InvalidOperationException">zenity is missing: there is no way to ask.</exception>
+    public static async Task<ZenityReply> AskAsync(IEnumerable<string> arguments, CancellationToken ct, string zenity = ZenityProgress.Zenity)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+        if (!File.Exists(zenity))
+            throw new InvalidOperationException($"{zenity} is missing: Flevert asks in its dialogs.");
+        var start = new ProcessStartInfo(UnixGroup.Setsid) { UseShellExecute = false, RedirectStandardOutput = true };
+        foreach (var argument in UnixGroup.Prefix(zenity, limits: null).Concat(arguments))
+            start.ArgumentList.Add(argument);
+
+        using var dialog = UnixStarter.Start(start);
+        using var close = ct.Register(() =>
+        {
+            try
+            {
+                dialog.Kill();
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        });
+        var buffer = new byte[MaxOutput];
+        var length = 0;
+        var output = dialog.StandardOutput.BaseStream;
+        int read;
+        while (length < buffer.Length && (read = await output.ReadAsync(buffer.AsMemory(length), CancellationToken.None).ConfigureAwait(false)) > 0)
+            length += read;
+        await dialog.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+        var reply = new ZenityReply(dialog.ExitCode, buffer, length);
+        if (ct.IsCancellationRequested)
+        {
+            reply.Dispose();
+            ct.ThrowIfCancellationRequested();
+        }
+
+        return reply;
     }
 }

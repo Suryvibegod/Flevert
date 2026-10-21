@@ -162,6 +162,36 @@ public sealed class UnixDesktopTests : IDisposable
         Assert.Contains("'Cancelled after 0 of 2 files.'", await WaitForLines(_dir.Combine("out")));
     }
 
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void An_open_question_holds_the_window_back_and_hears_the_progress()
+    {
+        var zenity = FakeZenity("cat > /dev/null");
+        var gdbus = FakeTool("gdbus", "exit 0");
+        var question = new FakeQuestion { Asking = true };
+
+        UnixBatchUi.Run("Protect", new RunLog(_dir.Combine("logs")), async (progress, ct) =>
+        {
+            progress?.Report(new BatchProgress(0, 3, "/x/a.pdf"));
+            await Task.Delay(TimeSpan.FromSeconds(3), ct);
+            question.Asking = false; // answered: the window may show 2 s from now, after the batch has ended
+            await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            return Done("/x/a (protected).pdf");
+        }, zenity, gdbus, question);
+
+        Assert.False(File.Exists(_dir.Combine("args")), "the window covered the question");
+        Assert.Equal(3, question.Last?.Total);
+    }
+
+    private sealed class FakeQuestion : IUnixQuestion
+    {
+        public bool Asking { get; set; }
+
+        public BatchProgress? Last { get; private set; }
+
+        public void Report(BatchProgress progress) => Last = progress;
+    }
+
     private static BatchOutcome Done(string output) => new([new FileResult("/x/a.txt", output, null)], 1);
 
     [SupportedOSPlatform("linux")]

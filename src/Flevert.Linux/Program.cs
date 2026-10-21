@@ -75,6 +75,25 @@ internal static class Program
             return ExitCodes.BadUsage;
         }
 
+        // Protect and unlock ask for the password in a dialog, once for the batch when the user agrees; Add watermark…
+        // asks for its text the same way. Without windows they keep the catalog's prompts, which fail each file at once
+        // rather than wait for an answer (docs/specs/pdf.md).
+        IUnixQuestion? question = null;
+        IPasswordOperation? asking = null;
+        if (!headless && operation is IPasswordOperation needsPassword)
+        {
+            var passwords = new ZenityPasswordPrompt();
+            question = passwords;
+            operation = asking = needsPassword.WithPrompt(passwords);
+        }
+
+        if (!headless && operation is PdfWatermarkMenu needsText)
+        {
+            var watermarks = new ZenityWatermarkPrompt();
+            question = watermarks;
+            operation = needsText.WithPrompt(watermarks);
+        }
+
         // Nautilus hands every selected file to one flevert: the whole batch is known from the start.
         var leader = BatchLeader.Alone(run.Files);
         try
@@ -94,10 +113,11 @@ internal static class Program
                 return batch(null, CancellationToken.None).GetAwaiter().GetResult().NoFailures ? ExitCodes.Ok : ExitCodes.Failed;
             // An operation outside the menu (a tool run by its id) is named by its id.
             var title = operation.MenuPath.Length > 0 ? operation.MenuPath.Replace('/', ' ') : operation.Id;
-            return UnixBatchUi.Run(title, log, batch) ? ExitCodes.Ok : ExitCodes.Failed;
+            return UnixBatchUi.Run(title, log, batch, question: question) ? ExitCodes.Ok : ExitCodes.Failed;
         }
         finally
         {
+            asking?.Dispose(); // wipes the passwords it still holds
             leader.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }

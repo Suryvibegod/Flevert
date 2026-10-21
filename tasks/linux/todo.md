@@ -91,8 +91,9 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T9. Cỡ: M
 
 ### T11: Hộp thoại mật khẩu và watermark
-- [ ] `IPasswordPrompt`/watermark prompt qua `zenity --password` và `--entry --hide-text`; hỏi một lần cho lô; Cancel → bỏ lô
+- [x] `IPasswordPrompt`/watermark prompt qua `zenity --password` và `--entry --hide-text`; hỏi một lần cho lô; Cancel → bỏ lô
 - Kiểm: test với zenity giả; test rò rỉ: mật khẩu không có trong `/proc/*/cmdline` của mọi tiến trình con, không có trong log
+- Đã làm (2026-10-21): `zenity --forms` thay cho `--password`/`--entry` (cần hai ô khi đặt mật khẩu và ô chọn "All N files / This file only" như hộp kiểm của Windows; mặc định là tất cả như hộp kiểm đã tích); watermark là ô thường (`--add-entry`), như bản Windows. `Core/Unix/UnixDesktop.cs`: `ZenityDialog` đọc stdout vào mảng byte cố định 64 KB, `ZenityReply.Dispose` xóa trắng; `IUnixQuestion` (đang hỏi, tiến độ). `Pdf/Unix/ZenityPrompts.cs`: hỏi lại kèm lý do theo `PasswordRules`/`WatermarkPrompts` của Windows; mật khẩu thành `char[]` cho `PdfPassword`, ô nhập lại xóa trắng sau khi so. `UnixBatchUi`: cửa sổ tiến độ chờ khi hộp thoại mở rồi thêm 2 s. 8 test prompt + 1 test luồng; **lỗi tìm thấy bằng test**: xóa trắng ô nhập lại *trước* khi so → mọi lần đặt mật khẩu "không khớp"; đột biến bỏ kiểm luật/escape/cờ đang hỏi → đỏ. `PasswordLeakTests` đạt trên Linux (đọc qpdf qua `/proc`) sau khi sửa test: nó quét `/tmp` và treo khi mở một FIFO (chờ người ghi mãi) → bỏ qua mục rỗng (FIFO, socket có độ dài 0). `dotnet-dump` (công cụ của Microsoft, cài cho user) dùng để đọc stack của test treo.
 - Phụ thuộc: T9. Cỡ: S
 
 ### T12: Menu Nautilus
