@@ -191,3 +191,19 @@ Trên `git diff main...feat/v0.3-media` (trừ 1084 file giấy phép và icon).
 | CR-9, CR-10 | Nit | Thanh tiến độ khi thử lại; so khớp chuỗi thông báo để thử lại | **Chấp nhận** |
 | CR-11 | Nit | `DeleteStaleRuns` dừng ở thư mục đầu không xóa được | **Sửa**: bắt lỗi từng thư mục |
 | CR-12 | Nit | Tham số `extra` của `Filters` không dùng | **Sửa**: bỏ |
+
+### Soát lại các bản sửa (một reviewer gộp, bối cảnh trống)
+
+| id | mức | việc | quyết định |
+|---|---|---|---|
+| RR-1 | High | Kiểm "file giấy phép phải là file thường" mới sẽ dừng job `ffmpeg-source` (và cả release) nếu thư viện để giấy phép là symlink trong archive (lilv `COPYING` → `LICENSES/ISC.txt`, re2) | **Sửa**: theo link nhưng chỉ tới file thường nằm trong chính thư mục giải nén của thư viện đó (`realpath`); kết quả như `cp` trước đây |
+| RR-2 | Should | Under N: lượt 2 vẫn dùng thời lượng ffprobe cho timeout và thanh tiến độ | **Sửa**: lượt 2 dùng thời lượng lượt 1 đo được |
+| RR-3 | Should | `GetDiskFreeSpaceEx` cần `\server\share\` có dấu phân cách cuối | **Sửa**: thêm dấu phân cách. Chưa có test UNC (`\localhost\C$` cần quyền admin) |
+| RR-4 | Should | Mobius (điểm uốn mặc định) làm phẳng vùng sáng của cảnh ngoài trời HLG 600–1000 nit | **Chấp nhận**, cùng mục mở "kiểm bằng mắt trên video iPhone thật" |
+| RR-5 | Should | Không test nào kiểm `-threads 6` đứng sau `-threads` của codec trên dòng lệnh thật | **Sửa**: theory MP4/WEBM/Balanced với ffprobe giả báo 8K: `-threads 2` trước `-i`, `-threads` cuối là 6, `scale=3840:2160` |
+| RR-6 | Nit | README "8K ra 4K": mọi video lớn hơn 4K (5K, 6K) đều thu về | **Sửa lời** |
+| RR-7 | Nit | Video xoay mà xen kẽ: transpose chạy trước bwdif | **Sửa**: không khử xen kẽ khi `Rotation != 0` |
+| RR-8 | Nit | `IsDate` bỏ kiểm `\0` | **Sửa** |
+| RR-9 | Nit | Không test ffprobe quá giờ → `ReadTooSlowMessage` | **Sửa**: test với RunTool giả ném `TimeoutException` |
+
+Kiểm thật trên Windows: `test-installer.ps1` kịch bản 6 đỏ hai lần liền ("flevert.exe was still running when the uninstaller finished"): `dev.slow-copy` chạy 8 file một lúc nên 20 file chỉ 3,4 s (đo tay), còn trình gỡ cài chậm hơn khi Defender đang quét ffmpeg vừa cài. **Sửa test**: `FLEVERT_SLOW_COPY_MS=7000` (ba lượt, ~21 s), đúng như chú thích muốn.

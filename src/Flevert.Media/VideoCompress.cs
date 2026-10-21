@@ -184,18 +184,21 @@ public sealed class VideoCompressUnder : IOperation
             var log = Path.Combine(passes, "x264");
             // The same frames in both passes (FrameTimes), or the statistics of the first do not fit the second.
             string[] picture =
-                [.. VideoEncoding.Filters(video, size), .. VideoEncoding.FrameTimes, "-c:v", "libx264", "-preset", "medium", .. VideoEncoding.EncoderThreads, .. VideoEncoding.EncoderThreadsFor(video),
-                    "-passlogfile", log];
+                [.. VideoEncoding.Filters(video, size), .. VideoEncoding.FrameTimes, "-c:v", "libx264", "-preset", "medium", .. VideoEncoding.EncoderThreads,
+                    .. VideoEncoding.EncoderThreadsFor(video), "-passlogfile", log];
             // The first pass only measures the picture: no sound, nothing written.
             var measured = await _ffmpeg.EncodeAsync(inputPath, ["-map", $"0:{video.Index}", .. picture, "-b:v", Kbps(budget.VideoKbps), "-pass", "1"], null, "null",
                 info.Duration, 0, MediaJob.Percent(progress, 0, 0.5), ct, slowness, VideoEncoding.DecoderThreadsFor(video), boundTime: true).ConfigureAwait(false);
             // Recordings joined byte by byte: ffprobe read the first one's length, the first pass went through them all
-            // (RC-1). The rates for the real length, at the size the first pass measured (code review, 2026-10-21).
+            // (RC-1). The rates, the timeout and the bar for the real length, at the size the first pass measured (code
+            // review, 2026-10-21).
+            var length = info.Duration;
             if (measured > info.Duration + TimeSpan.FromSeconds(1))
             {
                 var real = Plan(LimitBytes, measured, Math.Min(video.DisplayWidth, video.DisplayHeight), audio.Count > 0)
                     ?? throw new MediaException(TooLongMessage);
                 budget = real with { MaxShortSide = budget.MaxShortSide };
+                length = measured;
             }
 
             // One for every attempt, so a retry does not take the bar back from 100 % to 50 %.
@@ -214,7 +217,7 @@ public sealed class VideoCompressUnder : IOperation
                     // -fs at the limit: an output that reaches it is too large anyway (EncodeAsync reports it).
                     try
                     {
-                        await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", info.Duration, LimitBytes, secondHalf, token, slowness, VideoEncoding.DecoderThreadsFor(video), boundTime: true)
+                        await _ffmpeg.EncodeAsync(inputPath, options, temp, "mp4", length, LimitBytes, secondHalf, token, slowness, VideoEncoding.DecoderThreadsFor(video), boundTime: true)
                             .ConfigureAwait(false);
                         if (new FileInfo(temp).Length is var written && written < LimitBytes)
                         {

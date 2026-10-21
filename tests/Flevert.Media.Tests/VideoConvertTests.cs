@@ -126,6 +126,37 @@ public sealed class VideoConvertTests : IDisposable
         Assert.Empty(VideoEncoding.EncoderThreadsFor(k4));
     }
 
+    [Theory]
+    [InlineData("video.to-mp4")]
+    [InlineData("video.to-webm")]
+    [InlineData("video.compress-balanced")]
+    public async Task An_8k_video_s_encoder_gets_6_threads_last_and_its_decoder_2(string id)
+    {
+        // ffmpeg takes the last -threads of a stream: the 8K memory fix holds only while it comes after the codec's own.
+        var calls = new List<IReadOnlyList<string>>();
+        var eightK = new Ffmpeg(TestFfmpeg.Instance.FfmpegPath, TestFfmpeg.Instance.FfprobePath, async (tool, arguments, timeout, line, ct) =>
+        {
+            var run = await TestFfmpeg.Instance.Run(tool, arguments, timeout, line, ct);
+            if (tool == TestFfmpeg.Instance.FfprobePath)
+            {
+                var json = System.Text.RegularExpressions.Regex.Replace(run.StandardOutput, @"""width"": \d+", @"""width"": 7680");
+                return run with { StandardOutput = System.Text.RegularExpressions.Regex.Replace(json, @"""height"": \d+", @"""height"": 4320") };
+            }
+
+            calls.Add(arguments);
+            return new ExternalToolResult(1, "", "stopped by the test", false, false);
+        });
+        var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mkv");
+
+        await Assert.ThrowsAsync<MediaException>(() => MediaOperations.Create(eightK).OfType<IOperation>().Single(op => op.Id == id).RunAsync(input, CancellationToken.None));
+
+        var arguments = calls[0].ToList();
+        var at = arguments.IndexOf("-i");
+        Assert.Equal("2", arguments[arguments.LastIndexOf("-threads", at) + 1]);
+        Assert.Equal("6", arguments[arguments.LastIndexOf("-threads") + 1]);
+        Assert.Contains("scale=3840:2160", arguments[arguments.IndexOf("-vf") + 1], StringComparison.Ordinal);
+    }
+
     // The mean of the frames' average luma, as ffmpeg's signalstats measures it.
     private static async Task<double> MeanLuma(string path)
     {

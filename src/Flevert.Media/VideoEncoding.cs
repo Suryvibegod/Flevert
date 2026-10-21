@@ -62,7 +62,8 @@ internal static class VideoEncoding
     public static string[] Filters(VideoTrack video, (int Width, int Height) size)
     {
         var filters = new List<string>();
-        if (video.IsInterlaced)
+        // Not when turned: autorotate's transpose comes first, and a turned picture's fields are columns (very rare).
+        if (video.IsInterlaced && video.Rotation == 0)
             filters.Add(Deinterlace);
         if (size != (video.DisplayWidth, video.DisplayHeight))
             filters.Add(string.Create(CultureInfo.InvariantCulture, $"scale={size.Width}:{size.Height}:flags=lanczos"));

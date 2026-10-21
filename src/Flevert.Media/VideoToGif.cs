@@ -52,7 +52,7 @@ public sealed class VideoToGif : IOperation
         // Frames dropped and the picture made small before the tone map, which works in floating point (code review,
         // 2026-10-21: 4K at 60 tone mapped whole was 70 times the work).
         var filters = new List<string>();
-        if (video.IsInterlaced)
+        if (video.IsInterlaced && video.Rotation == 0)
             filters.Add(VideoEncoding.Deinterlace);
         filters.Add(string.Create(CultureInfo.InvariantCulture, $"fps={FramesPerSecond}"));
         if (size != (video.DisplayWidth, video.DisplayHeight))

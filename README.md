@@ -86,7 +86,7 @@ Less used PDF tools are one step away: hold **Shift** while you right-click a PD
 |---|---|
 | **Compress** > Light (best quality), Balanced, Strong (smallest) | `clip (compressed).mp4` (H.264 and AAC); Strong also brings it down to 720p |
 | **Compress** > Under 10 MB, 25 MB, 100 MB | `clip (under 25 MB).mp4`, always under that size, or a message that the video is too long to fit. **Under 10 MB** is the safe size for email |
-| **Convert to** > MP4, MOV, WEBM | `clip.mp4`, upright; HDR videos from iPhones are converted to standard colours so they look right everywhere, and an 8K video comes out at 4K |
+| **Convert to** > MP4, MOV, WEBM | `clip.mp4`, upright; HDR videos from iPhones are converted to standard colours so they look right everywhere, and a video larger than 4K (8K) comes out at 4K |
 | **Convert to** > GIF | `clip.gif`, at most 480 pixels and the first 30 seconds |
 | **Extract audio** > MP3, M4A | `clip.mp3`, the video's first sound track |
 | **Remove hidden info** | `clip (no metadata).mp4`, without where it was filmed, the camera or the software; picture and sound copied as they are, in seconds |

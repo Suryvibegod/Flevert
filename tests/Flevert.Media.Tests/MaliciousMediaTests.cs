@@ -193,6 +193,18 @@ public sealed class MaliciousMediaTests : IDisposable
     }
 
     [Fact]
+    public async Task A_file_that_takes_too_long_to_read_suggests_copying_it_to_this_pc()
+    {
+        var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mp4");
+        var slow = new Ffmpeg(TestFfmpeg.Instance.FfmpegPath, TestFfmpeg.Instance.FfprobePath, (tool, arguments, timeout, line, ct) =>
+            Task.FromException<ExternalToolResult>(new TimeoutException()));
+
+        var e = await Assert.ThrowsAsync<MediaException>(() => slow.ProbeAsync(input, CancellationToken.None));
+
+        Assert.Equal(MediaException.ReadTooSlowMessage, e.Message);
+    }
+
+    [Fact]
     public async Task A_disk_that_fills_up_is_said_to_be_full_not_the_file_damaged()
     {
         var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mp4");

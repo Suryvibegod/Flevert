@@ -120,6 +120,8 @@ internal static partial class MediaJob
             var folder = Path.GetDirectoryName(Path.GetFullPath(path));
             if (folder is null)
                 return null;
+            // GetDiskFreeSpaceEx wants a share's root as \\server\share\, with the separator (re-check review).
+            folder = Path.EndsInDirectorySeparator(folder) ? folder : folder + Path.DirectorySeparatorChar;
             if (!OperatingSystem.IsWindows())
                 return new DriveInfo(folder).AvailableFreeSpace;
             return GetDiskFreeSpaceExW(folder, out var available, out _, out _) ? (long)Math.Min(available, long.MaxValue) : null;

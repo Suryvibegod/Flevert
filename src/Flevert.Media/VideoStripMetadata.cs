@@ -88,7 +88,8 @@ public sealed class VideoStripMetadata : IOperation
     /// file chose it: 40 KB of it made the command line too long for Windows (code review, 2026-10-21).
     /// </summary>
     internal static bool IsDate(string value) =>
-        value.Length is > 0 and <= 64 && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out _);
+        value.Length is > 0 and <= 64 && !value.Contains('\0', StringComparison.Ordinal)
+        && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out _);
 
     /// <summary>
     /// H.264's SEI messages, where AVCHD camcorders keep the camera, the time and, with GPS, the place (Sony and
