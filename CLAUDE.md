@@ -29,7 +29,7 @@ Since 2026-10-20 the user wants the work built first and verified at the end, no
   - Prefer taking it as a dependency (NuGet, or a binary pinned by SHA256 in `scripts/deps.json`) over copying code, so security fixes keep coming. When code is copied, keep its copyright header and licence, add it to the third-party notices (with the NOTICE file for Apache-2.0), and say where it came from in the commit message.
   - Flevert opens files from strangers: check that the source is maintained and has no unfixed security advisories, and review copied code like our own.
 - UI, README, commit messages: English. Specs and plans: Vietnamese.
-- One logical change per commit; the message explains why. Commit identity is set by the setup script on the maintainer's machines; never commit with a personal email address.
+- One logical change per commit; the message explains why. The subject follows Conventional Commits in the imperative mood, plain English, at most 72 characters: `type(scope): summary`, e.g. `fix(media): stop ffmpeg when a batch is cancelled`. No chat phrases, quoted user prompts, slang or Vietnamese in commit messages; they are read on GitHub by strangers. Commit identity is set by the setup script on the maintainer's machines; never commit with a personal email address.
 - Run the test projects one after the other, not `dotnet test Flevert.sln`: run together, the image encodes starve the process-batching tests of CPU (CI runs them one at a time too).
 - Check `dotnet format Flevert.sln --verify-no-changes` by its exit code before committing (never through a pipe that hides it).
 - Never commit binaries (ffmpeg, qpdf, pdfium); they are fetched by scripts into `deps/`.
