@@ -104,7 +104,7 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T9. Cỡ: M
 
 ### Mốc: ứng dụng
-- [ ] Ba project xanh; bấm thử trong Nautilus mỗi nhóm thao tác một lần (ba project: xem bảng cuối; bấm thử: bước kiểm cuối, cần `python3-nautilus`)
+- [x] Ba project xanh; bấm thử trong Nautilus mỗi nhóm thao tác một lần (ba project: xem bảng cuối; bấm thử: bước kiểm cuối, cần `python3-nautilus`)
 
 ## Giai đoạn 4: đóng gói và tài liệu
 
@@ -125,6 +125,7 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 
 ## Kiểm một lần trước PR
 - [ ] Chạy thật: cài từ tarball, mọi thao tác ảnh và PDF trong Nautilus, Cancel, mật khẩu, gỡ
+  - 2026-10-21, lần bấm thử đầu của người dùng: ảnh, PDF qua qpdf, mật khẩu đạt; **mọi tác vụ của PDF worker (pdfium) báo "not a PDF" trong gói**, Debug/Release/publish không ReadyToRun đều chạy. Nguyên nhân: `unsigned long` của pdfium là 64 bit trên Linux, Flevert khai `uint` (đúng trên Windows), nên `m_FileLen` của `FPDF_FILEACCESS` có 4 byte cao là rác; JIT tình cờ để 0, ReadyToRun thì không. Sửa: `CULong` cho mọi `unsigned long`/`FPDF_DWORD` của pdfium (FILEACCESS, FILEWRITE, `GetLastError`, `FillRect`, `FormObj_GetObject`, `GetImageDataRaw`, `GetImageFilter`, `GetMetaText`, `SaveAsCopy`), đã đối chiếu header của bản chromium/8100 đã ghim; ABI Windows không đổi. `build-linux.sh` giờ chạy thử bản publish (pdfium to-jpg và page-numbers, qpdf, ImageMagick) trước khi đóng gói: gói cũ trả exit 1 ở bước này. Chờ người dùng bấm lại mục 5.
 - [ ] Ba review bối cảnh trống, chỉ đọc (code-reviewer, security-auditor, doubt) trên `git diff main..feat/linux`; bảng reconcile ở đây; sửa; một reviewer soát lại tới khi hết Critical/High/Required
 - [ ] Đủ 10 tiêu chí của spec
 
@@ -137,6 +138,14 @@ Lần chạy đầu (2026-10-21, sau T2), mỗi project chạy riêng:
 | Core | 250 | 123 | 13 |
 | Image | 0 | 168 | 0 |
 | Pdf | 221 | 1094 | 3 |
+
+Lần chạy cuối (2026-10-21, sau sửa `CULong`):
+
+| Project | Xanh | Đỏ | Bỏ qua |
+|---|---|---|---|
+| Core | 376 | 0 | 51 |
+| Image | 243 | 0 | 7 |
+| Pdf | 1347 | 0 | 28 |
 
 **Không build trên Linux** (chỉ có nghĩa trên Windows; `<Compile Remove>` có lý do trong csproj): Core: `BatchTests`, `ProcessBatchIntegrationTests`, `ProcessFactsTests` (gom lô qua pipe giữa nhiều tiến trình), `MenuRegistryIntegrationTests` (registry thật), `CheckoutScriptTests`, `FetchDepsScriptTests`, `PreviousSetupScriptTests`, `BuildPathsScriptTests`, `NoticesScriptTests`, `InstallerScriptTests`, `PowerShellScript`, `QpdfDepsTests` (script PowerShell, Inno Setup, DLL MSVC), `LongPathTests` (tên 8.3, `\\?\`), `UpdateCheckIntegrationTests` (báo bản mới tắt trên Linux). Pdf: `WatermarkWindowTests` (WinForms + UI Automation).
 

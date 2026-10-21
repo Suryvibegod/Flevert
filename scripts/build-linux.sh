@@ -17,6 +17,21 @@ tarball=$out/Flevert-$version-linux-x64.tar.gz
 rm -rf "$publish" "$tarball" "$tarball.sha256"
 dotnet publish "$root/src/Flevert.Linux" -c Release -r linux-x64 --self-contained -p:PublishReadyToRun=true -o "$publish"
 find "$publish" -name '*.pdb' -delete
+
+# The published flevert, not the build the tests ran: ReadyToRun code once read pdfium's FPDF_FILEACCESS differently
+# from the JIT and every PDF worker task failed in the package alone. One task per engine: the pdfium worker (render
+# and edit), qpdf, ImageMagick.
+smoke=$(mktemp -d)
+trap 'rm -rf "$smoke"' EXIT
+cp "$root/tests/Flevert.Pdf.Tests/fixtures/rotations.pdf" "$root/tests/Flevert.Image.Tests/fixtures/gradient-320x240.heic" "$smoke/"
+for task in "pdf.to-jpg rotations.pdf" "pdf.page-numbers rotations.pdf" "pdf.rotate-right rotations.pdf" "image.to-png gradient-320x240.heic"; do
+  set -- $task
+  before=$(find "$smoke" | wc -l)
+  if ! FLEVERT_HEADLESS=1 "$publish/flevert" run "$1" "$smoke/$2" || [ "$(find "$smoke" | wc -l)" -le "$before" ]; then
+    echo "The published flevert failed $1 on $2." >&2
+    exit 1
+  fi
+done
 install -m 644 "$root/LICENSE" "$publish/LICENSE.txt"
 install -m 755 "$root/packaging/linux/install.sh" "$publish/install.sh"
 packages=$(dotnet nuget locals global-packages --list | sed 's/^global-packages: //')

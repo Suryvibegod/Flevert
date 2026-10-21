@@ -20,6 +20,19 @@ public class PdfDocumentTests
     }
 
     [Fact]
+    public unsafe void Pdfium_reads_the_file_length_as_its_unsigned_long()
+    {
+        // FPDF_FILEACCESS starts with an unsigned long: 8 bytes on Linux, 4 on Windows. A 4-byte field on Linux left the
+        // high half to whatever the memory held, and the ReadyToRun package refused every PDF as damaged.
+        var path = TestPdf.Fixture("three-colours.pdf");
+        using var source = new FileSource(File.OpenHandle(path), new FileInfo(path).Length);
+
+        var fileLength = OperatingSystem.IsWindows() ? *(uint*)source.Access : *(ulong*)source.Access;
+
+        Assert.Equal((ulong)new FileInfo(path).Length, fileLength);
+    }
+
+    [Fact]
     public void Renders_each_page_in_its_own_colour_at_the_size_its_dpi_gives()
     {
         using var pdf = PdfDocument.Open(TestPdf.Fixture("three-colours.pdf"));
