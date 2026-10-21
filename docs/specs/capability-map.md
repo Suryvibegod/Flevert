@@ -8,6 +8,7 @@ Tool Windows miễn phí: chuột phải vào file ảnh / video-audio / PDF đ�
 | image | Convert JPG/PNG/WEBP/HEIC/AVIF/GIF/BMP/TIFF qua lại; nén 3 mức hoặc theo dung lượng mục tiêu; xóa metadata (EXIF, GPS) | core |
 | installer | Bộ cài 1 click, không cần admin; tùy chọn bật menu chuột phải kiểu cũ (cho mọi app, theo từng tài khoản); gỡ sạch registry; kèm sẵn ffmpeg/pdfium khi có module cần | core |
 | media | Nén video theo mức hoặc dưới 10/25/100 MB; convert MP4/MOV/MKV/WEBM/GIF; tách MP3/M4A từ video; convert audio MP3/M4A/WAV/FLAC/OGG/Opus ([spec](media.md)) | core |
+| linux | Bản Linux: menu chuột phải của Nautilus, cửa sổ tiến độ/hộp thoại bằng zenity, phần nền tảng của core và pdf cho Linux, cài per-user từ tarball ([spec](linux.md), đề xuất của người đóng góp, chờ maintainer duyệt) | core, image, pdf |
 | pdf | Nhiều ảnh thành một PDF; PDF sang ảnh; ghép/tách; xoay; nén; xóa metadata; đặt/gỡ mật khẩu; (nếu kịp) rút ảnh/text, đảo trang, sửa lỗi ([spec](pdf.md)) | core, image |
 
 Thứ tự làm:
@@ -23,4 +24,4 @@ Module id chốt một lần, không đổi. Mỗi module có spec riêng: `docs
 
 ## Ngoài phạm vi
 
-Menu chuột phải mới của Windows 11 (MSIX + ký số), PDF→DOCX, editor có giao diện (crop / thêm nền / ghi chú / che thông tin), macOS/Linux, xử lý trên cloud, tự tải và cài bản mới (chỉ báo và mở trang tải, ADR-0006).
+Menu chuột phải mới của Windows 11 (MSIX + ký số), PDF→DOCX, editor có giao diện (crop / thêm nền / ghi chú / che thông tin), macOS, Linux ngoài Nautilus (xem [linux.md](linux.md)), xử lý trên cloud, tự tải và cài bản mới (chỉ báo và mở trang tải, ADR-0006).
