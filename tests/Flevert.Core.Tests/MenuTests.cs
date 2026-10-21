@@ -61,7 +61,8 @@ public sealed class MenuTests
         Assert.Equal(["PNG", "WEBP"], convert.Select(k => _registry.GetValue(k, "MUIVerb")));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Entries_at_the_top_get_their_icon_from_the_icons_folder_beside_flevert_and_formats_get_none()
     {
         var looks = new Dictionary<string, MenuEntryLook> { ["Convert to"] = new("arrow_swap", 1), ["Remove hidden info"] = new("shield", 1) };
@@ -126,7 +127,8 @@ public sealed class MenuTests
         Assert.Throws<ArgumentException>(() => new MenuInstaller(_registry, Exe).Install([new FakeOp("image.to-png", "Convert/PNG", ".jpg")], looks));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void An_operation_placed_in_the_pdf_tools_menu_gets_a_second_top_level_entry_with_its_own_entries()
     {
         new MenuInstaller(_registry, Exe, iconExists: _ => true).Install(
