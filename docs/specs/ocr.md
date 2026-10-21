@@ -1,0 +1,64 @@
+# Spec: ocr (v1.4.0)
+
+Module `ocr` trong [capability-map.md](capability-map.md): nhận chữ trong ảnh và PDF scan, tiếng Việt trước, hoàn toàn trên máy. Phụ thuộc `core` (`ExternalTool`, job object, ngân sách bộ nhớ). `pdf` và `image` dùng nó. Phiên bản: **v1.4.0**.
+
+## Objective
+
+Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại) không tìm và không chép được chữ, hoặc ảnh chụp màn hình cần lấy chữ ra. Hôm nay họ tải ứng dụng OCR trên mạng, gửi file lên dịch vụ lạ. Flevert làm việc đó bằng chuột phải, không gửi file đi đâu.
+
+### User stories
+
+1. PDF scan 10 trang tiếng Việt → giữ Shift, chuột phải → **Flevert: more PDF tools > Make searchable (OCR)** → `<tên> (searchable).pdf`: nhìn y hệt bản gốc, Ctrl+F tìm được chữ, bôi đen chép ra đúng dấu tiếng Việt.
+2. PDF scan → **Convert to > Text** (menu chính) → `<tên>.txt` có chữ của các trang scan (trước v1.4.0: skipped "This PDF has no text to extract").
+3. Ảnh chụp màn hình/ảnh chụp giấy (JPG, PNG, HEIC, WEBP, …) → **Convert to > Text** → `<tên>.txt`.
+
+## Đã quyết (người dùng 2026-10-21)
+
+- PDF: `Make searchable (OCR)` nằm ở menu Shift `Flevert: more PDF tools` (menu chính đã đủ 16 mục). `Convert to > Text` tự OCR trang không có chữ.
+- Ảnh: `Convert to > Text` thay `Convert to > BMP` (ít người cần BMP làm đích; BMP vẫn là nguồn). Menu ảnh giữ 16 mục.
+
+## Engine (source-driven, nghiên cứu 2026-10-21)
+
+| Phương án | Kết luận |
+|---|---|
+| **Tesseract 5.5.3, bản Windows chính thức** trên release tesseract-ocr (bản dựng UB Mannheim, Apache-2.0), chạy `tesseract.exe` thành tiến trình riêng | **Chọn.** Thư viện ảnh mới (leptonica 1.87.0, libpng 1.6.58, libtiff 4.7.2, zlib 1.3.1, libjpeg-turbo 3.1.3, libwebp 1.6.0, openjp2 2.5.4). SHA256 bộ cài `bee9e3434bd94fd65387d9be28cd467a41f61b1275383b55b0f59a1331270ae4` (digest GitHub). Đã thử: ảnh 300 DPI tiếng Việt nhận đúng 100 %. |
+| NuGet `TesseractOCR` 5.5.2 | Loại: nhãn 5.5.2 nhưng `tesseract.exe` bên trong là 5.5.0, kèm libtiff 4.3.0, libpng 1.6.37, zlib 1.2.11 (cũ, có CVE). |
+| `charlesw/tesseract` NuGet | Loại: không bảo trì từ 2022, chạy trong tiến trình. |
+| Windows.Media.Ocr | Loại: không có gói OCR tiếng Việt. |
+| PaddleOCR/RapidOCR (ONNX) | Loại cho v1.4.0: +100–150 MB, phải tự dựng lớp chữ PDF. |
+
+- Bộ cài là NSIS: `scripts/fetch-deps.ps1` giải nén bằng 7-Zip ghim SHA256 (MSI `7z2604-x64.msi`, digest `0b01334a418654293513449f61d6bfc99e5196ca371e3c3dc961eda57cd535c6`, giải nén kiểu `msiexec /a`, không cài vào máy), chỉ giữ `tesseract.exe` và 33 DLL nó cần (đo bằng `ldd`, khoảng 47 MB chưa nén). DLL LGPL (libiconv, libintl, libunistring, libidn2) và libgcc/libstdc++ (GPL + runtime exception) chỉ nằm trong tiến trình tesseract riêng, như ffmpeg (ADR-0009); không mã nào của chúng vào Flevert.
+- Dữ liệu: `tessdata_fast` tag 4.1.0 (Apache-2.0): `vie` (531 275 byte, SHA256 `79df64caf7bcfb2a27df5042ecb6121e196eada34da774956995747636d5bfa1`), `eng` (`7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2`), `osd` (`9cf5d576fcc47564f11265841e5ca839001e7e6f38ff7f7aacf46d15a96b00ff`); thêm `pdf.ttf` và `configs/pdf` từ bộ cài (lớp chữ PDF cần).
+- Bố cục: `deps/tesseract/` (dev) và `{app}\tesseract\` (đã cài): `tesseract.exe`, các DLL, `tessdata/{vie,eng,osd}.traineddata`, `tessdata/pdf.ttf`, `tessdata/configs/pdf`, `licenses/`.
+
+## Cách làm
+
+- Ngôn ngữ mặc định `-l vie+eng`, `--oem 1` (LSTM), `--psm 3`; `TESSDATA_PREFIX` trỏ đúng thư mục `tessdata` của Flevert (không dùng biến môi trường của người dùng). Gọi qua `ExternalTool` trong job object (không mạng, giới hạn bộ nhớ, timeout, độ ưu tiên thấp) như ffmpeg/qpdf. Đường dẫn ảnh do Flevert tạo trong thư mục tạm riêng, không bao giờ là file của người lạ trực tiếp (tesseract đọc được URL và danh sách file).
+- Ảnh nguồn: giải mã bằng Magick.NET (đã có giới hạn) thành PNG xám trong thư mục tạm rồi mới đưa tesseract.
+- PDF: pdfium render từng trang 300 DPI (pdf-worker sẵn có). Trang đã có chữ (pdfium đếm > 10 ký tự) thì bỏ qua (`--skip-text` của OCRmyPDF). Trang cần OCR: tesseract `-c textonly_pdf=1 pdf` ra PDF chỉ có lớp chữ vô hình đúng khổ trang, rồi qpdf `--overlay` lên trang gốc (cách "sandwich" của OCRmyPDF, chỉ lấy ý tưởng, MPL-2.0 không chép mã). Trang gốc không bị mã hóa lại.
+- Tự xoay: OSD (`--psm 0 -l osd`) chỉ dùng khi độ tin cậy ≥ 14 (mặc định `rotate_pages_threshold` của OCRmyPDF): xoay ảnh trước khi nhận chữ để chữ đúng chiều; trang PDF output giữ nguyên hướng nhìn.
+- Song song theo trang trong giới hạn lõi và ngân sách bộ nhớ chung (ADR-0006); tiến độ trong file theo số trang.
+
+## Thao tác
+
+| op-id | Menu | Output |
+|---|---|---|
+| `pdf.make-searchable` | Shift: Flevert: more PDF tools > Make searchable (OCR) | `<tên> (searchable).pdf`. Mọi trang đã có chữ → skipped "This PDF already has text you can search." |
+| `pdf.to-text` (đã có) | Convert to > Text | Trang có chữ: như cũ; trang scan: chữ OCR. |
+| `image.to-text` | Convert to > Text (thay BMP) | `<tên>.txt` UTF-8. Không nhận ra chữ nào → skipped "No text was found in this picture." |
+
+## Success criteria
+
+1. PDF scan tiếng Việt mẫu (tạo trong test, có dấu) → `Make searchable`: pdfium lấy lại chữ trên mỗi trang, khớp văn bản gốc ≥ 95 % ký tự; trang render ra giống hệt trang gốc (so pixel); số trang và kích thước trang không đổi.
+2. PDF trộn trang có chữ và trang scan: trang có chữ không bị chồng lớp chữ thứ hai.
+3. Ảnh PNG/JPG/HEIC tiếng Việt → `.txt` đúng ≥ 95 % ký tự. Trang xoay 90°/180° vẫn nhận đúng (OSD).
+4. Hủy giữa chừng: tesseract dừng ngay, không file dở. File độc (ảnh/PDF trong bảng file độc hiện có) không treo, không làm sập flevert.exe.
+5. Tesseract chỉ chạy từ đường dẫn của Flevert, `TESSDATA_PREFIX` của Flevert; không truy cập mạng.
+6. Bộ cài kèm tesseract và giấy phép của mọi file; `scripts/write-notices.ps1` không từ chối file nào; installer test đạt, gỡ sạch.
+7. Năm bộ test (Core, Image, Pdf, Media, Ocr) xanh, CI ba lần cùng commit.
+
+## Boundaries
+
+- **Always:** test trước khi rẻ; binary chỉ lấy qua `scripts/deps.json` có SHA256; mọi file người lạ đi qua bộ giải mã có giới hạn trước khi tới tesseract.
+- **Ask first:** thêm ngôn ngữ khác ngoài vie/eng; đổi menu chính.
+- **Never:** gửi file ra mạng; đưa mã GPL/LGPL/MPL vào Flevert; commit binary hay traineddata.
