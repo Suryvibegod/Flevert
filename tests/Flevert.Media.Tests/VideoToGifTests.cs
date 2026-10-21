@@ -36,6 +36,21 @@ public sealed class VideoToGifTests : IDisposable
     }
 
     [Fact]
+    public async Task A_single_frame_video_still_produces_a_decodable_gif()
+    {
+        var input = _dir.Combine("one-frame.mp4");
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30", "-frames:v", "1",
+            "-c:v", "libx264", "-preset", "ultrafast", "-f", "mp4", input);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        var gif = await Probe(output);
+        Assert.Equal(("gif", 320, 180), (gif.Codec, gif.Width, gif.Height));
+        Assert.Equal("1", (await TestFfmpeg.ProbeRawAsync("-count_frames", "-select_streams", "v:0", "-show_entries",
+            "stream=nb_read_frames", "-of", "csv=p=0", output)).Trim());
+    }
+
+    [Fact]
     public async Task A_phone_video_becomes_an_upright_gif_480_pixels_tall_and_a_small_one_keeps_its_size()
     {
         var phone = await Fixtures.CopyAsync(Fixtures.PhoneMovAsync(), _dir, "phone.mov");

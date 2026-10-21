@@ -207,9 +207,19 @@ public sealed class Runner(RunLog log)
         return new BatchOutcome([new FileResult(first, null, message(Path.GetFileName(first), files.Count - 1))], 1) { OneOutput = true };
     }
 
-    // How long a cancelled join may take to stop and delete its temporary output before it is abandoned (and its inputs
+    // How long a cancelled operation may take to stop and delete its temporary output before it is abandoned (and its inputs
     // unpinned): a well-behaved operation stops at its next token check, well within this.
-    private static readonly TimeSpan JoinStopGrace = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(2);
+
+    private static async Task WaitForStopAsync(Task<string>? running)
+    {
+        if (running is null)
+            return;
+        await Task.WhenAny(running, Task.Delay(StopGrace, CancellationToken.None)).ConfigureAwait(false);
+        // Also observe a failure that arrives after the grace expires and the operation has been abandoned.
+        _ = running.ContinueWith(static task => { _ = task.Exception; }, CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
 
     private async Task<BatchOutcome> JoinAsync(
         IBatchOperation operation, List<(string Given, string Real)> inputs, IProgress<BatchProgress>? progress, Stopwatch timer,
@@ -238,11 +248,9 @@ public sealed class Runner(RunLog log)
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            if (running is not null)
-                await Task.WhenAny(running, Task.Delay(JoinStopGrace, CancellationToken.None)).ConfigureAwait(false);
+            await WaitForStopAsync(running).ConfigureAwait(false);
             if (running is not { IsCompletedSuccessfully: true })
             {
-                _ = running?.Exception; // observed: it stopped as asked, failed, or is abandoned
                 lock (gate)
                     finished = true;
                 return Cancelled(operation, first, timer);
@@ -408,19 +416,27 @@ public sealed class Runner(RunLog log)
         var notes = OutputNote.Begin(); // this file's own, also when files run in parallel
         SafeFileHandle? pin = null;
         FileResult result;
+        Task<string>? running = null;
         try
         {
             var realPath = file;
             var reason = Reject(operation, file) ?? Pin(file, out pin, out realPath) ?? Unsupported(operation, realPath);
-            // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned.
+            // Keep the task so cancellation can wait for its child processes and temporary output to be cleaned up.
             result = reason is not null
                 ? new FileResult(file, null, reason)
-                : new FileResult(file, await operation.RunAsync(realPath, within, ct).WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text, Sizes = notes.Sizes };
+                : new FileResult(file, await (running = operation.RunAsync(realPath, within, ct)).WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text, Sizes = notes.Sizes };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            log.Write(operation.Id, new FileResult(file, null, "cancelled"), timer.Elapsed);
-            return null;
+            await WaitForStopAsync(running).ConfigureAwait(false);
+            if (running is not { IsCompletedSuccessfully: true })
+            {
+                log.Write(operation.Id, new FileResult(file, null, "cancelled"), timer.Elapsed);
+                return null;
+            }
+
+            // An atomic commit may have won the race with cancellation: report the output that now exists.
+            result = new FileResult(file, running.Result, null) { Note = notes.Text, Sizes = notes.Sizes };
         }
         catch (OperationSkippedException ex)
         {

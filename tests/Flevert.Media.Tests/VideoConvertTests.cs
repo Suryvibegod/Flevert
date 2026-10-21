@@ -220,6 +220,50 @@ public sealed class VideoConvertTests : IDisposable
         Assert.Equal(reports.Order(), reports);
     }
 
+    [WindowsFact]
+    public async Task Cancelling_a_batch_waits_for_ffmpeg_and_its_partial_output_to_be_cleaned_up()
+    {
+        var input = await Fixtures.CopyAsync(Fixtures.Video1080pAsync(), _dir, "clip.mp4");
+        using var logs = new TempDir();
+        using var cts = new CancellationTokenSource();
+        var stopping = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ffmpeg = new Ffmpeg(TestFfmpeg.Instance.FfmpegPath, TestFfmpeg.Instance.FfprobePath, async (tool, arguments, timeout, line, ct) =>
+        {
+            try
+            {
+                return await TestFfmpeg.Instance.Run(tool, arguments, timeout, text =>
+                {
+                    line?.Invoke(text);
+                    // First progress line comes from the running encoder, after its output has been opened.
+                    if (tool == TestFfmpeg.Instance.FfmpegPath && text.StartsWith("frame=", StringComparison.Ordinal))
+                        cts.Cancel();
+                }, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                stopping.TrySetResult();
+                await release.Task; // hold the real operation just before its atomic writer's cleanup
+                throw;
+            }
+        });
+        var op = MediaOperations.Create(ffmpeg).OfType<IOperation>().Single(op => op.Id == "video.to-mov");
+        var running = new Runner(new RunLog(logs.Path)).RunAsync(op, [input], null, cts.Token);
+        try
+        {
+            await stopping.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            Assert.False(running.IsCompleted);
+            Assert.Contains(Directory.GetFiles(_dir.Path), path => path.EndsWith(".partial", StringComparison.Ordinal));
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        Assert.Empty((await running).Results);
+        Assert.Equal(["clip.mp4"], Directory.GetFiles(_dir.Path).Select(Path.GetFileName));
+    }
+
     [Fact]
     public async Task A_camcorder_s_interlaced_video_becomes_progressive()
     {

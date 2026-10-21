@@ -415,7 +415,96 @@ public sealed class RunnerTests : IDisposable
 
         await new Runner(new RunLog(_logs.Path)).RunAsync(new StubbornOp(), [file], progress: null, cts.Token);
 
-        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(2), $"took {timer.Elapsed}");
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(4), $"took {timer.Elapsed}"); // includes the bounded cleanup grace
+    }
+
+    [Fact]
+    public async Task Cancellation_waits_for_cleanup_with_the_input_pinned_and_no_partial_left()
+    {
+        var file = _dir.File("a.txt");
+        using var cts = new CancellationTokenSource();
+        var op = new StoppingOp();
+        var running = new Runner(new RunLog(_logs.Path)).RunAsync(op, [file], null, cts.Token);
+        try
+        {
+            await op.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await cts.CancelAsync();
+            await op.Stopping.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.ThrowsAny<IOException>(() => File.Move(file, file + ".moved"));
+            Assert.False(running.IsCompleted);
+        }
+        finally
+        {
+            op.Release.TrySetResult();
+            await op.Finished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        Assert.Empty((await running).Results);
+        Assert.Equal(["a.txt"], _dir.FileNames());
+        File.Move(file, file + ".moved"); // the pin is released after cleanup
+    }
+
+    [Fact]
+    public async Task Cancellation_reports_an_output_committed_while_the_operation_stops()
+    {
+        var file = _dir.File("a.txt");
+        using var cts = new CancellationTokenSource();
+        var op = new StoppingOp(commit: true);
+        var running = new Runner(new RunLog(_logs.Path)).RunAsync(op, [file], null, cts.Token);
+        await op.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await cts.CancelAsync();
+        await op.Stopping.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        op.Release.TrySetResult();
+
+        var result = Assert.Single((await running).Results);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(file + ".out", result.Output);
+        Assert.True(File.Exists(result.Output));
+        Assert.Equal("Written before stopping.", result.Note);
+        Assert.Equal(new SizeChange(1, 1), result.Sizes);
+        await op.Finished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    private sealed class StoppingOp(bool commit = false) : IOperation
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Stopping { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Finished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public string Id => "test.stop";
+        public string MenuPath => "Test/Stop";
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+
+        public async Task<string> RunAsync(string inputPath, CancellationToken ct)
+        {
+            try
+            {
+                return await OutputPath.WriteAtomicallyAsync(inputPath + ".out", async (temp, _) =>
+                {
+                    await File.WriteAllTextAsync(temp, "x", CancellationToken.None);
+                    Started.TrySetResult();
+                    try
+                    {
+                        await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        Stopping.TrySetResult();
+                        await Release.Task;
+                    }
+
+                    if (!commit)
+                        ct.ThrowIfCancellationRequested();
+                    OutputNote.Add("Written before stopping.");
+                    OutputNote.AddSizes(1, 1);
+                }, CancellationToken.None); // commit can race the cancellation, like a final atomic move
+            }
+            finally
+            {
+                Finished.TrySetResult();
+            }
+        }
     }
 
     [Fact]

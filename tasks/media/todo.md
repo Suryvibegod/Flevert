@@ -207,3 +207,14 @@ Trên `git diff main...feat/v0.3-media` (trừ 1084 file giấy phép và icon).
 | RR-9 | Nit | Không test ffprobe quá giờ → `ReadTooSlowMessage` | **Sửa**: test với RunTool giả ném `TimeoutException` |
 
 Kiểm thật trên Windows: `test-installer.ps1` kịch bản 6 đỏ hai lần liền ("flevert.exe was still running when the uninstaller finished"): `dev.slow-copy` chạy 8 file một lúc nên 20 file chỉ 3,4 s (đo tay), còn trình gỡ cài chậm hơn khi Defender đang quét ffmpeg vừa cài. **Sửa test**: `FLEVERT_SLOW_COPY_MS=7000` (ba lượt, ~21 s), đúng như chú thích muốn.
+
+### Soát bổ sung trước phát hành (2026-10-21)
+
+| id | việc | quyết định |
+|---|---|---|
+| CC-1 | Video chỉ một khung ở 30 fps bị bộ lọc `fps=12` bỏ hết, GIF rỗng, ffmpeg thoát -22 | **Sửa**: `eof_action=pass`; test tạo clip một khung thật, chuyển thành GIF, giải mã và đếm đúng một khung, kiểm kích thước |
+| CC-2 | `Runner` trả kết quả hủy từng file trước khi tiến trình và `.partial` được dọn, nhả pin đầu vào quá sớm; output vừa commit có thể bị bỏ khỏi kết quả | **Sửa**: giữ task và pin trong thời gian dọn tối đa 2 s như batch join; vẫn bỏ chờ thao tác không chịu dừng; giữ output/note/sizes nếu commit thắng cuộc đua hủy; quan sát cả lỗi đến sau khi bỏ chờ. Dùng chung phần chờ với join |
+
+TDD: bốn test mới đều đỏ trên code cũ (GIF lỗi -22, pin bị nhả, kết quả bỏ output, batch kết thúc trước cleanup của FFmpeg thật), rồi xanh sau sửa; test thao tác phớt lờ token vẫn dừng trong giới hạn (gồm 2 s cho cleanup). Reviewer gộp độc lập chỉ đọc diff bổ sung: không còn finding cần sửa.
+
+Kiểm cuối trên Windows: build không warning/error; `dotnet format Flevert.sln --verify-no-changes` mã 0; chạy tuần tự Core **531 đạt, 3 skip**, Image **245 đạt**, Pdf **1368 đạt, 1 skip**, Media **225 đạt** (tổng **2369 đạt, 4 skip**, không lỗi). Media chạy FFmpeg ghim `n8.1.3-9-g29e619e767-20260930`; archive khớp SHA256 trong `scripts/deps.json`. Lượt Core đầu có test cập nhật ứng dụng hết 30 s; chạy riêng đạt, rồi chạy lại toàn bộ Core đạt như trên.

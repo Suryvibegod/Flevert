@@ -54,7 +54,8 @@ public sealed class VideoToGif : IOperation
         var filters = new List<string>();
         if (video.IsInterlaced && video.Rotation == 0)
             filters.Add(VideoEncoding.Deinterlace);
-        filters.Add(string.Create(CultureInfo.InvariantCulture, $"fps={FramesPerSecond}"));
+        // Pass the final frame even when the whole clip is shorter than one GIF frame interval.
+        filters.Add(string.Create(CultureInfo.InvariantCulture, $"fps={FramesPerSecond}:eof_action=pass"));
         if (size != (video.DisplayWidth, video.DisplayHeight))
             filters.Add(string.Create(CultureInfo.InvariantCulture, $"scale={size.Width}:{size.Height}:flags=lanczos"));
         if (video.IsHdr)
