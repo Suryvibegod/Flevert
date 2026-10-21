@@ -117,13 +117,13 @@ public sealed class AudioToMp3Tests : IDisposable
     [Fact]
     public async Task Cancelling_stops_ffmpeg_at_once_and_leaves_no_partial_file()
     {
-        // Three hours of 8 kHz mono silence in FLAC: 2 MB, quick to write and to open even where a virus scanner reads
-        // new files (an 86 MB WAV made the probe time out on CI), yet 20 s or more to encode whole (2.5 s for 20 minutes
-        // of sound with ffmpeg 6.1, 8 s with 8.1). A run that ignored the cancel could neither return in time nor stop
-        // early. The time allowed is generous for a busy CI runner; how far ffmpeg got (it is cancelled at 1 %) does not
-        // depend on its speed.
+        // Three hours of 48 kHz stereo silence in FLAC: 1.8 MB, quick to write and to open even where a virus scanner
+        // reads new files (an 86 MB WAV made the probe time out on CI), yet 21 s to encode whole with ffmpeg 8.1. At
+        // 8 kHz mono it took 2.3 s, and a fast CI runner was through the whole file before ffmpeg's first progress report
+        // (every half second), so the cancel at 1 % came at 100 %. A run that ignored the cancel could neither return in
+        // time nor stop early. The time allowed is generous for a busy CI runner.
         var input = _dir.Combine("long.flac");
-        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "anullsrc=channel_layout=mono:sample_rate=8000:nb_samples=4096", "-t", "10800",
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000:nb_samples=4096", "-t", "10800",
             "-c:a", "flac", "-f", "flac", input);
         using var cancel = new CancellationTokenSource();
         var cancelledAt = new TaskCompletionSource<Stopwatch>(TaskCreationOptions.RunContinuationsAsynchronously);
