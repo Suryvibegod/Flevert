@@ -224,7 +224,8 @@ public sealed class PdfRotateTests : IDisposable
         Assert.Equal(Corner.BottomLeft, MarkCorner(pdf, 0));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Works_through_the_runner_on_a_path_just_under_260_characters()
     {
         // The runner gives an operation the plain form of a path under 260 characters (InputPin.Shorten), and the

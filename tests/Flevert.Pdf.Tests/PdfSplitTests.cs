@@ -110,7 +110,28 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(["report 001.pdf", "report 002.pdf"], Entries(second));
     }
 
-    [Fact]
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task A_long_vietnamese_name_is_shortened_so_every_name_fits_in_255_bytes_on_linux()
+    {
+        // A Linux name holds 255 bytes: 251 bytes of Vietnamese (two or three bytes a letter) + ".pdf" is the longest
+        // input, and both " 001.pdf" and " (split)" push a name past 255 bytes.
+        var stem = OutputPath.FitName(string.Concat(Enumerable.Repeat("Ảnh chụp ", 60)), ".pdf")[..^4];
+        var input = _dir.Combine(stem + ".pdf");
+        WriteWidths(input, 100, 200, 300);
+
+        var folder = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.EndsWith(" (split)", folder, StringComparison.Ordinal);
+        Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(Path.GetFileName(folder)), 253, 255);
+        var names = Entries(folder);
+        Assert.Equal([" 001.pdf", " 002.pdf", " 003.pdf"], names.Select(name => name[^8..]));
+        Assert.All(names, name => Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(name), 253, 255));
+        Assert.StartsWith(stem[..60], names[0], StringComparison.Ordinal);
+    }
+
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_long_name_is_shortened_so_every_page_name_fits()
     {
         // 251 + ".pdf" is the longest name a file can have; " 001.pdf" pushes a page name past 255, so it must be cut.
@@ -129,7 +150,8 @@ public sealed class PdfSplitTests : IDisposable
         Assert.StartsWith(stem[..200], names[0], StringComparison.Ordinal);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_name_cut_inside_a_character_outside_the_bmp_is_cut_before_it()
     {
         // The cut falls between the two halves of an emoji: the name keeps neither, never half of one.
@@ -178,7 +200,9 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(written, File.GetLastWriteTimeUtc(input));
     }
 
-    [Fact]
+    // Needs qpdf to take long enough to watch: on Linux it splits 1 500 pages in 0.1 s, before the first look (200 ms).
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Reports_progress_page_by_page_against_the_page_count()
     {
         var input = _dir.Combine("book.pdf");
@@ -293,7 +317,8 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(["Hóa đơn \U0001F9FE 001.pdf", "Hóa đơn \U0001F9FE 002.pdf"], Entries(output));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Works_through_the_runner_on_a_path_just_under_260_characters()
     {
         using var logs = new TempDir();
@@ -313,7 +338,9 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(2, Directory.GetFiles(TestPdf.Long(result.Output!)).Length);
     }
 
-    [Fact]
+    // Needs qpdf to take long enough to watch: on Linux it splits 1 500 pages in 0.1 s, before the first look (200 ms).
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Cancelling_while_qpdf_writes_the_pages_leaves_no_partial_folder()
     {
         var input = _dir.Combine("book.pdf");
@@ -333,7 +360,8 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(["book.pdf"], Entries(_dir.Path));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_page_held_open_in_qpdfs_folder_fails_the_split_rather_than_leaving_that_folder_in_the_output()
     {
         // What a scanner or indexer holding one of qpdf's pages looks like: the private folder cannot be deleted.

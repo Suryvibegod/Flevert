@@ -66,12 +66,13 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T3. Cỡ: M
 
 ### T7: Thư mục kết quả 1→N (PartialFolder)
-- [ ] `UnixPartialFolder`: `mkdir` 0700 tên ẩn, giữ fd `O_DIRECTORY|O_NOFOLLOW`, đổi tên `renameat2(RENAME_NOREPLACE)` (EINVAL/ENOSYS → `link`-free fallback: kiểm tên đích rồi `rename`, ghi rủi ro), dọn bằng `unlinkat` theo fd, không đi vào thư mục con
+- [x] `UnixPartialFolder`: `mkdir` 0700 tên ẩn, giữ fd `O_DIRECTORY|O_NOFOLLOW`, đổi tên `renameat2(RENAME_NOREPLACE)` (EINVAL/ENOSYS → `link`-free fallback: kiểm tên đích rồi `rename`, ghi rủi ro), dọn bằng `unlinkat` theo fd, không đi vào thư mục con
 - Kiểm: test có sẵn của `OutputPath` cho thư mục chạy trên Linux; test âm: tên đích bị chiếm giữa chừng, thư mục bị thay bằng symlink
+- Đã làm (2026-10-21): `IPartialFolder` cho `OutputPath` (Windows: `PartialFolder` giữ nguyên, Linux: `Unix/UnixPartialFolder.cs`). Linux: thư mục tạm `mkdir 0700`, liệt kê và xóa qua `/proc/self/fd/N` + `unlinkat` theo fd; chỉ đổi tên khi tên còn trỏ đúng (dev, ino) của thư mục đang giữ; xong thì quyền `0777 & ~umask` (umask đọc từ `/proc/self/status`, không gọi `umask(2)` vì đổi cho mọi luồng). `OutputPath`: kiểm tên qua `C:\`, mã "đang bận" 5/32 và bỏ dấu chấm/khoảng trắng cuối chỉ còn trên Windows (trên Linux 5/32 là `EIO`/`EPIPE`, và kiểm `C:\` luôn từ chối). **Độ dài tên:** `OutputPath.FitName` (công khai) đo 255 byte UTF-8 trên Linux, cắt giữa các ký tự; 4 bản chép cùng đoạn cắt tên (`DevSplit`, `PdfSplit`, `PdfSplitBySize`, `PdfToImages`) dùng nó. 12 test `UnixOutputPathTests` (đỏ 9/10 trước khi làm); đột biến bỏ `RENAME_NOREPLACE` lúc đầu **sống**: thêm test gọi thẳng `TryRenameTo` khi tên bị chiếm giữa chừng → bắt được; bỏ kiểm tên-còn-trỏ-đúng → đỏ. Windows-only (16 trong `OutputPathTests`: junction, thuộc tính ẩn/index/OneDrive, file neo, chờ chương trình khác đóng file; các test đếm 255 *ký tự* của Split/PdfToImages; khóa file). Bản Linux: `A_long_vietnamese_name_is_shortened…_255_bytes`. Hai test tiến độ/hủy của Split dựa vào qpdf chạy chậm: trên Linux qpdf tách 1 500 trang trong 0,10 s (đo), trước lần nhìn đầu (200 ms), mà trần là 2 000 trang → Windows-only, ghi lý do trong test.
 - Phụ thuộc: T3, T6. Cỡ: M
 
 ### Mốc: phần nền tảng
-- [ ] Core, Image, Pdf xanh trên Linux, trừ test cần `flevert` thật
+- [x] Core, Image, Pdf xanh trên Linux, trừ test cần `flevert` thật (2026-10-21: Core 344 xanh, 2 đỏ là menu registry của T12; Image 229 xanh, 2 đỏ cần `flevert`; Pdf: các đỏ còn lại cần `flevert`/worker (T9), `PasswordLeakTests` (T11), menu (T12))
 
 ## Giai đoạn 3: ứng dụng
 

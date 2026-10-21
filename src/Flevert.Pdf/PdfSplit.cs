@@ -30,7 +30,6 @@ namespace Flevert.Pdf;
 public sealed class PdfSplit : IOperation
 {
     private const string FolderSuffix = " (split)";
-    private const int MaxFileNameLength = 255;
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(200);
 
     private readonly Qpdf _qpdf;
@@ -215,14 +214,6 @@ public sealed class PdfSplit : IOperation
     private static string PageName(string stem, string number)
     {
         var suffix = $" {number}.pdf";
-        var room = MaxFileNameLength - suffix.Length;
-        if (stem.Length > room)
-        {
-            stem = stem[..room];
-            if (char.IsHighSurrogate(stem[^1]))
-                stem = stem[..^1];
-        }
-
-        return stem + suffix;
+        return OutputPath.FitName(stem, suffix);
     }
 }

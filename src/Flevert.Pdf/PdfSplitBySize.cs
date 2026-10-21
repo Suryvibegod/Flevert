@@ -35,7 +35,6 @@ namespace Flevert.Pdf;
 public sealed class PdfSplitBySize : IOperation
 {
     private const string FolderSuffix = " (parts)";
-    private const int MaxFileNameLength = 255;
 
     // The most the parts, or the single pages, may take: four times the PDF.
     private const int MaxGrowth = 4;
@@ -373,14 +372,6 @@ public sealed class PdfSplitBySize : IOperation
     internal static string PartName(string stem, int part)
     {
         var suffix = string.Create(CultureInfo.InvariantCulture, $" part {part}.pdf");
-        var room = MaxFileNameLength - suffix.Length;
-        if (stem.Length > room)
-        {
-            stem = stem[..room];
-            if (char.IsHighSurrogate(stem[^1]))
-                stem = stem[..^1];
-        }
-
-        return stem + suffix;
+        return OutputPath.FitName(stem, suffix);
     }
 }

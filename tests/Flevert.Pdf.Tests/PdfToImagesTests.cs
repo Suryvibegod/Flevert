@@ -303,7 +303,8 @@ public class PdfToImagesTests(ITestOutputHelper output)
         Assert.Equal(written, File.GetLastWriteTimeUtc(input));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_long_name_is_shortened_so_every_page_name_fits()
     {
         using var dir = new TempDir();
@@ -324,7 +325,8 @@ public class PdfToImagesTests(ITestOutputHelper output)
     }
 
     // Stems of 248 to 251 characters make "<stem> (pages)" longer than 255: the stem is shortened, not the suffix.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_long_name_keeps_the_pages_suffix_on_the_folder()
     {
         using var dir = new TempDir();
