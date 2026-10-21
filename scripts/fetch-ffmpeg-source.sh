@@ -130,13 +130,17 @@ for STAGE in $STAGES; do
     mkdir -p "$WORK/licence/$STAGE"
     # Names read from a file, as they are: a member named like an option (--to-command=…) stays a name.
     tar -xJf "$archive" -C "$WORK/licence/$STAGE" --verbatim-files-from -T <(printf '%s\n' "${licences[@]}")
+    root="$(realpath -- "$WORK/licence/$STAGE")"
     for licence in "${licences[@]}"; do
-        if [[ -L "$WORK/licence/$STAGE/$licence" || ! -f "$WORK/licence/$STAGE/$licence" ]]; then
+        # Read through links, as upstream keeps some (cloudflare-quiche's quiche/COPYING is ../COPYING), but only to a
+        # plain file extracted from this same archive: a link anywhere in the path to outside it is refused.
+        file="$(realpath -e -- "$root/$licence" 2>/dev/null || true)"
+        if [[ "$file" != "$root"/* || ! -f "$file" ]]; then
             echo "$STAGE: $licence is not a plain file in the archive." >&2
             exit 1
         fi
         # Flattened: lame/COPYING of stage 50-libmp3lame becomes 50-libmp3lame-lame-COPYING.
-        cp "$WORK/licence/$STAGE/$licence" "$OUT/licences/$STAGE-$(sed 's|^\./||; s|/|-|g' <<< "$licence")"
+        cp "$file" "$OUT/licences/$STAGE-$(sed 's|^\./||; s|/|-|g' <<< "$licence")"
     done
 done
 
