@@ -633,7 +633,11 @@ public sealed class BatchLeader : IAsyncDisposable
         Action onClosed, JoinGate gate, Action<bool> beforeClose, Action? onCancelled = null) =>
         new(createServer, server, files, idle, onClosed, gate: gate, beforeClose: beforeClose, onCancelled: onCancelled);
 
-    internal static BatchLeader Alone(IReadOnlyList<string> files) => new(null, null, files, TimeSpan.Zero, null);
+    /// <summary>
+    /// A batch of exactly <paramref name="files"/>, with no pipe: on Linux, where Nautilus hands every selected file to
+    /// one flevert, and wherever coordination cannot be set up.
+    /// </summary>
+    public static BatchLeader Alone(IReadOnlyList<string> files) => new(null, null, files, TimeSpan.Zero, null);
 
     /// <summary>
     /// Yields each distinct file as it arrives. Completes once the consumer is idle, nothing is queued and no path arrived
