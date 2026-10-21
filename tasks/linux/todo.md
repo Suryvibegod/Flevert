@@ -9,10 +9,11 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 ## Giai đoạn 1: nền
 
 ### T1: Solution build được trên Linux
-- [ ] `Directory.Build.props` chọn TFM theo hệ điều hành (đã làm); `Flevert.Cli`, `MenuProbe` cố định `net10.0-windows` + `EnableWindowsTargeting`
-- [ ] Kiểu chỉ dành cho Windows gắn `[SupportedOSPlatform("windows")]`; chỗ gọi chung rẽ nhánh `OperatingSystem.IsWindows()` (tạm thời ném `PlatformNotSupportedException` ở nhánh Linux chưa làm); không thêm `NoWarn`
-- [ ] Project rỗng `src/Flevert.Linux` (exe `flevert`, lệnh `list-ops`) trong sln
-- Kiểm: `dotnet build Flevert.sln` 0 cảnh báo, 0 lỗi trên Linux; `git diff` trên code Windows chỉ có attribute và điểm rẽ nhánh
+- [x] `Directory.Build.props` chọn TFM theo hệ điều hành (đã làm); `Flevert.Cli`, `MenuProbe` cố định `net10.0-windows` + `EnableWindowsTargeting`
+- [x] Kiểu chỉ dành cho Windows gắn `[SupportedOSPlatform("windows")]`; chỗ gọi chung rẽ nhánh `OperatingSystem.IsWindows()` (tạm thời ném `PlatformNotSupportedException` ở nhánh Linux chưa làm); không thêm `NoWarn`
+- [x] Project rỗng `src/Flevert.Linux` (exe `flevert`, lệnh `list-ops`) trong sln
+- Kiểm: bốn project `src` và `Flevert.Cli` build 0 cảnh báo, 0 lỗi trên Linux (cả solution, gồm test, là việc của T3); `git diff` trên code Windows chỉ có attribute và điểm rẽ nhánh
+- Đã làm (2026-10-21): CA1416 báo 168 chỗ ở 5 file Core, `ConfigurationFile` (Image), `PrivateFolder` (Pdf). Gắn `[SupportedOSPlatform("windows")]` cho `PipePeer`, `ProcessFacts`, `ProcessCensus`, `InstallLocation`, `WindowsRegistry`, `Batch`, `ConfigurationFile`, ba hàm ACL của `SecureDirectory`, `ProcessStamp.Self/Of/IsRunning`, phần pipe của `BatchLeader` (`Start`, `Listen*`, `ServeAsync`, `TryReplaceAsync`). Nhánh Linux chưa làm ném `PlatformNotSupportedException`: `SecureDirectory.TrySecure`, `MagickSetup` (T6), `PrivateFolder.Create` (T6). Bước kiểm deps của `Flevert.Pdf.csproj` tạm chỉ chạy trên Windows (T2 thêm bản Linux). Các lớp chỉ gọi P/Invoke Windows (`InputPin`, `NaturalOrder`, `ExternalTool`, `PartialFolder`, `FileIdentity`, `PdfRenderBudget`) không bị analyzer bắt: đổi ở T4–T8. Bản Windows biên dịch trên Linux: `dotnet build src/Flevert.Cli -p:TargetFramework=net10.0-windows -p:EnableWindowsTargeting=true` 0 cảnh báo. `flevert list-ops` in 42 thao tác (cần `DOTNET_ROOT=$HOME/.dotnet` với SDK cài cho user).
 - Phụ thuộc: không. Cỡ: M
 
 ### T2: Deps cho Linux
