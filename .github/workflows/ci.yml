@@ -61,6 +61,8 @@ jobs:
         run: dotnet test tests/Flevert.Pdf.Tests -c Release --no-build
       - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: dotnet test tests/Flevert.Media.Tests -c Release --no-build
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/Flevert.Ocr.Tests -c Release --no-build
       - name: No known-vulnerable packages
         shell: pwsh
         run: |
