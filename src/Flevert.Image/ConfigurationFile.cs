@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
@@ -14,6 +15,7 @@ namespace Flevert.Image;
 /// nothing but this user, SYSTEM and Administrators could have changed it; anything else is replaced atomically, waiting
 /// for readers to let go.
 /// </summary>
+[SupportedOSPlatform("windows")]
 internal static partial class ConfigurationFile
 {
     private const uint GenericRead = 0x80000000;

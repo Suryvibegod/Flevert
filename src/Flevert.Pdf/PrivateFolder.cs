@@ -21,6 +21,9 @@ internal static partial class PrivateFolder
     /// <exception cref="IOException">Something already exists at <paramref name="path"/>, or the folder cannot be created.</exception>
     public static unsafe void Create(string path)
     {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Private folders are not implemented on this OS yet.");
+
         using var me = WindowsIdentity.GetCurrent();
         var security = new DirectorySecurity();
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);

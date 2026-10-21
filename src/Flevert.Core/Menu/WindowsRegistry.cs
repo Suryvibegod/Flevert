@@ -1,7 +1,9 @@
+using System.Runtime.Versioning;
 using Microsoft.Win32;
 
 namespace Flevert.Core.Menu;
 
+[SupportedOSPlatform("windows")]
 public sealed class WindowsRegistry(string root = @"Software\Classes") : IRegistry
 {
     public void SetValue(string key, string name, string value)

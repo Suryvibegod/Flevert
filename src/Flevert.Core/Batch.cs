@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Threading.Channels;
@@ -12,6 +13,7 @@ namespace Flevert.Core;
 /// Explorer starts one flevert.exe per selected file. The first process to create the operation's pipe leads the batch and
 /// keeps accepting paths while it processes them; the others hand their paths over and exit. See docs/adr/0002.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public static class Batch
 {
     internal const int MaxFilesPerBatch = 1000;
@@ -513,22 +515,28 @@ public sealed class BatchLeader : IAsyncDisposable
         Func<NamedPipeServerStream>? createServer, NamedPipeServerStream? server, IReadOnlyList<string> files, TimeSpan idle,
         Action? onClosed, Func<uint, bool>? isTrusted = null, JoinGate? gate = null, Action<bool>? beforeClose = null, Action? onCancelled = null)
     {
-        _isTrusted = isTrusted ?? PipePeer.IsTrusted;
+        // Only a pipe leader (Windows) asks; without a pipe nobody connects.
+        _isTrusted = isTrusted ?? (OperatingSystem.IsWindows() ? PipePeer.IsTrusted : _ => false);
         _gate = gate;
         _onCancelled = onCancelled;
         foreach (var file in files)
             TryEnqueue(file);
 
-        if (server is null || createServer is null)
+        if (server is null || createServer is null || !OperatingSystem.IsWindows())
         {
             _queue.Writer.Complete();
             _listener = Task.CompletedTask;
         }
         else
         {
-            _listener = Task.Run(() => ListenAsync(createServer, server, idle, onClosed, beforeClose));
+            _listener = Listen(createServer, server, idle, onClosed, beforeClose);
         }
     }
+
+    [SupportedOSPlatform("windows")]
+    private Task Listen(
+        Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed, Action<bool>? beforeClose) =>
+        Task.Run(() => ListenAsync(createServer, server, idle, onClosed, beforeClose));
 
     /// <summary>Distinct files queued but not yet handed to the consumer.</summary>
     public int Pending => _queue.Reader.Count;
@@ -598,14 +606,17 @@ public sealed class BatchLeader : IAsyncDisposable
     public void ReportRunning(int count) => Volatile.Write(ref _running, count);
 
     /// <param name="createServer">Creates a replacement pipe instance with the same name, after a client broke the current one.</param>
+    [SupportedOSPlatform("windows")]
     internal static BatchLeader Start(
         Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle, Action onClosed) =>
         new(createServer, server, files, idle, onClosed);
 
+    [SupportedOSPlatform("windows")]
     internal static BatchLeader Start(NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle, Action onClosed) =>
         new(() => throw new IOException("No replacement pipe available."), server, files, idle, onClosed);
 
     /// <param name="isTrusted">Tests only: replaces the peer check, so a test can play an untrusted client.</param>
+    [SupportedOSPlatform("windows")]
     internal static BatchLeader Start(
         Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle,
         Action onClosed, Func<uint, bool> isTrusted) =>
@@ -616,6 +627,7 @@ public sealed class BatchLeader : IAsyncDisposable
     /// was lost, while no one else can have taken the name after the close; told whether the consumer was cancelled by
     /// then, so the record it writes says so from the start.</param>
     /// <param name="onCancelled">Runs once the batch has closed, when the user cancelled it (<see cref="MarkCancelledAsync"/>).</param>
+    [SupportedOSPlatform("windows")]
     internal static BatchLeader Start(
         Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, IReadOnlyList<string> files, TimeSpan idle,
         Action onClosed, JoinGate gate, Action<bool> beforeClose, Action? onCancelled = null) =>
@@ -693,6 +705,7 @@ public sealed class BatchLeader : IAsyncDisposable
     // them. A parallel consumer reports a taken file as running before it asks for the next, so it stays visible after.
     private bool IsIdle => _queue.Reader.Count == 0 && !Volatile.Read(ref _busy) && Volatile.Read(ref _running) == 0;
 
+    [SupportedOSPlatform("windows")]
     private async Task ListenAsync(
         Func<NamedPipeServerStream> createServer, NamedPipeServerStream server, TimeSpan idle, Action? onClosed, Action<bool>? beforeClose)
     {
@@ -812,6 +825,7 @@ public sealed class BatchLeader : IAsyncDisposable
     }
 
     /// <returns>A new instance, or <c>null</c> when the name was taken while it was free (another process or account).</returns>
+    [SupportedOSPlatform("windows")]
     private async Task<NamedPipeServerStream?> TryReplaceAsync(
         NamedPipeServerStream server, Func<NamedPipeServerStream> createServer, CancellationToken ct)
     {
@@ -836,6 +850,7 @@ public sealed class BatchLeader : IAsyncDisposable
     }
 
     /// <returns>Whether a trusted sender delivered a message (accepted or refused as full).</returns>
+    [SupportedOSPlatform("windows")]
     private async Task<bool> ServeAsync(NamedPipeServerStream server, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);

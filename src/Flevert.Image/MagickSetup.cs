@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.Versioning;
 using System.Text;
 using Flevert.Core;
 using ImageMagick;
@@ -51,6 +52,7 @@ public static class MagickSetup
     /// it, and Windows refuses to replace a file ImageMagick has open (T17b). Anything else is replaced atomically, so
     /// processes initialising at the same moment never see a half-written policy.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     internal static void WriteConfiguration(string directory, TimeSpan? patience = null)
     {
         var elapsed = Stopwatch.StartNew();
@@ -79,6 +81,9 @@ public static class MagickSetup
             // directory, which is exactly what must not decide the configuration. Checked before anything is created.
             if (!Path.IsPathFullyQualified(ConfigurationDirectory))
                 throw new InvalidOperationException("Cannot locate the user's local application data folder.");
+
+            if (!OperatingSystem.IsWindows())
+                throw new PlatformNotSupportedException("Securing ImageMagick's configuration folder is not implemented on this OS yet.");
 
             // ImageMagick reads policy.xml from disk; a folder other accounts can write would let them relax it.
             Directory.CreateDirectory(ConfigurationDirectory);

@@ -33,11 +33,11 @@
   </ItemGroup>
 
   <!-- Fail early and say how to fix it, rather than build something that fails at run time. -->
-  <Target Name="RequirePdfium" BeforeTargets="BeforeBuild" Condition="!Exists('$(PdfiumDll)')">
+  <Target Name="RequirePdfium" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT' And !Exists('$(PdfiumDll)')">
     <Error Text="deps\pdfium\bin\pdfium.dll is missing. Run: powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1" />
   </Target>
 
-  <Target Name="RequireQpdf" BeforeTargets="BeforeBuild" Condition="!Exists('$(QpdfBin)qpdf.exe')">
+  <Target Name="RequireQpdf" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT' And !Exists('$(QpdfBin)qpdf.exe')">
     <Error Text="deps\qpdf\bin\qpdf.exe is missing. Run: powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1" />
   </Target>
 

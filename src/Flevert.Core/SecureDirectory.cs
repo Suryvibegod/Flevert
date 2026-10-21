@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 
@@ -17,6 +18,7 @@ public static partial class SecureDirectory
     /// Replaces inherited permissions with full control for this user, SYSTEM and Administrators only, so other accounts
     /// that can read the profile (for example sandbox groups some tools add) cannot read what is stored here.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public static void RestrictToOwnerAndAdmins(string directory)
     {
         using var me = WindowsIdentity.GetCurrent();
@@ -42,6 +44,8 @@ public static partial class SecureDirectory
     /// </summary>
     public static void TrySecure(string directory)
     {
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Securing a folder is not implemented on this OS yet.");
         try
         {
             Directory.CreateDirectory(directory);
@@ -57,6 +61,7 @@ public static partial class SecureDirectory
     /// Read-up is allowed by default, so a sandboxed low-integrity process of the same user could otherwise read the batch
     /// keys. Labelling the folder blocks that; it needs no extra privilege for a folder the user owns.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public static void TryApplyNoReadUpLabel(string directory)
     {
         try
@@ -69,6 +74,7 @@ public static partial class SecureDirectory
         }
     }
 
+    [SupportedOSPlatform("windows")]
     public static void ApplyNoReadUpLabel(string directory)
     {
         if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(NoReadUpLabel, SddlRevision1, out var descriptor, 0))
