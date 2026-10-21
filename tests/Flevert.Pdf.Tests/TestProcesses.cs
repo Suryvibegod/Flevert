@@ -76,6 +76,8 @@ internal static partial class TestProcesses
     /// <c>ProcessFacts.CommandLine</c> in the product.</returns>
     public static string? CommandLine(Process process)
     {
+        if (OperatingSystem.IsLinux())
+            return ProcFs.CommandLine(process.Id);
         var handle = OpenProcess(ProcessQueryLimitedInformation, false, (uint)process.Id);
         if (handle == 0)
             throw new Win32Exception();
@@ -109,6 +111,8 @@ internal static partial class TestProcesses
     /// keeps an exited process listed.</summary>
     private static bool IsRunning(Process process)
     {
+        if (OperatingSystem.IsLinux())
+            return ProcFs.IsRunning(process.Id);
         var handle = OpenProcess(ProcessQueryLimitedInformation | Synchronize, false, (uint)process.Id);
         if (handle == 0)
             return false;
@@ -124,6 +128,8 @@ internal static partial class TestProcesses
 
     private static int? ParentId(int processId)
     {
+        if (OperatingSystem.IsLinux())
+            return ProcFs.ParentId(processId);
         var handle = OpenProcess(ProcessQueryLimitedInformation, false, (uint)processId);
         if (handle == 0)
             return null;

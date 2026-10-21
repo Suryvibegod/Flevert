@@ -280,7 +280,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         using var dir = new TempDir();
         var input = CopyFixture(dir, "three-colours.pdf", "colours.pdf");
         Directory.CreateDirectory(dir.Combine("colours (pages)"));
-        File.WriteAllText(dir.Combine(@"colours (pages)\mine.txt"), "keep me");
+        File.WriteAllText(dir.Combine(Path.Combine("colours (pages)", "mine.txt")), "keep me");
 
         var folder = await Jpg().RunAsync(input, CancellationToken.None);
 

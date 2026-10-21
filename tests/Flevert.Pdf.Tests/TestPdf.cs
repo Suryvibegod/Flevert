@@ -323,19 +323,7 @@ internal static class TestPdf
     }
 
     /// <summary>The flevert.exe the solution built, which the tests run as the PDF worker and as the app.</summary>
-    public static string FlevertExe
-    {
-        get
-        {
-            // tests/<project>/bin/<Configuration>/<tfm>/ → repository root is five levels up.
-            var output = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
-            var configuration = output.Parent!.Name;
-            var root = output.Parent!.Parent!.Parent!.Parent!.Parent!.FullName;
-            var exe = Path.Combine(root, "src", "Flevert.Cli", "bin", configuration, output.Name, "flevert.exe");
-            Assert.True(File.Exists(exe), $"Build the solution first; missing {exe}");
-            return exe;
-        }
-    }
+    public static string FlevertExe => BuiltFlevert.Path;
 
     /// <summary>The PDF worker of the built flevert.exe, with the product's limits.</summary>
     public static PdfWorker Worker => new(FlevertExe);

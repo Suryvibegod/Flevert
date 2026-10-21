@@ -50,7 +50,7 @@ public sealed class PdfWorkerEnvironmentTests : IDisposable
         }
 
         Assert.Contains("OTHER_FLEVERT_TEST_MARKER", names);
-        Assert.Contains("SystemRoot", names); // what .NET needs to start
+        Assert.Contains(OperatingSystem.IsWindows() ? "SystemRoot" : "HOME", names); // what .NET needs to start
         Assert.DoesNotContain("MAGICK_FLEVERT_TEST_MARKER", names);
         Assert.DoesNotContain("FLEVERT_TEST_MARKER", names);
     }

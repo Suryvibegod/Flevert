@@ -22,7 +22,7 @@ public sealed class FlevertExeTests : IDisposable
     [Fact]
     public async Task Flevert_exe_rotates_a_pdf_with_the_qpdf_beside_it()
     {
-        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(FlevertExe)!, "qpdf.exe")), "qpdf.exe is not next to flevert.exe");
+        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(FlevertExe)!, Qpdf.RelativePath)), "qpdf is not beside flevert");
         var input = _dir.Combine("Hóa đơn.pdf");
         File.Copy(Fixture("rotations.pdf"), input);
 
@@ -50,7 +50,7 @@ public sealed class FlevertExeTests : IDisposable
         // longer than the wait below, so qpdf ending in time means it was killed.
         var input = _dir.Combine("big.pdf");
         MaliciousPdf.WriteManyObjects(input, 1_000_000);
-        var qpdfPath = Path.Combine(Path.GetDirectoryName(FlevertExe)!, "qpdf.exe");
+        var qpdfPath = Path.Combine(Path.GetDirectoryName(FlevertExe)!, Qpdf.RelativePath);
 
         using var flevert = StartRun("pdf.rotate-right", input);
         Process? qpdf = null;
@@ -79,7 +79,43 @@ public sealed class FlevertExeTests : IDisposable
         }
     }
 
-    [Fact]
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task One_flevert_given_every_image_combines_them_into_one_pdf_in_the_order_nautilus_shows()
+    {
+        // Nautilus starts one flevert with every selected file, in whatever order the selection had; "photo 9" sorts
+        // before "photo 10" as Nautilus shows them. Each image has its own width, so a page out of place shows.
+        var images = new[]
+        {
+            TestImages.Picture(_dir.Combine("photo 1.jpg"), 96, 64, ImageMagick.MagickFormat.Jpeg),
+            TestImages.Picture(_dir.Combine("photo 2.png"), 104, 64, ImageMagick.MagickFormat.Png),
+            CopyFixture("portrait-gps.heic", "photo 3.heic"), // 240 x 320 upright
+            TestImages.Picture(_dir.Combine("photo 9.webp"), 112, 64, ImageMagick.MagickFormat.WebP),
+            TestImages.Picture(_dir.Combine("photo 10.gif"), 120, 64, ImageMagick.MagickFormat.Gif),
+            TestImages.Picture(_dir.Combine("photo 11.tiff"), 128, 64, ImageMagick.MagickFormat.Tiff),
+        };
+        int[] selectionOrder = [4, 1, 5, 0, 3, 2];
+        var start = new ProcessStartInfo(FlevertExe) { UseShellExecute = false };
+        start.ArgumentList.Add("run");
+        start.ArgumentList.Add("pdf.from-images");
+        foreach (var i in selectionOrder)
+            start.ArgumentList.Add(images[i]);
+        start.Environment["FLEVERT_LOG_DIR"] = _logs.Path;
+        start.Environment["FLEVERT_HEADLESS"] = "1";
+
+        using var flevert = Process.Start(start)!;
+        await flevert.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(90));
+
+        Assert.True(flevert.ExitCode == 0, string.Join('\n', Directory.GetFiles(_logs.Path).Select(File.ReadAllText)));
+        Assert.Equal(
+            images.Select(Path.GetFileName).Append("photo 1 (+5).pdf").Order(StringComparer.Ordinal),
+            Directory.GetFileSystemEntries(_dir.Path).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        using var pdf = PdfDocument.Open(_dir.Combine("photo 1 (+5).pdf"));
+        Assert.Equal([96, 104, 240, 112, 120, 128], Enumerable.Range(0, pdf.PageCount).Select(i => pdf.Render(i, 150).Width));
+    }
+
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Six_flevert_exe_processes_one_per_image_combine_them_into_one_pdf_in_natural_order()
     {
         // Explorer starts one flevert.exe per selected file, in no reliable order (ADR-0002); "photo 9" sorts before
@@ -117,7 +153,8 @@ public sealed class FlevertExeTests : IDisposable
         processes.ForEach(p => p.Dispose());
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Three_flevert_exe_processes_one_per_pdf_merge_them_into_one_pdf_in_natural_order()
     {
         // Explorer starts one flevert.exe per selected file, in no reliable order; "file 2" sorts before "file 10".
@@ -404,17 +441,5 @@ public sealed class FlevertExeTests : IDisposable
         return null;
     }
 
-    private static string FlevertExe
-    {
-        get
-        {
-            // tests/<project>/bin/<Configuration>/<tfm>/ → repository root is five levels up.
-            var output = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
-            var configuration = output.Parent!.Name;
-            var root = output.Parent!.Parent!.Parent!.Parent!.Parent!.FullName;
-            var exe = Path.Combine(root, "src", "Flevert.Cli", "bin", configuration, output.Name, "flevert.exe");
-            Assert.True(File.Exists(exe), $"Build the solution first; missing {exe}");
-            return exe;
-        }
-    }
+    private static string FlevertExe => BuiltFlevert.Path;
 }

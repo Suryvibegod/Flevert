@@ -16,6 +16,7 @@
   <ItemGroup>
     <!-- [WindowsFact] and [WindowsTheory]: tests of Windows behaviour, skipped on Linux. -->
     <Compile Include="..\Shared\PlatformFacts.cs" Link="PlatformFacts.cs" />
+    <Compile Include="..\Shared\BuiltFlevert.cs" Link="BuiltFlevert.cs" />
     <Using Include="Flevert.Tests" />
     <Using Include="System.Runtime.Versioning" />
     <Using Include="Xunit" />

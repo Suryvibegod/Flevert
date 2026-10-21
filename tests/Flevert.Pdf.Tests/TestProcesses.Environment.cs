@@ -20,6 +20,13 @@ internal static partial class TestProcesses
     /// </summary>
     public static HashSet<string> EnvironmentNames(Process process)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            return (ProcFs.Environment(process.Id) ?? "").Split('\0', StringSplitOptions.RemoveEmptyEntries)
+                .Select(entry => entry[..(entry.IndexOf('=') is var at and > 0 ? at : entry.Length)])
+                .ToHashSet(StringComparer.Ordinal);
+        }
+
         Assert.True(Environment.Is64BitProcess, "the offsets below are those of a 64-bit process");
         var handle = OpenProcess(ProcessQueryInformation | ProcessVmRead, false, (uint)process.Id);
         if (handle == 0)
