@@ -21,8 +21,14 @@ internal static partial class PrivateFolder
     /// <exception cref="IOException">Something already exists at <paramref name="path"/>, or the folder cannot be created.</exception>
     public static unsafe void Create(string path)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            CreateOnLinux(path);
+            return;
+        }
+
         if (!OperatingSystem.IsWindows())
-            throw new PlatformNotSupportedException("Private folders are not implemented on this OS yet.");
+            throw new PlatformNotSupportedException();
 
         using var me = WindowsIdentity.GetCurrent();
         var security = new DirectorySecurity();
@@ -52,6 +58,21 @@ internal static partial class PrivateFolder
             ? new IOException($"Something already exists at {path}.")
             : new IOException($"Could not create the folder {path}.", new Win32Exception(error));
     }
+
+    // mkdir with mode 0700 from the start; like CreateDirectoryW it fails on anything already there, a link included,
+    // which it never follows.
+    [System.Runtime.Versioning.SupportedOSPlatform("linux")]
+    private static void CreateOnLinux(string path)
+    {
+        if (Flevert.Core.Libc.MakeDirectory(path, OwnerOnly) == 0)
+            return;
+        var error = Marshal.GetLastPInvokeError();
+        throw error == Flevert.Core.Libc.EExist
+            ? new IOException($"Something already exists at {path}.")
+            : new IOException($"Could not create the folder {path}: {Flevert.Core.Libc.ErrorMessage(error)}");
+    }
+
+    private const uint OwnerOnly = 0x1C0; // 0700
 
     [StructLayout(LayoutKind.Sequential)]
     private unsafe struct SecurityAttributes

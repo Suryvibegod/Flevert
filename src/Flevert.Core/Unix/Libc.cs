@@ -113,6 +113,9 @@ internal static partial class Libc
 
     public static uint EffectiveUserId => geteuid();
 
+    /// <summary>mkdir: 0, or -1 with the error in <see cref="Marshal.GetLastPInvokeError"/>. Never follows a link.</summary>
+    public static int MakeDirectory(string path, uint mode) => mkdir(path, mode);
+
     /// <summary>
     /// A path that reaches exactly what the handle is open on (the kernel's link for it), for the calls .NET only offers
     /// by path; an <c>O_PATH</c> handle cannot be changed through directly.
@@ -135,6 +138,9 @@ internal static partial class Libc
 
     [LibraryImport("libc")]
     private static partial uint geteuid();
+
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int mkdir(string path, uint mode);
 
     [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     private static partial nint readlink(string path, byte[] buffer, nint size);

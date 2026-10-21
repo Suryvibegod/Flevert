@@ -271,6 +271,29 @@ public sealed class PdfStripMetadataTests : IDisposable
             rules.Select(rule => rule.IdentityReference.Value).Order(StringComparer.Ordinal));
     }
 
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void The_private_folder_is_only_for_this_user_on_linux()
+    {
+        var folder = Path.Combine(_scratch.Path, "private");
+
+        PrivateFolder.Create(folder);
+
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(folder));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_symbolic_link_at_the_private_folders_name_fails_and_its_target_is_not_used()
+    {
+        // qpdf would write through the link into a folder someone else chose.
+        var target = Directory.CreateDirectory(Path.Combine(_scratch.Path, "theirs")).FullName;
+        var folder = Path.Combine(_scratch.Path, "private");
+        Directory.CreateSymbolicLink(folder, target);
+
+        Assert.Throws<IOException>(() => PrivateFolder.Create(folder));
+    }
+
     [Fact]
     public void Creating_a_private_folder_where_one_exists_fails()
     {
