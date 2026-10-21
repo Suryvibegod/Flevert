@@ -97,7 +97,8 @@ public sealed class PasswordLeakTests : IDisposable
         // Anything written to the temporary folder meanwhile, by Flevert, qpdf or OpenSSL.
         var temporary = new DirectoryInfo(Path.GetTempPath())
             .EnumerateFiles("*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 })
-            .Where(file => file.LastWriteTimeUtc >= started && file.Length < 64L << 20 && !file.FullName.StartsWith(_dir.Path, StringComparison.OrdinalIgnoreCase));
+            // An empty entry holds nothing; on Linux it may be a FIFO or a socket, which a read would wait on forever.
+            .Where(file => file.LastWriteTimeUtc >= started && file.Length is > 0 and < 64L << 20 && !file.FullName.StartsWith(_dir.Path, StringComparison.OrdinalIgnoreCase));
         Assert.All(temporary, file => Assert.False(Holds(file.FullName, tag), file.FullName));
     }
 
