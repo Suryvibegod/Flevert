@@ -55,12 +55,12 @@
     },
     {
       "title": "qpdf 12.4.2",
-      "files": ["qpdf", "libqpdf.so.30"],
+      "files": ["qpdf/bin/qpdf", "qpdf/lib/libqpdf.so.30"],
       "licences": ["deps/qpdf/licenses/qpdf-LICENSE.txt", "deps/qpdf/licenses/qpdf-NOTICE.md"]
     },
     {
       "title": "libjpeg-turbo 2.1.2, shipped with qpdf 12.4.2",
-      "files": ["libjpeg.so.8"],
+      "files": ["qpdf/lib/libjpeg.so.8"],
       "note": "This software is based in part on the work of the Independent JPEG Group.",
       "licences": ["deps/qpdf/licenses/libjpeg-turbo-LICENSE.md", "deps/qpdf/licenses/libjpeg-turbo-README.ijg"]
     }

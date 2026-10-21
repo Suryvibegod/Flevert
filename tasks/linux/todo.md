@@ -109,9 +109,10 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 ## Giai đoạn 4: đóng gói và tài liệu
 
 ### T13: Tarball và install.sh
-- [ ] `scripts/build-linux.sh`: `dotnet publish src/Flevert.Linux -c Release -r linux-x64 --self-contained -p:PublishReadyToRun=true`, kèm deps, notices, extension; tạo `artifacts/Flevert-<version>-linux-x64.tar.gz`
-- [ ] `install.sh`: kiểm `python3-nautilus`, `zenity`, `gdbus`; chép vào `~/.local/share/flevert/app` (0755, chỉ user ghi được); `install-menu`; `--uninstall` gỡ sạch
-- Kiểm: cài, bấm, gỡ trên máy này; không còn file sót
+- [x] `scripts/build-linux.sh`: `dotnet publish src/Flevert.Linux -c Release -r linux-x64 --self-contained -p:PublishReadyToRun=true`, kèm deps, notices, extension; tạo `artifacts/Flevert-<version>-linux-x64.tar.gz`
+- [x] `install.sh`: kiểm `python3-nautilus`, `zenity`, `gdbus`; chép vào `~/.local/share/flevert/app` (0755, chỉ user ghi được); `install-menu`; `--uninstall` gỡ sạch
+- Kiểm: cài, bấm, gỡ trên máy này; không còn file sót (cài thật: bước kiểm cuối)
+- Đã làm (2026-10-21): app ở `~/.local/share/Flevert/app` (cùng thư mục với dữ liệu của Flevert, 0700; thay cho `~/.local/share/flevert/app` của plan để không có hai thư mục `flevert`/`Flevert`). `install.sh` kiểm `setsid setpriv prlimit gdbus zenity fc-match`, chép ra thư mục tạm rồi đổi tên (cài đè không để lại bản cũ), `go-w`, gọi `install-menu` (in lệnh cài nautilus-python khi thiếu); `--uninstall` gỡ menu và xóa cả thư mục. `scripts/write-notices-linux.py`: bản Python của `write-notices.ps1`, cùng luật (gói NuGet không có giấy phép, file không ai che, mục notice không có file → lỗi); lần chạy thật đầu tiên bắt được `deps-linux.json` ghi tên `qpdf` thay vì `qpdf/bin/qpdf` (đã sửa). `build-linux.sh`: gói 59 MB (thư mục 134 MB), 92 mục notice, không file `.pdb`, tar có thứ tự và owner 0. Chạy thử bản publish không cần .NET: HEIC → JPG, xoay PDF đạt; khởi động ~60 ms (tiêu chí ≤ 300 ms). Test: 4 `install.sh` (flevert giả, HOME tạm), 6 notices.
 - Phụ thuộc: T12. Cỡ: M
 
 ### T14: Tài liệu
