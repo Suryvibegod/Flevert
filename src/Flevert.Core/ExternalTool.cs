@@ -221,6 +221,9 @@ public static partial class ExternalTool
 
             using var timer = new CancellationTokenSource(timeout);
             using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timer.Token, callbackFailed.Token);
+            // Kill on the thread that cancels, not in the continuation below: on a busy thread pool that continuation can wait
+            // seconds for a thread while the tool keeps running (a cancel took 4-12 s on CI runners).
+            using var killOnStop = stop.Token.Register(() => Kill(process, job));
             try
             {
                 await process.WaitForExitAsync(stop.Token).ConfigureAwait(false);
