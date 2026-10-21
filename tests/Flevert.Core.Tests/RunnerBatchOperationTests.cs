@@ -68,12 +68,12 @@ public sealed class RunnerBatchOperationTests : IDisposable
     {
         Directory.CreateDirectory(_dir.Combine("a"));
         Directory.CreateDirectory(_dir.Combine("b"));
-        var later = _dir.File(@"a\x 10.txt");
-        var first = _dir.File(@"b\x 2.txt");
+        var later = _dir.File(Path.Combine("a", "x 10.txt"));
+        var first = _dir.File(Path.Combine("b", "x 2.txt"));
 
         var outcome = await NewRunner().RunAsync(new DevJoin(), [later, first], progress: null, CancellationToken.None);
 
-        Assert.Equal(_dir.Combine(@"b\x 2 (+1).txt"), Assert.Single(outcome.Results).Output);
+        Assert.Equal(_dir.Combine(Path.Combine("b", "x 2 (+1).txt")), Assert.Single(outcome.Results).Output);
     }
 
     [Fact]
@@ -179,7 +179,8 @@ public sealed class RunnerBatchOperationTests : IDisposable
         Assert.Contains(lines, line => line.Contains("3.txt", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Every_input_stays_pinned_while_the_operation_runs()
     {
         var files = new[] { _dir.File("1.txt"), _dir.File("2.txt"), _dir.File("3.txt") };

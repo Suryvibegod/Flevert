@@ -36,6 +36,7 @@ internal static partial class Libc
     public const int SIfLnk = 0xA000;
 
     public const int EExist = 17;
+    public const int EIsDir = 21;
     public const int EInval = 22;
     public const int ENoSys = 38;
     public const int ENotEmpty = 39;
@@ -116,6 +117,52 @@ internal static partial class Libc
     /// <summary>mkdir: 0, or -1 with the error in <see cref="Marshal.GetLastPInvokeError"/>. Never follows a link.</summary>
     public static int MakeDirectory(string path, uint mode) => mkdir(path, mode);
 
+    /// <summary>renameat2 between two paths: 0, or -1 with the error. <see cref="RenameNoReplace"/> fails on any name taken.</summary>
+    public static int Rename(string from, string to, uint flags) => renameat2(AtFdCwd, from, AtFdCwd, to, flags);
+
+    /// <summary>unlinkat relative to an open folder (or <see cref="AtFdCwd"/> for a path): 0, or -1 with the error.</summary>
+    public static int Unlink(SafeFileHandle? folder, string name, int flags)
+    {
+        if (folder is null)
+            return unlinkat(AtFdCwd, name, flags);
+        var added = false;
+        folder.DangerousAddRef(ref added);
+        try
+        {
+            return unlinkat((int)folder.DangerousGetHandle(), name, flags);
+        }
+        finally
+        {
+            if (added)
+                folder.DangerousRelease();
+        }
+    }
+
+    /// <summary>What <paramref name="path"/> names itself: a link is described, never followed.</summary>
+    public static bool TryStatNoFollow(string path, out Statx stat) =>
+        statx(AtFdCwd, path, AtSymlinkNofollow, StatxBasicStats, out stat) == 0;
+
+    /// <summary>
+    /// This process's umask, read from /proc (Linux 4.7 and later) rather than with umask(2), which would change it for
+    /// every thread while it is read. 022 when /proc does not say.
+    /// </summary>
+    public static UnixFileMode Umask()
+    {
+        try
+        {
+            foreach (var line in File.ReadLines("/proc/self/status"))
+            {
+                if (line.StartsWith("Umask:", StringComparison.Ordinal))
+                    return (UnixFileMode)Convert.ToInt32(line["Umask:".Length..].Trim(), 8);
+            }
+        }
+        catch (IOException)
+        {
+        }
+
+        return UnixFileMode.GroupWrite | UnixFileMode.OtherWrite;
+    }
+
     /// <summary>
     /// A path that reaches exactly what the handle is open on (the kernel's link for it), for the calls .NET only offers
     /// by path; an <c>O_PATH</c> handle cannot be changed through directly.
@@ -141,6 +188,12 @@ internal static partial class Libc
 
     [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     private static partial int mkdir(string path, uint mode);
+
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int renameat2(int fromDir, string from, int toDir, string to, uint flags);
+
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int unlinkat(int dir, string name, int flags);
 
     [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     private static partial nint readlink(string path, byte[] buffer, nint size);
