@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using Flevert.Core;
 
@@ -109,19 +110,29 @@ internal static partial class MediaJob
             throw new MediaException(MediaException.NotEnoughSpaceMessage(estimatedBytes + SpareBytes));
     }
 
-    // The room on the disk of a path, or null: a network share has no drive letter, and Windows reports a full disk there
-    // when ffmpeg writes.
+    // The room this user may still write on the disk of a path, quotas included, or null when Windows does not say.
+    // GetDiskFreeSpaceEx, not DriveInfo: DriveInfo refuses a network share and a \\?\ path, which then had no check
+    // and no -fs bound, and a full share failed as a damaged file (doubt review, 2026-10-21).
     private static long? FreeBytes(string path)
     {
         try
         {
-            return new DriveInfo(Path.GetPathRoot(Path.GetFullPath(path))!).AvailableFreeSpace;
+            var folder = Path.GetDirectoryName(Path.GetFullPath(path));
+            if (folder is null)
+                return null;
+            if (!OperatingSystem.IsWindows())
+                return new DriveInfo(folder).AvailableFreeSpace;
+            return GetDiskFreeSpaceExW(folder, out var available, out _, out _) ? (long)Math.Min(available, long.MaxValue) : null;
         }
         catch (Exception e) when (e is ArgumentException or IOException or UnauthorizedAccessException)
         {
             return null;
         }
     }
+
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetDiskFreeSpaceExW(string directory, out ulong freeBytesAvailable, out ulong totalBytes, out ulong totalFreeBytes);
 
     /// <summary>
     /// ffmpeg's progress from 0 to 1, shown as the part from <paramref name="from"/> to <paramref name="to"/> of the file

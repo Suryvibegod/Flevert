@@ -24,7 +24,9 @@ public sealed class Ffmpeg
     /// </summary>
     internal const string Demuxers = "mov,matroska,avi,asf,mpegts,mp3,wav,flac,ogg,aac,aiff";
 
-    internal static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
+    // ffprobe reads the start of a file, but OneDrive downloads an online-only file whole on first read, and a share may
+    // be slow: 10 s failed them (doubt review, 2026-10-21). A minute, like qpdf's probe.
+    internal static readonly TimeSpan ProbeTimeout = TimeSpan.FromMinutes(1);
     private const int MaxDetailChars = 2_000;
 
     /// <param name="folder">Absolute path of the folder holding ffmpeg.exe and ffprobe.exe; checked when they run.</param>
@@ -114,7 +116,7 @@ public sealed class Ffmpeg
         }
         catch (TimeoutException e)
         {
-            throw new MediaException(MediaException.TooSlowMessage, e);
+            throw new MediaException(MediaException.ReadTooSlowMessage, e);
         }
 
         RequireMemory(run, "ffprobe");
@@ -131,12 +133,13 @@ public sealed class Ffmpeg
     /// <param name="options">Output options, constants of Flevert's and numbers it computed: never anything a file or user chose.</param>
     /// <param name="maxOutputBytes">ffmpeg stops writing past this (<c>-fs</c>); an output that reached it is an error.</param>
     /// <param name="slowness">How many times the duration the pass may take, beyond its minute (<see cref="TimeoutFor"/>).</param>
+    /// <returns>How far into the input ffmpeg got: its real length, which ffprobe only estimates for some files.</returns>
     /// <exception cref="MediaException">ffmpeg failed, took longer than <see cref="TimeoutFor"/>, or the output reached <paramref name="maxOutputBytes"/>.</exception>
     /// <param name="decoding">Options for the input, before it (the decoder's thread count).</param>
     /// <param name="boundTime">Stop at <see cref="MaxTime"/>: for a video encode, where x264's statistics and the time grow
     /// with every frame. Sound and stream copies need not: <paramref name="maxOutputBytes"/> bounds them, and a raw AAC or
     /// several recordings joined have a duration ffprobe only estimates.</param>
-    internal async Task EncodeAsync(
+    internal async Task<TimeSpan> EncodeAsync(
         string inputPath, IEnumerable<string> options, string? outputPath, string format, TimeSpan duration, long maxOutputBytes,
         IProgress<double>? progress, CancellationToken ct, double slowness = DefaultSlowness, IEnumerable<string>? decoding = null,
         bool boundTime = false)
@@ -164,6 +167,9 @@ public sealed class Ffmpeg
         }
 
         RequireMemory(run, "ffmpeg");
+        // A full disk is not a damaged file (doubt review, 2026-10-21): ffmpeg says so as the C library does.
+        if (run.ExitCode != 0 && run.StandardError.Contains("No space left on device", StringComparison.Ordinal))
+            throw new MediaException(MediaException.DiskFullMessage, new FfmpegException("ffmpeg", run.ExitCode, Detail(run)));
         if (run.ExitCode != 0)
             throw new MediaException(MediaException.ToolFailedMessage, new FfmpegException("ffmpeg", run.ExitCode, Detail(run)));
         // Stopped by -t: the file holds more than it says, and a cut output must never pass for the whole (RC-1).
@@ -177,6 +183,8 @@ public sealed class Ffmpeg
             throw new MediaException(written.Exists ? MediaException.TooBigOutputMessage : MediaException.ToolFailedMessage,
                 new FfmpegException("ffmpeg", run.ExitCode, written.Exists ? "the output reached its size limit" : "no output was written"));
         }
+
+        return reader.LastTime;
     }
 
     /// <summary>

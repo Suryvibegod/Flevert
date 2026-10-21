@@ -49,12 +49,16 @@ public sealed class VideoToGif : IOperation
         var estimate = (long)(size.Width * (double)size.Height * FramesPerSecond * duration.TotalSeconds / 2);
         var desired = MediaJob.Beside(inputPath, ".gif");
         MediaJob.RequireSpace(desired, estimate);
+        // Frames dropped and the picture made small before the tone map, which works in floating point (code review,
+        // 2026-10-21: 4K at 60 tone mapped whole was 70 times the work).
         var filters = new List<string>();
-        if (video.IsHdr)
-            filters.Add(VideoEncoding.ToneMap);
+        if (video.IsInterlaced)
+            filters.Add(VideoEncoding.Deinterlace);
         filters.Add(string.Create(CultureInfo.InvariantCulture, $"fps={FramesPerSecond}"));
         if (size != (video.DisplayWidth, video.DisplayHeight))
             filters.Add(string.Create(CultureInfo.InvariantCulture, $"scale={size.Width}:{size.Height}:flags=lanczos"));
+        if (video.IsHdr)
+            filters.Add(VideoEncoding.ToneMap);
         filters.Add(Palette);
         string[] options =
         [
@@ -64,7 +68,7 @@ public sealed class VideoToGif : IOperation
         ];
         var output = await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _ffmpeg.EncodeAsync(
             inputPath, options, temp, "gif", duration, MediaJob.MaxOutputBytes(inputPath, estimate, desired), MediaJob.Percent(progress), token,
-            VideoEncoding.Slowness(video), VideoEncoding.DecoderThreads, boundTime: true), ct)
+            VideoEncoding.Slowness(video), VideoEncoding.DecoderThreadsFor(video), boundTime: true), ct)
             .ConfigureAwait(false);
         if (cut)
             OutputNote.Add(FirstSecondsNote);

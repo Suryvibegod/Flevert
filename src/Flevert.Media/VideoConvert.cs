@@ -20,7 +20,7 @@ internal sealed record VideoFormat(string Label, string Extension, string Muxer,
     /// </summary>
     public static VideoFormat Webm { get; } = new("WEBM", ".webm", "webm",
         ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", .. VideoEncoding.EncoderThreads,
-            "-c:a", "libopus", "-b:a", "128k"],
+            "-c:a", "libopus", "-b:a", "128k", .. AudioFormat.OpusChannels],
         Slowness: 2);
 
     // Not MKV: few people need it as an output (docs/specs/media.md); it stays a source.
@@ -69,10 +69,10 @@ public sealed class VideoConvert : IOperation
         string[] options =
         [
             .. VideoEncoding.Maps(info, audio), .. MediaJob.MetadataOptions(info, audio),
-            .. VideoEncoding.Filters(video, size), .. VideoEncoding.FrameTimes, .. _format.Codecs,
+            .. VideoEncoding.Filters(video, size), .. VideoEncoding.FrameTimes, .. _format.Codecs, .. VideoEncoding.EncoderThreadsFor(video),
         ];
         return await OutputPath.WriteAtomicallyAsync(desired, (temp, token) => _ffmpeg.EncodeAsync(
             inputPath, options, temp, _format.Muxer, info.Duration, MediaJob.MaxOutputBytes(inputPath, estimate, desired), MediaJob.Percent(progress), token,
-            VideoEncoding.Slowness(video, _format.Slowness), VideoEncoding.DecoderThreads, boundTime: true), ct).ConfigureAwait(false);
+            VideoEncoding.Slowness(video, _format.Slowness), VideoEncoding.DecoderThreadsFor(video), boundTime: true), ct).ConfigureAwait(false);
     }
 }

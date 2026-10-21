@@ -143,6 +143,18 @@ public sealed class AudioConvertTests : IDisposable
     }
 
     [Fact]
+    public async Task Surround_sound_of_a_film_becomes_an_opus_file_in_surround()
+    {
+        // AC-3, E-AC-3 and DTS 5.1 decode as 5.1(side), which libopus refused (code review, 2026-10-21).
+        var input = _dir.Combine("film.flac");
+        await TestFfmpeg.RunRawAsync("-i", await Fixtures.WavAsync(), "-af", "aformat=channel_layouts=5.1(side)", "-c:a", "flac", "-f", "flac", input);
+
+        var output = await Op("audio.to-opus").RunAsync(input, CancellationToken.None);
+
+        Assert.Equal(6, (await TestFfmpeg.Instance.ProbeAsync(output, CancellationToken.None)).MainAudio!.Channels);
+    }
+
+    [Fact]
     public void Extract_audio_offers_mp3_and_m4a_for_every_video_type()
     {
         var extract = MediaOperations.Create(TestFfmpeg.Instance).Where(op => op.Id.StartsWith("video.extract-", StringComparison.Ordinal)).ToList();

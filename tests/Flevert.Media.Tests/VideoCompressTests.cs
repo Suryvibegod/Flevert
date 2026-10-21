@@ -124,6 +124,25 @@ public sealed class VideoCompressTests : IDisposable
     }
 
     [Fact]
+    public async Task Recordings_joined_byte_by_byte_fit_though_ffprobe_reads_the_first_one()
+    {
+        // ffprobe reads 20 s of these 60 (RC-1): the second pass's rate came from 20 s, three times too high, and three
+        // encodes later the user was told it could not fit (code review, 2026-10-21).
+        var piece = _dir.Combine("piece.ts");
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "testsrc2=size=320x180:rate=25:duration=20", "-f", "lavfi", "-i", "sine=duration=20",
+            "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-f", "mpegts", piece);
+        var input = _dir.Combine("joined.mts");
+        var bytes = await File.ReadAllBytesAsync(piece);
+        await File.WriteAllBytesAsync(input, [.. bytes, .. bytes, .. bytes]);
+        var limit = new FileInfo(input).Length * 6 / 10;
+
+        var output = await Under(10, _dir.Combine("passes"), limit).RunAsync(input, CancellationToken.None);
+
+        Assert.True(new FileInfo(output).Length < limit, $"{new FileInfo(output).Length} of {limit} bytes");
+        Assert.True((await Probe(output)).Duration > 55, $"{(await Probe(output)).Duration} s of 60");
+    }
+
+    [Fact]
     public async Task An_output_still_too_large_is_encoded_again_lower_twice_at_most()
     {
         var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mp4");

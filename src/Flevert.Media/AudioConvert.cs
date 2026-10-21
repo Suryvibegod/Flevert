@@ -14,6 +14,12 @@ internal sealed class AudioFormat
         BitsPerSecond = bitsPerSecond;
     }
 
+    /// <summary>
+    /// libopus takes only the Vorbis channel layouts and ffmpeg does not remix for it: AC-3, E-AC-3 and DTS 5.1 decode as
+    /// 5.1(side), which it refuses ("Invalid channel layout"). The nearest layout it takes (code review, 2026-10-21).
+    /// </summary>
+    internal static readonly string[] OpusChannels = ["-af", "aformat=channel_layouts=mono|stereo|3.0|quad|5.0|5.1|6.1|7.1"];
+
     /// <summary>LAME VBR quality 2 (about 190 kbit/s), which every player reads.</summary>
     public static AudioFormat Mp3 { get; } = new("MP3", ".mp3", "mp3", _ => ["-c:a", "libmp3lame", "-q:a", "2"], _ => 190_000);
 
@@ -32,7 +38,7 @@ internal sealed class AudioFormat
     public static AudioFormat Ogg { get; } = new("OGG", ".ogg", "ogg", _ => ["-c:a", "libvorbis", "-q:a", "5"], _ => 160_000);
 
     /// <summary>Opus 128 kbit/s in Ogg, as <c>.opus</c> files are.</summary>
-    public static AudioFormat Opus { get; } = new("Opus", ".opus", "opus", _ => ["-c:a", "libopus", "-b:a", "128k"], _ => 128_000);
+    public static AudioFormat Opus { get; } = new("Opus", ".opus", "opus", _ => ["-c:a", "libopus", "-b:a", "128k", .. OpusChannels], _ => 128_000);
 
     public static IReadOnlyList<AudioFormat> All { get; } = [Mp3, M4a, Wav, Flac, Ogg, Opus];
 

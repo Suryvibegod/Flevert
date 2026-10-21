@@ -108,6 +108,7 @@ public sealed record MediaInfo(
             transfer is "smpte2084" or "arib-std-b67", Rate(Text(stream, "avg_frame_rate")) ?? Rate(Text(stream, "r_frame_rate")) ?? 0)
         {
             Tags = ReadTags(Property(stream, "tags")),
+            IsInterlaced = Text(stream, "field_order") is "tt" or "bb" or "tb" or "bt",
         };
     }
 
@@ -180,6 +181,9 @@ public sealed record VideoTrack(int Index, string Codec, int Width, int Height, 
 {
     /// <summary>The stream's own metadata, keys in lower case.</summary>
     public IReadOnlyDictionary<string, string> Tags { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>Stored as two fields a frame (AVCHD 1080i, DV, broadcast TS): deinterlaced when encoded again.</summary>
+    public bool IsInterlaced { get; init; }
 
     private bool Sideways => Rotation is 90 or 270;
 

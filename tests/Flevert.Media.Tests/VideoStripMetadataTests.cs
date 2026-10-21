@@ -201,6 +201,15 @@ public sealed class VideoStripMetadataTests : IDisposable
     }
 
     // The MD5 of the decoded pictures: equal when nothing that shows was changed.
+    [Theory]
+    [InlineData("2026-07-14T09:30:00.000000Z", true)]
+    [InlineData("2026-07-14 09:30:00", true)]
+    [InlineData("", false)]
+    [InlineData("yesterday", false)]
+    [InlineData("2026-07-14T09:30:00Z and a long tail of text a file chose to put there", false)]
+    public void Only_a_date_is_kept_as_the_recording_date(string value, bool kept) =>
+        Assert.Equal(kept, VideoStripMetadata.IsDate(value));
+
     private async Task<string> PicturesHash(string path)
     {
         var output = _dir.Combine(Guid.NewGuid().ToString("N") + ".md5");

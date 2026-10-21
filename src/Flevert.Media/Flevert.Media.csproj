@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- LibraryImport (the free space of a network share). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Fetched by scripts/fetch-deps.ps1, pinned by SHA256 (ADR-0009); never committed. -->
     <FfmpegBin>$(MSBuildThisFileDirectory)..\..\deps\ffmpeg\bin\</FfmpegBin>
   </PropertyGroup>

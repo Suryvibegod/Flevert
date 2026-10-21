@@ -93,6 +93,51 @@ public sealed class VideoConvertTests : IDisposable
         Assert.Equal(("h264", "yuv420p", "bt709", "bt709"), (video.Codec, video.PixelFormat, video.Transfer, video.Primaries));
     }
 
+    [Theory]
+    [InlineData("arib-std-b67")]
+    [InlineData("smpte2084")]
+    public async Task An_hdr_video_keeps_its_brightness_once_tone_mapped(string transfer)
+    {
+        // An SDR picture made HDR at HDR's reference white (203 nits) and mapped back by Flevert: Hable made it a fifth
+        // darker (mean luma 103 of 126), Mobius keeps it within a few percent (doubt review, 2026-10-21).
+        var sdr = _dir.Combine("sdr.mp4");
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "testsrc2=size=640x360:rate=25:duration=1", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", sdr);
+        var input = _dir.Combine("hdr.mov");
+        await TestFfmpeg.RunRawAsync("-i", sdr, "-vf", $"zscale=tin=bt709:t={transfer}:pin=bt709:p=bt2020:min=bt709:m=bt2020nc:npl=203,format=yuv420p10le",
+            "-c:v", "libx265", "-preset", "ultrafast", "-x265-params", "log-level=error", "-color_primaries", "bt2020", "-color_trc", transfer,
+            "-colorspace", "bt2020nc", input);
+
+        var output = await Op("video.to-mp4").RunAsync(input, CancellationToken.None);
+
+        var (before, after) = (await MeanLuma(sdr), await MeanLuma(output));
+        Assert.InRange(after, before * 0.92, before * 1.08);
+    }
+
+    [Fact]
+    public void A_picture_larger_than_4k_is_decoded_and_encoded_with_fewer_threads()
+    {
+        var k8 = new VideoTrack(0, "hevc", 7680, 4320, 0, true, 30);
+        var k4 = k8 with { Width = 3840, Height = 2160 };
+
+        Assert.Equal(["-threads", "2"], VideoEncoding.DecoderThreadsFor(k8));
+        Assert.Equal(["-threads", "6"], VideoEncoding.EncoderThreadsFor(k8));
+        Assert.Equal(VideoEncoding.DecoderThreads, VideoEncoding.DecoderThreadsFor(k4));
+        Assert.Empty(VideoEncoding.EncoderThreadsFor(k4));
+    }
+
+    // The mean of the frames' average luma, as ffmpeg's signalstats measures it.
+    private static async Task<double> MeanLuma(string path)
+    {
+        var run = await TestFfmpeg.Instance.Run(TestFfmpeg.Instance.FfmpegPath,
+            ["-hide_banner", "-nostdin", "-i", path, "-vf", "signalstats,metadata=print:key=lavfi.signalstats.YAVG", "-f", "null", "-"],
+            TimeSpan.FromMinutes(1), null, CancellationToken.None);
+        var values = System.Text.RegularExpressions.Regex.Matches(run.StandardError, @"YAVG=([0-9.]+)")
+            .Select(match => double.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)).ToList();
+        Assert.NotEmpty(values);
+        return values.Average();
+    }
+
     [Fact]
     public async Task Only_the_first_video_and_the_first_sound_stream_are_kept_with_its_language()
     {
@@ -145,6 +190,44 @@ public sealed class VideoConvertTests : IDisposable
     }
 
     [Fact]
+    public async Task A_camcorder_s_interlaced_video_becomes_progressive()
+    {
+        // AVCHD 1080i: fields encoded as one frame show combs on motion (code review, 2026-10-21).
+        var input = _dir.Combine("camcorder.mts");
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "testsrc2=size=320x180:rate=50:duration=2", "-vf", "tinterlace=interleave_top,fieldorder=tff",
+            "-c:v", "libx264", "-preset", "ultrafast", "-flags", "+ildct+ilme", "-x264-params", "tff=1", "-f", "mpegts", input);
+        Assert.True((await TestFfmpeg.Instance.ProbeAsync(input, CancellationToken.None)).Video!.IsInterlaced);
+
+        var calls = new List<IReadOnlyList<string>>();
+        var recording = new Ffmpeg(TestFfmpeg.Instance.FfmpegPath, TestFfmpeg.Instance.FfprobePath, (tool, arguments, timeout, line, ct) =>
+        {
+            if (tool == TestFfmpeg.Instance.FfmpegPath)
+                calls.Add(arguments);
+            return TestFfmpeg.Instance.Run(tool, arguments, timeout, line, ct);
+        });
+
+        // Through ffmpeg 8.1 as it ships, so the filter is known to run; the output's flag says progressive either way.
+        var output = await MediaOperations.Create(recording).OfType<IOperation>().Single(op => op.Id == "video.to-mp4").RunAsync(input, CancellationToken.None);
+
+        var filters = Assert.Single(calls).SkipWhile(argument => argument != "-vf").ElementAt(1);
+        Assert.StartsWith(VideoEncoding.Deinterlace + ",", filters, StringComparison.Ordinal);
+        Assert.False((await TestFfmpeg.Instance.ProbeAsync(output, CancellationToken.None)).Video!.IsInterlaced);
+    }
+
+    [Fact]
+    public async Task A_film_with_5_1_sound_converts_to_webm()
+    {
+        // An MKV film's AC-3 5.1 decodes as 5.1(side), which libopus refused (code review, 2026-10-21).
+        var input = _dir.Combine("film.mkv");
+        await TestFfmpeg.RunRawAsync("-f", "lavfi", "-i", "testsrc2=size=320x180:rate=25:duration=2", "-f", "lavfi", "-i", "sine=duration=2",
+            "-af", "aformat=channel_layouts=5.1(side)", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "ac3", "-f", "matroska", input);
+
+        var output = await Op("video.to-webm").RunAsync(input, CancellationToken.None);
+
+        Assert.Equal(6, (await TestFfmpeg.Instance.ProbeAsync(output, CancellationToken.None)).MainAudio!.Channels);
+    }
+
+    [Fact]
     public async Task Recordings_joined_byte_by_byte_convert_whole_though_ffprobe_reads_the_first_one()
     {
         // The usual way to join a camcorder's .mts pieces ("copy /b"): ffprobe reads the length from the first (RC-1).
@@ -172,6 +255,9 @@ public sealed class VideoConvertTests : IDisposable
     [InlineData(1280, 720, 0, 720, 1280, 720)]
     [InlineData(854, 480, 0, 720, 854, 480)]
     [InlineData(1920, 800, 0, 480, 1152, 480)]
+    [InlineData(7680, 4320, 0, null, 3840, 2160)] // 8K is encoded at 4K, within the memory cap
+    [InlineData(4320, 7680, 0, null, 2160, 3840)]
+    [InlineData(3840, 2160, 0, null, 3840, 2160)]
     public void The_output_size_is_the_picture_as_shown_capped_on_its_short_side_with_even_sides(
         int width, int height, int rotation, int? maxShortSide, int expectedWidth, int expectedHeight)
     {
@@ -240,6 +326,8 @@ public sealed class VideoConvertTests : IDisposable
         Assert.Equal(["-vf", "format=yuv420p"], VideoEncoding.Filters(sdr, (1920, 1080)));
         Assert.Equal(["-vf", "scale=1280:720:flags=lanczos,format=yuv420p"], VideoEncoding.Filters(sdr, (1280, 720)));
         Assert.Equal(["-vf", $"{VideoEncoding.ToneMap},format=yuv420p"], VideoEncoding.Filters(hdr, (1920, 1080)));
+        Assert.Equal(["-vf", $"{VideoEncoding.Deinterlace},scale=1280:720:flags=lanczos,format=yuv420p"],
+            VideoEncoding.Filters(sdr with { IsInterlaced = true }, (1280, 720)));
     }
 
     // The names of the file's and every stream's tags.

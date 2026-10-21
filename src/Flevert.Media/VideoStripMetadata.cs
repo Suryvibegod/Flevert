@@ -1,3 +1,4 @@
+using System.Globalization;
 using Flevert.Core;
 
 namespace Flevert.Media;
@@ -72,9 +73,7 @@ public sealed class VideoStripMetadata : IOperation
         [
             .. VideoEncoding.Maps(info, audio), "-c", "copy", .. DropsSei(inputPath, extension, video) ? DropSei : [],
             "-map_metadata", "-1", "-map_chapters", "-1",
-            .. info.Tags.TryGetValue("creation_time", out var date) && date.Length > 0 && !date.Contains('\0', StringComparison.Ordinal)
-                ? (string[])["-metadata", $"creation_time={date}"]
-                : [],
+            .. info.Tags.TryGetValue("creation_time", out var date) && IsDate(date) ? (string[])["-metadata", $"creation_time={date}"] : [],
             .. MediaJob.LanguageOptions(audio), .. muxer.Options,
         ];
         // The same streams in less metadata: never much more than the input (MPEG-TS packets of 188 bytes become 192).
@@ -83,6 +82,13 @@ public sealed class VideoStripMetadata : IOperation
             MediaJob.Percent(progress), token), ct)
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// A date as files hold it (<c>2026-10-20T08:15:00.000000Z</c>), kept as it is; anything else is dropped, since a
+    /// file chose it: 40 KB of it made the command line too long for Windows (code review, 2026-10-21).
+    /// </summary>
+    internal static bool IsDate(string value) =>
+        value.Length is > 0 and <= 64 && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out _);
 
     /// <summary>
     /// H.264's SEI messages, where AVCHD camcorders keep the camera, the time and, with GPS, the place (Sony and

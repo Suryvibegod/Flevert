@@ -193,6 +193,19 @@ public sealed class MaliciousMediaTests : IDisposable
     }
 
     [Fact]
+    public async Task A_disk_that_fills_up_is_said_to_be_full_not_the_file_damaged()
+    {
+        var input = await Fixtures.CopyAsync(Fixtures.SmallClipAsync(), _dir, "clip.mp4");
+        var full = new Ffmpeg(TestFfmpeg.Instance.FfmpegPath, TestFfmpeg.Instance.FfprobePath, (tool, arguments, timeout, line, ct) =>
+            Task.FromResult(new ExternalToolResult(-28, "", "[out#0/mp4] Error writing trailer: No space left on device", false, false)));
+
+        var e = await Assert.ThrowsAsync<MediaException>(() => full.EncodeAsync(
+            input, ["-c", "copy"], _dir.Combine("out.partial"), "mp4", TimeSpan.FromSeconds(4), 100_000_000, null, CancellationToken.None));
+
+        Assert.Equal(MediaException.DiskFullMessage, e.Message);
+    }
+
+    [Fact]
     public async Task A_video_damaged_in_the_middle_converts_or_fails_clearly_within_10_seconds()
     {
         var input = _dir.Combine("damaged.mkv");

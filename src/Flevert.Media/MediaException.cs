@@ -33,6 +33,9 @@ public sealed class MediaException : Exception
 
     internal const string TooSlowMessage = "Converting this file took too long: it may be damaged, or made to stall video tools.";
 
+    internal const string ReadTooSlowMessage =
+        "Reading this file took too long. If it is on OneDrive or a network drive, copy it to this PC and try again; otherwise it may be damaged.";
+
     internal const string NeedsTooMuchMemoryMessage =
         "This file needs more memory than Flevert allows its video tool (4 GB): it is too large, or made to exhaust memory.";
 
@@ -41,6 +44,8 @@ public sealed class MediaException : Exception
 
     internal const string TooBigOutputMessage =
         "The converted file grew far larger than expected, or than the free disk space allows, so Flevert stopped: the file may be damaged.";
+
+    internal const string DiskFullMessage = "The disk filled up while converting this file: free some space and try again.";
 
     internal static string NotEnoughSpaceMessage(long neededBytes) => string.Create(CultureInfo.InvariantCulture,
         $"Not enough free disk space: converting this file needs about {Math.Ceiling(neededBytes / 1_000_000.0):0} MB.");
