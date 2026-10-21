@@ -44,6 +44,11 @@ public sealed class RunLog(string directory)
 
     private const int ErrorSharingViolation = 32;
     private const int ErrorLockViolation = 33;
+    private const int EWouldBlock = 11; // Linux: the flock another writer holds
+
+    // Windows refuses a second writer under FileShare.Read. .NET on Linux maps sharing to flock, where only None is
+    // exclusive: with Read two writers both open the file and one overwrites the other's line.
+    private static readonly FileShare WriterShare = OperatingSystem.IsWindows() ? FileShare.Read : FileShare.None;
 
     // Set once a wait timed out: something keeps the file open (a viewer, a stuck writer), so later lines in this process
     // try once instead of adding the full wait to every file.
@@ -58,13 +63,13 @@ public sealed class RunLog(string directory)
         {
             try
             {
-                using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+                using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, WriterShare);
                 stream.Write(bytes);
                 _held = false;
                 return;
             }
             // Only "another handle has it" is worth waiting for; disk full or a bad path will not clear up in 2 s.
-            catch (IOException ex) when ((ex.HResult & 0xFFFF) is ErrorSharingViolation or ErrorLockViolation && !_held)
+            catch (IOException ex) when (IsHeldByAnotherWriter(ex) && !_held)
             {
                 if (waited.Elapsed >= LockTimeout)
                 {
@@ -78,6 +83,10 @@ public sealed class RunLog(string directory)
     }
 
     /// <summary>Deletes daily logs outside the retention window; the window includes today.</summary>
+    private static bool IsHeldByAnotherWriter(IOException ex) => OperatingSystem.IsWindows()
+        ? (ex.HResult & 0xFFFF) is ErrorSharingViolation or ErrorLockViolation
+        : ex.HResult == EWouldBlock;
+
     public void Prune(TimeSpan retention, DateOnly today) => BestEffort(() =>
     {
         if (!System.IO.Directory.Exists(Directory))
