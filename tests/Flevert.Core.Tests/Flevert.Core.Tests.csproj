@@ -30,11 +30,13 @@
     <ProjectReference Include="..\..\src\Flevert.Linux\Flevert.Linux.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' != 'Windows_NT'" />
   </ItemGroup>
 
-  <!-- Windows only: batching across processes over pipes, the registry, the PowerShell scripts and the Inno Setup installer, 8.3 and \\?\ paths, the update offer (off on Linux). Not built on Linux (docs/specs/linux.md). -->
+  <!-- Windows only: ExternalTool driven through cmd, PowerShell and ping (UnixExternalToolTests is the Linux side), batching across processes over pipes, the registry, the PowerShell scripts and the Inno Setup installer, 8.3 and \\?\ paths, the update offer (off on Linux). Not built on Linux (docs/specs/linux.md). -->
   <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
     <Compile Remove="BatchTests.cs" />
     <Compile Remove="BuildPathsScriptTests.cs" />
     <Compile Remove="CheckoutScriptTests.cs" />
+    <Compile Remove="ExternalToolLineTests.cs" />
+    <Compile Remove="ExternalToolTests.cs" />
     <Compile Remove="FetchDepsScriptTests.cs" />
     <Compile Remove="InstallerScriptTests.cs" />
     <Compile Remove="LongPathTests.cs" />

@@ -110,6 +110,9 @@ internal static partial class Libc
 
     public static string ErrorMessage(int errno) => Marshal.GetPInvokeErrorMessage(errno);
 
+    /// <summary>Sends <paramref name="signal"/> to a process, or to a process group when <paramref name="pid"/> is negative.</summary>
+    public static int Kill(int pid, int signal) => kill(pid, signal);
+
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
     [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
@@ -117,6 +120,9 @@ internal static partial class Libc
 
     [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     private static partial int statx(int dirfd, string path, int flags, uint mask, out Statx statx);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int kill(int pid, int signal);
 
     [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     private static partial nint readlink(string path, byte[] buffer, nint size);

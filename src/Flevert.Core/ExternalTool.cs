@@ -125,7 +125,7 @@ public static partial class ExternalTool
         workingDirectory = CheckWorkingDirectory(workingDirectory) ?? Path.GetDirectoryName(toolPath)!;
         cancellationToken.ThrowIfCancellationRequested();
 
-        var start = new ProcessStartInfo(toolPath)
+        var start = new ProcessStartInfo(OperatingSystem.IsLinux() ? UnixGroup.Setsid : toolPath)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -135,6 +135,12 @@ public static partial class ExternalTool
             RedirectStandardError = true,
             StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), // never a BOM before the input
         };
+        if (OperatingSystem.IsLinux())
+        {
+            foreach (var argument in UnixGroup.Prefix(toolPath, limits))
+                start.ArgumentList.Add(argument);
+        }
+
         foreach (var argument in arguments)
             start.ArgumentList.Add(argument);
         ChangeEnvironment(start, environment);
@@ -167,6 +173,14 @@ public static partial class ExternalTool
     {
         public async Task<ExternalToolResult> OnceAsync(ExternalToolLimits? limits, CancellationToken cancellationToken)
         {
+            if (OperatingSystem.IsLinux())
+            {
+                // No job: the tool leads a process group of its own (setsid), which is ended as the job would be.
+                using var tool = Process.Start(start) ?? throw new InvalidOperationException($"{start.FileName} did not start.");
+                afterStart?.Invoke(tool);
+                return await WaitAsync(tool, job: null, memoryReports: null, limits, cancellationToken).ConfigureAwait(false);
+            }
+
             using var memoryReports = limits?.MaxMemoryBytes is null ? null : CreateCompletionPort();
             using var job = CreateJob(limits, memoryReports);
             using var process = Process.Start(start) ?? throw new InvalidOperationException($"{start.FileName} did not start.");
@@ -190,11 +204,12 @@ public static partial class ExternalTool
                 throw;
             }
 
-            return await WaitAsync(process, job, memoryReports, cancellationToken).ConfigureAwait(false);
+            return await WaitAsync(process, job, memoryReports, limits, cancellationToken).ConfigureAwait(false);
         }
 
+        /// <param name="job">The tool's job on Windows; <c>null</c> on Linux, where its process group stands in for it.</param>
         private async Task<ExternalToolResult> WaitAsync(
-            Process process, SafeHandle job, SafeHandle? memoryReports, CancellationToken cancellationToken)
+            Process process, SafeHandle? job, SafeHandle? memoryReports, ExternalToolLimits? limits, CancellationToken cancellationToken)
         {
             // Process.Dispose leaves a redirected stream open once it has been read (the caller could still hold it), so
             // the pipes are closed here when the run ends. A read already blocked on a process that escaped the job is not
@@ -217,14 +232,16 @@ public static partial class ExternalTool
             {
                 await process.WaitForExitAsync(stop.Token).ConfigureAwait(false);
                 // A child it started may still hold the pipes open; it is part of this run and ends with it.
-                _ = TerminateJobObject(job, 1);
+                EndWhatIsLeft(process, job);
                 var (stdout, stdoutTruncated) = await output.WaitAsync(stop.Token).ConfigureAwait(false);
                 var (stderr, stderrTruncated) = await error.WaitAsync(stop.Token).ConfigureAwait(false);
                 await input.WaitAsync(stop.Token).ConfigureAwait(false);
                 lines?.ThrowIfFailed();
                 return new ExternalToolResult(process.ExitCode, stdout, stderr, stdoutTruncated, stderrTruncated)
                 {
-                    MemoryLimitExceeded = ReportsMemoryLimit(memoryReports),
+                    MemoryLimitExceeded = OperatingSystem.IsLinux()
+                        ? limits?.MaxMemoryBytes is not null && UnixGroup.LooksOutOfMemory(process.ExitCode, stderr)
+                        : ReportsMemoryLimit(memoryReports),
                 };
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested)
@@ -246,8 +263,9 @@ public static partial class ExternalTool
         ArgumentException.ThrowIfNullOrWhiteSpace(toolPath);
         if (!Path.IsPathFullyQualified(toolPath))
             throw new ArgumentException($"The tool path must be absolute: {toolPath}", nameof(toolPath));
-        // CreateProcess runs .bat and .cmd files through cmd.exe, which would parse the arguments as a command line.
-        if (!string.Equals(Path.GetExtension(toolPath), ".exe", StringComparison.OrdinalIgnoreCase))
+        // CreateProcess runs .bat and .cmd files through cmd.exe, which would parse the arguments as a command line. Linux
+        // passes the arguments to whatever is started as they are.
+        if (OperatingSystem.IsWindows() && !string.Equals(Path.GetExtension(toolPath), ".exe", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException($"Only .exe tools are run: {toolPath}", nameof(toolPath));
         if (!File.Exists(toolPath))
             throw new FileNotFoundException("The tool was not found.", toolPath);
@@ -262,7 +280,7 @@ public static partial class ExternalTool
         {
             // "=" ends a name in the environment block and "\0" ends an entry: either would set a different variable.
             if (name.Length == 0 || name.AsSpan().ContainsAny('=', '\0'))
-                throw new ArgumentException($"Not a variable name Windows can hold: \"{name}\".", nameof(environment));
+                throw new ArgumentException($"Not a variable name an environment can hold: \"{name}\".", nameof(environment));
             if (value is not null && value.Contains('\0', StringComparison.Ordinal))
                 throw new ArgumentException($"The value of {name} holds a null character, which would end it.", nameof(environment));
             if (value is null)
@@ -418,7 +436,7 @@ public static partial class ExternalTool
         }
     }
 
-    private static void Kill(Process process, SafeHandle job)
+    private static void Kill(Process process, SafeHandle? job)
     {
         // The job holds the tool and everything it started after AssignToJob; the tree kill also reaches a child started
         // in the moment before that, while its parent is still alive to be found.
@@ -431,7 +449,16 @@ public static partial class ExternalTool
             // Already exited, or a child could not be opened: terminating the job below still covers it.
         }
 
-        _ = TerminateJobObject(job, 1);
+        EndWhatIsLeft(process, job);
+    }
+
+    // The job on Windows, the tool's process group on Linux: whatever the tool started and left running.
+    private static void EndWhatIsLeft(Process process, SafeHandle? job)
+    {
+        if (OperatingSystem.IsLinux())
+            UnixGroup.Kill(process.Id);
+        else if (job is not null)
+            _ = TerminateJobObject(job, 1);
     }
 
     /// <summary>
