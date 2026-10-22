@@ -131,6 +131,94 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - [ ] Ba review bối cảnh trống, chỉ đọc (code-reviewer, security-auditor, doubt) trên `git diff main..feat/linux`; bảng reconcile ở đây; sửa; một reviewer soát lại tới khi hết Critical/High/Required
 - [ ] Đủ 10 tiêu chí của spec
 
+### Reconcile ba review (2026-10-21)
+
+CR = code-reviewer, SA = security-auditor, DD = doubt-driven. "Kiểm" = tôi tự kiểm lại trước khi xếp mức.
+
+| # | Phát hiện | Nguồn | Mức | Kiểm | Quyết định |
+|---|---|---|---|---|---|
+| R1 | Input được pin (O_PATH) nhưng thao tác mở lại **theo tên**: đổi file thành symlink sau khi kiểm thì đọc được file riêng của người dùng, bản chuyển đổi nằm trong thư mục chung; ADR nói sai ("đường dẫn kernel giữ") | CR, SA, DD | High | Đúng; đã thử: tiến trình con (qua setsid/setpriv, Yama 1) đọc `/proc/<pid>/fd/N` của handle O_PATH ra file gốc sau khi tên bị thay | Sửa: `PinnedInput` (đọc qua `/proc/<flevert>/fd/N`, kể cả qpdf và worker; request worker bản 3 mang cả hai đường dẫn; lời qpdf hiện tên). Test: mọi thao tác (33) chạy khi tên bị đổi thành link tới rác ngay sau khi ghim, so với bản đối chứng không ghim; kiểm đột biến: đo độ dài qua link bị bắt. Lỗi phụ tìm ra khi sửa: `FileInfo` của `/proc/.../fd/N` cho độ dài của link (64 byte), nén và tách theo cỡ bỏ qua mọi file: đo qua handle (`PinnedInput.Length`). ADR, spec đã sửa |
+| R2 | Thư mục output ghi qua tên, không qua handle đang giữ | SA | Low | Đúng | Sửa: người ghi nhận `WritePath` = handle (`/proc/<flevert>/fd/N`); test đổi thư mục thành link giữa chừng. Hệ quả: qpdf không còn thấy `%d` trong tên thư mục thật, nên trên Linux thư mục `50%done` được tách bình thường (test riêng); Windows vẫn từ chối |
+| R3 | zenity chạy `g_strcompress` trước markup (`\074` thành `<`); dòng `#` của progress là `set_text` nên `&` hiện thành `&amp;` | SA | Low | Đúng, đọc `forms.c:255`, `progress.c:176,382` của zenity 3.42.1 | Sửa: `Markup.ForZenity` nhân đôi `\\`; dòng `#` của progress không thoát markup nữa. Test cho cả hai |
+| R4 | Trường form tách bằng `\n`, không kiểm số trường | SA, CR | Low | Đúng | Sửa: `--separator=\u001e`, đúng số trường, không thì hỏi lại ("could not read the answer"). Test |
+| R5 | Thiếu zenity/gdbus trên runner CI → test `install.sh` đỏ | DD | High (CI) | Đúng: `install.sh` đòi `/usr/bin/zenity` | Chờ người dùng đồng ý sửa `ci.yml` |
+| R6 | Restore trên Windows có thể lỗi NU1201 vì `Flevert.Linux` trong sln | DD | (High nếu đúng) | **Sai**: `OS=Windows_NT dotnet restore/build Flevert.sln` (worktree tạm, deps giả): Flevert.Linux không được restore; cả solution, gồm ba project test, build `net10.0-windows` 0 cảnh báo | Không sửa (sai) |
+| R7 | PDF worker (một tiến trình) chạy `fc-match` | CR | Medium | Đúng | Sửa: cha tìm font, gửi trong `PdfEdit` (trường thứ ba, đường dẫn tuyệt đối); worker chỉ đọc file. Test giao thức |
+| R8 | Không có test Linux cho Cancel giữa lúc qpdf ghi trang (SC5) | CR, DD | Medium | Đúng | Sửa: test Linux hủy khi qpdf (bọc bởi script vẫn chạy sau khi ghi xong) còn chạy: không còn thư mục tạm, < 10 s |
+| R9 | Phát hiện quá bộ nhớ yếu hơn: cần exit ≠ 0; một cấp phát lớn bị từ chối không làm VmData tăng; kernel < 4.7 | DD | Medium | Đúng một phần | Sửa: exit ≠ 0 (trừ SIGKILL) và đỉnh ≥ 3/4 là quá giới hạn, gồm exit 3; thành công được tin. Test 5 trường hợp. Phần còn lại ghi ADR |
+| R10 | Thiếu bằng chứng SC2, 3, 5, 10 | DD | Medium | Đúng | Đang làm: chạy mọi thao tác trên gói, đo khởi động; nhờ người dùng thử 20 HEIC + Cancel |
+| R11 | Thứ tự Nautilus: tên bắt đầu `.` hoặc `#` xếp cuối | DD | Medium | Kiểm nguồn Nautilus | Đúng (nautilus-file.c 42.6 và 46.2, `SORT_LAST_CHAR1/2`). Sửa + test |
+| R12 | `install-menu` khi thiếu nautilus-python vẫn báo đã vào menu (spec: in lệnh rồi dừng) | DD | Low | Kiểm | Sửa: in lệnh cài, trả `Failed`, không báo đã vào menu (menu.json vẫn ghi sẵn) |
+| R13 | Log ghi trước `TrySecure` ở hai đường thoát sớm | CR, SA | Low | Đúng | Sửa: `TrySecure` đầu `RunBatch` |
+| R14 | Lời lỗi nêu `setsid` thay vì tên công cụ | CR | Low | Đúng | Sửa lời hết giờ (tên công cụ); lỗi khởi động thật sự là của setsid nên giữ. Test |
+| R15 | `out of memory`/`bad_alloc` trong tên file làm lời báo sai | CR, DD | Low | Đúng, an toàn (vẫn là lỗi) | Ghi nhận: lời báo sai nhưng vẫn là lỗi; không sửa |
+| R16 | `maxFiles` không được extension đọc; `Popen` lỗi (E2BIG) im lặng | CR, DD | Low | Đúng | Sửa: extension đưa tối đa `maxFiles + 1` file (flevert từ chối và báo), bắt `OSError` của `Popen`; lời từ chối không còn nêu số file. Test |
+| R17 | `AskAsync` ngừng đọc sau 64 KiB rồi chờ zenity không hạn | CR | Low | Đúng | Sửa: đọc bỏ phần dư (xóa), trả lời rỗng, hỏi lại. Test 300 KB |
+| R18 | `WorkerEnvironment` so tên biến không phân biệt hoa thường trên Linux | CR | Low | Kiểm | Sửa: `Ordinal` trên Linux. Test |
+| R19 | `TryStat` không kiểm `stx_mask` | CR | Low | Đúng | Sửa: `TryStat`/`TryStatNoFollow` đòi đủ type, mode, nlink, uid, ino; thiếu → EOPNOTSUPP |
+| R20 | `setlocale` trong static init khi đã có luồng khác | CR | Low | Có thể | Sửa: `NaturalOrder.Prepare()` trước khi chạy join |
+| R21 | `afterStart` ném thì không giết tool (chỉ test dùng) | CR | Low | Đúng | Sửa: giết nhóm rồi ném lại |
+| R22 | `kill(-pgid)` sau khi đã reap; PID tái dùng | CR, SA, DD | Low | Đúng về lý thuyết; số pgid còn bị giữ khi nhóm còn tiến trình | Ghi chú trong `UnixGroup.Kill` |
+| R23 | Kiểm vị trí cài chỉ xét thư mục, chỉ lúc cài | SA | Info | Đúng; `install.sh` `go-w` + umask 077 che | Ghi nhận |
+| R24 | Nhánh dự phòng khi không có `RENAME_NOREPLACE` có thể thay thư mục rỗng | SA | Info | Đúng | Ghi ADR |
+| R25 | libjpeg-turbo 2.1.2 cũ (đi kèm bản qpdf chính thức) | SA | Info | Đúng | Ghi ADR |
+| R26 | pdeathsig: khe giữa fork và prctl; util-linux ≥ 2.33; mức tối thiểu glibc/libstdc++ chưa ghi | DD | Low | Đúng | Ghi ADR và README: glibc 2.34, GLIBCXX_3.4.29 (qpdf), util-linux 2.33 |
+| R27 | `PasswordLeakTests` đọc file /tmp của user khác thì ném | DD | Low | Đúng | Không sửa: `Holds` đã bỏ qua file không đọc được (`UnauthorizedAccessException`) |
+| R28 | Tài liệu cũ: bảng spec (`O_RDONLY`/`fstat`), mô tả `UnixExternalToolTests`, comment `UnixMemoryWatch`, summary `Prune` lệch | CR, DD | Nit | Đúng | Sửa |
+| R29 | Trùng: `ENoSys`, 0700, `0x12`, dev/ino, `Markup`, `MaxFiles`; `FitName` dùng `!IsWindows()` | CR | Nit | Đúng | Sửa: `ENoSys` trùng, `Markup` trùng; phần còn lại giữ |
+| R30 | Extension chỉ kiểm cấp ngoài của `menu.json` | CR | Nit | Đúng | Sửa: kiểm từng mục (nhãn chữ, op chữ hoặc children không rỗng), `operations`, `maxFiles`. Test |
+| R31 | (tìm ra khi sửa R1) `dotnet build Flevert.sln` không build `Flevert.Linux` (không có trong cấu hình solution, và solution bỏ qua tham chiếu tới project nó không build): trên runner sạch mọi test chạy `flevert` thật sẽ đỏ | tự kiểm | High (CI) | Đúng: xóa `bin/obj` của Flevert.Linux rồi build solution → không có `flevert` | Sửa: `OnlyReferenceAndBuildProjectsEnabledInSolutionConfiguration=false` trong ba project test (chỉ Linux) |
+| R32 | (tìm ra khi tái hiện) Khi `~/.local/share` (hoặc `XDG_DATA_HOME`) chưa có, `GetFolderPath` trả "", log và cấu hình thành đường dẫn tương đối theo thư mục flevert được chạy | tự kiểm | Medium | Đúng: log nằm trong thư mục đang đứng | Sửa: `AppData.UserFolder` dùng `DoNotVerify` trên Linux (AppData, menu, MagickSetup). Test |
+
+## Bằng chứng tiêu chí (2026-10-22, gói từ `build-linux.sh`, cài bằng `install.sh`)
+
+**SC2**: mọi thao tác của menu chạy qua `flevert` đã cài, headless, trên fixture (HEIC thật, PDF của test; JPG/PNG/PDF ảnh do chính flevert làm từ HEIC). "skipped" là đúng với fixture đó (không có trang trắng, đã nhỏ…). Mật khẩu và watermark cần cửa sổ: người dùng đã bấm thử trong Nautilus (Protect, Remove password, Add watermark, Add page numbers đạt). Chưa so nội dung byte với bản Windows (không có máy Windows); tên file kết quả giống bảng tên của bản Windows.
+
+| Thao tác | Đầu vào | Kết quả | Trạng thái |
+|---|---|---|---|
+| `image.to-jpg` | ảnh 1.heic | ảnh 1.jpg | ok |
+| `image.to-png` | ảnh 1.heic | ảnh 1.png | ok |
+| `image.to-webp` | ảnh 1.heic | ảnh 1.webp | ok |
+| `image.to-avif` | ảnh 1.heic | ảnh 1.avif | ok |
+| `image.to-gif` | ảnh 1.jpg | ảnh 1.gif | ok |
+| `image.to-bmp` | ảnh 1.heic | ảnh 1.bmp | ok |
+| `image.to-tiff` | ảnh 1.heic | ảnh 1.tiff | ok |
+| `image.compress-light` | ảnh 1.heic | ảnh 1 (compressed).jpg | ok |
+| `image.compress-balanced` | ảnh 1.heic | ảnh 1 (compressed).jpg | ok |
+| `image.compress-strong` | ảnh 1.heic | ảnh 1 (compressed).jpg | ok |
+| `image.compress-under-500kb` | ảnh 1.heic | ảnh 1 (under 500 KB).jpg | ok |
+| `image.compress-under-1mb` | ảnh 1.heic | ảnh 1 (under 1 MB).jpg | ok |
+| `image.compress-under-5mb` | ảnh 1.heic | ảnh 1 (under 5 MB).jpg | ok |
+| `image.strip-metadata` | ảnh 1.heic | ảnh 1 (no metadata).jpg | ok |
+| `pdf.from-images` | ảnh 1.jpg | ảnh 1 (+1).pdf | ok |
+| `pdf.compress` | Hồ sơ 1.pdf | Hồ sơ 1 (compressed).pdf | ok |
+| `pdf.compress-sharing` | Hồ sơ 1.pdf | — | skipped: This PDF is already small: compressing it for sharing would not make it much small |
+| `pdf.merge` | Hồ sơ 1.pdf | Hồ sơ 1 (merged).pdf | ok |
+| `pdf.split` | Hồ sơ 1.pdf | Hồ sơ 1 (split) | ok |
+| `pdf.to-jpg` | Hồ sơ 1.pdf | Hồ sơ 1 (pages) | ok |
+| `pdf.extract-text` | Hồ sơ 1.pdf | — | skipped: This PDF has no text to extract: it may be a scanned document (Flevert does not re |
+| `pdf.rotate-right` | Hồ sơ 1.pdf | Hồ sơ 1 (rotated).pdf | ok |
+| `pdf.rotate-left` | Hồ sơ 1.pdf | Hồ sơ 1 (rotated).pdf | ok |
+| `pdf.rotate-180` | Hồ sơ 1.pdf | Hồ sơ 1 (rotated).pdf | ok |
+| `pdf.watermark` | Hồ sơ 1.pdf | — | failed: Flevert asks for the watermark text only in a window, and it runs without windows h |
+| `pdf.protect` | Hồ sơ 1.pdf | — | failed: Flevert asks for a PDF password only in a window, and it runs without windows here |
+| `pdf.unlock` | Hồ sơ 1.pdf | — | skipped: This PDF has no password. |
+| `pdf.strip-metadata` | Hồ sơ 1.pdf | Hồ sơ 1 (no metadata).pdf | ok |
+| `pdf.remove-blank-pages` | Hồ sơ 1.pdf | — | skipped: This PDF has no blank pages. |
+| `pdf.page-numbers` | Hồ sơ 1.pdf | Hồ sơ 1 (numbered).pdf | ok |
+| `pdf.n-up-2` | Hồ sơ 1.pdf | Hồ sơ 1 (2 per sheet).pdf | ok |
+| `pdf.n-up-4` | Hồ sơ 1.pdf | Hồ sơ 1 (4 per sheet).pdf | ok |
+| `pdf.fit-a4` | Hồ sơ 1.pdf | Hồ sơ 1 (A4).pdf | ok |
+| `pdf.flatten` | Hồ sơ 1.pdf | — | skipped: This PDF has no filled forms or comments to lock. |
+| `pdf.split-10mb` | Hồ sơ 1.pdf | — | skipped: This PDF is already under 10 MB: there is nothing to split. |
+| `pdf.split-25mb` | Hồ sơ 1.pdf | — | skipped: This PDF is already under 25 MB: there is nothing to split. |
+| `pdf.to-png` | Hồ sơ 1.pdf | Hồ sơ 1 (pages) | ok |
+| `pdf.extract-images` | ảnh 1 (+1).pdf | ảnh 1 (+1) (images) | ok |
+
+**SC10**: `flevert run dev.copy` trên file nhỏ, 12 lần, cache ấm: 87–110 ms, trung vị ~96 ms (`list-ops` 48 ms). Khởi động lạnh thật cần root để xóa page cache: chưa đo.
+
+**SC3, SC5**: chờ người dùng bấm thử (`~/Flevert-test/kiem-cuoi`): 20 HEIC (xong dưới 1 s nên cửa sổ tiến độ không hiện, đúng thiết kế: chỉ hiện sau 2 s), Cancel trên PDF 450 trang (`pdf.to-jpg` mất ~12 s).
+
 ## Bảng test trên Linux (T3)
 
 Lần chạy đầu (2026-10-21, sau T2), mỗi project chạy riêng:

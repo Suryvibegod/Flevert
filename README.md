@@ -40,7 +40,7 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 2. Run `./install.sh` in the folder it made (no root needed). It installs Flevert for you in `~/.local/share/Flevert` and adds it to the right-click menu of Files (Nautilus). If it asks for `nautilus-python`, install it (`sudo apt install python3-nautilus` on Ubuntu, Debian and Pop!_OS; `sudo dnf install nautilus-python` on Fedora) and run `./install.sh` again.
 3. Restart Files (`nautilus -q`), then right-click a picture or a PDF and choose **Flevert**. The tools that Windows shows only with Shift are under **Flevert > More PDF tools**.
 
-To remove it: `~/.local/share/Flevert/app/install.sh --uninstall`. For 64-bit x86 Linux with GNOME Files; other file managers are not supported yet.
+To remove it: `~/.local/share/Flevert/app/install.sh --uninstall`. For 64-bit x86 Linux with GNOME Files and glibc 2.34 or later (Ubuntu 22.04, Debian 12, Fedora 35 and later); other file managers are not supported yet.
 
 ## The menu
 

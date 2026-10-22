@@ -27,8 +27,8 @@ Nautilus hands every selected file to one call, so `flevert run` gets the whole 
 
 ### Files
 
-- **Inputs** are opened with `O_PATH|O_NOFOLLOW` and checked with `statx` (whose layout is the same on every architecture): only a regular file with one name is processed, never a link, FIFO, device or folder; `O_PATH` reads nothing, so a FIFO cannot block. The operation gets the path the kernel holds for the handle (`/proc/self/fd/N`).
-- **Folder outputs** (one-to-many) are made `mkdir 0700`, so nobody else can add to them while they are written; held open with `O_NOFOLLOW`; emptied through the handle (`unlinkat`); renamed only while their name still leads to the folder held (device and inode), with `renameat2(RENAME_NOREPLACE)`; then given the usual mode of a new folder (`0777` less the umask, read from `/proc/self/status`).
+- **Inputs** are opened with `O_PATH|O_NOFOLLOW` and checked with `statx` (whose layout is the same on every architecture): only a regular file with one name is processed, never a link, FIFO, device or folder; `O_PATH` reads nothing, so a FIFO cannot block. Outputs are named after the path the kernel holds for the handle (`readlink /proc/self/fd/N`), but nothing reads the input by that name again: whoever can write the folder could point it at another file (a link to a private file, whose converted copy would land beside the input) after the check. Every engine reads through the pin itself, `/proc/<flevert>/fd/N` (`PinnedInput.ReadPath`): ImageMagick in the process, qpdf and the PDF worker (processes of the same user, which Yama's `ptrace_scope` 1 does not stop; it restricts attaching only). The worker's request carries both paths (format 3), and qpdf's messages show the name. A test swaps every input's name for a link to junk right after the pin, for every operation.
+- **Folder outputs** (one-to-many) are made `mkdir 0700`, so nobody else can add to them while they are written; held open with `O_NOFOLLOW`; written through the handle (`/proc/<flevert>/fd/N`), so a link swapped in for the name is never written through; emptied through the handle (`unlinkat`); renamed only while their name still leads to the folder held (device and inode), with `renameat2(RENAME_NOREPLACE)`; then given the usual mode of a new folder (`0777` less the umask, read from `/proc/self/status`).
 - **Names** fit 255 bytes of UTF-8 on Linux (255 UTF-16 characters on Windows), cut between characters, through one `OutputPath.FitName` that replaced five copies of the rule.
 - Flevert's own folders are `0700`; ImageMagick's policy is written `0600` and kept only when it is a regular file of one name, owned by the user, writable by nobody else, with the exact bytes.
 - `RunLog` locks the log with `FileShare.None` on Linux: .NET maps sharing to `flock`, where `FileShare.Read` is shared, and two parallel writers overwrote each other's lines.
@@ -56,10 +56,11 @@ A tool runs as `setsid` → `setpriv --pdeathsig KILL` → `prlimit --data=<limi
 
 ## Where Linux is weaker than Windows
 
-- **No mandatory locks.** A pinned input, or a parent of the output folder, can still be renamed or replaced by whoever can write its folder. The inputs are beside the user's own files, normally in their home; folders others can write are rare on a desktop, and `/tmp`'s sticky bit keeps others from renaming what is not theirs.
+- **No mandatory locks.** A pinned input, or a parent of the output folder, can still be renamed or replaced by whoever can write its folder. Flevert still reads the file it checked and writes into the folder it made, but an output is published beside the name, so someone who can write the input's folder can still move it or put something else in its way. The inputs are beside the user's own files, normally in their home; folders others can write are rare on a desktop. In `/tmp`, the kernel's `fs.protected_symlinks` and `fs.protected_hardlinks` (on by default) keep links planted by others from being followed. Without `RENAME_NOREPLACE` (a file system that lacks it), the rename falls back to check-then-rename, which could replace an empty folder created in between.
 - **Only the tool dies with flevert**: what a tool starts gets no death signal (qpdf and the worker start nothing).
 - **No single-process limit** for qpdf.
-- **Memory refusals are inferred**, not reported (above).
+- **Memory refusals are inferred**, not reported (above). A tool that ends with an error after using three quarters of its limit counts as refused; one large allocation refused early leaves `VmData` low, and pdfium's abort then reads as a crash: still a failure, with another message. `RLIMIT_DATA` covers `mmap` since Linux 4.7.
+- **Older systems**: `setpriv --pdeathsig` needs util-linux 2.33; a tool started just before flevert dies, before `setpriv` sets the death signal, is not killed with it. qpdf's own `libjpeg` (libjpeg-turbo 2.1.2) comes with qpdf's official build and is updated with it.
 - **The update check is off** on Linux: there is no Linux release to point to yet.
 
 ## Consequences
@@ -67,4 +68,5 @@ A tool runs as `setsid` → `setpriv --pdeathsig KILL` → `prlimit --data=<limi
 - Windows behaviour is unchanged; Windows-only tests are skipped on Linux with a reason, and Linux tests are skipped on Windows.
 - Linux needs, on the desktop: util-linux, GLib (`gdbus`), zenity, fontconfig, and nautilus-python for the menu (`install.sh` and `install-menu` say how to install what is missing).
 - x86-64 only for now: a few `open` flags differ on other architectures, and `Libc` refuses them rather than guess.
+- glibc 2.34 and the libstdc++ of GCC 11 or later, which qpdf's Linux build needs (`GLIBC_2.34`, `GLIBCXX_3.4.29`): Ubuntu 22.04, Debian 12, Fedora 35 and later.
 - Nautilus 43 and later (nautilus-python 4.0) are covered only by tests with a stand-in; the machine the port was made on has Nautilus 42.
