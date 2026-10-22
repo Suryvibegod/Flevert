@@ -14,7 +14,7 @@ public static class PdfToolMenu
     public static IReadOnlyDictionary<string, string> PageNumbers { get; } =
         new Dictionary<string, string> { [PdfTools.Position] = PdfTools.BottomCenter, [PdfTools.Style] = PdfTools.OfTotalStyle };
 
-    /// <summary>In menu order: 12 entries, submenus counted.</summary>
+    /// <summary>In menu order: 13 entries, submenus counted.</summary>
     public static IReadOnlyList<IMenuOperation> All { get; } =
     [
         Placed("pdf.remove-blank-pages", "Remove blank pages"),
@@ -27,6 +27,7 @@ public static class PdfToolMenu
         Placed("pdf.split-25mb", "Split by size/Under 25 MB"),
         new PlacedOperation(new PdfToImages(PdfPageImageFormat.Png), "Convert to PNG images", MenuCascade.PdfTools),
         Placed("pdf.extract-images", "Extract images"),
+        Placed("pdf.make-searchable", "Make searchable (OCR)"),
     ];
 
     private static PlacedOperation Placed(string operationId, string menuPath, IReadOnlyDictionary<string, string>? options = null) =>

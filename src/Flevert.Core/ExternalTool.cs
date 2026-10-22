@@ -233,6 +233,9 @@ public static partial class ExternalTool
                 var (stderr, stderrTruncated) = await error.WaitAsync(stop.Token).ConfigureAwait(false);
                 await input.WaitAsync(stop.Token).ConfigureAwait(false);
                 lines?.ThrowIfFailed();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (timer.IsCancellationRequested)
+                    throw new TimeoutException($"{Path.GetFileName(start.FileName)} did not finish within {timeout.TotalSeconds:0.#} s.");
                 return new ExternalToolResult(process.ExitCode, stdout, stderr, stdoutTruncated, stderrTruncated)
                 {
                     MemoryLimitExceeded = ReportsMemoryLimit(memoryReports),

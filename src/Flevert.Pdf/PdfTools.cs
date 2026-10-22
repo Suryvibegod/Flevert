@@ -1,4 +1,5 @@
 using Flevert.Core;
+using Flevert.Ocr;
 
 namespace Flevert.Pdf;
 
@@ -56,6 +57,7 @@ public static class PdfTools
         new("pdf.flatten", []),
         new("pdf.extract-text", []),
         new("pdf.extract-images", []),
+        new("pdf.make-searchable", []),
     ];
 
     /// <summary>
@@ -115,6 +117,7 @@ public static class PdfTools
             "pdf.flatten" => new PdfFlatten(qpdf),
             "pdf.extract-text" => new PdfExtractText(worker),
             "pdf.extract-images" => new PdfExtractImages(worker),
+            "pdf.make-searchable" => new PdfMakeSearchable(qpdf, worker, Tesseract.NextToApp),
             _ => throw new ArgumentException($"'{operationId}' is not a PDF tool.", nameof(operationId)),
         };
     }

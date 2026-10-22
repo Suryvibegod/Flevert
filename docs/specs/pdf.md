@@ -623,7 +623,7 @@ Người dùng chọn (2026-10-21): **một dòng `Flevert`** với 16 việc ha
 Flevert ▸  Compress ▸ (2) · Merge PDFs · Split into pages · Convert to ▸ (JPG images · Text) · Rotate ▸ (3)
            ── Add watermark… · Protect with password · Remove password · Remove hidden info          (16)
 Shift: Flevert: more PDF tools ▸  Remove blank pages · Add page numbers ── Print layout ▸ (2) · Fit pages to A4
-           · Lock filled forms · Split by size ▸ (2) ── Convert to PNG images · Extract images        (12)
+           · Lock filled forms · Split by size ▸ (2) ── Convert to PNG images · Extract images ── Make searchable (OCR) (13)
 ```
 
 - op-id không đổi; PNG chuyển từ `Convert to` sang menu Shift (`Convert to PNG images`); Add watermark… sang menu chính (nhóm bảo vệ và chia sẻ).

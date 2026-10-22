@@ -34,6 +34,13 @@ internal sealed class Tesseract
     /// for low-power or heavily loaded machines while ensuring hung processes or catastrophic backtracking
     /// in layout analysis are terminated.
     /// </summary>
+    /// <summary>
+    /// How many pages may be read at once: one per core (OMP_THREAD_LIMIT=1), but never more caps of
+    /// <see cref="MaxMemoryBytes"/> than a quarter of this PC's memory, as for pictures (ADR-0006).
+    /// </summary>
+    internal static int MaxParallel { get; } = (int)Math.Clamp(
+        (ulong)GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 4 / MaxMemoryBytes, 1, (ulong)Environment.ProcessorCount);
+
     public static readonly TimeSpan PageTimeout = TimeSpan.FromSeconds(150);
 
     private const int MaxDetailChars = 2_000;

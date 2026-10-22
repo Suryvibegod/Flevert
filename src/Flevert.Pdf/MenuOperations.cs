@@ -19,8 +19,8 @@ public static class MenuOperations
     /// between groups. Flevert: 1 converting and arranging (Convert to, Compress, Merge, Split into pages, Rotate) · 2
     /// marking, protecting and sharing (Add watermark…, the passwords, Remove hidden info, Combine into PDF). Flevert: more PDF
     /// tools (Shift only): 4 marking the pages (blank pages, numbers) · 5 printing and sending (Print layout, Fit pages to A4,
-    /// Lock filled forms, Split by size) · 6 pictures (Convert to PNG images, Extract images). Formats inside Convert to,
-    /// and the choices inside Print layout and Split by size, have no icon.
+    /// Lock filled forms, Split by size) · 6 pictures (Convert to PNG images, Extract images) · 7 OCR (Make searchable (OCR)).
+    /// Formats inside Convert to, and the choices inside Print layout and Split by size, have no icon.
     /// </summary>
     public static IReadOnlyDictionary<string, MenuEntryLook> Looks { get; } = new Dictionary<string, MenuEntryLook>(StringComparer.Ordinal)
     {
@@ -42,5 +42,6 @@ public static class MenuOperations
         ["Split by size"] = new("cut", 5),
         ["Convert to PNG images"] = new("arrow_swap", 6),
         ["Extract images"] = new("image_multiple", 6),
+        ["Make searchable (OCR)"] = new("draw_text", 7),
     };
 }

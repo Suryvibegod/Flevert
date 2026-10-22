@@ -13,11 +13,11 @@ public sealed class PdfToolsTests
     private static readonly string[] WorkerTools = ["pdf.remove-blank-pages", "pdf.n-up-2", "pdf.fit-a4", "pdf.watermark", "pdf.page-numbers", "pdf.extract-images"];
 
     [Fact]
-    public void The_tools_are_the_operations_of_v022()
+    public void The_tools_are_the_operations_of_v022_and_the_ocr_of_v140()
     {
         Assert.Equal(
             ["pdf.remove-blank-pages", "pdf.n-up-2", "pdf.n-up-4", "pdf.fit-a4", "pdf.split-10mb", "pdf.split-25mb", "pdf.watermark",
-                "pdf.page-numbers", "pdf.flatten", "pdf.extract-text", "pdf.extract-images"],
+                "pdf.page-numbers", "pdf.flatten", "pdf.extract-text", "pdf.extract-images", "pdf.make-searchable"],
             PdfTools.All.Select(tool => tool.OperationId));
     }
 

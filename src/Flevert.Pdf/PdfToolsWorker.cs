@@ -779,6 +779,79 @@ internal static class PdfToolsWorker
         }
     }
 
+    // ---- Make searchable (OCR) ---------------------------------------------------------------------------------------
+
+    public static void RenderOcrPages(PdfRenderRequest request, SafeFileHandle file, StreamWriter lines)
+    {
+        using var pdf = PdfDocument.Open(file, PdfLimits.Default);
+        var total = Start(pdf, lines);
+
+        long allPixels = 0;
+        for (var index = 0; index < total; index++)
+        {
+            var size = pdf.GetRenderSize(index, request.Dpi);
+            allPixels += (long)size.Width * size.Height;
+        }
+
+        if (PdfRenderBudget.Check(allPixels, PdfPageImageFormat.Png, PdfRenderBudget.FreeBytes(request.Folder)) is { } noRoom)
+            throw new PdfRenderWorker.PageWriteException(noRoom, null);
+
+        try
+        {
+            MagickSetup.EnsureInitialized();
+        }
+        catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or MagickException)
+        {
+            throw new PdfRenderWorker.SetupException($"Flevert could not set up its image encoder: {e.Message}", e);
+        }
+
+        byte[] pixels = [];
+        for (var index = 0; index < total; index++)
+        {
+            var page = index + 1;
+            var size = pdf.GetRenderSize(index, request.Dpi);
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"page {page} {size.Width} {size.Height}"));
+
+            if (pdf.CountChars(index) <= 10)
+            {
+                if (pixels.Length < size.Bytes)
+                {
+                    pixels = [];
+                    pixels = GC.AllocateUninitializedArray<byte>(checked((int)size.Bytes));
+                }
+
+                pdf.RenderInto(index, request.Dpi, pixels);
+                var imagePath = Path.Combine(request.Folder, $"page-{page}.png");
+                EncodeOcrPng(pixels.AsSpan(0, (int)size.Bytes), size, imagePath, PdfRenderWorker.Busy(lines, page));
+                lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"ocr {page}"));
+            }
+
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"wrote {page}"));
+        }
+
+        lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"done {total}"));
+    }
+
+    private static void EncodeOcrPng(ReadOnlySpan<byte> bgra, PdfRenderSize size, string path, Action busy)
+    {
+        using var image = new MagickImage();
+        image.ReadPixels(bgra, new PixelReadSettings((uint)size.Width, (uint)size.Height, StorageType.Char, PixelMapping.BGRA));
+        image.Alpha(AlphaAction.Off);
+        image.Density = new Density(size.Dpi, size.Dpi, DensityUnit.PixelsPerInch);
+        image.ColorSpace = ColorSpace.Gray;
+        image.ColorType = ColorType.Grayscale;
+        image.Progress += (_, _) => busy();
+        try
+        {
+            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            image.Write(stream, MagickFormat.Png);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new PdfRenderWorker.PageWriteException($"Could not write {Path.GetFileName(path)}: {e.Message}", e);
+        }
+    }
+
     // ---- Shared ---------------------------------------------------------------------------------------------------
 
     private static int Start(PdfDocument pdf, StreamWriter lines)

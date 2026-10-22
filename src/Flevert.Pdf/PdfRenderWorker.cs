@@ -28,6 +28,9 @@ internal enum PdfWorkerTask
 
     /// <summary>Write every image the pages draw into the folder (<see cref="PdfExtractImages"/>).</summary>
     ExtractImages,
+
+    /// <summary>Render pages with &lt;= 10 characters at 300 DPI grayscale PNG into the folder; others are skipped.</summary>
+    OcrPages,
 }
 
 /// <summary>
@@ -48,7 +51,7 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
     /// <summary>For the tasks of v0.2.2: what to do, such as the edit (<see cref="PdfEdit.Encode"/>); empty when nothing more is needed.</summary>
     public string Options { get; init; } = "";
 
-    private bool HasOptions => Task is PdfWorkerTask.BlankPages or PdfWorkerTask.Edit or PdfWorkerTask.ExtractImages;
+    private bool HasOptions => Task is PdfWorkerTask.BlankPages or PdfWorkerTask.Edit or PdfWorkerTask.ExtractImages or PdfWorkerTask.OcrPages;
 
     /// <summary>
     /// Changes whenever a field of a task already sent changes its meaning, so a worker of another version refuses the
@@ -74,6 +77,7 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
                 PdfWorkerTask.BlankPages => "blank",
                 PdfWorkerTask.Edit => "edit",
                 PdfWorkerTask.ExtractImages => "images",
+                PdfWorkerTask.OcrPages => "ocr-pages",
                 _ => Format == PdfPageImageFormat.Jpeg ? "jpeg" : "png",
             },
             Dpi.ToString("R", CultureInfo.InvariantCulture),
@@ -94,7 +98,7 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
         if (!text.EndsWith('\0'))
             throw new FormatException("The request is incomplete.");
         var fields = text[..^1].Split('\0');
-        var withOptions = fields.Length > 4 && fields[4] is "blank" or "edit" or "images";
+        var withOptions = fields.Length > 4 && fields[4] is "blank" or "edit" or "images" or "ocr-pages";
         if (fields.Length != (withOptions ? 7 : 6) || fields[0] != Magic)
             throw new FormatException("Not a request of this version.");
 
@@ -103,7 +107,7 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
             throw new FormatException("The request's paths must be fully qualified.");
         var imageFormat = format switch
         {
-            "jpeg" or "text" or "shrink" or "blank" or "edit" or "images" => PdfPageImageFormat.Jpeg,
+            "jpeg" or "text" or "shrink" or "blank" or "edit" or "images" or "ocr-pages" => PdfPageImageFormat.Jpeg,
             "png" => PdfPageImageFormat.Png,
             _ => throw new FormatException($"Unknown image format: {format}"),
         };
@@ -116,6 +120,7 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
             "blank" => PdfWorkerTask.BlankPages,
             "edit" => PdfWorkerTask.Edit,
             "images" => PdfWorkerTask.ExtractImages,
+            "ocr-pages" => PdfWorkerTask.OcrPages,
             _ => PdfWorkerTask.Pictures,
         };
         // An edit this version does not know is refused with the rest of the request; the tasks that take no options
@@ -207,6 +212,9 @@ public static class PdfRenderWorker
                     break;
                 case PdfWorkerTask.ExtractImages:
                     PdfToolsWorker.ExtractImages(request, file!, lines);
+                    break;
+                case PdfWorkerTask.OcrPages:
+                    PdfToolsWorker.RenderOcrPages(request, file!, lines);
                     break;
                 default:
                     Render(request, file!, lines);
@@ -523,7 +531,7 @@ public static class PdfRenderWorker
 
     // "busy <n>" at most every BusyEvery while ImageMagick works on page n: proof of work, so the parent's watchdog
     // allows a large page the time it takes to encode.
-    private static Action Busy(StreamWriter lines, int page)
+    internal static Action Busy(StreamWriter lines, int page)
     {
         var since = Stopwatch.StartNew();
         return () =>

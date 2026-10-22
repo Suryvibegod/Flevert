@@ -220,6 +220,36 @@ public sealed class PdfWorker
         return names;
     }
 
+    /// <summary>
+    /// Renders pages of <paramref name="inputPath"/> that have &lt;= 10 characters at <paramref name="dpi"/> (typically 300)
+    /// as grayscale PNG images into <paramref name="folder"/> (<c>page-&lt;n&gt;.png</c>), reporting each page.
+    /// Pages with &gt; 10 characters are skipped.
+    /// Returns the 1-based page numbers that were rendered and require OCR, and the total page count.
+    /// </summary>
+    /// <param name="folder">An empty folder the caller holds.</param>
+    /// <exception cref="PdfException">As for <see cref="RenderAsync"/>.</exception>
+    internal async Task<(int Total, IReadOnlyList<int> OcrPages)> RenderOcrPagesAsync(
+        string inputPath, string folder, double dpi, IProgress<FileProgress>? progress, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(folder);
+        IReadOnlyList<int> ocrPages = [];
+        var (total, run) = await RunAsync(inputPath,
+            input => new PdfRenderRequest(inputPath, input, folder, PdfPageImageFormat.Png, dpi)
+            {
+                Task = PdfWorkerTask.OcrPages,
+            },
+            "read", progress, ct, session => ocrPages = session.OcrPages).ConfigureAwait(false);
+
+        foreach (var page in ocrPages)
+        {
+            var pageFile = Path.Combine(folder, $"page-{page}.png");
+            if (!File.Exists(pageFile))
+                throw new PdfException(PdfError.ReaderFailed, FailedMessage(null, "read"), new PdfWorkerException(run, $"page-{page}.png is missing from the folder"));
+        }
+
+        return (total, ocrPages);
+    }
+
     // Runs one worker on the request made for the pinned input; "render" or "read" is what the messages say it was doing.
     // finished: what the request needs from the session, once the worker has done.
     private async Task<(int Total, ExternalToolResult Run)> RunAsync(
@@ -336,6 +366,7 @@ public sealed class PdfWorker
         public PdfWorkerTask Task { get; init; }
 
         private readonly List<int> _blank = [];
+        private readonly List<int> _ocrPages = [];
         private int? _imageCount;
         private int _extracted;
         private int _extracting;
@@ -349,6 +380,16 @@ public sealed class PdfWorker
             {
                 lock (_gate)
                     return [.. _blank];
+            }
+        }
+
+        /// <summary>For a request to OCR pages: those the worker said need OCR, numbered from 1.</summary>
+        public IReadOnlyList<int> OcrPages
+        {
+            get
+            {
+                lock (_gate)
+                    return [.. _ocrPages];
             }
         }
 
@@ -478,6 +519,10 @@ public sealed class PdfWorker
                         && (_blank.Count == 0 || _blank[^1] != _current):
                         _blank.Add(Number(parts[1], _current, _current));
                         return null;
+                    case "ocr" when Task == PdfWorkerTask.OcrPages && parts.Length == 2 && _current > _written
+                        && (_ocrPages.Count == 0 || _ocrPages[^1] != _current):
+                        _ocrPages.Add(Number(parts[1], _current, _current));
+                        return null;
                     case "saved" when Task == PdfWorkerTask.Edit && parts.Length == 2 && _total > 0 && _written == _total:
                         _savedMegabytes = Number(parts[1], _savedMegabytes + 1, int.MaxValue);
                         Watch(_worker.StallTimeout);
@@ -513,7 +558,7 @@ public sealed class PdfWorker
                         Watch(_worker.StallTimeout); // it is about to exit
                         return null;
                     case "pages" or "page" or "busy" or "wrote" or "done" or "error" or "encode" or "image" or "kept"
-                        or "blank" or "saved" or "images" or "extract" or "extracted":
+                        or "blank" or "ocr" or "saved" or "images" or "extract" or "extracted":
                         throw new ProtocolException(line);
                     default:
                         // Not the worker's: a native library writing to standard output. It proves nothing, so it does
