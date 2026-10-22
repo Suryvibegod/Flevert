@@ -8,6 +8,10 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 - **Flevert for Linux**: the same picture and PDF tools in the right-click menu of GNOME Files (Nautilus), installed for you from a tarball with `install.sh`, without root. A progress window, the password and watermark dialogs and the notification at the end work as on Windows; the PDF tools that Windows shows only with Shift are under **Flevert > More PDF tools**. Merge PDFs and Combine into PDF join files in the order Files shows them.
 
+### Fixed
+
+- **Cancel** in the progress window could leave a hidden `.flevert-….partial` folder beside a PDF being converted to images: Flevert closed before the conversion had removed the pages it had written. It now waits up to two seconds for the work to stop and clean up.
+
 ## [1.2.3] - 2026-10-21
 
 ### Changed
