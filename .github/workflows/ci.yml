@@ -66,10 +66,10 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
-      # What the Linux side calls in the tests: fontconfig and a font with Vietnamese letters for the watermark, and
-      # GLib's Python bindings to check the order of names against GLib itself.
+      # What the Linux side calls in the tests: fontconfig and a font with Vietnamese letters for the watermark, GLib's
+      # Python bindings to check the order of names against GLib itself, and zenity and gdbus, which install.sh requires.
       - name: System packages
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fontconfig fonts-liberation2 python3-gi
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fontconfig fonts-liberation2 python3-gi zenity libglib2.0-bin
       # pdfium and qpdf for Linux, each checked against the SHA256 in scripts/deps-linux.json before it is unpacked.
       - name: Fetch third-party tools
         run: python3 -I scripts/fetch-deps-linux.py
