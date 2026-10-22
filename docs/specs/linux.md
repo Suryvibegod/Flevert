@@ -19,7 +19,7 @@ Người dùng Linux (GNOME, trình quản lý file Nautilus) có cùng vấn đ
 
 Trong phạm vi: mọi thao tác ảnh và PDF của 1.2.3 (menu thường và các công cụ của "Flevert: more PDF tools"); cửa sổ tiến độ, thông báo, hộp thoại mật khẩu và watermark; cài/gỡ theo từng user; chạy cả ba project test trên Linux.
 
-Ngoài phạm vi (lần này): Dolphin, Nemo, Thunar, Caja; video/âm thanh (module `media` chưa vào `main`); báo bản mới (xem Open Questions); gói `.deb`, `.rpm`, Flatpak, Snap (Flatpak/Snap chạy trong sandbox, không gắn extension vào Nautilus được); ARM64; macOS.
+Ngoài phạm vi (lần này): Dolphin, Nemo, Thunar, Caja; video/âm thanh (module `media` vào `main` ở 1.3.0 sau khi spec này được duyệt; trên Linux nó vẫn biên dịch, pin `net10.0-windows` như `Flevert.Cli`, nhưng không có trong gói hay menu Linux: cần ffmpeg cho Linux và spec riêng); báo bản mới (xem Open Questions); gói `.deb`, `.rpm`, Flatpak, Snap (Flatpak/Snap chạy trong sandbox, không gắn extension vào Nautilus được); ARM64; macOS.
 
 ## Khác biệt nền tảng và cách làm
 

@@ -62,6 +62,7 @@ A tool runs as `setsid` → `setpriv --pdeathsig KILL` → `prlimit --data=<limi
 - **Memory refusals are inferred**, not reported (above). A tool that ends with an error after using three quarters of its limit counts as refused (so a large PDF qpdf repairs with warnings near its limit is refused rather than written: safe, but the message may be wrong); one large allocation refused early leaves `VmData` low, and pdfium's abort then reads as a crash: still a failure, with another message. `RLIMIT_DATA` covers `mmap` since Linux 4.7.
 - **Older systems**: `setpriv --pdeathsig` needs util-linux 2.33; a tool started just before flevert dies, before `setpriv` sets the death signal, is not killed with it. qpdf's own `libjpeg` (libjpeg-turbo 2.1.2) comes with qpdf's official build and is updated with it.
 - **The update check is off** on Linux: there is no Linux release to point to yet.
+- **No video or audio.** `Flevert.Media` (1.3.0) and its tests are pinned to `net10.0-windows`, as `Flevert.Cli` is: Linux compiles them, so Windows-only compile errors show there too, but the Linux package and menu leave them out until ffmpeg for Linux has a spec of its own.
 
 ## Consequences
 
