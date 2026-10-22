@@ -26,7 +26,7 @@ Options evaluated on 2026-10-21:
 
 - **Build standalone Tesseract 5.5.3 on GitHub Actions**: Automation defined in `.github/workflows/build-tesseract.yml` and `scripts/build-tesseract.ps1` builds `tesseract.exe` using Microsoft vcpkg on `windows-latest`.
 - **Pinned source commits**:
-  - vcpkg repository pinned to tag `2026.10.16`, dereferenced commit `5d4a3dc90c0b3773f3bac81bf41297b54328f471` (port `tesseract 5.5.3`, `leptonica 1.87.0`).
+  - vcpkg repository pinned to tag `2026.10.16`, dereferenced commit `9eec002df1cd109f8f104cd966a763daf9751489` (port `tesseract 5.5.3`, `leptonica 1.87.0`).
   - Fast language models from `tesseract-ocr/tessdata_fast` tag `4.1.0` (`vie.traineddata`, `eng.traineddata`, `osd.traineddata`).
   - Searchable PDF assets from `tesseract-ocr/tesseract` tag `5.5.3` (`pdf.ttf` glyphless font and `configs/pdf`).
 - **Custom overlay triplet (`x64-windows-static-release.cmake`)**:
