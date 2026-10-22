@@ -9,7 +9,7 @@
   ADR-0010.
 #>
 param(
-    [string]$VcpkgCommit = '5d4a3dc90c0b3773f3bac81bf41297b54328f471',
+    [string]$VcpkgCommit = '9eec002df1cd109f8f104cd966a763daf9751489',
     [string]$VcpkgTag = '2026.10.16',
     [string]$TesseractVersion = '5.5.3',
     [string]$LeptonicaVersion = '1.87.0',

@@ -96,7 +96,7 @@ jobs:
           cat << 'EOF' > notes.md
           ## Standalone Tesseract 5.5.3 static binary for Windows x64
 
-          Built with Microsoft vcpkg 2026.10.16 (`5d4a3dc90c0b3773f3bac81bf41297b54328f471`) on Windows Server 2025 (`windows-latest`).
+          Built with Microsoft vcpkg 2026.10.16 (`9eec002df1cd109f8f104cd966a763daf9751489`) on Windows Server 2025 (`windows-latest`).
 
           - Statically linked with CRT (`/MT`) and permissive dependencies only (Apache-2.0, BSD, MIT, zlib).
           - No GPL or LGPL libraries included (no jbigkit, no libiconv/libintl/libunistring/libidn2).
