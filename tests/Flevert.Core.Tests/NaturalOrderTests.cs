@@ -90,6 +90,22 @@ public sealed class UnixNaturalOrderTests
 
     [SkippableFact]
     [SupportedOSPlatform("linux")]
+    public void Names_starting_with_a_dot_or_a_hash_come_last_as_in_nautilus()
+    {
+        // Nautilus checks the first character before GLib's key (nautilus-file.c, compare_by_display_name, 42 and 46).
+        Skip.IfNot(OperatingSystem.IsLinux(), "Linux only");
+
+        string[] names = [".b.jpg", "#1.jpg", "zz.jpg", ".a.jpg", "a.jpg"];
+
+        var sorted = names.Order(NaturalOrder.Comparer).ToArray();
+
+        Assert.Equal(["a.jpg", "zz.jpg"], sorted[..2]);
+        // Among themselves, GLib's order.
+        Assert.Equal(["#1.jpg", ".a.jpg", ".b.jpg"], sorted[2..].Order(StringComparer.Ordinal));
+    }
+
+    [SkippableFact]
+    [SupportedOSPlatform("linux")]
     public void Names_come_in_the_order_nautilus_shows_them()
     {
         Skip.IfNot(OperatingSystem.IsLinux(), "Linux only");

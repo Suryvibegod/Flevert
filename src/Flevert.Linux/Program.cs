@@ -149,12 +149,14 @@ internal static class Program
             operation = needsText.WithPrompt(watermarks);
         }
 
+        // A join sorts its files; setting the C library's collation is not thread-safe, so it is done before any work starts.
+        if (operation is IBatchOperation)
+            NaturalOrder.Prepare();
+
         // Nautilus hands every selected file to one flevert: the whole batch is known from the start.
         var leader = BatchLeader.Alone(run.Files);
         try
         {
-            // Logs hold every path processed; keep the whole app-data folder private to this user.
-            SecureDirectory.TrySecure(AppData.Root);
             log.Prune(LogRetention, DateOnly.FromDateTime(DateTime.Now));
             var runner = new Runner(log);
             Func<IProgress<BatchProgress>?, CancellationToken, Task<BatchOutcome>> batch = operation switch

@@ -32,6 +32,16 @@ public static partial class NaturalOrder
         : OperatingSystem.IsLinux() ? UnixNaturalOrder.Compare(x, y)
         : throw new PlatformNotSupportedException();
 
+    /// <summary>
+    /// Readies the order before work starts on other threads: on Linux it sets the C library's collation (setlocale), which
+    /// is not thread-safe. Comparing first does it too, later.
+    /// </summary>
+    public static void Prepare()
+    {
+        if (OperatingSystem.IsLinux())
+            UnixNaturalOrder.Prepare();
+    }
+
     /// <summary>Sorts paths with <see cref="PathComparer"/>.</summary>
     public static IReadOnlyList<string> SortPaths(IEnumerable<string> paths) => [.. paths.Order(PathComparer)];
 

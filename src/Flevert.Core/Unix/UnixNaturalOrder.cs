@@ -19,7 +19,19 @@ internal static unsafe partial class UnixNaturalOrder
 
     private static readonly bool HasGlib = TryLoadGlib();
 
-    public static int Compare(string x, string y) => HasGlib ? CompareKeys(x, y) : CompareNaturally(x, y);
+    public static int Compare(string x, string y)
+    {
+        // Nautilus puts names starting with "." or "#" after all others (nautilus-file.c, compare_by_display_name; 42 and 46).
+        var (lastX, lastY) = (SortsLast(x), SortsLast(y));
+        if (lastX != lastY)
+            return lastX ? 1 : -1;
+        return HasGlib ? CompareKeys(x, y) : CompareNaturally(x, y);
+    }
+
+    /// <summary>Sets the collation now, while no other thread works: setlocale is not thread-safe.</summary>
+    public static void Prepare() => GC.KeepAlive(HasGlib);
+
+    private static bool SortsLast(string name) => name.StartsWith('.') || name.StartsWith('#');
 
     // .NET never calls setlocale, so libc collates in the "C" locale until told otherwise; GLib's keys then would not be
     // Nautilus'. Only the collation category is set, from the environment flevert inherits from Nautilus.
