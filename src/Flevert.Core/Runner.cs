@@ -42,6 +42,9 @@ public sealed record BatchOutcome(IReadOnlyList<FileResult> Results, int Total)
 
 public sealed class Runner(RunLog log)
 {
+    /// <summary>Called with each input's real path once it is pinned, before the operation starts: tests change the name.</summary>
+    internal Action<string>? AfterPin { get; init; }
+
     public Task<BatchOutcome> RunAsync(
         IOperation operation, IReadOnlyList<string> files, IProgress<BatchProgress>? progress, CancellationToken ct, int maxParallel = 1)
     {
@@ -112,7 +115,7 @@ public sealed class Runner(RunLog log)
         var pins = new List<SafeFileHandle>();
         try
         {
-            var inputs = new List<(string Given, string Real)>();
+            var inputs = new List<(string Given, string Real, SafeFileHandle? Pin)>();
             var rejected = new List<(string File, string Reason)>();
             foreach (var file in received)
             {
@@ -122,7 +125,7 @@ public sealed class Runner(RunLog log)
                 if (pin is not null)
                     pins.Add(pin);
                 if (reason is null)
-                    inputs.Add((file, realPath));
+                    inputs.Add((file, realPath, pin));
                 else
                     rejected.Add((file, reason));
             }
@@ -130,8 +133,14 @@ public sealed class Runner(RunLog log)
             if (rejected.Count > 0)
                 return Rejected(operation, rejected, timer);
 
+            if (OperatingSystem.IsLinux())
+                PinnedInput.Use(inputs.Select(i => (i.Real, i.Pin!)));
+            foreach (var input in inputs)
+                AfterPin?.Invoke(input.Real);
+
             // Two spellings of one file (a short 8.3 name and the long one) pin the same real path: join it once.
-            var ordered = inputs.DistinctBy(i => i.Real, StringComparer.Ordinal).OrderBy(i => i.Real, NaturalOrder.PathComparer).ToList();
+            var ordered = inputs.Select(i => (i.Given, i.Real)).DistinctBy(i => i.Real, StringComparer.Ordinal)
+                .OrderBy(i => i.Real, NaturalOrder.PathComparer).ToList();
             return await JoinAsync(operation, ordered, progress, timer, ct).ConfigureAwait(false);
         }
         finally
@@ -406,6 +415,10 @@ public sealed class Runner(RunLog log)
         {
             var realPath = file;
             var reason = Reject(operation, file) ?? Pin(file, out pin, out realPath) ?? Unsupported(operation, realPath);
+            if (reason is null && OperatingSystem.IsLinux())
+                PinnedInput.Use([(realPath, pin!)]);
+            if (reason is null)
+                AfterPin?.Invoke(realPath);
             // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned.
             result = reason is not null
                 ? new FileResult(file, null, reason)

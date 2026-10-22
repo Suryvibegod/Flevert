@@ -1,3 +1,5 @@
+using Flevert.Core;
+
 namespace Flevert.Pdf;
 
 /// <summary>
@@ -29,7 +31,7 @@ public static class PdfSignature
     /// <summary>Whether <paramref name="path"/> holds a signature dictionary.</summary>
     public static async Task<bool> IsSignedAsync(string path, CancellationToken ct)
     {
-        var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        var file = new FileStream(PinnedInput.ReadPath(path), FileMode.Open, FileAccess.Read, FileShare.Read, 1, FileOptions.Asynchronous | FileOptions.SequentialScan);
         await using (file.ConfigureAwait(false))
         {
             var markerLength = Marker.Length;

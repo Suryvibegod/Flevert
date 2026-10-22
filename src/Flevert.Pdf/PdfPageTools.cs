@@ -151,7 +151,7 @@ public sealed class PdfWatermark : IOperation
             throw new InvalidOperationException(NoTextMessage);
         if (SystemFont.Path is not { } font || !File.Exists(font))
             throw new InvalidOperationException(NoArialMessage);
-        return PdfWorkerEdits.RunAsync(_qpdf, _worker, inputPath, " (watermarked)", new PdfEdit(PdfEditKind.Watermark) { Text = Text }, pages => pages, progress, ct);
+        return PdfWorkerEdits.RunAsync(_qpdf, _worker, inputPath, " (watermarked)", new PdfEdit(PdfEditKind.Watermark) { Text = Text, Font = font }, pages => pages, progress, ct);
     }
 }
 

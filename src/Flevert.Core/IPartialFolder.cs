@@ -9,6 +9,10 @@ internal interface IPartialFolder : IDisposable
     /// <summary>The folder's real path; every path used afterwards is built from it.</summary>
     string Path { get; }
 
+    /// <summary>Where the writer writes into the folder: <see cref="Path"/>, or on Linux the handle held, through which a
+    /// link swapped in for the folder's name is never written through.</summary>
+    string WritePath => Path;
+
     /// <summary>Readies the written folder for its rename.</summary>
     void PrepareForRename();
 

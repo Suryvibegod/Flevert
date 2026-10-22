@@ -99,7 +99,7 @@ public sealed class PdfSplitBySize : IOperation
         var total = await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
         if (total == 0)
             throw new PdfException(PdfError.NoPages, "This PDF has no pages.");
-        var length = new FileInfo(inputPath).Length;
+        var length = PinnedInput.Length(inputPath);
         if (length < LimitBytes)
             throw new OperationSkippedException($"This PDF is already under {Limit}: there is nothing to split.");
         var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);

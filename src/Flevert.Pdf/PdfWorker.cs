@@ -229,13 +229,15 @@ public sealed class PdfWorker
         ArgumentException.ThrowIfNullOrEmpty(inputPath);
         RequireExe();
 
-        // Held until the worker has ended, sharing reading only, like the runner's pin: the worker reopens this path, and
-        // nobody can change, rename or replace the file meanwhile. The worker checks it opened this very file.
-        using var pin = File.OpenHandle(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        // Held until the worker has ended, sharing reading only, like the runner's pin: the worker reopens this path, and on
+        // Windows nobody can change, rename or replace the file meanwhile; on Linux the path is the runner's pin, which
+        // leads to the file it checked whatever its name leads to. The worker checks it opened this very file.
+        var readPath = PinnedInput.ReadPath(inputPath);
+        using var pin = File.OpenHandle(readPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var length = RandomAccess.GetLength(pin);
         if (length > PdfDocument.MaxFileBytes)
             throw PdfDocument.TooLargeError(PdfDocument.MaxFileBytes);
-        var made = makeRequest(FileIdentity.Of(pin));
+        var made = makeRequest(FileIdentity.Of(pin)) with { ReadPath = readPath };
         var request = made.Encode();
 
         using var session = new Session(this, StallTimeout + (PerHundredMegabytes * (length / 100_000_000.0)), doing, progress, ct)

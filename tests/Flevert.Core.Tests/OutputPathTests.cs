@@ -666,7 +666,7 @@ public sealed class OutputPathTests : IDisposable
             _dir.Combine("a (pages)"),
             async (temp, ct) =>
             {
-                handed = temp;
+                handed = Located(temp);
                 await WritePages(1)(temp, ct);
                 Directory.CreateDirectory(Path.Combine(temp, "sub"));
                 await File.WriteAllTextAsync(Path.Combine(temp, "sub", "deep.txt"), "theirs", ct);
@@ -787,4 +787,8 @@ public sealed class OutputPathTests : IDisposable
 
     private static string[] EntryNames(string folder) =>
         Directory.GetFileSystemEntries(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray()!;
+
+    // Where the folder handed to a writer is: on Linux the writer gets the handle held (/proc/<pid>/fd/<n>), which leads
+    // nowhere once the folder is closed.
+    internal static string Located(string handed) => new DirectoryInfo(handed).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? handed;
 }

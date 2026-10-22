@@ -317,7 +317,7 @@ public sealed partial class Qpdf
     {
         RequireArgumentLine(inputPath, nameof(inputPath));
         RequireExe();
-        var length = new FileInfo(inputPath).Length;
+        var length = PinnedInput.Length(inputPath);
         if (length > MaxInputBytes)
             throw PdfDocument.TooLargeError(MaxInputBytes);
 
@@ -470,7 +470,7 @@ public sealed partial class Qpdf
         long total = 0;
         foreach (var input in inputs)
         {
-            var length = new FileInfo(input).Length;
+            var length = PinnedInput.Length(input);
             if (length > MaxInputBytes)
                 throw ForInput(inputs, input, PdfDocument.TooLargeError(MaxInputBytes));
             total += length;
@@ -719,9 +719,10 @@ public sealed partial class Qpdf
     /// </remarks>
     internal static string ToExtendedPath(string path)
     {
-        // Linux has no length limit to work around: the path goes as it is, made absolute.
+        // Linux has no length limit to work around: the path goes made absolute, and a pinned input as its pin, which leads
+        // to the file the runner checked whatever its name leads to now (PinnedInput); messages show the name (Detail).
         if (!OperatingSystem.IsWindows())
-            return Path.GetFullPath(path);
+            return PinnedInput.ReadPath(Path.GetFullPath(path));
         if (path.StartsWith(ExtendedPrefix, StringComparison.Ordinal))
             return path;
         if (path.StartsWith(@"\??\", StringComparison.Ordinal))
@@ -766,7 +767,7 @@ public sealed partial class Qpdf
     // always with the extended prefix (ToExtendedPath); the message shows them as the user knows them.
     internal static string Detail(ExternalToolResult run)
     {
-        var text = run.StandardError.Trim()
+        var text = PinnedInput.ShowNames(run.StandardError.Trim())
             .Replace(ExtendedUncPrefix, @"\\", StringComparison.OrdinalIgnoreCase)
             .Replace(ExtendedPrefix, "", StringComparison.Ordinal);
         if (text.Length == 0)

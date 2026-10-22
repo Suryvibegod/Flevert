@@ -6,9 +6,10 @@ namespace Flevert.Core;
 
 /// <summary>
 /// The Linux counterpart of <see cref="InputPin"/>: opens an input without following a link and keeps it open while an
-/// operation works on it, giving the operation the file's real location from the handle. Opened with <c>O_PATH</c>, so
-/// nothing is read and opening a FIFO or a device neither blocks nor has an effect. Linux has no mandatory locks: unlike
-/// on Windows, the file can still be renamed or replaced while it is pinned (docs/adr/0010-linux-nautilus-port.md).
+/// operation works on it, giving the operation the file's real location from the handle to name its outputs after; the
+/// operation reads the file through the handle itself (<see cref="PinnedInput"/>). Opened with <c>O_PATH</c>, so nothing
+/// is read and opening a FIFO or a device neither blocks nor has an effect. Linux has no mandatory locks: unlike on
+/// Windows, the name can still be renamed or pointed elsewhere while the file is pinned (docs/adr/0010-linux-nautilus-port.md).
 /// </summary>
 [SupportedOSPlatform("linux")]
 internal static class UnixInputPin

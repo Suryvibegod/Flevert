@@ -25,7 +25,6 @@ namespace Flevert.Core;
 internal sealed class UnixPartialFolder : IPartialFolder
 {
     private const uint OwnerOnly = 0x1C0; // 0700
-    private const int ENoSys = 38;
 
     private readonly SafeFileHandle _folder;
     private readonly ulong _device;
@@ -41,6 +40,9 @@ internal sealed class UnixPartialFolder : IPartialFolder
 
     /// <summary>The folder's real path, links in the spelling given resolved away (from the handle).</summary>
     public string Path { get; private set; }
+
+    /// <summary>The folder held, whatever its name leads to now: also from qpdf and the PDF worker, processes of this user.</summary>
+    public string WritePath => $"/proc/{Environment.ProcessId}/fd/{_folder.DangerousGetHandle()}";
 
     /// <summary>Creates <paramref name="path"/>, which must not exist, opens it and checks it is the empty folder just made.</summary>
     public static UnixPartialFolder Create(string path)
@@ -106,7 +108,7 @@ internal sealed class UnixPartialFolder : IPartialFolder
         }
 
         var error = Marshal.GetLastPInvokeError();
-        if (error is not (Libc.EInval or ENoSys))
+        if (error is not (Libc.EInval or Libc.ENoSys))
             return error;
 
         // A file system without RENAME_NOREPLACE (some network and FUSE ones): check, then rename. The check and the rename

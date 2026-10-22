@@ -129,7 +129,7 @@ public static class OutputPath
         var keep = false;
         try
         {
-            await write(folder.Path, ct).ConfigureAwait(false);
+            await write(folder.WritePath, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             folder.PrepareForRename();
             var final = await RenameToFreeNameAsync(folder, leafName, keepSuffix, renameWait, ct).ConfigureAwait(false);

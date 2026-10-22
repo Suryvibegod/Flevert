@@ -56,7 +56,7 @@ public sealed class UnixOutputPathTests : IDisposable
 
         await OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), (temp, _) =>
         {
-            handed = temp;
+            handed = OutputPathTests.Located(temp);
             mode = File.GetUnixFileMode(temp);
             entries = Directory.GetFileSystemEntries(temp);
             return Task.CompletedTask;
@@ -134,6 +134,25 @@ public sealed class UnixOutputPathTests : IDisposable
         Assert.False(Path.Exists(_dir.Combine("a (pages)")));
         Assert.Equal(["precious.txt"], EntryNames(outside));
         Assert.Equal("keep me", File.ReadAllText(Path.Combine(outside, "precious.txt")));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task Pages_written_after_the_folder_was_swapped_for_a_link_go_into_the_folder_held_never_through_the_link()
+    {
+        // Whoever can write the parent moves the hidden folder away and puts a link to another folder at its name.
+        var outside = Directory.CreateDirectory(_dir.Combine("outside")).FullName;
+
+        await Assert.ThrowsAsync<IOException>(() => OutputPath.WriteDirectoryAtomicallyAsync(_dir.Combine("a (pages)"), async (temp, ct) =>
+        {
+            var real = OutputPathTests.Located(temp);
+            Directory.Move(real, _dir.Combine("moved away"));
+            Directory.CreateSymbolicLink(real, outside);
+            await WritePages(2)(temp, ct);
+        }, CancellationToken.None));
+
+        Assert.Empty(EntryNames(outside));
+        Assert.False(Path.Exists(_dir.Combine("a (pages)")));
     }
 
     [LinuxFact]

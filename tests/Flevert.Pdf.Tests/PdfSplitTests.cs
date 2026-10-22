@@ -283,7 +283,8 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(["huge.pdf"], Entries(_dir.Path));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_folder_whose_path_holds_percent_d_is_refused_rather_than_letting_qpdf_write_elsewhere()
     {
         // qpdf puts the page number in place of the first "%d" in the output path, wherever it is: here page 1 would go
@@ -300,6 +301,24 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(PdfError.UnsupportedFileName, ex.Error);
         Assert.Contains("%d", ex.Message, StringComparison.Ordinal);
         Assert.Equal(["report.pdf"], Entries(folder));
+        Assert.Empty(Entries(decoy));
+    }
+
+    [LinuxFact]
+    public async Task On_linux_a_folder_whose_path_holds_percent_d_is_split_where_it_is()
+    {
+        // qpdf writes through the folder's handle (/proc/<flevert>/fd/<n>), so it never sees the "%d" in its name.
+        var folder = _dir.Combine("50%done");
+        var decoy = _dir.Combine("501one");
+        Directory.CreateDirectory(folder);
+        Directory.CreateDirectory(decoy);
+        var input = Path.Combine(folder, "report.pdf");
+        WriteWidths(input, 100, 200);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.Equal(Path.Combine(folder, "report (split)"), output);
+        Assert.Equal(2, Entries(output).Length);
         Assert.Empty(Entries(decoy));
     }
 
@@ -355,6 +374,33 @@ public sealed class PdfSplitTests : IDisposable
         var timer = System.Diagnostics.Stopwatch.StartNew();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Op().RunAsync(input, progress, cancel.Token));
+
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), $"took {timer.Elapsed}");
+        Assert.Equal(["book.pdf"], Entries(_dir.Path));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task On_linux_cancelling_while_qpdf_still_runs_leaves_no_partial_folder()
+    {
+        // qpdf splits 1 500 pages in 0.1 s here, before the first look: a stand-in runs it, then keeps running, so the
+        // cancel comes while it is still at work, as with a slow disk.
+        using var tools = new TempDir();
+        var slow = tools.Combine("qpdf");
+        // Only the split itself: the page count before it is asked of qpdf too.
+        File.WriteAllText(slow, $"#!/bin/sh\n'{Qpdf.NextToApp.ExePath}' \"$@\"\ncase \"$*\" in *--split-pages*) sleep 60;; esac\n");
+        File.SetUnixFileMode(slow, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var input = _dir.Combine("book.pdf");
+        WriteBlank(input, 20, resources: true);
+        using var cancel = new CancellationTokenSource();
+        var progress = new SynchronousProgress(report =>
+        {
+            if (report.Position > 1)
+                cancel.Cancel();
+        });
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new PdfSplit(new Qpdf(slow)).RunAsync(input, progress, cancel.Token));
 
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), $"took {timer.Elapsed}");
         Assert.Equal(["book.pdf"], Entries(_dir.Path));
