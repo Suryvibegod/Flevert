@@ -233,7 +233,7 @@ Người dùng: PDF scan 20 trang 25 MB, cần gửi qua Zalo/email.
 ### P3. Extract text (`pdf.extract-text`, menu `Convert > Text`)
 
 - pdfium trong worker (`FPDFText_LoadPage`, `FPDFText_GetText`), output `<tên>.txt`, UTF-8 **có BOM** (Notepad cũ đọc đúng tiếng Việt), xuống dòng `\r\n`, giữa các trang một ký tự form feed (`\f`). Thứ tự chữ là thứ tự pdfium trả về.
-- PDF không có chữ nào (scan) → skipped "This PDF has no text to extract: it may be a scanned document (Flevert does not recognise text in pictures)." Không làm OCR.
+- Từ v1.4.0 ([ocr.md](ocr.md)): trang có ≤ 10 ký tự (không kể khoảng trắng) được worker render PNG xám 300 DPI và tesseract đọc ở flevert.exe (worker không được sinh tiến trình); chữ OCR chỉ thay chữ sẵn có khi nhiều hơn. Tiến độ lượt đọc là "scanned page N of M". Không tìm được chữ nào, kể cả trong ảnh → skipped "This PDF has no text, and Flevert found none in the pictures of its pages."
 - Giới hạn: output tối đa 100 MB (quá → lỗi rõ, không ghi file dở); ngân sách thời gian của worker như render. Tiến độ "page N of M".
 
 ### P4. Báo khi PDF đã phải sửa (thay cho Repair; review DD-M7)

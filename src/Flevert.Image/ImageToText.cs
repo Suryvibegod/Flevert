@@ -80,24 +80,7 @@ public sealed class ImageToText : IOperation
 
             ct.ThrowIfCancellationRequested();
 
-            var rotation = await _tesseract.DetectRotationAsync(tempPng, ct).ConfigureAwait(false);
-            if (rotation != 0)
-            {
-                await ImageFile.RunAsync(() =>
-                {
-                    using var rotated = new MagickImage(tempPng);
-                    ImageFile.StopOnCancel([rotated], ct);
-                    rotated.Rotate(rotation);
-                    rotated.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
-                    rotated.Format = MagickFormat.Png;
-                    rotated.Write(tempPng);
-                }, ct).ConfigureAwait(false);
-            }
-
-            ct.ThrowIfCancellationRequested();
-
-            var rawText = await _tesseract.ReadTextAsync(tempPng, ct).ConfigureAwait(false);
-            var clean = CleanText(rawText);
+            var clean = CleanText(await ReadUprightAsync(_tesseract, tempPng, ct).ConfigureAwait(false));
 
             if (clean.Trim().Length == 0)
                 throw new OperationSkippedException("No text was found in this picture.");
@@ -116,6 +99,30 @@ public sealed class ImageToText : IOperation
                 // A folder left in %TEMP% must not hide the result or the real error.
             }
         }
+    }
+
+    /// <summary>
+    /// The text of <paramref name="pngPath"/>, a grey PNG Flevert wrote at 300 DPI in a folder of its own: turned upright
+    /// first, in place, when OSD is confident it is turned (scanned pages of a PDF too).
+    /// </summary>
+    internal static async Task<string> ReadUprightAsync(Tesseract tesseract, string pngPath, CancellationToken ct)
+    {
+        var rotation = await tesseract.DetectRotationAsync(pngPath, ct).ConfigureAwait(false);
+        if (rotation != 0)
+        {
+            await ImageFile.RunAsync(() =>
+            {
+                using var rotated = new MagickImage(pngPath);
+                ImageFile.StopOnCancel([rotated], ct);
+                rotated.Rotate(rotation);
+                rotated.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
+                rotated.Format = MagickFormat.Png;
+                rotated.Write(pngPath);
+            }, ct).ConfigureAwait(false);
+        }
+
+        ct.ThrowIfCancellationRequested();
+        return await tesseract.ReadTextAsync(pngPath, ct).ConfigureAwait(false);
     }
 
     internal static string CleanText(string text)

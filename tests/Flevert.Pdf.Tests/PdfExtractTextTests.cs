@@ -7,8 +7,7 @@ namespace Flevert.Pdf.Tests;
 [Collection(WorkerProcesses.Name)]
 public sealed class PdfExtractTextTests : IDisposable
 {
-    private const string NoTextMessage =
-        "This PDF has no text to extract: it may be a scanned document (Flevert does not recognise text in pictures).";
+    private const string NoTextMessage = "This PDF has no text, and Flevert found none in the pictures of its pages.";
 
     private readonly TempDir _dir = new();
 
@@ -45,7 +44,49 @@ public sealed class PdfExtractTextTests : IDisposable
     }
 
     [Fact]
-    public async Task A_pdf_without_text_is_skipped_as_a_scan_and_leaves_nothing()
+    public async Task A_vietnamese_scan_comes_out_as_the_text_tesseract_reads_page_by_page()
+    {
+        string[] pages = ["Cộng hòa xã hội chủ nghĩa Việt Nam\nĐộc lập - Tự do - Hạnh phúc", "Hợp đồng mua bán hàng hóa\nSố 12 năm 2026"];
+        var input = _dir.Combine("scan.pdf");
+        await TestOcr.WriteScan(input, pages);
+
+        var reports = new List<FileProgress>();
+
+        var output = await Op().RunAsync(input, new SyncProgress(reports.Add), CancellationToken.None);
+
+        // The worker counts the pages it reads, then each page tesseract has read is counted, once.
+        Assert.Equal([("page", 1, 2), ("page", 2, 2), ("scanned page", 1, 2), ("scanned page", 2, 2)],
+            reports.Select(r => (r.Unit, r.Position, r.Total)));
+        var bytes = await File.ReadAllBytesAsync(output);
+        Assert.Equal([0xEF, 0xBB, 0xBF], bytes[..3]);
+        var read = new UTF8Encoding(false).GetString(bytes, 3, bytes.Length - 3).Split('\f');
+        Assert.Equal(2, read.Length);
+        for (var i = 0; i < 2; i++)
+            Assert.True(TestOcr.Similarity(pages[i], read[i]) >= 0.95, $"Page {i + 1}: '{read[i]}'");
+        Assert.All(read, page => Assert.EndsWith("\r\n", page, StringComparison.Ordinal));
+        Assert.Equal(["scan.pdf", "scan.txt"], TestPdf.FileNames(_dir.Path));
+    }
+
+    [Fact]
+    public async Task A_page_with_text_keeps_its_own_and_a_scanned_page_beside_it_gets_what_tesseract_reads()
+    {
+        var text = _dir.Combine("text.pdf");
+        TestTextPdf.Write(text, "Trang này đã có chữ thật");
+        var scan = _dir.Combine("scan.pdf");
+        await TestOcr.WriteScan(scan, "Hóa đơn bán hàng số 12345");
+        var input = _dir.Combine("mixed.pdf");
+        await Qpdf.NextToApp.MergeAsync([text, scan], input, CancellationToken.None);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        var read = (await File.ReadAllTextAsync(output)).Split('\f');
+        Assert.Equal(2, read.Length);
+        Assert.Equal("Trang này đã có chữ thật\r\n", read[0]);
+        Assert.True(TestOcr.Similarity("Hóa đơn bán hàng số 12345", read[1]) >= 0.95, read[1]);
+    }
+
+    [Fact]
+    public async Task A_pdf_without_text_even_in_its_pictures_is_skipped_and_leaves_nothing()
     {
         var input = _dir.Combine("scan.pdf");
         TestPdf.WriteBlank(input, 3);
@@ -57,7 +98,7 @@ public sealed class PdfExtractTextTests : IDisposable
     }
 
     [Fact]
-    public async Task Through_the_runner_a_scan_is_skipped_not_failed()
+    public async Task Through_the_runner_a_pdf_without_text_is_skipped_not_failed()
     {
         var input = _dir.Combine("scan.pdf");
         TestPdf.WriteBlank(input, 1);
@@ -85,7 +126,8 @@ public sealed class PdfExtractTextTests : IDisposable
     public async Task Reports_progress_once_per_page_in_order()
     {
         var input = _dir.Combine("three.pdf");
-        TestTextPdf.Write(input, "1", "2", "3");
+        // More than 10 characters a page: none is read as a scan.
+        TestTextPdf.Write(input, "Trang số một", "Trang số hai", "Trang số ba");
         var reports = new List<FileProgress>();
 
         await Op().RunAsync(input, new SyncProgress(reports.Add), CancellationToken.None);

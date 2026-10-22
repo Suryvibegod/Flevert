@@ -83,7 +83,7 @@ public sealed class PdfMakeSearchable : IOperation
                 await _tesseract.WriteTextLayerAsync(imagePath, layerBase, token).ConfigureAwait(false);
 
                 var completed = Interlocked.Increment(ref ocrDone);
-                progress?.Report(new FileProgress("page", completed, ocrPages.Count));
+                progress?.Report(new FileProgress(PdfExtractText.ScannedPageUnit, completed, ocrPages.Count));
             }).ConfigureAwait(false);
 
             string layerPdf;
