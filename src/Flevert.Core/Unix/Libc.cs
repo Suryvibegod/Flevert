@@ -27,8 +27,12 @@ internal static partial class Libc
     public const uint StatxType = 0x1;
     public const uint StatxMode = 0x2;
     public const uint StatxNlink = 0x4;
+    public const uint StatxUid = 0x8;
     public const uint StatxIno = 0x100;
     public const uint StatxBasicStats = 0x7ff;
+
+    // What every check reads; a file system may leave fields out (stx_mask says which), and a field left out is zero.
+    private const uint StatxNeeded = StatxType | StatxMode | StatxNlink | StatxUid | StatxIno;
 
     public const int SIfMt = 0xF000;
     public const int SIfReg = 0x8000;
@@ -40,6 +44,7 @@ internal static partial class Libc
     public const int EInval = 22;
     public const int ENoSys = 38;
     public const int ENotEmpty = 39;
+    public const int EOpNotSupp = 95;
 
     private static readonly bool X64 = RuntimeInformation.ProcessArchitecture == Architecture.X64;
 
@@ -80,7 +85,7 @@ internal static partial class Libc
         handle.DangerousAddRef(ref added);
         try
         {
-            return statx((int)handle.DangerousGetHandle(), "", AtEmptyPath | AtSymlinkNofollow, StatxBasicStats, out stat) == 0;
+            return Complete(statx((int)handle.DangerousGetHandle(), "", AtEmptyPath | AtSymlinkNofollow, StatxBasicStats, out stat), stat);
         }
         finally
         {
@@ -140,7 +145,19 @@ internal static partial class Libc
 
     /// <summary>What <paramref name="path"/> names itself: a link is described, never followed.</summary>
     public static bool TryStatNoFollow(string path, out Statx stat) =>
-        statx(AtFdCwd, path, AtSymlinkNofollow, StatxBasicStats, out stat) == 0;
+        Complete(statx(AtFdCwd, path, AtSymlinkNofollow, StatxBasicStats, out stat), stat);
+
+    // Fails, as "operation not supported", a description without a field the checks read, rather than let a zero pass for
+    // a link count or an owner.
+    private static bool Complete(int result, in Statx stat)
+    {
+        if (result != 0)
+            return false;
+        if ((stat.Mask & StatxNeeded) == StatxNeeded)
+            return true;
+        Marshal.SetLastPInvokeError(EOpNotSupp);
+        return false;
+    }
 
     /// <summary>
     /// This process's umask, read from /proc (Linux 4.7 and later) rather than with umask(2), which would change it for

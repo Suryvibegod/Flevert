@@ -55,6 +55,27 @@ public sealed class PdfWorkerEnvironmentTests : IDisposable
         Assert.DoesNotContain("FLEVERT_TEST_MARKER", names);
     }
 
+    [LinuxFact]
+    public void On_linux_two_spellings_of_a_name_are_two_variables_and_both_are_removed()
+    {
+        string[] names = ["MAGICK_FLEVERT_CASE_MARKER", "magick_flevert_case_marker"];
+        try
+        {
+            foreach (var name in names)
+                Environment.SetEnvironmentVariable(name, "1");
+
+            var environment = PdfWorker.WorkerEnvironment();
+
+            foreach (var name in names)
+                Assert.True(environment.TryGetValue(name, out var value) && value is null, name);
+        }
+        finally
+        {
+            foreach (var name in names)
+                Environment.SetEnvironmentVariable(name, null);
+        }
+    }
+
     /// <summary>Calls back at once, on the reporting thread, unlike <see cref="Progress{T}"/>.</summary>
     private sealed class SyncProgress(Action<FileProgress> report) : IProgress<FileProgress>
     {

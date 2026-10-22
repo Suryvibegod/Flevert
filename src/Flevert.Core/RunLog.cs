@@ -82,11 +82,11 @@ public sealed class RunLog(string directory)
         }
     }
 
-    /// <summary>Deletes daily logs outside the retention window; the window includes today.</summary>
     private static bool IsHeldByAnotherWriter(IOException ex) => OperatingSystem.IsWindows()
         ? (ex.HResult & 0xFFFF) is ErrorSharingViolation or ErrorLockViolation
         : ex.HResult == EWouldBlock;
 
+    /// <summary>Deletes daily logs outside the retention window; the window includes today.</summary>
     public void Prune(TimeSpan retention, DateOnly today) => BestEffort(() =>
     {
         if (!System.IO.Directory.Exists(Directory))

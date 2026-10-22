@@ -290,7 +290,8 @@ public sealed class PdfWorker
     /// </summary>
     internal static IReadOnlyDictionary<string, string?> WorkerEnvironment()
     {
-        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        // Names are case-sensitive on Linux: MAGICK_X and magick_x are two variables, and each is removed.
+        var environment = new Dictionary<string, string?>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         foreach (var name in System.Environment.GetEnvironmentVariables().Keys.OfType<string>())
         {
             if (name.StartsWith("MAGICK_", StringComparison.OrdinalIgnoreCase) || name.StartsWith("FLEVERT_", StringComparison.OrdinalIgnoreCase))
