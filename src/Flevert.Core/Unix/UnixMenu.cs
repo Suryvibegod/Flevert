@@ -16,7 +16,7 @@ public sealed class UnixMenuInstaller(string dataDirectory, string extensionsDir
 
     /// <summary>~/.local/share/Flevert and ~/.local/share/nautilus-python/extensions (both under XDG_DATA_HOME when set).</summary>
     public static UnixMenuInstaller ForThisUser() =>
-        new(AppData.Root, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "nautilus-python", "extensions"));
+        new(AppData.Root, Path.Combine(AppData.UserFolder(Environment.SpecialFolder.LocalApplicationData), "nautilus-python", "extensions"));
 
     public void Install(string menuJson, string extensionSource)
     {

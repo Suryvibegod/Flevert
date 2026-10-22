@@ -56,6 +56,29 @@ public sealed class UnixFlevertTests : IDisposable
 
     [LinuxFact]
     [SupportedOSPlatform("linux")]
+    public void On_a_new_account_the_log_goes_where_the_data_folder_will_be_never_in_the_folder_flevert_started_in()
+    {
+        // ~/.local/share may not exist yet: .NET then gives "" for it, unless told not to check.
+        var data = _dir.Combine("not made yet");
+        var start = Start(["run", "dev.copy", _dir.File("a.txt")]);
+        start.Environment.Remove("FLEVERT_LOG_DIR");
+        start.Environment["XDG_DATA_HOME"] = data;
+        using var startedIn = new TempDir();
+        start.WorkingDirectory = startedIn.Path;
+
+        using (var flevert = Process.Start(start)!)
+        {
+            flevert.StandardOutput.ReadToEnd();
+            Assert.True(flevert.WaitForExit(TimeSpan.FromMinutes(2)), "flevert did not finish");
+            Assert.Equal(ExitCodes.Ok, flevert.ExitCode);
+        }
+
+        Assert.Single(Directory.GetFiles(Path.Combine(data, "Flevert", "logs")));
+        Assert.Empty(Directory.GetFileSystemEntries(startedIn.Path));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
     public void An_unknown_operation_is_bad_usage()
     {
         var (exitCode, _) = Run(["run", "no.such-op", _dir.File("a.txt")]);

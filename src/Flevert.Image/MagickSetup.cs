@@ -138,10 +138,10 @@ public static class MagickSetup
     {
         var folders = new List<string>
         {
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ImageMagick"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ImageMagick"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ImageMagick"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "ImageMagick"),
+            Path.Combine(AppData.UserFolder(Environment.SpecialFolder.LocalApplicationData), "ImageMagick"),
+            Path.Combine(AppData.UserFolder(Environment.SpecialFolder.ApplicationData), "ImageMagick"),
+            Path.Combine(AppData.UserFolder(Environment.SpecialFolder.UserProfile), "ImageMagick"),
+            Path.Combine(AppData.UserFolder(Environment.SpecialFolder.UserProfile), ".config", "ImageMagick"),
         };
         foreach (var variable in new[] { "MAGICK_HOME", "MAGICK_CONFIGURE_PATH" })
         {
