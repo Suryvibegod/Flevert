@@ -43,7 +43,11 @@ internal static class UnixGroup
         return prefix;
     }
 
-    /// <summary>Ends every process left in the group the tool led. Nothing to do once the group is empty.</summary>
+    /// <summary>
+    /// Ends every process left in the group the tool led. Nothing to do once the group is empty. Called after .NET reaped
+    /// the leader; Linux gives no new process the group's id while any process of the group is left, and a new group with
+    /// that id would need a new process given that id and making itself a group leader in between.
+    /// </summary>
     public static void Kill(int groupLeader)
     {
         if (groupLeader > 1)
@@ -60,12 +64,13 @@ internal static class UnixGroup
         OutOfMemoryWords.Any(word => standardError.Contains(word, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Whether a tool died of a signal after taking at least three quarters of <paramref name="limit"/>: pdfium's allocator
-    /// aborts without a word when refused memory. SIGKILL does not count: it is what a cancel, a timeout or a stalled page
-    /// sends, from outside.
+    /// Whether a tool failed after taking at least three quarters of <paramref name="limit"/>: pdfium's allocator aborts
+    /// without a word when refused memory, and qpdf may go on with what it could not read as null and end with warnings
+    /// (exit code 3) or an error. SIGKILL does not count: it is what a cancel, a timeout or a stalled page sends, from
+    /// outside. The job on Windows reports a refusal whatever the exit code; here a success is trusted.
     /// </summary>
     public static bool DiedNearItsLimit(int exitCode, long peakBytes, ulong limit) =>
-        exitCode > 128 && exitCode != 128 + SigKill && (ulong)peakBytes >= limit / 4 * 3;
+        exitCode != 0 && exitCode != 128 + SigKill && (ulong)peakBytes >= limit / 4 * 3;
 
     private static readonly string[] OutOfMemoryWords =
         ["bad_alloc", "out of memory", "cannot allocate memory", "memory exhausted", "OutOfMemoryException"];

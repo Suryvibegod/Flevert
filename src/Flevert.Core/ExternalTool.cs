@@ -145,7 +145,7 @@ public static partial class ExternalTool
             start.ArgumentList.Add(argument);
         ChangeEnvironment(start, environment);
 
-        var run = new Run(start, timeout, standardInput, afterStart, assign ?? AssignToJob, standardOutputLine);
+        var run = new Run(toolPath, start, timeout, standardInput, afterStart, assign ?? AssignToJob, standardOutputLine);
         try
         {
             return await run.OnceAsync(limits, cancellationToken).ConfigureAwait(false);
@@ -167,8 +167,9 @@ public static partial class ExternalTool
     private sealed class ProcessLimitRefusedException(Exception inner) : Exception(inner.Message, inner);
 
     /// <summary>One start of the tool, in a job of its own, with its output read and its input written.</summary>
+    /// <param name="tool">The tool, which messages name: on Linux <paramref name="start"/> runs setsid, which runs it.</param>
     private sealed class Run(
-        ProcessStartInfo start, TimeSpan timeout, ReadOnlyMemory<byte> standardInput, Action<Process>? afterStart,
+        string tool, ProcessStartInfo start, TimeSpan timeout, ReadOnlyMemory<byte> standardInput, Action<Process>? afterStart,
         Action<SafeHandle, Process> assign, Action<string>? standardOutputLine)
     {
         public async Task<ExternalToolResult> OnceAsync(ExternalToolLimits? limits, CancellationToken cancellationToken)
@@ -176,10 +177,20 @@ public static partial class ExternalTool
             if (OperatingSystem.IsLinux())
             {
                 // No job: the tool leads a process group of its own (setsid), which is ended as the job would be.
-                using var tool = UnixStarter.Start(start);
-                afterStart?.Invoke(tool);
-                using var memory = limits?.MaxMemoryBytes is null ? null : new UnixMemoryWatch(tool.Id);
-                return await WaitAsync(tool, job: null, memoryReports: null, limits, cancellationToken, memory).ConfigureAwait(false);
+                using var group = UnixStarter.Start(start);
+                try
+                {
+                    afterStart?.Invoke(group);
+                }
+                catch
+                {
+                    Kill(group, job: null);
+                    await group.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                    throw;
+                }
+
+                using var memory = limits?.MaxMemoryBytes is null ? null : new UnixMemoryWatch(group.Id);
+                return await WaitAsync(group, job: null, memoryReports: null, limits, cancellationToken, memory).ConfigureAwait(false);
             }
 
             using var memoryReports = limits?.MaxMemoryBytes is null ? null : CreateCompletionPort();
@@ -260,7 +271,7 @@ public static partial class ExternalTool
                     .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
                 lines?.ThrowIfFailed();
-                throw new TimeoutException($"{Path.GetFileName(start.FileName)} did not finish within {timeout.TotalSeconds:0.#} s.");
+                throw new TimeoutException($"{Path.GetFileName(tool)} did not finish within {timeout.TotalSeconds:0.#} s.");
             }
         }
     }

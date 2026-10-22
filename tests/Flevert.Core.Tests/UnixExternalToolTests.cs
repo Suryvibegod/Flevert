@@ -6,7 +6,7 @@ namespace Flevert.Core.Tests;
 /// <summary>
 /// ExternalTool on Linux, with the system's own tools in place of the cmd, PowerShell and ping of ExternalToolTests: the
 /// same guarantees, kept without a job object. The tool runs in a process group of its own (setsid), which is ended when
-/// the run returns; a memory limit is an address-space limit (prlimit). docs/specs/linux.md.
+/// the run returns; a memory limit is a data limit (prlimit --data, RLIMIT_DATA). docs/specs/linux.md.
 /// </summary>
 public sealed class UnixExternalToolTests : IDisposable
 {
@@ -66,8 +66,10 @@ public sealed class UnixExternalToolTests : IDisposable
         var pidFile = _dir.Combine("pid");
         var timer = Stopwatch.StartNew();
 
-        await Assert.ThrowsAsync<TimeoutException>(() => ExternalTool.RunAsync(Sh, ["-c", $"echo $$ > '{pidFile}'; sleep 60"], TimeSpan.FromSeconds(1)));
+        var timeout = await Assert.ThrowsAsync<TimeoutException>(() => ExternalTool.RunAsync(Sh, ["-c", $"echo $$ > '{pidFile}'; sleep 60"], TimeSpan.FromSeconds(1)));
 
+        // The tool, not setsid, which starts it.
+        Assert.StartsWith("sh did not finish", timeout.Message, StringComparison.Ordinal);
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), $"took {timer.Elapsed}");
         Assert.False(IsRunning(int.Parse(File.ReadAllText(pidFile).Trim(), System.Globalization.CultureInfo.InvariantCulture)));
     }
@@ -156,22 +158,24 @@ public sealed class UnixExternalToolTests : IDisposable
         Assert.False(free.MemoryLimitExceeded);
     }
 
-    // pdfium says nothing when refused memory: its allocator aborts. Python stands in, taking most of the allowance and
-    // then dying of the same signal; a kill (as on cancel) or a crash with little memory taken is not about memory.
+    // pdfium says nothing when refused memory: its allocator aborts; qpdf may end with warnings (3) or an error. Python
+    // stands in, taking most of the allowance and then ending the same way; a kill (as on cancel), a failure with little
+    // memory taken, or a success is not about memory.
     [SkippableTheory]
     [SupportedOSPlatform("linux")]
-    [InlineData(330, "ABRT", true)]
-    [InlineData(330, "KILL", false)]
-    [InlineData(10, "ABRT", false)]
-    public async Task A_tool_that_dies_silently_near_its_limit_is_reported_as_over_the_limit(int megabytes, string signal, bool over)
+    [InlineData(330, "os.kill(os.getpid(), signal.SIGABRT)", true)]
+    [InlineData(330, "os._exit(3)", true)]
+    [InlineData(330, "os.kill(os.getpid(), signal.SIGKILL)", false)]
+    [InlineData(10, "os.kill(os.getpid(), signal.SIGABRT)", false)]
+    [InlineData(330, "os._exit(0)", false)]
+    public async Task A_tool_that_fails_silently_near_its_limit_is_reported_as_over_the_limit(int megabytes, string ending, bool over)
     {
         Skip.IfNot(OperatingSystem.IsLinux() && File.Exists("/usr/bin/python3"), "Linux with Python only");
-        var script = $"import os, signal, time; b = bytearray({megabytes} << 20); time.sleep(0.5); os.kill(os.getpid(), signal.SIG{signal})";
+        var script = $"import os, signal, time; b = bytearray({megabytes} << 20); time.sleep(0.5); {ending}";
 
         var result = await ExternalTool.RunAsync("/usr/bin/python3", ["-I", "-c", script], Generous,
             limits: new ExternalToolLimits { MaxMemoryBytes = 400 * 1024 * 1024 });
 
-        Assert.NotEqual(0, result.ExitCode);
         Assert.Equal(over, result.MemoryLimitExceeded);
     }
 

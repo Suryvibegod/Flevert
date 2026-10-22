@@ -25,7 +25,8 @@ internal sealed class UnixMemoryWatch : IDisposable
     /// <summary>The highest VmData seen, in bytes.</summary>
     public long PeakBytes => Interlocked.Read(ref _peak);
 
-    // Stopped as soon as the tool has exited, before its process id can be given to another process.
+    // Stopped as soon as the tool has exited. .NET has reaped it by then, so a sample already running may read the status
+    // of a process given the same id meanwhile: at worst one wrong peak, for a tool that has ended anyway.
     public void Dispose() => _timer.Dispose();
 
     private void Sample()
