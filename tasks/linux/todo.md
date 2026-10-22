@@ -32,7 +32,7 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T1, T2. Cỡ: M
 
 ### Mốc: nền
-- [ ] Build 0 cảnh báo; bảng test có trong todo
+- [x] Build 0 cảnh báo; bảng test có trong todo
 
 ## Giai đoạn 2: phần nền tảng
 
@@ -124,12 +124,12 @@ Lệnh chung: `export PATH=$HOME/.dotnet:$PATH`, `python3 scripts/fetch-deps-lin
 - Phụ thuộc: T13. Cỡ: S
 
 ## Kiểm một lần trước PR
-- [ ] Chạy thật: cài từ tarball, mọi thao tác ảnh và PDF trong Nautilus, Cancel, mật khẩu, gỡ
+- [x] Chạy thật: cài từ tarball, mọi thao tác ảnh và PDF trong Nautilus, Cancel, mật khẩu, gỡ
   - 2026-10-21, lần bấm thử đầu của người dùng: ảnh, PDF qua qpdf, mật khẩu đạt; **mọi tác vụ của PDF worker (pdfium) báo "not a PDF" trong gói**, Debug/Release/publish không ReadyToRun đều chạy. Nguyên nhân: `unsigned long` của pdfium là 64 bit trên Linux, Flevert khai `uint` (đúng trên Windows), nên `m_FileLen` của `FPDF_FILEACCESS` có 4 byte cao là rác; JIT tình cờ để 0, ReadyToRun thì không. Sửa: `CULong` cho mọi `unsigned long`/`FPDF_DWORD` của pdfium (FILEACCESS, FILEWRITE, `GetLastError`, `FillRect`, `FormObj_GetObject`, `GetImageDataRaw`, `GetImageFilter`, `GetMetaText`, `SaveAsCopy`), đã đối chiếu header của bản chromium/8100 đã ghim; ABI Windows không đổi. `build-linux.sh` giờ chạy thử bản publish (pdfium to-jpg và page-numbers, qpdf, ImageMagick) trước khi đóng gói: gói cũ trả exit 1 ở bước này. Người dùng bấm lại: Add page numbers và Add watermark đạt.
   - Gỡ (`install.sh --uninstall`) để lại `nautilus-python/extensions/__pycache__/flevert_menu.cpython-310.pyc` (Python tạo khi Nautilus import extension): `uninstall-menu` giờ xóa `flevert_menu.*.pyc` và thư mục cache khi rỗng, không theo link (2 test).
   - Chưa kiểm bằng tay: Cancel (lô 20 PNG xong trước khi cửa sổ tiến độ hiện ra sau 2 s); có test tự động cho Cancel của `UnixBatchUi`.
-- [ ] Ba review bối cảnh trống, chỉ đọc (code-reviewer, security-auditor, doubt) trên `git diff main..feat/linux`; bảng reconcile ở đây; sửa; một reviewer soát lại tới khi hết Critical/High/Required
-- [ ] Đủ 10 tiêu chí của spec
+- [x] Ba review bối cảnh trống, chỉ đọc (code-reviewer, security-auditor, doubt) trên `git diff main..feat/linux`; bảng reconcile ở đây; sửa; một reviewer soát lại tới khi hết Critical/High/Required
+- [x] Đủ 10 tiêu chí của spec, với hai giới hạn ghi ở phần bằng chứng: SC2 chưa so nội dung từng byte với bản Windows (không có máy Windows; tên file kết quả khớp), SC10 đo với cache ấm (~96 ms; khởi động lạnh thật cần root)
 
 ### Reconcile ba review (2026-10-21)
 
@@ -234,7 +234,7 @@ Kết luận của reviewer: **không còn Critical/High**. Bấm thử của ng
 
 **SC10**: `flevert run dev.copy` trên file nhỏ, 12 lần, cache ấm: 87–110 ms, trung vị ~96 ms (`list-ops` 48 ms). Khởi động lạnh thật cần root để xóa page cache: chưa đo.
 
-**SC3, SC5**: chờ người dùng bấm thử (`~/Flevert-test/kiem-cuoi`): 20 HEIC (xong dưới 1 s nên cửa sổ tiến độ không hiện, đúng thiết kế: chỉ hiện sau 2 s), Cancel trên PDF 450 trang (`pdf.to-jpg` mất ~12 s).
+**SC3, SC5** (người dùng bấm trong Nautilus, 2026-10-22): 20 HEIC → 20 JPG trong một lần chạy, một thông báo (xong dưới 1 s nên cửa sổ tiến độ không hiện, đúng thiết kế: chỉ hiện sau 2 s). Cancel giữa lúc PDF 450 trang → PNG: lần đầu để lại `.partial` (R33), sau khi sửa thư mục chỉ còn file gốc. Gỡ bằng `install.sh --uninstall`: không còn file nào (kể cả `__pycache__`).
 
 ## Bảng test trên Linux (T3)
 
