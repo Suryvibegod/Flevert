@@ -204,6 +204,48 @@ class FlevertMenuTests(unittest.TestCase):
 
         self.assertEqual([[str(self.flevert), "run", "image.to-jpg", "/home/u/b 2.heic", "/home/u/a.heic"]], self.started)
 
+    def test_more_files_than_flevert_takes_reach_it_as_one_too_many_so_it_says_so(self):
+        # Thousands of paths could pass what one command line holds, and nothing would happen at all.
+        self.write_menu(dict(MENU, maxFiles=2))
+        module = self.load()
+        paths = [f"/home/u/{n}.heic" for n in range(5)]
+
+        self.items(module, paths)[0].submenu.items[1].activate()  # Compress
+
+        self.assertEqual([[str(self.flevert), "run", "image.compress", *paths[:3]]], self.started)
+
+    def test_a_damaged_entry_gives_no_menu_and_no_error(self):
+        damaged = [
+            [{"label": 5, "op": "image.compress"}],
+            [{"label": "Compress", "op": ["image.compress"]}],
+            [{"label": "Convert to", "children": "JPG"}],
+            [{"label": "Convert to"}],
+            ["Compress"],
+            {"label": "Compress", "op": "image.compress"},
+        ]
+        for entries in damaged:
+            with self.subTest(entries=entries):
+                self.write_menu(dict(MENU, menus={".heic": entries}))
+                module = self.load()
+
+                self.assertEqual([], self.items(module, ["/home/u/a.heic"]))
+            self.tearDown_modules()
+
+        for menu in [dict(MENU, maxFiles=0), dict(MENU, maxFiles="1000"), dict(MENU, operations={"image.compress": ".heic"})]:
+            with self.subTest(menu=menu):
+                self.write_menu(menu)
+                module = self.load()
+
+                self.assertEqual([], self.items(module, ["/home/u/a.heic"]))
+            self.tearDown_modules()
+
+    def test_a_flevert_that_cannot_start_raises_nothing_inside_nautilus(self):
+        module = self.load()
+        del module.start  # the module's own
+        module = importlib.reload(module)
+
+        module.start([str(self.dir / "missing"), "run", "x", "/home/u/a.heic"])
+
     def test_a_menu_file_that_cannot_be_read_gives_no_menu_and_no_error(self):
         module = self.load()
         self.menu_path.write_text("{ not json")

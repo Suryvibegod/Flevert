@@ -104,6 +104,8 @@ internal static class Program
             Console.Error.WriteLine("  Ubuntu, Debian, Pop!_OS: sudo apt install python3-nautilus");
             Console.Error.WriteLine("  Fedora: sudo dnf install nautilus-python");
             Console.Error.WriteLine("  Arch: sudo pacman -S python-nautilus");
+            // The menu is written, so installing nautilus-python is all that is left; but Flevert is not in the menu yet.
+            return ExitCodes.Failed;
         }
 
         Console.WriteLine("Flevert is in the Nautilus menu once Nautilus restarts: nautilus -q");
@@ -112,6 +114,8 @@ internal static class Program
 
     private static int RunBatch(RunCommand run, OperationCatalog catalog, RunLog log)
     {
+        // Logs hold every path processed; keep the whole app-data folder private to this user, before the first line.
+        SecureDirectory.TrySecure(AppData.Root);
         var operation = catalog.Find(run.OperationId);
         if (operation is null)
         {
@@ -122,7 +126,8 @@ internal static class Program
         var headless = Environment.GetEnvironmentVariable("FLEVERT_HEADLESS") == "1";
         if (run.Files.Count > MaxFiles)
         {
-            var refused = $"Flevert takes at most {MaxFiles} files at once; {run.Files.Count} were selected.";
+            // The menu hands over one file too many, not every file selected (flevert_menu.py): no count to give.
+            var refused = $"Flevert takes at most {MaxFiles} files at once. Select fewer and try again.";
             log.Write(run.OperationId, new FileResult($"({run.Files.Count} files)", null, refused), TimeSpan.Zero);
             Console.Error.WriteLine(refused);
             if (!headless)
