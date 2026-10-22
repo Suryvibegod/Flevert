@@ -282,13 +282,17 @@ public sealed class Runner(RunLog log)
         {
             // The operation names the real path it was given; report the file as the batch received it.
             var culprit = inputs.Where(i => i.Real == ex.InputPath).Select(i => i.Given).FirstOrDefault() ?? ex.InputPath;
-            result = new FileResult(culprit, null, $"{Path.GetFileName(culprit)}: {ex.Message}{Environment.NewLine}{ex}");
+            result = new FileResult(culprit, null, PinnedInput.ShowNames($"{Path.GetFileName(culprit)}: {ex.Message}{Environment.NewLine}{ex}"));
         }
 #pragma warning disable CA1031 // Whatever the operation throws, the batch ends with a result and a notification.
         catch (Exception ex)
 #pragma warning restore CA1031
         {
-            result = new FileResult(first, null, $"{ex.Message}{Environment.NewLine}{ex}");
+            result = new FileResult(first, null, PinnedInput.ShowNames($"{ex.Message}{Environment.NewLine}{ex}"));
+        }
+        finally
+        {
+            Release(pins, running);
         }
 
         lock (gate)
@@ -474,12 +478,14 @@ public sealed class Runner(RunLog log)
         catch (Exception ex)
 #pragma warning restore CA1031
         {
-            // The message on the first line for the notification, as a join does; the stack for the log after it.
-            result = new FileResult(file, null, $"{ex.Message}{Environment.NewLine}{ex}");
+            // The message on the first line for the notification, as a join does; the stack for the log after it. A
+            // pinned input read through /proc/<flevert>/fd/<n> is named as the user knows it.
+            result = new FileResult(file, null, PinnedInput.ShowNames($"{ex.Message}{Environment.NewLine}{ex}"));
         }
         finally
         {
-            pin?.Dispose();
+            if (pin is not null)
+                Release([pin], running);
         }
 
         log.Write(operation.Id, result, timer.Elapsed);

@@ -170,6 +170,23 @@ CR = code-reviewer, SA = security-auditor, DD = doubt-driven. "Kiểm" = tôi t�
 | R31 | (tìm ra khi sửa R1) `dotnet build Flevert.sln` không build `Flevert.Linux` (không có trong cấu hình solution, và solution bỏ qua tham chiếu tới project nó không build): trên runner sạch mọi test chạy `flevert` thật sẽ đỏ | tự kiểm | High (CI) | Đúng: xóa `bin/obj` của Flevert.Linux rồi build solution → không có `flevert` | Sửa: `OnlyReferenceAndBuildProjectsEnabledInSolutionConfiguration=false` trong ba project test (chỉ Linux) |
 | R32 | (tìm ra khi tái hiện) Khi `~/.local/share` (hoặc `XDG_DATA_HOME`) chưa có, `GetFolderPath` trả "", log và cấu hình thành đường dẫn tương đối theo thư mục flevert được chạy | tự kiểm | Medium | Đúng: log nằm trong thư mục đang đứng | Sửa: `AppData.UserFolder` dùng `DoNotVerify` trên Linux (AppData, menu, MagickSetup). Test |
 
+### Soát lại các bản sửa (2026-10-22, một reviewer bối cảnh trống, code + bảo mật)
+
+Kết luận của reviewer: **không còn Critical/High**. Bấm thử của người dùng tìm thêm một lỗi (R33).
+
+| # | Phát hiện | Mức | Quyết định |
+|---|---|---|---|
+| R33 | (người dùng bấm thử SC5) Cancel trong cửa sổ tiến độ khi PDF → PNG để lại `.flevert-….partial` với 50 trang: `Runner` thôi chờ thao tác ngay lúc hủy (`WaitAsync(ct)`), flevert kết thúc trước khi thao tác xóa thư mục tạm | High | Sửa: thao tác bị hủy được chờ tối đa `StopGrace` (2 s, như join đã có) để dừng và dọn; test Core (thao tác dọn chậm) và test PDF qua `Runner` + worker thật, cả hai đỏ với `Runner` cũ |
+| L1 | Đường dẫn `/proc/<pid>/fd/N` có thể lọt vào lời lỗi (.NET, worker) | Low | Sửa: `Runner` dùng `PinnedInput.ShowNames` cho mọi lời lỗi; lỗi trong thư mục output (handle thư mục) còn có thể hiện `/proc`: ghi nhận |
+| L2 | Pin bị đóng khi `Runner` bỏ thao tác, thao tác còn đọc qua `/proc/.../fd/N` thì gặp fd khác | Low | Sửa cùng R33: pin được giữ tới khi thao tác thật sự kết thúc (`Release` trong continuation). Test Linux: thao tác bỏ qua token đọc lại sau 3 s vẫn ra file gốc |
+| L3 | qpdf exit 3 gần giới hạn giờ bị từ chối | Low | Ghi ADR (an toàn, lời có thể sai) |
+| L4 | Nhánh dự phòng rename coi "không mô tả được" là "trống" | Low | Sửa: chỉ ENOENT là trống |
+| N1 | `DevCopy`/`DevJoin` mở theo tên | Nit | Sửa |
+| N2 | `ShowNames` thay chuỗi con (`/fd/7` trong `/fd/70`) | Nit | Sửa: không thay khi theo sau là chữ số; test |
+| N3 | Comment `MaxBytes` "two paths" | Nit | Sửa |
+| N4, N5 | Font chứa U+001F; hook `AfterPin` | Nit | Giữ |
+| S1, S2 | Đỉnh VmData bình thường của worker so với 3/4; zenity 4 (Ubuntu 24.04) | — | Mở: chưa có máy zenity 4; ghi ADR mục Nautilus 43+ |
+
 ## Bằng chứng tiêu chí (2026-10-22, gói từ `build-linux.sh`, cài bằng `install.sh`)
 
 **SC2**: mọi thao tác của menu chạy qua `flevert` đã cài, headless, trên fixture (HEIC thật, PDF của test; JPG/PNG/PDF ảnh do chính flevert làm từ HEIC). "skipped" là đúng với fixture đó (không có trang trắng, đã nhỏ…). Mật khẩu và watermark cần cửa sổ: người dùng đã bấm thử trong Nautilus (Protect, Remove password, Add watermark, Add page numbers đạt). Chưa so nội dung byte với bản Windows (không có máy Windows); tên file kết quả giống bảng tên của bản Windows.

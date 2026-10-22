@@ -113,7 +113,8 @@ internal sealed class UnixPartialFolder : IPartialFolder
 
         // A file system without RENAME_NOREPLACE (some network and FUSE ones): check, then rename. The check and the rename
         // are two steps; the name is beside the user's own input.
-        if (System.IO.Path.Exists(destination) || Libc.TryStatNoFollow(destination, out _))
+        // Free only when nothing is there (ENOENT): a name that cannot be described counts as taken.
+        if (System.IO.Path.Exists(destination) || Libc.TryStatNoFollow(destination, out _) || Marshal.GetLastPInvokeError() != Libc.ENoEnt)
             return Libc.EExist;
         if (Libc.Rename(Path, destination, 0) != 0)
             return Marshal.GetLastPInvokeError();

@@ -63,7 +63,7 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
     /// </summary>
     internal const string Magic = "flevert-pdf-worker/3";
 
-    /// <summary>Two paths of at most 32 767 characters and a few short fields fit with room to spare.</summary>
+    /// <summary>Three paths of at most 32 767 characters and a few short fields fit with room to spare.</summary>
     internal const int MaxBytes = 256 * 1024;
 
     private const double MaxDpi = 10_000;

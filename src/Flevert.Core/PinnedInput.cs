@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using System.Text.RegularExpressions;
 using Microsoft.Win32.SafeHandles;
 
 namespace Flevert.Core;
@@ -45,9 +46,9 @@ public static class PinnedInput
     public static string ShowNames(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        // Longest first, so /proc/1/fd/7 is never replaced inside /proc/1/fd/70.
-        foreach (var (name, handle) in (Pins.Value ?? []).OrderByDescending(pin => pin.Handle.Length))
-            text = text.Replace(handle, name, StringComparison.Ordinal);
+        // Never inside a longer number: /proc/1/fd/7 is not the start of /proc/1/fd/70.
+        foreach (var (name, handle) in Pins.Value ?? [])
+            text = Regex.Replace(text, Regex.Escape(handle) + "(?![0-9])", name.Replace("$", "$$", StringComparison.Ordinal));
         return text;
     }
 

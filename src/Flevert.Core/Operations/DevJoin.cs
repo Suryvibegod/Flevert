@@ -29,7 +29,7 @@ public sealed class DevJoin : IBatchOperation
             for (var i = 0; i < inputPaths.Count; i++)
             {
                 progress?.Report(new FileProgress("file", i + 1, inputPaths.Count));
-                await using var source = new FileStream(inputPaths[i], FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+                await using var source = new FileStream(PinnedInput.ReadPath(inputPaths[i]), FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
                 await source.CopyToAsync(target, token).ConfigureAwait(false);
             }
         }, ct);

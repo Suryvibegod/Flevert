@@ -20,6 +20,23 @@ public sealed class UnixInputPinTests : IDisposable
 
     [LinuxFact]
     [SupportedOSPlatform("linux")]
+    public void A_message_names_a_pinned_input_as_the_user_knows_it_and_nothing_else()
+    {
+        var file = _dir.File("Hồ sơ $1.pdf");
+        using var pin = Libc.Open(file, Libc.OPath | Libc.OCloexec);
+        PinnedInput.Use([(file, pin)]);
+        var handle = PinnedInput.ReadPath(file);
+
+        var shown = PinnedInput.ShowNames($"{handle}: denied; {handle}0/page.png: full");
+
+        // "$1" is no group reference, and the number of another handle is left alone.
+        Assert.Equal($"{file}: denied; {handle}0/page.png: full", shown);
+        Assert.StartsWith("/proc/", handle, StringComparison.Ordinal);
+        Assert.Equal(new FileInfo(file).Length, PinnedInput.Length(file));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
     public void A_plain_file_is_pinned_at_its_real_path()
     {
         var file = _dir.File("a.txt");

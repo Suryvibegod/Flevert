@@ -39,6 +39,7 @@ internal static partial class Libc
     public const int SIfDir = 0x4000;
     public const int SIfLnk = 0xA000;
 
+    public const int ENoEnt = 2;
     public const int EExist = 17;
     public const int EIsDir = 21;
     public const int EInval = 22;
