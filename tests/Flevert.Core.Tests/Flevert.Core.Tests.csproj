@@ -30,6 +30,11 @@
     <ProjectReference Include="..\..\src\Flevert.Cli\Flevert.Cli.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' == 'Windows_NT'" />
     <ProjectReference Include="..\..\src\Flevert.Linux\Flevert.Linux.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' != 'Windows_NT'" />
   </ItemGroup>
+  <!-- Flevert.Linux is in the solution without being built by it (on Windows it could not reference the libraries built
+       for Windows), and a solution build skips references to projects it does not build: built anyway, through this one. -->
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+    <OnlyReferenceAndBuildProjectsEnabledInSolutionConfiguration>false</OnlyReferenceAndBuildProjectsEnabledInSolutionConfiguration>
+  </PropertyGroup>
 
   <!-- Windows only: ExternalTool driven through cmd, PowerShell and ping (UnixExternalToolTests is the Linux side), batching across processes over pipes, the registry, the PowerShell scripts and the Inno Setup installer, 8.3 and \\?\ paths, the update offer (off on Linux). Not built on Linux (docs/specs/linux.md). -->
   <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
