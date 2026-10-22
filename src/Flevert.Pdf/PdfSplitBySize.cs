@@ -35,7 +35,6 @@ namespace Flevert.Pdf;
 public sealed class PdfSplitBySize : IOperation
 {
     private const string FolderSuffix = " (parts)";
-    private const int MaxFileNameLength = 255;
 
     // The most the parts, or the single pages, may take: four times the PDF.
     private const int MaxGrowth = 4;
@@ -100,7 +99,7 @@ public sealed class PdfSplitBySize : IOperation
         var total = await _qpdf.CountPagesAsync(inputPath, ct).ConfigureAwait(false);
         if (total == 0)
             throw new PdfException(PdfError.NoPages, "This PDF has no pages.");
-        var length = new FileInfo(inputPath).Length;
+        var length = PinnedInput.Length(inputPath);
         if (length < LimitBytes)
             throw new OperationSkippedException($"This PDF is already under {Limit}: there is nothing to split.");
         var signed = await PdfSignature.IsSignedAsync(inputPath, ct).ConfigureAwait(false);
@@ -373,14 +372,6 @@ public sealed class PdfSplitBySize : IOperation
     internal static string PartName(string stem, int part)
     {
         var suffix = string.Create(CultureInfo.InvariantCulture, $" part {part}.pdf");
-        var room = MaxFileNameLength - suffix.Length;
-        if (stem.Length > room)
-        {
-            stem = stem[..room];
-            if (char.IsHighSurrogate(stem[^1]))
-                stem = stem[..^1];
-        }
-
-        return stem + suffix;
+        return OutputPath.FitName(stem, suffix);
     }
 }

@@ -12,7 +12,13 @@ namespace Flevert.Pdf;
 /// </summary>
 public sealed partial class Qpdf
 {
-    public const string FileName = "qpdf.exe";
+    public static readonly string FileName = OperatingSystem.IsWindows() ? "qpdf.exe" : "qpdf";
+
+    /// <summary>
+    /// Where qpdf is below the folder of the running program. On Linux it keeps the bin/ and lib/ of its release, since
+    /// it finds libqpdf through $ORIGIN/../lib (scripts/deps-linux.json).
+    /// </summary>
+    internal static readonly string RelativePath = OperatingSystem.IsWindows() ? FileName : Path.Combine("qpdf", "bin", FileName);
 
     // qpdf's documented exit codes: 0 success, 2 error, 3 success with warnings.
     private const int ExitError = 2;
@@ -69,7 +75,7 @@ public sealed partial class Qpdf
     /// qpdf.exe in the folder of the running program: the install folder for flevert.exe (which setup checks only
     /// the user and administrators can change), or the build output, where the Flevert.Pdf project copies it.
     /// </summary>
-    public static Qpdf NextToApp { get; } = new(Path.Combine(AppContext.BaseDirectory, FileName));
+    public static Qpdf NextToApp { get; } = new(Path.Combine(AppContext.BaseDirectory, RelativePath));
 
     public string ExePath { get; }
 
@@ -311,7 +317,7 @@ public sealed partial class Qpdf
     {
         RequireArgumentLine(inputPath, nameof(inputPath));
         RequireExe();
-        var length = new FileInfo(inputPath).Length;
+        var length = PinnedInput.Length(inputPath);
         if (length > MaxInputBytes)
             throw PdfDocument.TooLargeError(MaxInputBytes);
 
@@ -464,7 +470,7 @@ public sealed partial class Qpdf
         long total = 0;
         foreach (var input in inputs)
         {
-            var length = new FileInfo(input).Length;
+            var length = PinnedInput.Length(input);
             if (length > MaxInputBytes)
                 throw ForInput(inputs, input, PdfDocument.TooLargeError(MaxInputBytes));
             total += length;
@@ -713,6 +719,10 @@ public sealed partial class Qpdf
     /// </remarks>
     internal static string ToExtendedPath(string path)
     {
+        // Linux has no length limit to work around: the path goes made absolute, and a pinned input as its pin, which leads
+        // to the file the runner checked whatever its name leads to now (PinnedInput); messages show the name (Detail).
+        if (!OperatingSystem.IsWindows())
+            return PinnedInput.ReadPath(Path.GetFullPath(path));
         if (path.StartsWith(ExtendedPrefix, StringComparison.Ordinal))
             return path;
         if (path.StartsWith(@"\??\", StringComparison.Ordinal))
@@ -729,12 +739,15 @@ public sealed partial class Qpdf
     private const string ExtendedPrefix = @"\\?\";
     private const string ExtendedUncPrefix = @"\\?\UNC\";
 
+    private static readonly string FetchDepsCommand =
+        OperatingSystem.IsWindows() ? @"scripts\fetch-deps.ps1" : "python3 -I scripts/fetch-deps-linux.py";
+
     private void RequireExe()
     {
         if (!File.Exists(ExePath))
         {
             throw new FileNotFoundException(
-                $"{FileName} is missing from {Path.GetDirectoryName(ExePath)}. Reinstall Flevert (in a source build, run scripts\\fetch-deps.ps1).",
+                $"{FileName} is missing from {Path.GetDirectoryName(ExePath)}. Reinstall Flevert (in a source build, run {FetchDepsCommand}).",
                 ExePath);
         }
     }
@@ -754,7 +767,7 @@ public sealed partial class Qpdf
     // always with the extended prefix (ToExtendedPath); the message shows them as the user knows them.
     internal static string Detail(ExternalToolResult run)
     {
-        var text = run.StandardError.Trim()
+        var text = PinnedInput.ShowNames(run.StandardError.Trim())
             .Replace(ExtendedUncPrefix, @"\\", StringComparison.OrdinalIgnoreCase)
             .Replace(ExtendedPrefix, "", StringComparison.Ordinal);
         if (text.Length == 0)

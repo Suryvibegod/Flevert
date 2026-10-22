@@ -1,0 +1,134 @@
+using System.Runtime.Versioning;
+using System.Text;
+
+namespace Flevert.Core;
+
+/// <summary>
+/// Puts Flevert in the Nautilus menu for this user, and takes it out: menu.json in Flevert's own folder, and the
+/// extension where nautilus-python loads extensions from (docs/specs/linux.md). Each file is written beside its place and
+/// renamed over it, so a link put in its place is replaced, never written through.
+/// </summary>
+[SupportedOSPlatform("linux")]
+public sealed class UnixMenuInstaller(string dataDirectory, string extensionsDirectory)
+{
+    public const string MenuFileName = "menu.json";
+    public const string ExtensionFileName = "flevert_menu.py";
+
+    /// <summary>~/.local/share/Flevert and ~/.local/share/nautilus-python/extensions (both under XDG_DATA_HOME when set).</summary>
+    public static UnixMenuInstaller ForThisUser() =>
+        new(AppData.Root, Path.Combine(AppData.UserFolder(Environment.SpecialFolder.LocalApplicationData), "nautilus-python", "extensions"));
+
+    public void Install(string menuJson, string extensionSource)
+    {
+        ArgumentNullException.ThrowIfNull(menuJson);
+        SecureDirectory.TrySecure(dataDirectory);
+        Directory.CreateDirectory(dataDirectory);
+        Replace(Path.Combine(dataDirectory, MenuFileName), Encoding.UTF8.GetBytes(menuJson), UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        Directory.CreateDirectory(extensionsDirectory);
+        Replace(Path.Combine(extensionsDirectory, ExtensionFileName), File.ReadAllBytes(extensionSource),
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+    }
+
+    /// <summary>
+    /// Removes both files, and the bytecode Python cached for the extension when Nautilus imported it (with the cache
+    /// folder once nothing else is in it); a link at any of these names is removed itself, never followed.
+    /// </summary>
+    public void Uninstall()
+    {
+        File.Delete(Path.Combine(extensionsDirectory, ExtensionFileName));
+        File.Delete(Path.Combine(dataDirectory, MenuFileName));
+
+        var cache = new DirectoryInfo(Path.Combine(extensionsDirectory, "__pycache__"));
+        if (!cache.Exists || cache.LinkTarget is not null)
+            return;
+        foreach (var compiled in cache.EnumerateFiles(Path.ChangeExtension(ExtensionFileName, ".*.pyc")))
+            compiled.Delete();
+        if (!cache.EnumerateFileSystemInfos().Any())
+            cache.Delete();
+    }
+
+    private static void Replace(string path, byte[] bytes, UnixFileMode mode)
+    {
+        var temp = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            using (var stream = new FileStream(temp, new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, UnixCreateMode = mode }))
+                stream.Write(bytes);
+            File.Move(temp, path, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(temp);
+        }
+    }
+}
+
+/// <summary>
+/// Whether nobody but this user (and root) can change the folder flevert runs from: whoever can would put another
+/// flevert in its place, and the menu would run it as the user. The counterpart of InstallLocation on Windows.
+/// </summary>
+[SupportedOSPlatform("linux")]
+public static class UnixInstallLocation
+{
+    private const int OthersMayWrite = 0x12; // S_IWGRP | S_IWOTH
+    private const int Sticky = 0x200; // S_ISVTX: only an entry's owner may rename or delete it
+
+    /// <summary>
+    /// The whole app tree and every folder above it are owned by this user or root, without links or files others can
+    /// write. Only ancestors may be sticky and writable; the app itself and its descendants must never be writable by
+    /// other accounts, since that would let them change code the menu runs.
+    /// </summary>
+    public static bool IsWritableOnlyByOwner(string directory)
+    {
+        try
+        {
+            return Check(directory);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static bool Check(string directory)
+    {
+        var me = Libc.EffectiveUserId;
+        var path = Path.GetFullPath(directory);
+        for (var current = path; current is not null; current = Path.GetDirectoryName(current))
+        {
+            if (!Libc.TryStatNoFollow(current, out var stat) || stat.Type != Libc.SIfDir)
+                return false;
+            if (stat.Uid != me && stat.Uid != 0)
+                return false;
+            var othersMayWrite = (stat.Mode & OthersMayWrite) != 0;
+            if (othersMayWrite && (current == path || (stat.Mode & Sticky) == 0))
+                return false;
+        }
+
+        return CheckTree(path, me);
+    }
+
+    private static bool CheckTree(string directory, uint me)
+    {
+        foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+        {
+            if (!Libc.TryStatNoFollow(entry, out var stat) || (stat.Uid != me && stat.Uid != 0)
+                || (stat.Mode & OthersMayWrite) != 0)
+            {
+                return false;
+            }
+
+            if (stat.Type == Libc.SIfDir)
+            {
+                if (!CheckTree(entry, me))
+                    return false;
+            }
+            else if (stat.Type != Libc.SIfReg || stat.Nlink != 1)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}

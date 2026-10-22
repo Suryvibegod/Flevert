@@ -48,6 +48,9 @@ public sealed record BatchOutcome(IReadOnlyList<FileResult> Results, int Total)
 
 public sealed class Runner(RunLog log)
 {
+    /// <summary>Called with each input's real path once it is pinned, before the operation starts: tests change the name.</summary>
+    internal Action<string>? AfterPin { get; init; }
+
     public Task<BatchOutcome> RunAsync(
         IOperation operation, IReadOnlyList<string> files, IProgress<BatchProgress>? progress, CancellationToken ct, int maxParallel = 1)
     {
@@ -118,7 +121,7 @@ public sealed class Runner(RunLog log)
         var pins = new List<SafeFileHandle>();
         try
         {
-            var inputs = new List<(string Given, string Real)>();
+            var inputs = new List<(string Given, string Real, SafeFileHandle? Pin)>();
             var rejected = new List<(string File, string Reason)>();
             foreach (var file in received)
             {
@@ -128,7 +131,7 @@ public sealed class Runner(RunLog log)
                 if (pin is not null)
                     pins.Add(pin);
                 if (reason is null)
-                    inputs.Add((file, realPath));
+                    inputs.Add((file, realPath, pin));
                 else
                     rejected.Add((file, reason));
             }
@@ -136,14 +139,20 @@ public sealed class Runner(RunLog log)
             if (rejected.Count > 0)
                 return Rejected(operation, rejected, timer);
 
+            if (OperatingSystem.IsLinux())
+                PinnedInput.Use(inputs.Select(i => (i.Real, i.Pin!)));
+            foreach (var input in inputs)
+                AfterPin?.Invoke(input.Real);
+
             // Two spellings of one file (a short 8.3 name and the long one) pin the same real path: join it once.
-            var ordered = inputs.DistinctBy(i => i.Real, StringComparer.Ordinal).OrderBy(i => i.Real, NaturalOrder.PathComparer).ToList();
-            return await JoinAsync(operation, ordered, progress, timer, ct).ConfigureAwait(false);
+            var ordered = inputs.Select(i => (i.Given, i.Real)).DistinctBy(i => i.Real, StringComparer.Ordinal)
+                .OrderBy(i => i.Real, NaturalOrder.PathComparer).ToList();
+            var held = pins.ToList();
+            pins.Clear(); // JoinAsync releases them
+            return await JoinAsync(operation, ordered, held, progress, timer, ct).ConfigureAwait(false);
         }
         finally
         {
-            // Held until the operation has finished (or been abandoned): no input can be renamed, replaced or deleted while
-            // it is being joined.
             foreach (var pin in pins)
                 pin.Dispose();
         }
@@ -207,8 +216,8 @@ public sealed class Runner(RunLog log)
         return new BatchOutcome([new FileResult(first, null, message(Path.GetFileName(first), files.Count - 1))], 1) { OneOutput = true };
     }
 
-    // How long a cancelled operation may take to stop and delete its temporary output before it is abandoned (and its inputs
-    // unpinned): a well-behaved operation stops at its next token check, well within this.
+    // How long a cancelled operation may take to stop and delete its temporary output before it is abandoned: a
+    // well-behaved operation stops at its next token check, well within this.
     private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(2);
 
     private static async Task WaitForStopAsync(Task<string>? running)
@@ -221,9 +230,27 @@ public sealed class Runner(RunLog log)
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
+    // Windows releases an abandoned operation's locks after StopGrace. Linux must keep its descriptors alive until the
+    // operation really ends, because it may still be reading through PinnedInput's /proc paths.
+    private static void Release(List<SafeFileHandle> pins, Task? running)
+    {
+        if (!OperatingSystem.IsLinux() || running is null || running.IsCompleted)
+        {
+            foreach (var pin in pins)
+                pin.Dispose();
+            return;
+        }
+
+        _ = running.ContinueWith(_ =>
+        {
+            foreach (var pin in pins)
+                pin.Dispose();
+        }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+    }
+
     private async Task<BatchOutcome> JoinAsync(
-        IBatchOperation operation, List<(string Given, string Real)> inputs, IProgress<BatchProgress>? progress, Stopwatch timer,
-        CancellationToken ct)
+        IBatchOperation operation, List<(string Given, string Real)> inputs, List<SafeFileHandle> pins, IProgress<BatchProgress>? progress,
+        Stopwatch timer, CancellationToken ct)
     {
         var notes = OutputNote.Begin();
         var first = inputs[0].Given;
@@ -268,13 +295,17 @@ public sealed class Runner(RunLog log)
         {
             // The operation names the real path it was given; report the file as the batch received it.
             var culprit = inputs.Where(i => i.Real == ex.InputPath).Select(i => i.Given).FirstOrDefault() ?? ex.InputPath;
-            result = new FileResult(culprit, null, $"{Path.GetFileName(culprit)}: {ex.Message}{Environment.NewLine}{ex}");
+            result = new FileResult(culprit, null, PinnedInput.ShowNames($"{Path.GetFileName(culprit)}: {ex.Message}{Environment.NewLine}{ex}"));
         }
 #pragma warning disable CA1031 // Whatever the operation throws, the batch ends with a result and a notification.
         catch (Exception ex)
 #pragma warning restore CA1031
         {
-            result = new FileResult(first, null, $"{ex.Message}{Environment.NewLine}{ex}");
+            result = new FileResult(first, null, PinnedInput.ShowNames($"{ex.Message}{Environment.NewLine}{ex}"));
+        }
+        finally
+        {
+            Release(pins, running);
         }
 
         lock (gate)
@@ -421,6 +452,10 @@ public sealed class Runner(RunLog log)
         {
             var realPath = file;
             var reason = Reject(operation, file) ?? Pin(file, out pin, out realPath) ?? Unsupported(operation, realPath);
+            if (reason is null && OperatingSystem.IsLinux())
+                PinnedInput.Use([(realPath, pin!)]);
+            if (reason is null)
+                AfterPin?.Invoke(realPath);
             // Keep the task so cancellation can wait for its child processes and temporary output to be cleaned up.
             result = reason is not null
                 ? new FileResult(file, null, reason)
@@ -447,12 +482,14 @@ public sealed class Runner(RunLog log)
         catch (Exception ex)
 #pragma warning restore CA1031
         {
-            // The message on the first line for the notification, as a join does; the stack for the log after it.
-            result = new FileResult(file, null, $"{ex.Message}{Environment.NewLine}{ex}");
+            // The message on the first line for the notification, as a join does; the stack for the log after it. A
+            // pinned input read through /proc/<flevert>/fd/<n> is named as the user knows it.
+            result = new FileResult(file, null, PinnedInput.ShowNames($"{ex.Message}{Environment.NewLine}{ex}"));
         }
         finally
         {
-            pin?.Dispose();
+            if (pin is not null)
+                Release([pin], running);
         }
 
         log.Write(operation.Id, result, timer.Elapsed);
@@ -463,6 +500,10 @@ public sealed class Runner(RunLog log)
     // following links.
     private static string? Reject(IMenuOperation operation, string file)
     {
+        // On Linux a name may end in a dot or a space or hold a colon, and no 8.3 names exist: only the shape is checked.
+        if (!OperatingSystem.IsWindows())
+            return IsPlainUnixPath(file) ? Unsupported(operation, file) : "Only absolute file paths are accepted.";
+
         // Paths also arrive over the batch pipe; accept only plain absolute file paths, not device namespaces. flevert.exe
         // keeps a relative path with a dotted name unresolved, so say what is actually wrong with it.
         if (!IsPlainFilePath(file))
@@ -489,6 +530,8 @@ public sealed class Runner(RunLog log)
             ? null
             : $"File type {extension} is not supported by {operation.Id}.";
     }
+
+    private static bool IsPlainUnixPath(string file) => file.StartsWith('/') && !file.Contains('\0', StringComparison.Ordinal);
 
     /// <summary>
     /// Allow-list, either slash: <c>C:\…</c>, <c>\\server\share\…</c>, <c>\\?\C:\…</c> or <c>\\?\UNC\…</c>. The share may not
@@ -521,7 +564,14 @@ public sealed class Runner(RunLog log)
 
     private static string? Pin(string file, out SafeFileHandle? pin, out string realPath)
     {
-        pin = InputPin.TryPin(file, out var reason, out realPath);
+        // Linux has no mandatory locks: the pin keeps the file open and checks it, but cannot stop a rename (ADR-0010).
+        string? reason;
+        if (OperatingSystem.IsWindows())
+            pin = InputPin.TryPin(file, out reason, out realPath);
+        else if (OperatingSystem.IsLinux())
+            pin = UnixInputPin.TryPin(file, out reason, out realPath);
+        else
+            throw new PlatformNotSupportedException();
         return reason;
     }
 

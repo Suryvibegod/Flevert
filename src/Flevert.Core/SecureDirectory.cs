@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 
@@ -17,6 +18,7 @@ public static partial class SecureDirectory
     /// Replaces inherited permissions with full control for this user, SYSTEM and Administrators only, so other accounts
     /// that can read the profile (for example sandbox groups some tools add) cannot read what is stored here.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public static void RestrictToOwnerAndAdmins(string directory)
     {
         using var me = WindowsIdentity.GetCurrent();
@@ -37,11 +39,47 @@ public static partial class SecureDirectory
     }
 
     /// <summary>
+    /// The Linux counterpart of <see cref="RestrictToOwnerAndAdmins"/>: mode 0700, for a folder this user owns.
+    /// </summary>
+    /// <exception cref="IOException">The folder is a link, not a folder, or another account's.</exception>
+    [SupportedOSPlatform("linux")]
+    public static void RestrictToOwner(string directory)
+    {
+        // Opened without following a link: a link put in place of the folder must not pass its target's mode on.
+        using var handle = Libc.Open(directory, Libc.OPath | Libc.ONofollow | Libc.ODirectory | Libc.OCloexec);
+        if (handle.IsInvalid)
+            throw new IOException($"{Libc.ErrorMessage(Marshal.GetLastPInvokeError())} ({directory})");
+        if (!Libc.TryStat(handle, out var stat) || stat.Type != Libc.SIfDir || stat.Uid != Libc.EffectiveUserId)
+            throw new IOException($"{directory} is not a folder of this user's own.");
+
+        // Through the handle that was checked, so what changes is that folder whatever happened to its name meanwhile.
+        File.SetUnixFileMode(Libc.HandlePath(handle), OwnerOnly);
+    }
+
+    [SupportedOSPlatform("linux")]
+    private const UnixFileMode OwnerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+    /// <summary>
     /// Restricts and labels the folder, creating it if needed. Never throws: it runs after a leader acknowledged other
     /// processes' files, and it is defence in depth only.
     /// </summary>
     public static void TrySecure(string directory)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            try
+            {
+                Directory.CreateDirectory(directory, OwnerOnly);
+                RestrictToOwner(directory);
+            }
+#pragma warning disable CA1031 // Defence in depth only, as on Windows.
+            catch (Exception) { }
+#pragma warning restore CA1031
+            return;
+        }
+
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException();
         try
         {
             Directory.CreateDirectory(directory);
@@ -57,6 +95,7 @@ public static partial class SecureDirectory
     /// Read-up is allowed by default, so a sandboxed low-integrity process of the same user could otherwise read the batch
     /// keys. Labelling the folder blocks that; it needs no extra privilege for a folder the user owns.
     /// </summary>
+    [SupportedOSPlatform("windows")]
     public static void TryApplyNoReadUpLabel(string directory)
     {
         try
@@ -69,6 +108,7 @@ public static partial class SecureDirectory
         }
     }
 
+    [SupportedOSPlatform("windows")]
     public static void ApplyNoReadUpLabel(string directory)
     {
         if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(NoReadUpLabel, SddlRevision1, out var descriptor, 0))

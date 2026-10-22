@@ -25,7 +25,8 @@ namespace Flevert.Core;
 /// with something in it was put there by someone else, and it is left with everything in it.
 /// </para>
 /// </remarks>
-internal sealed partial class PartialFolder : IDisposable
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
+internal sealed partial class PartialFolder : IPartialFolder
 {
     /// <summary>The anchor's name; writers must not create a file with this name.</summary>
     internal const string AnchorName = ".flevert.lock";

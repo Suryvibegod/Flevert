@@ -361,10 +361,5 @@ public sealed class InstallerScriptTests
             Assert.Contains($@"Type: filesandordirs; Name: ""{{localappdata}}\{{#AppName}}\{folder}""", Script, StringComparison.Ordinal);
     }
 
-    internal static string RepositoryRoot()
-    {
-        // tests/<project>/bin/<Configuration>/<tfm>/ → repository root is five levels up.
-        var output = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
-        return output.Parent!.Parent!.Parent!.Parent!.Parent!.FullName;
-    }
+    internal static string RepositoryRoot() => Repository.Root();
 }

@@ -408,7 +408,7 @@ public sealed class ImagesToPdfTests : IDisposable
         Directory.GetFileSystemEntries(_dir.Path).Select(f => Path.GetFileName(f)!).Order(StringComparer.Ordinal).ToArray();
 
     private static Task<ExternalToolResult> Qpdf(params string[] arguments) =>
-        ExternalTool.RunAsync(Path.Combine(AppContext.BaseDirectory, "qpdf.exe"), arguments, TimeSpan.FromSeconds(30));
+        ExternalTool.RunAsync(Flevert.Pdf.Qpdf.NextToApp.ExePath, arguments, TimeSpan.FromSeconds(30));
 
     private static Colour At(PdfBitmap page, double fx, double fy)
     {

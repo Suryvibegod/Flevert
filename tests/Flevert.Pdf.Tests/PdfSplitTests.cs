@@ -110,40 +110,63 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(["report 001.pdf", "report 002.pdf"], Entries(second));
     }
 
-    [Fact]
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task A_long_vietnamese_name_is_shortened_so_every_name_fits_in_255_bytes_on_linux()
+    {
+        // A Linux name holds 255 bytes: 251 bytes of Vietnamese (two or three bytes a letter) + ".pdf" is the longest
+        // input, and both " 001.pdf" and " (split)" push a name past 255 bytes.
+        var stem = OutputPath.FitName(string.Concat(Enumerable.Repeat("Ảnh chụp ", 60)), ".pdf")[..^4];
+        var input = _dir.Combine(stem + ".pdf");
+        WriteWidths(input, 100, 200, 300);
+
+        var folder = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.EndsWith(" (split)", folder, StringComparison.Ordinal);
+        Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(Path.GetFileName(folder)), 253, 255);
+        var names = Entries(folder);
+        Assert.Equal([" 001.pdf", " 002.pdf", " 003.pdf"], names.Select(name => name[^8..]));
+        Assert.All(names, name => Assert.InRange(System.Text.Encoding.UTF8.GetByteCount(name), 253, 255));
+        Assert.StartsWith(stem[..60], names[0], StringComparison.Ordinal);
+    }
+
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_long_name_is_shortened_so_every_page_name_fits()
     {
         // 251 + ".pdf" is the longest name a file can have; " 001.pdf" pushes a page name past 255, so it must be cut.
         var stem = string.Concat(Enumerable.Repeat("Ảnh chụp ", 30))[..251];
-        var input = @"\\?\" + _dir.Combine(stem + ".pdf");
+        var input = TestPdf.Long(_dir.Combine(stem + ".pdf"));
         WriteWidths(input, 100, 200, 300);
 
         var folder = await Op().RunAsync(input, CancellationToken.None);
 
         Assert.EndsWith(" (split)", folder, StringComparison.Ordinal);
         Assert.Equal(255, Path.GetFileName(folder).Length);
-        var names = Entries(@"\\?\" + folder);
+        var names = Entries(TestPdf.Long(folder));
         Assert.Equal(3, names.Length);
         Assert.All(names, name => Assert.Equal(255, name.Length));
         Assert.Equal([" 001.pdf", " 002.pdf", " 003.pdf"], names.Select(name => name[^8..]));
         Assert.StartsWith(stem[..200], names[0], StringComparison.Ordinal);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_name_cut_inside_a_character_outside_the_bmp_is_cut_before_it()
     {
         // The cut falls between the two halves of an emoji: the name keeps neither, never half of one.
         var stem = new string('a', 246) + "\U0001F9FE" + "bbb";
         Assert.Equal(251, stem.Length);
-        var input = @"\\?\" + _dir.Combine(stem + ".pdf");
+        var input = TestPdf.Long(_dir.Combine(stem + ".pdf"));
         WriteWidths(input, 100);
 
         var folder = await Op().RunAsync(input, CancellationToken.None);
 
-        Assert.Equal([new string('a', 246) + " 001.pdf"], Entries(@"\\?\" + folder));
+        Assert.Equal([new string('a', 246) + " 001.pdf"], Entries(TestPdf.Long(folder)));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task The_pages_get_the_permissions_of_the_folder_like_any_new_file()
     {
         var input = Pdf("report.pdf", 100, 200);
@@ -156,6 +179,7 @@ public sealed class PdfSplitTests : IDisposable
             name => Assert.Equal(Rules(fresh), Rules(Path.Combine(folder, name))));
     }
 
+    [SupportedOSPlatform("windows")]
     private static string[] Rules(string path) => new FileInfo(path).GetAccessControl()
         .GetAccessRules(includeExplicit: true, includeInherited: true, typeof(SecurityIdentifier))
         .Cast<FileSystemAccessRule>()
@@ -176,7 +200,9 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(written, File.GetLastWriteTimeUtc(input));
     }
 
-    [Fact]
+    // Needs qpdf to take long enough to watch: on Linux it splits 1 500 pages in 0.1 s, before the first look (200 ms).
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Reports_progress_page_by_page_against_the_page_count()
     {
         var input = _dir.Combine("book.pdf");
@@ -257,7 +283,8 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(["huge.pdf"], Entries(_dir.Path));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_folder_whose_path_holds_percent_d_is_refused_rather_than_letting_qpdf_write_elsewhere()
     {
         // qpdf puts the page number in place of the first "%d" in the output path, wherever it is: here page 1 would go
@@ -277,6 +304,24 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Empty(Entries(decoy));
     }
 
+    [LinuxFact]
+    public async Task On_linux_a_folder_whose_path_holds_percent_d_is_split_where_it_is()
+    {
+        // qpdf writes through the folder's handle (/proc/<flevert>/fd/<n>), so it never sees the "%d" in its name.
+        var folder = _dir.Combine("50%done");
+        var decoy = _dir.Combine("501one");
+        Directory.CreateDirectory(folder);
+        Directory.CreateDirectory(decoy);
+        var input = Path.Combine(folder, "report.pdf");
+        WriteWidths(input, 100, 200);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        Assert.Equal(Path.Combine(folder, "report (split)"), output);
+        Assert.Equal(2, Entries(output).Length);
+        Assert.Empty(Entries(decoy));
+    }
+
     [Fact]
     public async Task Works_on_a_pdf_whose_folder_and_name_hold_characters_outside_the_bmp()
     {
@@ -291,7 +336,8 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(["Hóa đơn \U0001F9FE 001.pdf", "Hóa đơn \U0001F9FE 002.pdf"], Entries(output));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Works_through_the_runner_on_a_path_just_under_260_characters()
     {
         using var logs = new TempDir();
@@ -308,10 +354,12 @@ public sealed class PdfSplitTests : IDisposable
         var result = Assert.Single(outcome.Results);
         Assert.True(result.Succeeded, result.Error);
         Assert.Equal(Path.Combine(folder, Path.GetFileNameWithoutExtension(input) + " (split)"), result.Output);
-        Assert.Equal(2, Directory.GetFiles(@"\\?\" + result.Output!).Length);
+        Assert.Equal(2, Directory.GetFiles(TestPdf.Long(result.Output!)).Length);
     }
 
-    [Fact]
+    // Needs qpdf to take long enough to watch: on Linux it splits 1 500 pages in 0.1 s, before the first look (200 ms).
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Cancelling_while_qpdf_writes_the_pages_leaves_no_partial_folder()
     {
         var input = _dir.Combine("book.pdf");
@@ -331,7 +379,35 @@ public sealed class PdfSplitTests : IDisposable
         Assert.Equal(["book.pdf"], Entries(_dir.Path));
     }
 
-    [Fact]
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task On_linux_cancelling_while_qpdf_still_runs_leaves_no_partial_folder()
+    {
+        // qpdf splits 1 500 pages in 0.1 s here, before the first look: a stand-in runs it, then keeps running, so the
+        // cancel comes while it is still at work, as with a slow disk.
+        using var tools = new TempDir();
+        var slow = tools.Combine("qpdf");
+        // Only the split itself: the page count before it is asked of qpdf too.
+        File.WriteAllText(slow, $"#!/bin/sh\n'{Qpdf.NextToApp.ExePath}' \"$@\"\ncase \"$*\" in *--split-pages*) sleep 60;; esac\n");
+        File.SetUnixFileMode(slow, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var input = _dir.Combine("book.pdf");
+        WriteBlank(input, 20, resources: true);
+        using var cancel = new CancellationTokenSource();
+        var progress = new SynchronousProgress(report =>
+        {
+            if (report.Position > 1)
+                cancel.Cancel();
+        });
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new PdfSplit(new Qpdf(slow)).RunAsync(input, progress, cancel.Token));
+
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(10), $"took {timer.Elapsed}");
+        Assert.Equal(["book.pdf"], Entries(_dir.Path));
+    }
+
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_page_held_open_in_qpdfs_folder_fails_the_split_rather_than_leaving_that_folder_in_the_output()
     {
         // What a scanner or indexer holding one of qpdf's pages looks like: the private folder cannot be deleted.

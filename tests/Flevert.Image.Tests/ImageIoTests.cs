@@ -40,7 +40,8 @@ public sealed class ImageIoTests : IDisposable
             }
         }
 
-        var output = await Op(operationId).RunAsync(@"\\?\" + input, CancellationToken.None);
+        // The runner passes the final path: \\?\ form on Windows, plain on Linux.
+        var output = await Op(operationId).RunAsync((OperatingSystem.IsWindows() ? @"\\?\" : "") + input, CancellationToken.None);
 
         Assert.Equal(dir, Path.GetDirectoryName(output.Replace(@"\\?\", "", StringComparison.Ordinal)));
         Assert.True(File.Exists(output), output);

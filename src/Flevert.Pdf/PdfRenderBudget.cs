@@ -45,9 +45,22 @@ internal static partial class PdfRenderBudget
             : null;
     }
 
-    /// <summary>The bytes this user may still write to the volume <paramref name="folder"/> is on, quotas included; <c>null</c> when Windows does not say.</summary>
-    public static long? FreeBytes(string folder) =>
-        GetDiskFreeSpaceExW(folder, out var available, out _, out _) ? (long)Math.Min(available, long.MaxValue) : null;
+    /// <summary>The bytes this user may still write to the volume <paramref name="folder"/> is on, quotas included; <c>null</c> when the system does not say.</summary>
+    public static long? FreeBytes(string folder)
+    {
+        if (OperatingSystem.IsWindows())
+            return GetDiskFreeSpaceExW(folder, out var available, out _, out _) ? (long)Math.Min(available, long.MaxValue) : null;
+
+        // On Linux DriveInfo takes any folder and asks statvfs: the blocks an unprivileged user may still write.
+        try
+        {
+            return new DriveInfo(folder).AvailableFreeSpace;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null;
+        }
+    }
 
     // "350 MB", "1.2 GB".
     internal static string Describe(long bytes) => bytes >= 1L << 30

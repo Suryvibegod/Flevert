@@ -3,8 +3,8 @@ using System.Runtime.InteropServices;
 namespace Flevert.Pdf.Tests;
 
 /// <summary>
-/// PDFs with real text, written by pdfium at run time with Arial embedded (Windows' C:\Windows\Fonts\arial.ttf, which has
-/// the Vietnamese letters): each line of a page is a text object in that font, and pdfium writes the font's ToUnicode
+/// PDFs with real text, written by pdfium at run time with Arial embedded (Windows' C:\Windows\Fonts\arial.ttf, or on
+/// Linux the font that replaces it, which have the Vietnamese letters: SystemFont): each line of a page is a text object in that font, and pdfium writes the font's ToUnicode
 /// map, as a word processor's PDF export does. Nothing is downloaded, and no font is committed.
 /// </summary>
 internal static unsafe partial class TestTextPdf
@@ -13,7 +13,8 @@ internal static unsafe partial class TestTextPdf
     private const int FontTrueType = 2;
     private const float FontSize = 14;
 
-    private static string Arial => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "arial.ttf");
+    // The watermark's font, the same on each platform as the PDFs Flevert writes (SystemFont).
+    private static string Arial => SystemFont.Path ?? throw new FileNotFoundException("No system font with Vietnamese letters.");
 
     /// <summary>Writes one A4 page per entry of <paramref name="pages"/>, its lines (split at <c>\n</c>) from the top.</summary>
     public static void Write(string path, params string[] pages)

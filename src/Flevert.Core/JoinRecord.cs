@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.Versioning;
 using System.Text;
 
 namespace Flevert.Core;
@@ -6,13 +7,16 @@ namespace Flevert.Core;
 /// <summary>A process, told apart from a later one that reuses its id by when it was created.</summary>
 internal readonly record struct ProcessStamp(uint Id, DateTime Created)
 {
+    [SupportedOSPlatform("windows")]
     public static ProcessStamp Self { get; } = new(
         (uint)Environment.ProcessId,
         ProcessFacts.CreationTimeUtc((uint)Environment.ProcessId) ?? DateTime.UtcNow);
 
+    [SupportedOSPlatform("windows")]
     public static ProcessStamp? Of(uint processId) =>
         ProcessFacts.CreationTimeUtc(processId) is { } created ? new ProcessStamp(processId, created) : null;
 
+    [SupportedOSPlatform("windows")]
     public bool IsRunning => ProcessFacts.CreationTimeUtc(Id) == Created;
 }
 

@@ -178,7 +178,8 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
             Assert.False(File.Exists(MaliciousPdf.LaunchMarker(input)), "the PDF's launch action ran");
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void The_launch_action_writes_its_marker_when_something_does_run_it()
     {
         // The control for the launch-action cases: what a viewer that obeys the action would run, run by hand.

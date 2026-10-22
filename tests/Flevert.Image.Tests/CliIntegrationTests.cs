@@ -116,17 +116,5 @@ public sealed class CliIntegrationTests : IDisposable
         }
     }
 
-    private static string FlevertExe
-    {
-        get
-        {
-            // tests/<project>/bin/<Configuration>/<tfm>/ → repository root is five levels up.
-            var output = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
-            var configuration = output.Parent!.Name;
-            var root = output.Parent!.Parent!.Parent!.Parent!.Parent!.FullName;
-            var exe = Path.Combine(root, "src", "Flevert.Cli", "bin", configuration, output.Name, "flevert.exe");
-            Assert.True(File.Exists(exe), $"Build the solution first; missing {exe}");
-            return exe;
-        }
-    }
+    private static string FlevertExe => BuiltFlevert.Path;
 }

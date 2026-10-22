@@ -51,6 +51,13 @@ Lưu ý kiểm thử:
 
 ## Việc tiếp theo
 
+### Linux — đóng góp của long89kev qua PR #5
+
+- Maintainer yêu cầu sửa các lỗi review ngày 2026-10-23, trên nhánh riêng `codex/fix-linux-pr5`; không trộn OCR. Đã sửa và kiểm chứng nhả pin Windows sau Cancel, toàn bộ cây ứng dụng Linux, bộ cài có manifest sở hữu/khóa/rollback và giữ file lạ, cấu hình solution/formatter Windows. Phạm vi, test và reconcile ở [linux/pr5-fixes.md](linux/pr5-fixes.md); re-review gộp không còn Critical/High/Required.
+- Windows local: bốn suite lần lượt, tổng 2379 test đạt; build/format đạt. [Ubuntu RED/GREEN và gói thật](https://github.com/Suryvibegod/Flevert/actions/runs/39830117473) đạt: Core 414, Image 243, PDF 1391, Python 54; cài/cập nhật/chuyển đổi/gỡ trong profile tạm và giữ file cá nhân. [CI của PR](https://github.com/Suryvibegod/Flevert/pull/5/checks) là gate cuối trên head trước merge.
+- README ghi nhận tlong (@long89kev). Ruleset repo chỉ cho squash; commit merge phải có `Co-Authored-By: tlong <74588006+long89kev@users.noreply.github.com>`. [PR #5](https://github.com/Suryvibegod/Flevert/pull/5) giữ lịch sử 47 commit contributor. Không có release/tag mới trong đợt này.
+- Khi tích hợp Linux vào nhánh OCR: hợp nhất main trên nhánh OCR, kiểm lại thay đổi nền tảng; đổi số ADR Tesseract vì Linux đã dùng `0010`. Worktree OCR đang có sửa chưa commit, phải giữ nguyên trước khi tích hợp.
+
 1. **v1.4.0 OCR (đang làm, ưu tiên):** làm trên nhánh `feat/v1.4-ocr`, theo [ocr/todo.md](ocr/todo.md): T5b (README/CHANGELOG, `build-installer.ps1` thật), T6 (file độc, hủy giữa chừng, trang xoay), T7 (icon), rồi các bước trước release và PR vào main. Trên máy mới chạy `scripts/fetch-deps.ps1` để lấy bản tesseract tĩnh. Worktree cũ `D:\github\Flevert-wt\ocr-*` (≈ 15 GB) đã được gom; chỉ xóa khi người dùng đồng ý.
 2. **Ký số SignPath Foundation.** Đã có [code-signing-policy.md](../docs/code-signing-policy.md) và mục README; chưa xác nhận người dùng gửi đơn. Người dùng tự điền tên/email, đồng ý điều khoản và reCAPTCHA. Khi duyệt: action chính thức ghim SHA, secret GitHub, ký installer/binary Flevert, kiểm chữ ký; cập nhật ADR-0005, README/install.md/release notes. Không ghi token vào chat/file.
 3. **v1.3.1 (sau v1.4.0, số phiên bản xét lại khi bắt đầu):** menu Shift “Flevert: more video tools” (sửa nhãn trong media spec), Trim, Rotate, Remove sound, Make volume even, Save a frame, Merge videos, Send by Email/WhatsApp/Messenger. Audio một mũi tên, không cửa sổ công cụ.

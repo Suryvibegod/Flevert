@@ -144,7 +144,7 @@ internal sealed unsafe class FileSource : IDisposable
         _access = (PdfiumNative.FileAccess*)NativeMemory.Alloc((nuint)sizeof(PdfiumNative.FileAccess));
         *_access = new PdfiumNative.FileAccess
         {
-            FileLength = (uint)length,
+            FileLength = new CULong((nuint)length),
             GetBlock = &GetBlock,
             Param = GCHandle.ToIntPtr(_self),
         };
@@ -165,13 +165,13 @@ internal sealed unsafe class FileSource : IDisposable
     // Called by pdfium, on the thread that holds the gate, whenever it needs bytes. Nothing may be thrown back into
     // native code: any failure is reported as 0, which pdfium treats as a read error.
     [UnmanagedCallersOnly]
-    private static int GetBlock(nint param, uint position, byte* buffer, uint size)
+    private static int GetBlock(nint param, CULong position, byte* buffer, CULong size)
     {
 #pragma warning disable CA1031 // An exception must not unwind through pdfium's frames.
         try
         {
             var source = (FileSource)GCHandle.FromIntPtr(param).Target!;
-            return source.Read(position, new Span<byte>(buffer, checked((int)size))) ? 1 : 0;
+            return source.Read(checked((long)position.Value), new Span<byte>(buffer, checked((int)size.Value))) ? 1 : 0;
         }
         catch (Exception)
         {
@@ -215,7 +215,7 @@ internal sealed unsafe class BytesSource : IDisposable
         _access = (PdfiumNative.FileAccess*)NativeMemory.Alloc((nuint)sizeof(PdfiumNative.FileAccess));
         *_access = new PdfiumNative.FileAccess
         {
-            FileLength = (uint)bytes.Length, // at most JpegSegments.MaxBytes
+            FileLength = new CULong((nuint)bytes.Length), // at most JpegSegments.MaxBytes
             GetBlock = &GetBlock,
             Param = GCHandle.ToIntPtr(_self),
         };
@@ -234,15 +234,15 @@ internal sealed unsafe class BytesSource : IDisposable
 
     // Called by pdfium on the thread that holds the gate; nothing may be thrown back into native code.
     [UnmanagedCallersOnly]
-    private static int GetBlock(nint param, uint position, byte* buffer, uint size)
+    private static int GetBlock(nint param, CULong position, byte* buffer, CULong size)
     {
 #pragma warning disable CA1031 // An exception must not unwind through pdfium's frames.
         try
         {
             var bytes = ((BytesSource)GCHandle.FromIntPtr(param).Target!)._bytes;
-            if ((ulong)position + size > (ulong)bytes.Length)
+            if ((ulong)position.Value + size.Value > (ulong)bytes.Length)
                 return 0;
-            bytes.AsSpan((int)position, (int)size).CopyTo(new Span<byte>(buffer, (int)size));
+            bytes.AsSpan((int)position.Value, (int)size.Value).CopyTo(new Span<byte>(buffer, (int)size.Value));
             return 1;
         }
         catch (Exception)
@@ -292,7 +292,7 @@ internal sealed unsafe class StreamSink : IDisposable
     }
 
     [UnmanagedCallersOnly]
-    private static int WriteBlock(PdfiumNative.FileWrite* self, void* data, uint size)
+    private static int WriteBlock(PdfiumNative.FileWrite* self, void* data, CULong size)
     {
         StreamSink? sink = null;
 #pragma warning disable CA1031 // An exception must not unwind through pdfium's frames.
@@ -301,7 +301,7 @@ internal sealed unsafe class StreamSink : IDisposable
             sink = (StreamSink)GCHandle.FromIntPtr(self->Param).Target!;
             if (sink._error is not null)
                 return 0; // pdfium may keep writing after a failure; nothing more reaches the stream
-            sink._stream.Write(new ReadOnlySpan<byte>(data, checked((int)size)));
+            sink._stream.Write(new ReadOnlySpan<byte>(data, checked((int)size.Value)));
             return 1;
         }
         catch (Exception e)

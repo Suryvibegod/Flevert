@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.Versioning;
 using System.Text;
 using Flevert.Core;
 using ImageMagick;
@@ -82,9 +83,20 @@ public static class MagickSetup
 
             // ImageMagick reads policy.xml from disk; a folder other accounts can write would let them relax it.
             Directory.CreateDirectory(ConfigurationDirectory);
-            SecureDirectory.RestrictToOwnerAndAdmins(ConfigurationDirectory);
-            // Also the pixel-cache folder for decoded images; flevert.exe labels the whole app-data folder, other hosts may not.
-            SecureDirectory.TryApplyNoReadUpLabel(ConfigurationDirectory);
+            if (OperatingSystem.IsWindows())
+            {
+                SecureDirectory.RestrictToOwnerAndAdmins(ConfigurationDirectory);
+                // Also the pixel-cache folder for decoded images; flevert.exe labels the whole app-data folder, other hosts may not.
+                SecureDirectory.TryApplyNoReadUpLabel(ConfigurationDirectory);
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                SecureDirectory.RestrictToOwner(ConfigurationDirectory);
+            }
+            else
+            {
+                throw new PlatformNotSupportedException();
+            }
 
             // ImageMagick also loads configuration from other folders and applies it after ours. A planted policy.xml can
             // redirect temporary files (decoded pixels) or enable delegates while the coder probes below still pass, so
@@ -126,10 +138,10 @@ public static class MagickSetup
     {
         var folders = new List<string>
         {
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ImageMagick"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ImageMagick"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ImageMagick"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "ImageMagick"),
+            Path.Combine(AppData.UserFolder(Environment.SpecialFolder.LocalApplicationData), "ImageMagick"),
+            Path.Combine(AppData.UserFolder(Environment.SpecialFolder.ApplicationData), "ImageMagick"),
+            Path.Combine(AppData.UserFolder(Environment.SpecialFolder.UserProfile), "ImageMagick"),
+            Path.Combine(AppData.UserFolder(Environment.SpecialFolder.UserProfile), ".config", "ImageMagick"),
         };
         foreach (var variable in new[] { "MAGICK_HOME", "MAGICK_CONFIGURE_PATH" })
         {

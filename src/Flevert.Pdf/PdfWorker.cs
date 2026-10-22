@@ -17,7 +17,7 @@ namespace Flevert.Pdf;
 /// </remarks>
 public sealed class PdfWorker
 {
-    public const string FileName = "flevert.exe";
+    public static readonly string FileName = OperatingSystem.IsWindows() ? "flevert.exe" : "flevert";
 
     /// <summary>The worker's command, hidden from the usage text (<see cref="PdfWorkerCommand"/>).</summary>
     internal const string Command = "pdf-worker";
@@ -229,13 +229,15 @@ public sealed class PdfWorker
         ArgumentException.ThrowIfNullOrEmpty(inputPath);
         RequireExe();
 
-        // Held until the worker has ended, sharing reading only, like the runner's pin: the worker reopens this path, and
-        // nobody can change, rename or replace the file meanwhile. The worker checks it opened this very file.
-        using var pin = File.OpenHandle(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        // Held until the worker has ended, sharing reading only, like the runner's pin: the worker reopens this path, and on
+        // Windows nobody can change, rename or replace the file meanwhile; on Linux the path is the runner's pin, which
+        // leads to the file it checked whatever its name leads to. The worker checks it opened this very file.
+        var readPath = PinnedInput.ReadPath(inputPath);
+        using var pin = File.OpenHandle(readPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         var length = RandomAccess.GetLength(pin);
         if (length > PdfDocument.MaxFileBytes)
             throw PdfDocument.TooLargeError(PdfDocument.MaxFileBytes);
-        var made = makeRequest(FileIdentity.Of(pin));
+        var made = makeRequest(FileIdentity.Of(pin)) with { ReadPath = readPath };
         var request = made.Encode();
 
         using var session = new Session(this, StallTimeout + (PerHundredMegabytes * (length / 100_000_000.0)), doing, progress, ct)
@@ -288,7 +290,8 @@ public sealed class PdfWorker
     /// </summary>
     internal static IReadOnlyDictionary<string, string?> WorkerEnvironment()
     {
-        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        // Names are case-sensitive on Linux: MAGICK_X and magick_x are two variables, and each is removed.
+        var environment = new Dictionary<string, string?>(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         foreach (var name in System.Environment.GetEnvironmentVariables().Keys.OfType<string>())
         {
             if (name.StartsWith("MAGICK_", StringComparison.OrdinalIgnoreCase) || name.StartsWith("FLEVERT_", StringComparison.OrdinalIgnoreCase))
@@ -627,7 +630,7 @@ public sealed class PdfWorkerException : Exception
             error = "…" + error[^MaxDetailChars..];
         var text = string.Create(CultureInfo.InvariantCulture, $"The PDF worker ended with exit code {run.ExitCode} (0x{run.ExitCode:X8})");
         if (run.MemoryLimitExceeded)
-            text += ", after Windows refused it memory past its limit";
+            text += OperatingSystem.IsWindows() ? ", after Windows refused it memory past its limit" : ", after it was refused memory past its limit";
         if (detail is not null)
             text += $": {detail}";
         return error.Length == 0 ? text + "." : $"{text}. {error}";

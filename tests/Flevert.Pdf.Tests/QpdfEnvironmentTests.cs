@@ -16,7 +16,8 @@ public sealed class QpdfEnvironmentTests : IDisposable
 
     public void Dispose() => _dir.Dispose();
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Qpdf_does_not_read_the_openssl_configuration_the_users_environment_names()
     {
         // OpenSSL, linked into qpdf, loads the file OPENSSL_CONF names, and that file can load further code. A named pipe
@@ -44,7 +45,8 @@ public sealed class QpdfEnvironmentTests : IDisposable
         }
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Openssl_reads_only_the_empty_configuration_beside_qpdf_and_loads_code_only_from_its_folder()
     {
         // Review SA-L1: without OPENSSL_CONF, OpenSSL reads C:\Program Files\Common Files\SSL\openssl.cnf, and C: need

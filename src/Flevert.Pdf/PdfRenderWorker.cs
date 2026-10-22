@@ -31,19 +31,25 @@ internal enum PdfWorkerTask
 }
 
 /// <summary>
-/// What one worker is asked to do (<see cref="Task"/>) with <see cref="InputPath"/>, which must be the file
-/// <see cref="Input"/>, and where the result goes (<see cref="Folder"/>). It travels on the worker's standard input,
-/// never its command line.
+/// What one worker is asked to do (<see cref="Task"/>) with <see cref="InputPath"/>, read through <see cref="ReadPath"/>,
+/// which must be the file <see cref="Input"/>, and where the result goes (<see cref="Folder"/>). It travels on the worker's
+/// standard input, never its command line.
 /// </summary>
 /// <remarks>
 /// The fields are the raw UTF-16 code units of their text, each ended by U+0000, which no path can hold: a Windows name may
 /// hold a lone surrogate, which UTF-8 (and .NET's encoders) would replace with U+FFFD, naming another file (review round 1,
-/// SA-M1, for qpdf). The tasks of v0.2.2 (<see cref="PdfWorkerTask.BlankPages"/> and after) have a seventh field,
-/// <see cref="Options"/>; the requests of the tasks before keep their six.
+/// SA-M1, for qpdf). The tasks of v0.2.2 (<see cref="PdfWorkerTask.BlankPages"/> and after) have an eighth field,
+/// <see cref="Options"/>; the requests of the tasks before keep their seven.
 /// </remarks>
 internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, string Folder, PdfPageImageFormat Format, double Dpi)
 {
     public PdfWorkerTask Task { get; init; }
+
+    /// <summary>
+    /// Where the worker opens the input: <see cref="InputPath"/>, which names the outputs, or on Linux the runner's pin of
+    /// it (<see cref="Flevert.Core.PinnedInput.ReadPath"/>), since the name may lead elsewhere by now.
+    /// </summary>
+    public string ReadPath { get; init; } = InputPath;
 
     /// <summary>For the tasks of v0.2.2: what to do, such as the edit (<see cref="PdfEdit.Encode"/>); empty when nothing more is needed.</summary>
     public string Options { get; init; } = "";
@@ -55,9 +61,9 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
     /// request rather than misreading it. A new task may add a field without changing it: a worker that does not know the
     /// task refuses the request by its task name, and the count of fields is checked per task.
     /// </summary>
-    internal const string Magic = "flevert-pdf-worker/2";
+    internal const string Magic = "flevert-pdf-worker/3";
 
-    /// <summary>Two paths of at most 32 767 characters and a few short fields fit with room to spare.</summary>
+    /// <summary>Three paths of at most 32 767 characters and a few short fields fit with room to spare.</summary>
     internal const int MaxBytes = 256 * 1024;
 
     private const double MaxDpi = 10_000;
@@ -66,7 +72,7 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
     {
         string[] fields =
         [
-            Magic, InputPath, Input.ToString(), Folder,
+            Magic, InputPath, ReadPath, Input.ToString(), Folder,
             Task switch
             {
                 PdfWorkerTask.Text => "text",
@@ -94,12 +100,12 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
         if (!text.EndsWith('\0'))
             throw new FormatException("The request is incomplete.");
         var fields = text[..^1].Split('\0');
-        var withOptions = fields.Length > 4 && fields[4] is "blank" or "edit" or "images";
-        if (fields.Length != (withOptions ? 7 : 6) || fields[0] != Magic)
+        var withOptions = fields.Length > 5 && fields[5] is "blank" or "edit" or "images";
+        if (fields.Length != (withOptions ? 8 : 7) || fields[0] != Magic)
             throw new FormatException("Not a request of this version.");
 
-        var (input, identity, folder, format, dpiText) = (fields[1], fields[2], fields[3], fields[4], fields[5]);
-        if (!Path.IsPathFullyQualified(input) || !Path.IsPathFullyQualified(folder))
+        var (input, readPath, identity, folder, format, dpiText) = (fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]);
+        if (!Path.IsPathFullyQualified(input) || !Path.IsPathFullyQualified(readPath) || !Path.IsPathFullyQualified(folder))
             throw new FormatException("The request's paths must be fully qualified.");
         var imageFormat = format switch
         {
@@ -121,13 +127,14 @@ internal sealed record PdfRenderRequest(string InputPath, FileIdentity Input, st
         // An edit this version does not know is refused with the rest of the request; the tasks that take no options
         // must have none, so a field this version would ignore is never read as something else.
         if (task == PdfWorkerTask.Edit)
-            PdfEdit.Decode(fields[6]);
-        else if (withOptions && fields[6].Length != 0)
+            PdfEdit.Decode(fields[7]);
+        else if (withOptions && fields[7].Length != 0)
             throw new FormatException($"The {format} task takes no options.");
         return new PdfRenderRequest(input, FileIdentity.Parse(identity), folder, imageFormat, dpi)
         {
             Task = task,
-            Options = withOptions ? fields[6] : "",
+            ReadPath = readPath,
+            Options = withOptions ? fields[7] : "",
         };
     }
 }
@@ -176,9 +183,9 @@ public static class PdfRenderWorker
         try
         {
             request = PdfRenderRequest.Decode(ReadRequest(input));
-            file = File.OpenHandle(request.InputPath, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.RandomAccess);
-            // The parent holds the file open with read-only sharing, so the path still names it; checked anyway, so a path
-            // that leads anywhere else is never read.
+            file = File.OpenHandle(request.ReadPath, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.RandomAccess);
+            // The parent holds the file open (with read-only sharing on Windows; on Linux the path is its pin), so the path
+            // still leads to it; checked anyway, so a path that leads anywhere else is never read.
             if (FileIdentity.Of(file) != request.Input)
                 throw new IOException("the input is not the file Flevert holds.");
         }

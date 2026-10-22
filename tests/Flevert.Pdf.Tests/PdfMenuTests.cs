@@ -33,7 +33,8 @@ public sealed class PdfMenuTests
         Assert.Equal(16, CountEntries(@"Flevert.Menu.pdf\shell"));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_pdf_gets_more_tools_in_a_second_menu_shown_only_with_shift()
     {
         // Explorer shows at most 16 entries per top-level entry (measured: a submenu pointing at a key of its own does not
@@ -87,7 +88,8 @@ public sealed class PdfMenuTests
         Assert.All(PdfToolMenu.PageNumbers, option => Assert.Contains(option.Value, numbers.Options.Single(o => o.Key == option.Key).Choices));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Every_entry_at_the_top_of_a_menu_has_an_icon_and_the_choices_inside_have_none()
     {
         foreach (var menu in _registry.SubKeyNames("").Where(key => key.StartsWith("Flevert.Menu", StringComparison.Ordinal) && !key.Contains('\\', StringComparison.Ordinal)))
@@ -103,7 +105,8 @@ public sealed class PdfMenuTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Every_icon_the_menus_name_is_built_beside_flevert()
     {
         // The build copies assets/menu/*.ico into icons\ beside flevert.exe, and the installer packs that folder.

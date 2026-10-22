@@ -61,7 +61,8 @@ public sealed class MenuTests
         Assert.Equal(["PNG", "WEBP"], convert.Select(k => _registry.GetValue(k, "MUIVerb")));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Entries_at_the_top_get_their_icon_from_the_icons_folder_beside_flevert_and_formats_get_none()
     {
         var looks = new Dictionary<string, MenuEntryLook> { ["Convert to"] = new("arrow_swap", 1), ["Remove hidden info"] = new("shield", 1) };
@@ -151,7 +152,8 @@ public sealed class MenuTests
         Assert.Throws<ArgumentException>(() => new MenuInstaller(_registry, Exe).Install([new FakeOp("image.to-png", "Convert/PNG", ".jpg")], looks));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void An_operation_placed_in_the_pdf_tools_menu_gets_a_second_top_level_entry_with_its_own_entries()
     {
         new MenuInstaller(_registry, Exe, iconExists: _ => true).Install(
@@ -274,7 +276,8 @@ public sealed class MenuTests
         Assert.Throws<ArgumentException>(() => Install(new FakeOp("image.to-png", "Convert/PNG", ext)));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Install_location_whose_parent_lets_other_users_delete_children_is_unsafe()
     {
         using var parent = new TempDir();
@@ -294,7 +297,8 @@ public sealed class MenuTests
         Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(child, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Install_location_with_a_file_other_users_can_write_is_unsafe()
     {
         using var dir = new TempDir();
@@ -312,7 +316,8 @@ public sealed class MenuTests
     // Setup checks the install folder while it is still empty. An entry that applies only to files created later
     // (inherit-only) would give every copied flevert.exe and DLL to other accounts, so it counts although it does not
     // apply to the folder itself.
-    [Theory]
+    [WindowsTheory]
+    [SupportedOSPlatform("windows")]
     [InlineData(System.Security.AccessControl.InheritanceFlags.ObjectInherit)]
     [InlineData(System.Security.AccessControl.InheritanceFlags.ContainerInherit)]
     public void Install_location_that_would_hand_new_files_to_other_users_is_unsafe(System.Security.AccessControl.InheritanceFlags inheritance)
@@ -332,7 +337,8 @@ public sealed class MenuTests
         Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
-    [Theory]
+    [WindowsTheory]
+    [SupportedOSPlatform("windows")]
     [InlineData(System.Security.Principal.WellKnownSidType.CreatorOwnerSid, true)] // becomes the user who creates each file
     [InlineData(System.Security.Principal.WellKnownSidType.CreatorGroupSid, false)] // becomes their primary group, shared with others
     public void Inherit_only_creator_entries_are_judged_by_who_they_become(System.Security.Principal.WellKnownSidType creator, bool safe)
@@ -351,7 +357,8 @@ public sealed class MenuTests
         Assert.Equal(safe, InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Write_that_a_parent_passes_to_new_files_makes_the_install_location_unsafe()
     {
         // Write without Delete on the parent is harmless to the parent itself, but the install folder inherits it for
@@ -369,7 +376,8 @@ public sealed class MenuTests
         Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Inherit_only_entries_on_a_parent_do_not_make_the_install_location_unsafe()
     {
         // C:\ grants Authenticated Users inherit-only Modify for new folders; the install folder's own ACL shows what
@@ -390,7 +398,8 @@ public sealed class MenuTests
         Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Install_location_whose_parent_other_users_may_modify_is_unsafe()
     {
         // Modify includes DELETE on the parent itself: it can be renamed away and rebuilt with a planted flevert.exe.
@@ -412,7 +421,8 @@ public sealed class MenuTests
 
     // The ACL check reads the link target; the link itself lives in its parent and inherits that folder's rights, so
     // another account that can delete it can rebuild the path with a planted flevert.exe.
-    [Theory]
+    [WindowsTheory]
+    [SupportedOSPlatform("windows")]
     [InlineData(@"link")]
     [InlineData(@"link\app")]
     public void Install_location_reached_through_a_junction_is_unsafe(string viaLink)
@@ -429,8 +439,10 @@ public sealed class MenuTests
     }
 
     [SkippableFact]
+    [SupportedOSPlatform("windows")]
     public void Install_location_on_a_subst_drive_is_unsafe()
     {
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows only");
         // The parent walk stops at the drive root, so the real parents of a subst target are never checked; subst
         // drives also vanish on reboot and the letter can later belong to a USB stick.
         using var dir = new TempDir();
@@ -451,7 +463,8 @@ public sealed class MenuTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Install_location_containing_a_junction_is_unsafe()
     {
         // The ACL check of an entry follows its link, so a junction inside would be judged by its target, whose own
@@ -467,6 +480,7 @@ public sealed class MenuTests
         Assert.False(InstallLocation.IsWritableOnlyByOwnerAndAdmins(app, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
+    [SupportedOSPlatform("windows")]
     private static int Cmd(string arguments)
     {
         using var cmd = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c " + arguments)
@@ -479,6 +493,7 @@ public sealed class MenuTests
         return cmd.ExitCode;
     }
 
+    [SupportedOSPlatform("windows")]
     private static void Junction(string link, string target)
     {
         using var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
@@ -490,6 +505,7 @@ public sealed class MenuTests
         Assert.Equal(0, mklink.ExitCode);
     }
 
+    [SupportedOSPlatform("windows")]
     private static System.Security.Principal.SecurityIdentifier[] OwnerAndAdmins()
     {
         using var me = System.Security.Principal.WindowsIdentity.GetCurrent();
@@ -501,6 +517,7 @@ public sealed class MenuTests
         ];
     }
 
+    [SupportedOSPlatform("windows")]
     private static void ProtectToOwnerAndAdmins(string path)
     {
         var acl = new System.Security.AccessControl.DirectorySecurity();
@@ -529,7 +546,8 @@ public sealed class MenuTests
             new FakeOp("dev.b", "Dev/Copy", ".txt")));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Install_location_with_only_user_system_and_admin_write_access_is_safe()
     {
         // The whole checked chain is built here: inherited ACLs on real parents vary by machine (sandbox tools, for one,
@@ -541,7 +559,8 @@ public sealed class MenuTests
         Assert.True(InstallLocation.IsWritableOnlyByOwnerAndAdmins(child, stopAt: Path.GetDirectoryName(parent.Path)));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Install_location_that_other_users_can_write_is_unsafe()
     {
         using var dir = new TempDir();

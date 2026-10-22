@@ -14,14 +14,25 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- [WindowsFact] and [WindowsTheory]: tests of Windows behaviour, skipped on Linux. -->
+    <Compile Include="..\Shared\PlatformFacts.cs" Link="PlatformFacts.cs" />
+    <Compile Include="..\Shared\BuiltFlevert.cs" Link="BuiltFlevert.cs" />
+    <Using Include="Flevert.Tests" />
+    <Using Include="System.Runtime.Versioning" />
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Flevert.Image\Flevert.Image.csproj" />
-    <!-- Build order only: CliIntegrationTests launches the real flevert.exe. -->
-    <ProjectReference Include="..\..\src\Flevert.Cli\Flevert.Cli.csproj" ReferenceOutputAssembly="false" />
+    <!-- Build order only: CliIntegrationTests launches the real flevert.exe (flevert on Linux). -->
+    <ProjectReference Include="..\..\src\Flevert.Cli\Flevert.Cli.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' == 'Windows_NT'" />
+    <ProjectReference Include="..\..\src\Flevert.Linux\Flevert.Linux.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' != 'Windows_NT'" />
   </ItemGroup>
+  <!-- Flevert.Linux is in the solution without being built by it (on Windows it could not reference the libraries built
+       for Windows), and a solution build skips references to projects it does not build: built anyway, through this one. -->
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+    <OnlyReferenceAndBuildProjectsEnabledInSolutionConfiguration>false</OnlyReferenceAndBuildProjectsEnabledInSolutionConfiguration>
+  </PropertyGroup>
 
   <ItemGroup>
     <None Include="fixtures\**" CopyToOutputDirectory="PreserveNewest" />

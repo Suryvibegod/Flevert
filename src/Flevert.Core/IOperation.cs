@@ -35,7 +35,8 @@ public interface IOperation : IMenuOperation
     /// <list type="bullet">
     /// <item>Write only through <see cref="OutputPath.WriteAtomicallyAsync"/>, or <see cref="OutputPath.WriteDirectoryAtomicallyAsync"/>
     /// for a folder of outputs (return the folder); never write next to the input directly.</item>
-    /// <item>Open the input read-only with at least <see cref="FileShare.Read"/>; the runner holds it pinned meanwhile.</item>
+    /// <item>Open the input read-only with at least <see cref="FileShare.Read"/>, through <see cref="PinnedInput.ReadPath"/>; the
+    /// runner holds it pinned meanwhile.</item>
     /// <item>Honour <paramref name="ct"/> promptly. The runner keeps the input pinned during a bounded cleanup grace;
     /// an operation still running after that is abandoned.</item>
     /// <item>Do not return or throw while a child process or handle still uses the temporary output, or a

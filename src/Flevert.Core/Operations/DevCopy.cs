@@ -20,7 +20,7 @@ public sealed class DevCopy : IOperation
 
         return OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
         {
-            await using var source = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+            await using var source = new FileStream(PinnedInput.ReadPath(inputPath), FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
             await using var target = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true);
             await source.CopyToAsync(target, token).ConfigureAwait(false);
         }, ct);

@@ -153,7 +153,7 @@ public sealed class PdfFlattenTests : IDisposable
     // Whether qpdf finds an interactive form with fields (qpdf --json, "acroform").
     private static async Task<bool> HasForm(string path)
     {
-        var run = await ExternalTool.RunAsync(Path.Combine(AppContext.BaseDirectory, "qpdf.exe"), ["--json=2", "--json-key=acroform", path], TimeSpan.FromSeconds(30));
+        var run = await ExternalTool.RunAsync(Qpdf.NextToApp.ExePath, ["--json=2", "--json-key=acroform", path], TimeSpan.FromSeconds(30));
         Assert.True(run.ExitCode == 0, run.StandardError);
         using var json = JsonDocument.Parse(run.StandardOutput);
         var form = json.RootElement.GetProperty("acroform");

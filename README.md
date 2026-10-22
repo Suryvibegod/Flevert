@@ -36,6 +36,16 @@ iPhone photos to JPG, videos small enough to send, copies without GPS, photos in
 
 For Windows 10 (1809 or later) and 11, 64-bit.
 
+### On Linux (GNOME Files)
+
+1. Download `Flevert-<version>-linux-x64.tar.gz` and unpack it.
+2. Run `./install.sh` in the folder it made (no root needed). It installs Flevert for you in `~/.local/share/Flevert` and adds it to the right-click menu of Files (Nautilus). If it asks for `nautilus-python`, install it (`sudo apt install python3-nautilus` on Ubuntu, Debian and Pop!_OS; `sudo dnf install nautilus-python` on Fedora) and run `./install.sh` again.
+3. Restart Files (`nautilus -q`), then right-click a picture or a PDF and choose **Flevert**. The tools that Windows shows only with Shift are under **Flevert > More PDF tools**.
+
+To remove it: `~/.local/share/Flevert/app/install.sh --uninstall`. For 64-bit x86 Linux with GNOME Files and glibc 2.34 or later (Ubuntu 22.04, Debian 12, Fedora 35 and later); other file managers, and video and audio, are not supported there yet.
+
+The installer records the files it owns. Uninstall keeps unrelated files; updates refuse unrecognized files inside the app folder. Linked installation paths and older preview copies without an installation manifest are refused. Move those copies to a backup location before installing again.
+
 ## The menu
 
 **Pictures** (`.jpg .jpeg .png .webp .heic .heif .avif .gif .bmp .tif .tiff`):
@@ -103,7 +113,7 @@ PDFs, videos and songs are read in a separate process with a memory limit, so a 
 
 ## Privacy
 
-No account, no telemetry, no uploads. At most once a day, after a conversion, Flevert asks GitHub whether a new version is out (GitHub sees your IP address and Flevert version) but never downloads or installs anything by itself; turn this off in setup or with `flevert.exe update-check off`.
+No account, no telemetry, no uploads. At most once a day, after a conversion, Flevert asks GitHub whether a new version is out (GitHub sees your IP address and Flevert version) but never downloads or installs anything by itself; turn this off in setup or with `flevert.exe update-check off`. The Linux version does not check.
 
 ## Coming next
 
@@ -134,3 +144,7 @@ Free code signing provided by [SignPath.io](https://about.signpath.io/), certifi
 ## Contributing and license
 
 Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), or [SECURITY.md](SECURITY.md) for security problems. [MIT license](LICENSE); bundled components' licences are in `THIRD-PARTY-NOTICES.txt` in the install folder (ffmpeg is GPL, see above).
+
+## Contributors
+
+- [tlong (@long89kev)](https://github.com/long89kev) — Linux port, GNOME Files menu, and Linux packaging and tests ([PR #5](https://github.com/Suryvibegod/Flevert/pull/5)).

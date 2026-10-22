@@ -88,7 +88,7 @@ internal static class TestPasswords
                 {
                     var document = PdfiumNative.FPDF_LoadCustomDocument(source.Access, p);
                     if (document == 0)
-                        return -(int)PdfiumNative.FPDF_GetLastError();
+                        return -(int)PdfiumNative.FPDF_GetLastError().Value;
                     var pages = PdfiumNative.FPDF_GetPageCount(document);
                     PdfiumNative.FPDF_CloseDocument(document);
                     return pages;

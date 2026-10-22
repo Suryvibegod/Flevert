@@ -62,10 +62,16 @@ internal sealed record PdfEdit(PdfEditKind Kind)
     /// <summary>For <see cref="PdfEditKind.Watermark"/>: the text, already checked (<see cref="WatermarkText"/>).</summary>
     public string Text { get; init; } = "";
 
+    /// <summary>
+    /// For <see cref="PdfEditKind.Watermark"/>: the font file (<see cref="SystemFont"/>), found by the parent, so the worker
+    /// only reads a file and starts no process (fontconfig, on Linux).
+    /// </summary>
+    public string Font { get; init; } = "";
+
     public string Encode() => Kind switch
     {
         PdfEditKind.PageNumbers => string.Join(Separator, "numbers", ((int)Position).ToString(CultureInfo.InvariantCulture), ((int)Style).ToString(CultureInfo.InvariantCulture)),
-        PdfEditKind.Watermark => string.Join(Separator, "watermark", Text),
+        PdfEditKind.Watermark => string.Join(Separator, "watermark", Text, Font),
         PdfEditKind.TwoPerSheet => "2up",
         PdfEditKind.FourPerSheet => "4up",
         PdfEditKind.FitA4 => "a4",
@@ -83,9 +89,10 @@ internal sealed record PdfEdit(PdfEditKind Kind)
                 Position = Enum<PdfPageNumberPosition>(parts[1]),
                 Style = Enum<PdfPageNumberStyle>(parts[2]),
             },
-            ("watermark", 2) => new PdfEdit(PdfEditKind.Watermark)
+            ("watermark", 3) => new PdfEdit(PdfEditKind.Watermark)
             {
                 Text = WatermarkText(parts[1]) ?? throw new FormatException("Not a watermark text."),
+                Font = Path.IsPathFullyQualified(parts[2]) ? parts[2] : throw new FormatException("The font's path must be fully qualified."),
             },
             ("2up", 1) => new PdfEdit(PdfEditKind.TwoPerSheet),
             ("4up", 1) => new PdfEdit(PdfEditKind.FourPerSheet),
