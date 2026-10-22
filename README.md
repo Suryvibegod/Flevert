@@ -20,7 +20,8 @@ iPhone photos to JPG, videos small enough to send, copies without GPS, photos in
 
 - **iPhone photos that open anywhere**: HEIC to JPG, the right way up.
 - **Photos that fit**: compress them for chat and email, or to under 500 KB, 1 MB or 5 MB.
-- **Seven formats**: convert between JPG, PNG, WebP, AVIF, GIF, BMP and TIFF. Animations stay animated in GIF and WebP.
+- **Seven formats**: convert between JPG, PNG, WebP, AVIF, GIF and TIFF (BMP opens too). Animations stay animated in GIF and WebP.
+- **Text from pictures and scans**: Vietnamese and English, read on your PC: a screenshot or a photo of a page to `.txt`, a scanned PDF to a PDF you can search and copy from.
 - **No location in what you share**: remove GPS and camera details first.
 - **Videos that fit**: compress to under 10, 25 or 100 MB, convert to MP4, MOV, WEBM or GIF, take the sound out as MP3, or remove where it was filmed.
 - **Audio**: convert between MP3, M4A, WAV, FLAC, OGG and Opus.
@@ -42,7 +43,8 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 
 | Flevert > | You get |
 |---|---|
-| **Convert to** > JPG, PNG, WebP, AVIF, GIF, BMP, TIFF | `photo.jpg`, upright (no GIF for HEIC photos) |
+| **Convert to** > JPG, PNG, WebP, AVIF, GIF, TIFF | `photo.jpg`, upright (no GIF for HEIC and BMP pictures) |
+| **Convert to** > Text | `photo.txt`, the Vietnamese or English text in the picture, read on your PC |
 | **Compress** > Light (best quality), Balanced, Strong (smallest) | `photo (compressed).jpg` |
 | **Compress** > Under 500 KB, 1 MB, 5 MB | `photo (under 1 MB).jpg`, the best quality that fits |
 | **Remove hidden info** | `photo (no metadata).jpg`, without GPS location, camera details, XMP or comments |
@@ -61,7 +63,7 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 | **Merge PDFs** | `report (merged).pdf`, in name order |
 | **Split into pages** | a folder `report (split)` with one PDF per page |
 | **Convert to** > JPG images | a folder `report (pages)` with `report 001.jpg`, … |
-| **Convert to** > Text | `report.txt`, the text of every page (scans have none: Flevert does not recognise text in pictures) |
+| **Convert to** > Text | `report.txt`, the text of every page; scanned pages are read from their pictures (Vietnamese and English) |
 | **Rotate** > Right 90°, Left 90°, 180° | `report (rotated).pdf` |
 | **Add watermark…** | `report (watermarked).pdf` with your text across every page, such as what the copy is for; it asks for the text once for all the PDFs you selected. Anyone with a PDF editor can still remove it. The font goes into the PDF and adds about 1 MB to the file. To mark a photo, use **Combine into PDF** first |
 | **Protect with password**, **Remove password** | `report (protected).pdf` (AES-256), `report (unlocked).pdf` |
@@ -79,6 +81,7 @@ Less used PDF tools are one step away: hold **Shift** while you right-click a PD
 | **Split by size** > Under 10 MB, Under 25 MB | a folder `report (parts)` with `report part 1.pdf`, …, in page order. **Under 10 MB** is the safe size for email (Gmail counts 25 MB after encoding, about 18 MB of file; Outlook takes 20 MB); **Under 25 MB** is for chat apps |
 | **Convert to PNG images** | a folder `report (pages)` with `report 001.png`, …, lossless |
 | **Extract images** | a folder `report (images)` with `report 001.jpg`, `report 002.png`, …: photos exactly as they are in the PDF, other pictures as PNG |
+| **Make searchable (OCR)** | `report (searchable).pdf`: the same pages, with invisible text over the scanned ones, so Ctrl+F finds words and you can copy them with their Vietnamese accents |
 
 **Videos** (`.mp4 .mov .m4v .mkv .webm .avi .wmv .3gp .mts .m2ts`):
 
@@ -93,9 +96,9 @@ Less used PDF tools are one step away: hold **Shift** while you right-click a PD
 
 **Audio** (`.mp3 .wav .m4a .aac .flac .ogg .opus .wma .aiff .aif`): **Flevert > Convert to** > MP3, M4A, WAV, FLAC, OGG, Opus gives `song.mp3` beside it, with its title and artist.
 
-Video and audio are converted by [ffmpeg](https://ffmpeg.org/), included in the installer. It is free software under the GNU GPL, and each [release](https://github.com/Suryvibegod/Flevert/releases) has its complete source beside the setup (`ffmpeg-source-*.tar`).
+Text in pictures is read by [Tesseract](https://github.com/tesseract-ocr/tesseract) (Apache-2.0), built for Flevert from source with permissive libraries only and included in the installer. Video and audio are converted by [ffmpeg](https://ffmpeg.org/), included in the installer. It is free software under the GNU GPL, and each [release](https://github.com/Suryvibegod/Flevert/releases) has its complete source beside the setup (`ffmpeg-source-*.tar`).
 
-PDFs, videos and songs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
+PDFs, videos, songs and the text of pictures are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
 
 <p align="center">
 <img src="assets/screenshots/progress.png" width="420" alt="The Flevert progress window converting twelve photos to JPG: 8 of 12 done, with a Cancel button">
@@ -107,7 +110,7 @@ No account, no telemetry, no uploads. At most once a day, after a conversion, Fl
 
 ## Coming next
 
-**1.3.1**: more video tools (trim, rotate, a still frame, merge) behind Shift + right-click, like the PDF ones. **1.4**: text from scans (OCR). Ideas are welcome in [issues](https://github.com/Suryvibegod/Flevert/issues); changes are in the [CHANGELOG](CHANGELOG.md).
+More video tools (trim, rotate, a still frame, merge) behind Shift + right-click, like the PDF ones. Ideas are welcome in [issues](https://github.com/Suryvibegod/Flevert/issues); changes are in the [CHANGELOG](CHANGELOG.md).
 
 ## Troubleshooting
 

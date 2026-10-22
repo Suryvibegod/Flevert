@@ -4,6 +4,19 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+Text from pictures and scans, in Vietnamese and English, read on your PC.
+
+### Added
+
+- Right-click a picture and choose **Flevert > Convert to > Text**: `photo.txt` with the text in it. A turned photo of a page is read the right way up.
+- Hold **Shift**, right-click a PDF and choose **Flevert: more PDF tools > Make searchable (OCR)**: `report (searchable).pdf` looks the same, and Ctrl+F finds the words of its scanned pages, which you can copy with their accents.
+- **Convert to > Text** of a PDF now reads scanned pages from their pictures instead of skipping a scanned PDF.
+- The installer includes Tesseract 5.5.3 (Apache-2.0) with its Vietnamese and English data, built for Flevert from source with permissive libraries only.
+
+### Changed
+
+- **Convert to > BMP** left the picture menu to make room for Text; BMP pictures still open in every tool.
+
 ## [1.3.0] - 2026-10-21
 
 Video and audio: convert, compress to a size you choose, take the sound out of a video, and remove where it was filmed, on your PC.

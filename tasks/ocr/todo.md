@@ -16,7 +16,7 @@ Phiên trước giao việc cho worker của `ceo-worker-agent` trong 5 worktree
 - [x] T3 `pdf.make-searchable` (61f456e). Sửa: `IsLiteralLine` chỉ nhận `--to=`/`--from=` kèm phạm vi trang hợp lệ; song song tối đa `Tesseract.MaxParallel` (lõi, và RAM/4 chia 1 GB); thêm test (worktree không có).
 - [x] T4 `pdf.to-text` OCR trang scan: **không** dùng patch `ocr-pdftext` (nó bỏ `SingleProcess` của pdf-worker để worker tự chạy tesseract). Làm lại ở leader bằng `RenderOcrPagesAsync`; chữ OCR chỉ thay chữ sẵn có khi nhiều hơn; tiến độ lượt đọc là "scanned page N of M" (cả Make searchable).
 - [x] T5 Đóng gói (f6ee52b): publish kèm `tesseract\` (trừ `licenses\`), `installer/Flevert.iss` thư mục riêng ngoài lượt giải nén check-location, notices, Installer/NoticesScriptTests.
-- [ ] T5b README/CHANGELOG, `docs/install.md`; kiểm `build-installer.ps1` thật (Excludes `tesseract\*` có loại được thư mục con `tessdata\configs` không).
+- [x] T5b README/CHANGELOG (mục Unreleased). `build-installer.ps1` thật đạt: setup 100,2 MB (1.3.0: 97,7 MB). Thử riêng với ISCC: `Excludes: "tesseract\*"` loại cả thư mục con, nên `tessdata\configs\pdf` không vào lượt giải nén check-location.
 - [ ] T6 File độc (bảng file độc hiện có cho ảnh/PDF qua OCR), hủy giữa chừng (tesseract dừng, không file dở), trang `/Rotate 90` cho Make searchable.
 - [ ] T7 Icon riêng cho Make searchable (đang dùng chung `draw_text` với Add watermark).
 - [ ] Trước release: app thật, MenuProbe, installer, ba review, reconcile; theo docs/RELEASING.md.
