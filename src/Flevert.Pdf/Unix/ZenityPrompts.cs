@@ -34,7 +34,7 @@ public sealed class ZenityPasswordPrompt(string zenity = ZenityProgress.Zenity) 
             List<string> arguments =
             [
                 "--forms", protect ? "--title=Flevert — Protect with password" : "--title=Flevert — Remove password",
-                "--text=" + ZenityQuestion.Text(heading, problem), "--separator=\n",
+                "--text=" + ZenityQuestion.Text(heading, problem), ZenityQuestion.Separator,
                 protect ? "--ok-label=Protect" : "--ok-label=Remove password", "--add-password=Password",
             ];
             if (protect)
@@ -44,9 +44,14 @@ public sealed class ZenityPasswordPrompt(string zenity = ZenityProgress.Zenity) 
             using var reply = await _question.AskAsync(arguments, zenity, ct).ConfigureAwait(false);
             if (reply.ExitCode != 0)
                 return new PasswordAnswer(null, 1);
-            var fields = ZenityQuestion.Fields(reply.Output);
-            var password = fields.ElementAtOrDefault(0) ?? [];
-            var again = protect ? fields.ElementAtOrDefault(1) ?? [] : [];
+            if (ZenityQuestion.Fields(reply.Output, (protect ? 2 : 1) + ZenityQuestion.ForAllFields(files)) is not { } fields)
+            {
+                problem = ZenityQuestion.UnreadableMessage;
+                continue;
+            }
+
+            var password = fields[0];
+            var again = protect ? fields[1] : [];
             var forAll = ZenityQuestion.ChoseAll(fields.ElementAtOrDefault(protect ? 2 : 1), files);
             problem = PasswordRules.Problem(password, again, question.Purpose);
             // Only the password itself is kept, by the PdfPassword that takes it over; the second entry goes now.
@@ -80,7 +85,7 @@ public sealed class ZenityWatermarkPrompt(string zenity = ZenityProgress.Zenity)
             var files = _question.FilesLeft(question.AnsweredInProgress);
             List<string> arguments =
             [
-                "--forms", "--title=Flevert — Add watermark", "--text=" + ZenityQuestion.Text(heading, problem), "--separator=\n",
+                "--forms", "--title=Flevert — Add watermark", "--text=" + ZenityQuestion.Text(heading, problem), ZenityQuestion.Separator,
                 "--ok-label=Add watermark", "--add-entry=Text",
             ];
             arguments.AddRange(ZenityQuestion.ForAll(files));
@@ -88,8 +93,13 @@ public sealed class ZenityWatermarkPrompt(string zenity = ZenityProgress.Zenity)
             using var reply = await _question.AskAsync(arguments, zenity, ct).ConfigureAwait(false);
             if (reply.ExitCode != 0)
                 return new WatermarkAnswer(null, 1);
-            var fields = ZenityQuestion.Fields(reply.Output);
-            var text = new string(fields.ElementAtOrDefault(0) ?? []);
+            if (ZenityQuestion.Fields(reply.Output, 1 + ZenityQuestion.ForAllFields(files)) is not { } fields)
+            {
+                problem = ZenityQuestion.UnreadableMessage;
+                continue;
+            }
+
+            var text = new string(fields[0]);
             var forAll = ZenityQuestion.ChoseAll(fields.ElementAtOrDefault(1), files);
             problem = WatermarkPrompts.Problem(text);
             if (problem is null)
@@ -128,29 +138,42 @@ internal sealed class ZenityQuestion
 
     // zenity reads markup: names show as they are. The reason the last answer was refused goes under the heading.
     public static string Text(string heading, string? problem) =>
-        Markup(heading) + (problem is null ? "" : "\n\n" + Markup(problem));
+        Shown(heading) + (problem is null ? "" : "\n\n" + Shown(problem));
+
+    // Between fields: a character no one types or pastes into a field, so a password pasted with a line break stays one
+    // field instead of moving the others along.
+    public const string Separator = "--separator=\u001e";
+
+    public const string UnreadableMessage = "Flevert could not read the answer. Type it again.";
 
     public static IEnumerable<string> ForAll(int files) =>
         files > 1 ? ["--add-combo=Use it for", $"--combo-values=All {files} files|This file only"] : [];
+
+    public static int ForAllFields(int files) => files > 1 ? 1 : 0;
 
     // As on Windows, where the box starts ticked: anything but "This file only" is for all.
     public static bool ChoseAll(char[]? choice, int files) =>
         files > 1 && !(choice ?? []).AsSpan().SequenceEqual("This file only");
 
-    /// <summary>The form's fields, one per line, as characters (a password is wiped by whoever keeps it).</summary>
-    public static List<char[]> Fields(ReadOnlySpan<byte> output)
+    /// <summary>
+    /// The form's <paramref name="count"/> fields, as characters (a password is wiped by whoever keeps it), or <c>null</c>
+    /// when the output does not hold exactly that many.
+    /// </summary>
+    public static List<char[]>? Fields(ReadOnlySpan<byte> output, int count)
     {
         var chars = new char[Encoding.UTF8.GetCharCount(output)];
         Encoding.UTF8.GetChars(output, chars);
         try
         {
-            var fields = new List<char[]>();
             var rest = chars.AsSpan();
             if (rest.EndsWith('\n'))
                 rest = rest[..^1];
+            if (rest.Count('\u001e') != count - 1)
+                return null;
+            var fields = new List<char[]>();
             while (true)
             {
-                var end = rest.IndexOf('\n');
+                var end = rest.IndexOf('\u001e');
                 fields.Add((end < 0 ? rest : rest[..end]).ToArray());
                 if (end < 0)
                     return fields;
@@ -163,6 +186,5 @@ internal sealed class ZenityQuestion
         }
     }
 
-    private static string Markup(string text) =>
-        text.Replace("&", "&amp;", StringComparison.Ordinal).Replace("<", "&lt;", StringComparison.Ordinal).Replace(">", "&gt;", StringComparison.Ordinal);
+    private static string Shown(string text) => Markup.ForZenity(Markup.Escape(text));
 }

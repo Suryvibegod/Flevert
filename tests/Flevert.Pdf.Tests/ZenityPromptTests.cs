@@ -16,7 +16,7 @@ public sealed class ZenityPromptTests : IDisposable
     [SupportedOSPlatform("linux")]
     public async Task Protecting_asks_for_the_password_twice_and_takes_it()
     {
-        var zenity = FakeZenity(Answer(0, "s3cret ếch\ns3cret ếch\n"));
+        var zenity = FakeZenity(Answer(0, "s3cret ếch\u001es3cret ếch\n"));
 
         var answer = await new ZenityPasswordPrompt(zenity).AskAsync(new PasswordQuestion("/x/Hồ sơ.pdf", PasswordPurpose.Protect, 0), CancellationToken.None);
 
@@ -45,7 +45,7 @@ public sealed class ZenityPromptTests : IDisposable
     [SupportedOSPlatform("linux")]
     public async Task Two_passwords_that_differ_are_asked_again_saying_why()
     {
-        var zenity = FakeZenity(Answer(0, "one\ntwo\n"), Answer(0, "two\ntwo\n"));
+        var zenity = FakeZenity(Answer(0, "one\u001etwo\n"), Answer(0, "two\u001etwo\n"));
 
         var answer = await new ZenityPasswordPrompt(zenity).AskAsync(new PasswordQuestion("/x/a.pdf", PasswordPurpose.Protect, 0), CancellationToken.None);
 
@@ -71,7 +71,7 @@ public sealed class ZenityPromptTests : IDisposable
     [SupportedOSPlatform("linux")]
     public async Task With_more_files_left_the_answer_can_be_for_all_of_them()
     {
-        var zenity = FakeZenity(Answer(0, "pw\nAll 3 files\n"));
+        var zenity = FakeZenity(Answer(0, "pw\u001eAll 3 files\n"));
         var prompt = new ZenityPasswordPrompt(zenity);
         prompt.Report(new BatchProgress(1, 4, "/x/b.pdf"));
 
@@ -122,6 +122,50 @@ public sealed class ZenityPromptTests : IDisposable
 
         Assert.True(during);
         Assert.False(prompt.Asking);
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task A_backslash_in_a_name_reaches_zenity_doubled_so_it_never_becomes_markup()
+    {
+        // zenity runs the text through g_strcompress, where \074 is "<".
+        var zenity = FakeZenity(Answer(0, "pw\n"));
+
+        (await new ZenityPasswordPrompt(zenity).AskAsync(new PasswordQuestion("/x/a\\074b\\076.pdf", PasswordPurpose.Unlock, 0), CancellationToken.None))
+            .Password!.Dispose();
+
+        Assert.Contains(Calls().Single(), a => a.Contains("a\\\\074b\\\\076.pdf", StringComparison.Ordinal));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task A_form_with_more_or_fewer_fields_than_asked_is_asked_again()
+    {
+        // A line break pasted into a field cannot move the others along: fields are told apart by U+001E.
+        var zenity = FakeZenity(Answer(0, "one\n"), Answer(0, "a\u001eb\u001ec\n"), Answer(0, "pw\u001epw\n"));
+
+        var answer = await new ZenityPasswordPrompt(zenity).AskAsync(new PasswordQuestion("/x/a.pdf", PasswordPurpose.Protect, 0), CancellationToken.None);
+
+        using var password = answer.Password;
+        Assert.Equal("pw", new string(password!.Chars));
+        var calls = Calls();
+        Assert.Equal(3, calls.Count);
+        Assert.Contains("--separator=\u001e", calls[0]);
+        Assert.Contains(calls[2], a => a.Contains("Flevert could not read the answer", StringComparison.Ordinal));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task An_answer_too_long_to_be_one_is_read_to_the_end_and_asked_again()
+    {
+        // Past what a pipe holds: zenity would block writing it if it were not read.
+        var zenity = FakeZenity(Answer(0, new string('x', 300_000) + "\n"), Answer(0, "Bản sao\n"));
+
+        var answer = await new ZenityWatermarkPrompt(zenity).AskAsync(new WatermarkQuestion("/x/a.pdf", 0), CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Equal("Bản sao", answer.Text);
+        Assert.Equal(2, Calls().Count);
     }
 
     // One answer per call: exit code, then what zenity prints.

@@ -21,7 +21,7 @@ public sealed class UnixDesktopTests : IDisposable
         using (var window = ZenityProgress.Start("Convert to JPG", zenity))
         {
             Assert.NotNull(window);
-            window.Report(new BatchProgress(3, 10, "/x/ảnh <1> & 2.heic"), "/x/ảnh <1> & 2.heic");
+            window.Report(new BatchProgress(3, 10, "/x/ảnh <1> & 2\\074.heic"), "/x/ảnh <1> & 2\\074.heic");
             await Task.Delay(200);
         }
 
@@ -29,8 +29,9 @@ public sealed class UnixDesktopTests : IDisposable
         Assert.Contains("--progress", Arguments(), StringComparer.Ordinal);
         Assert.Contains("--title=Flevert: Convert to JPG", Arguments(), StringComparer.Ordinal);
         Assert.Contains("30", lines);
-        // zenity reads markup: the file name's < and & must show as they are.
-        Assert.Contains("# 3 of 10 done: ảnh &lt;1&gt; &amp; 2.heic", lines);
+        // A plain label (zenity 3.42.1, progress.c: gtk_label_set_text): < and & show as they are, unescaped; its
+        // g_strcompress would turn \074 into "<", so the backslash goes doubled.
+        Assert.Contains("# 3 of 10 done: ảnh <1> & 2\\\\074.heic", lines);
     }
 
     [LinuxFact]

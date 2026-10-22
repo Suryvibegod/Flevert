@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.Versioning;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Flevert.Core;
@@ -66,7 +67,8 @@ public sealed class ZenityProgress : IDisposable
             try
             {
                 var input = _zenity.StandardInput;
-                input.Write(string.Create(CultureInfo.InvariantCulture, $"{percent}\n# {Markup.Escape(OneLine(text))}\n"));
+                // A plain label (gtk_label_set_text): no markup to escape, only g_strcompress's backslashes.
+                input.Write(string.Create(CultureInfo.InvariantCulture, $"{percent}\n# {Markup.ForZenity(OneLine(text))}\n"));
                 input.Flush();
             }
             catch (IOException)
@@ -170,6 +172,13 @@ internal static class Markup
 {
     public static string Escape(string text) =>
         text.Replace("&", "&amp;", StringComparison.Ordinal).Replace("<", "&lt;", StringComparison.Ordinal).Replace(">", "&gt;", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Text for zenity, which runs a dialog's text and each progress line through <c>g_strcompress</c> first (zenity
+    /// 3.42.1, forms.c and progress.c): a name holding <c>\074</c> would come out as <c>&lt;</c>, after it was escaped.
+    /// Backslashes are doubled, so it shows them as they are.
+    /// </summary>
+    public static string ForZenity(string text) => text.Replace("\\", "\\\\", StringComparison.Ordinal);
 }
 
 /// <summary>
@@ -291,7 +300,7 @@ public sealed class ZenityReply(int exitCode, byte[] buffer, int length) : IDisp
     /// <summary>The bytes zenity wrote on standard output.</summary>
     public ReadOnlySpan<byte> Output => buffer.AsSpan(0, length);
 
-    public void Dispose() => System.Security.Cryptography.CryptographicOperations.ZeroMemory(buffer);
+    public void Dispose() => CryptographicOperations.ZeroMemory(buffer);
 }
 
 /// <summary>Runs one zenity dialog, which dies with flevert, and reads its answer without ever making it a string.</summary>
@@ -329,6 +338,17 @@ public static class ZenityDialog
         int read;
         while (length < buffer.Length && (read = await output.ReadAsync(buffer.AsMemory(length), CancellationToken.None).ConfigureAwait(false)) > 0)
             length += read;
+        // More than any answer: read to the end and drop it all (zenity would block on a full pipe and never exit), so the
+        // form reads as empty rather than cut.
+        if (length == buffer.Length)
+        {
+            var rest = new byte[4096];
+            while (await output.ReadAsync(rest, CancellationToken.None).ConfigureAwait(false) > 0)
+                CryptographicOperations.ZeroMemory(rest);
+            CryptographicOperations.ZeroMemory(buffer);
+            length = 0;
+        }
+
         await dialog.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
         var reply = new ZenityReply(dialog.ExitCode, buffer, length);
         if (ct.IsCancellationRequested)
