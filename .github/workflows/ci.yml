@@ -6,6 +6,11 @@ on:
   pull_request:
   # Started by hand for the release check: three runs of one commit at once (docs/RELEASING.md).
   workflow_dispatch:
+    inputs:
+      regression_baseline:
+        description: Optional pre-fix commit SHA to verify the Linux menu and installer regression tests fail first
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -17,6 +22,7 @@ env:
 
 jobs:
   build-and-test:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.regression_baseline == '' }}
     runs-on: windows-latest
     # The media tests encode real video (a minute of 1080p in two passes among them): 30 minutes left no margin.
     timeout-minutes: 45
@@ -83,10 +89,15 @@ jobs:
       # What the Linux side calls in the tests: fontconfig and a font with Vietnamese letters for the watermark, GLib's
       # Python bindings to check the order of names against GLib itself, and zenity and gdbus, which install.sh requires.
       - name: System packages
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fontconfig fonts-liberation2 python3-gi zenity libglib2.0-bin
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fontconfig fonts-liberation2 python3-gi python3-nautilus zenity libglib2.0-bin
       # pdfium and qpdf for Linux, each checked against the SHA256 in scripts/deps-linux.json before it is unpacked.
       - name: Fetch third-party tools
         run: python3 -I scripts/fetch-deps-linux.py
+      - name: Prove Linux regression tests reject the pre-fix code
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.regression_baseline != '' }}
+        env:
+          REGRESSION_BASELINE: ${{ inputs.regression_baseline }}
+        run: bash scripts/test-linux-regressions.sh "$REGRESSION_BASELINE"
       - id: build
         run: dotnet build Flevert.sln -c Release
       - run: dotnet format Flevert.sln --verify-no-changes
@@ -105,3 +116,6 @@ jobs:
       - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         name: Package
         run: scripts/build-linux.sh
+      - if: ${{ success() }}
+        name: Install, update, convert and uninstall the packaged app in a temporary profile
+        run: bash scripts/test-linux-package.sh

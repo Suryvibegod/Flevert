@@ -18,7 +18,7 @@ Everything below was measured on Pop!_OS 22.04 (Nautilus 42, glibc 2.35, x86-64)
 
 ### Build
 
-- `Directory.Build.props` targets `net10.0-windows` on Windows and `net10.0` elsewhere. `Flevert.Cli` and `MenuProbe` stay `net10.0-windows` everywhere (with `EnableWindowsTargeting`), so a Linux machine also catches Windows compile errors. `Flevert.Linux` (the `flevert` executable) is `net10.0` everywhere and is not built by the solution on its own: on Windows it could not reference the libraries built for Windows; the Linux tests build it through their references.
+- `Directory.Build.props` targets `net10.0-windows` on Windows and `net10.0` elsewhere. `Flevert.Cli` and `MenuProbe` stay `net10.0-windows` everywhere (with `EnableWindowsTargeting`), so a Linux machine also catches Windows compile errors. `Flevert.Linux` uses the host target and builds as part of the solution on both systems; Linux packages still target `net10.0`. The shared libraries and Linux host disable only the automatically generated assembly platform attribute: their explicit platform annotations and CA1416 remain active, so a Windows build can analyze the Linux host without falsely declaring every shared API Windows-only.
 - Windows-only types and members carry `[SupportedOSPlatform("windows")]`, the Linux ones `[SupportedOSPlatform("linux")]`, and shared code branches with `OperatingSystem.IsWindows()`/`IsLinux()`. CA1416 stays an error; nothing is silenced. The Linux side lives under `Unix/` folders.
 
 ### One process per selection
@@ -51,8 +51,8 @@ A tool runs as `setsid` → `setpriv --pdeathsig KILL` → `prlimit --data=<limi
 - **Order of joined files**: GLib's `g_utf8_collate_key_for_filename`, which Nautilus sorts with, called from the system's `libglib-2.0` (linked, not shipped) after `setlocale(LC_COLLATE, "")`. Its order follows the locale's collation (in en_US "img_0011" sorts before "IMG_0009"); no natural comparison of our own reproduced it. Without GLib, a natural comparison.
 - **Watermark font**: the TrueType font fontconfig gives for Arial with Vietnamese (`fc-match`, Liberation Sans or Arimo, made to replace Arial). Flevert ships no font.
 - **Progress, questions, notifications**: zenity (`--progress`, `--forms` with masked fields) and `gdbus` to `org.freedesktop.Notifications`, all separate processes, with GVariant and Pango markup escaped. A password goes from zenity through a pipe into a buffer and characters that are wiped, never a string or a command line.
-- **Menu**: a nautilus-python extension (MIT, API 3.0 and 4.0) reads `menu.json`, which `flevert install-menu` builds for each extension with the Windows menu's own `MenuNode`, so the order is the same; the PDF tools Windows shows only with Shift are a submenu at the end, since Nautilus has no 16-entry limit. `install-menu` refuses a flevert whose folder or a folder above it others can change or reach through a link (a parent others can write is accepted only with the sticky bit).
-- **Package**: a tarball with `install.sh`, installing for the user into `~/.local/share/Flevert/app` (0700) without root; `--uninstall` removes everything.
+- **Menu**: a nautilus-python extension (MIT, API 3.0 and 4.0) reads `menu.json`, which `flevert install-menu` builds for each extension with the Windows menu's own `MenuNode`, so the order is the same; the PDF tools Windows shows only with Shift are a submenu at the end, since Nautilus has no 16-entry limit. `install-menu` checks the whole app tree and its ancestors: trusted owners only, no links or files with multiple hard links, and no entries other accounts can write. Only ancestor folders may use the sticky-directory exception.
+- **Package**: a tarball with `install.sh` and a Python-standard-library installer, installing for the user into `~/.local/share/Flevert/app` (0700) without root. `.flevert-install.json` records app entries. Unrecognized existing apps, linked paths and unsafe owners/permissions are refused before replacement or deletion. Updates refuse unknown app entries; uninstall keeps unknown files. Failed menu registration restores the previous app, manifest and menu files; if rollback fails, its backup is retained for recovery.
 
 ## Where Linux is weaker than Windows
 
@@ -63,6 +63,7 @@ A tool runs as `setsid` → `setpriv --pdeathsig KILL` → `prlimit --data=<limi
 - **Older systems**: `setpriv --pdeathsig` needs util-linux 2.33; a tool started just before flevert dies, before `setpriv` sets the death signal, is not killed with it. qpdf's own `libjpeg` (libjpeg-turbo 2.1.2) comes with qpdf's official build and is updated with it.
 - **The update check is off** on Linux: there is no Linux release to point to yet.
 - **No video or audio.** `Flevert.Media` (1.3.0) and its tests are pinned to `net10.0-windows`, as `Flevert.Cli` is: Linux compiles them, so Windows-only compile errors show there too, but the Linux package and menu leave them out until ffmpeg for Linux has a spec of its own.
+- **Desktop session and selection size.** Interactive use requires a working GNOME session; terminal/SSH jobs without a display use `FLEVERT_HEADLESS=1`. Nautilus passes selections through argv, so the operating system's argument-byte budget also applies to the 1000-file count limit; very deep paths may require smaller selections.
 
 ## Consequences
 

@@ -230,11 +230,11 @@ public sealed class Runner(RunLog log)
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
-    // Held until the operation has finished, also when it was abandoned: no input can be renamed, replaced or deleted (on
-    // Windows) while it is used, and it may still read through them (PinnedInput, on Linux).
+    // Windows releases an abandoned operation's locks after StopGrace. Linux must keep its descriptors alive until the
+    // operation really ends, because it may still be reading through PinnedInput's /proc paths.
     private static void Release(List<SafeFileHandle> pins, Task? running)
     {
-        if (running is null || running.IsCompleted)
+        if (!OperatingSystem.IsLinux() || running is null || running.IsCompleted)
         {
             foreach (var pin in pins)
                 pin.Dispose();

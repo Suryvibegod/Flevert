@@ -33,11 +33,6 @@
     <ProjectReference Include="..\..\src\Flevert.Cli\Flevert.Cli.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' == 'Windows_NT'" />
     <ProjectReference Include="..\..\src\Flevert.Linux\Flevert.Linux.csproj" ReferenceOutputAssembly="false" Condition="'$(OS)' != 'Windows_NT'" />
   </ItemGroup>
-  <!-- Flevert.Linux is in the solution without being built by it (on Windows it could not reference the libraries built
-       for Windows), and a solution build skips references to projects it does not build: built anyway, through this one. -->
-  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
-    <OnlyReferenceAndBuildProjectsEnabledInSolutionConfiguration>false</OnlyReferenceAndBuildProjectsEnabledInSolutionConfiguration>
-  </PropertyGroup>
 
   <ItemGroup>
     <None Include="fixtures\**" CopyToOutputDirectory="PreserveNewest" />

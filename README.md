@@ -44,6 +44,8 @@ For Windows 10 (1809 or later) and 11, 64-bit.
 
 To remove it: `~/.local/share/Flevert/app/install.sh --uninstall`. For 64-bit x86 Linux with GNOME Files and glibc 2.34 or later (Ubuntu 22.04, Debian 12, Fedora 35 and later); other file managers, and video and audio, are not supported there yet.
 
+The installer records the files it owns. Uninstall keeps unrelated files; updates refuse unrecognized files inside the app folder. Linked installation paths and older preview copies without an installation manifest are refused. Move those copies to a backup location before installing again.
+
 ## The menu
 
 **Pictures** (`.jpg .jpeg .png .webp .heic .heif .avif .gif .bmp .tif .tiff`):
@@ -142,3 +144,7 @@ Free code signing provided by [SignPath.io](https://about.signpath.io/), certifi
 ## Contributing and license
 
 Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), or [SECURITY.md](SECURITY.md) for security problems. [MIT license](LICENSE); bundled components' licences are in `THIRD-PARTY-NOTICES.txt` in the install folder (ffmpeg is GPL, see above).
+
+## Contributors
+
+- [tlong (@long89kev)](https://github.com/long89kev) — Linux port, GNOME Files menu, and Linux packaging and tests ([PR #5](https://github.com/Suryvibegod/Flevert/pull/5)).

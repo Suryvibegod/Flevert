@@ -103,6 +103,98 @@ public sealed class UnixMenuInstallerTests : IDisposable
 
     [LinuxFact]
     [SupportedOSPlatform("linux")]
+    public void A_tree_of_plain_files_and_folders_only_this_user_can_change_is_safe()
+    {
+        var (app, _) = SafeAppTree();
+
+        Assert.True(UnixInstallLocation.IsWritableOnlyByOwner(app));
+    }
+
+    [SkippableFact]
+    [SupportedOSPlatform("linux")]
+    public void A_tree_with_safe_root_owned_files_and_folders_is_safe()
+    {
+        Skip.IfNot(OperatingSystem.IsLinux(), "Linux only");
+        Skip.IfNot(Libc.EffectiveUserId == 0, "Changing a fixture's owner to root requires root");
+        var (app, _) = SafeAppTree();
+        Run("chown", "-R", "0:0", app);
+
+        Assert.True(UnixInstallLocation.IsWritableOnlyByOwner(app));
+    }
+
+    [LinuxTheory]
+    [SupportedOSPlatform("linux")]
+    [InlineData(UnixFileMode.GroupWrite)]
+    [InlineData(UnixFileMode.OtherWrite)]
+    public void A_nested_file_another_account_can_write_makes_the_app_unsafe(UnixFileMode permission)
+    {
+        var (app, file) = SafeAppTree();
+        Assert.True(UnixInstallLocation.IsWritableOnlyByOwner(app), "control: the plain tree is safe");
+        File.SetUnixFileMode(file, File.GetUnixFileMode(file) | permission);
+
+        Assert.False(UnixInstallLocation.IsWritableOnlyByOwner(app));
+    }
+
+    [LinuxTheory]
+    [SupportedOSPlatform("linux")]
+    [InlineData(UnixFileMode.GroupWrite)]
+    [InlineData(UnixFileMode.OtherWrite)]
+    [InlineData(UnixFileMode.GroupWrite | UnixFileMode.OtherWrite | UnixFileMode.StickyBit)]
+    public void A_nested_folder_another_account_can_write_makes_the_app_unsafe(UnixFileMode permission)
+    {
+        var (app, file) = SafeAppTree();
+        Assert.True(UnixInstallLocation.IsWritableOnlyByOwner(app), "control: the plain tree is safe");
+        var folder = Path.GetDirectoryName(file)!;
+        File.SetUnixFileMode(folder, Open | permission);
+
+        Assert.False(UnixInstallLocation.IsWritableOnlyByOwner(app));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_dangling_nested_symbolic_link_makes_the_app_unsafe()
+    {
+        var (app, file) = SafeAppTree();
+        File.CreateSymbolicLink(Path.Combine(Path.GetDirectoryName(file)!, "missing-library"), Path.Combine(_private.FullName, "missing"));
+
+        Assert.False(UnixInstallLocation.IsWritableOnlyByOwner(app));
+    }
+
+    [LinuxTheory]
+    [SupportedOSPlatform("linux")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_nested_symbolic_link_makes_the_app_unsafe_even_when_its_target_is_safe(bool directory)
+    {
+        var (app, file) = SafeAppTree();
+        var link = Path.Combine(Path.GetDirectoryName(file)!, "linked");
+        if (directory)
+        {
+            var target = Directory.CreateDirectory(Path.Combine(_private.FullName, "target")).FullName;
+            File.SetUnixFileMode(target, Open);
+            Directory.CreateSymbolicLink(link, target);
+        }
+        else
+        {
+            File.CreateSymbolicLink(link, file);
+        }
+
+        Assert.False(UnixInstallLocation.IsWritableOnlyByOwner(app));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_nested_file_with_a_hard_link_outside_the_app_makes_the_app_unsafe()
+    {
+        var (app, file) = SafeAppTree();
+        Assert.True(UnixInstallLocation.IsWritableOnlyByOwner(app), "control: the plain tree is safe");
+        Run("ln", file, Path.Combine(_private.FullName, "outside-library"));
+
+        Assert.False(UnixInstallLocation.IsWritableOnlyByOwner(app));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
     public void A_folder_others_can_write_is_not()
     {
         var app = Directory.CreateDirectory(Path.Combine(_private.FullName, "app")).FullName;
@@ -152,6 +244,29 @@ public sealed class UnixMenuInstallerTests : IDisposable
 
     [SupportedOSPlatform("linux")]
     private UnixMenuInstaller Installer() => new(_dir.Combine("data"), _dir.Combine("extensions"));
+
+    [SupportedOSPlatform("linux")]
+    private (string App, string File) SafeAppTree()
+    {
+        var app = Path.Combine(_private.FullName, "app");
+        var libraries = Directory.CreateDirectory(Path.Combine(app, "qpdf", "lib")).FullName;
+        foreach (var directory in new[] { app, Path.Combine(app, "qpdf"), libraries })
+            File.SetUnixFileMode(directory, Open);
+        var file = Path.Combine(libraries, "libqpdf.so");
+        File.WriteAllText(file, "the library");
+        File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        return (app, file);
+    }
+
+    private static void Run(string program, params string[] arguments)
+    {
+        var start = new ProcessStartInfo(program) { UseShellExecute = false };
+        foreach (var argument in arguments)
+            start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)!;
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
+    }
 
     [LinuxFact]
     [SupportedOSPlatform("linux")]

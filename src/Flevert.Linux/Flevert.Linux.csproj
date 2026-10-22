@@ -2,8 +2,9 @@
 
   <!-- flevert for Linux: the Nautilus menu runs it with every selected file at once (docs/specs/linux.md). -->
   <PropertyGroup>
-    <!-- The Linux app on every OS, as Flevert.Cli is the Windows app everywhere. -->
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Use the shared libraries' host target when compiling or formatting on Windows. Linux packages still target net10.0. -->
+    <!-- Program.cs declares Linux support explicitly; the host TFM must not add Windows to that platform contract. -->
+    <GenerateSupportedOSPlatformAttribute>false</GenerateSupportedOSPlatformAttribute>
     <OutputType>Exe</OutputType>
     <AssemblyName>flevert</AssemblyName>
     <RootNamespace>Flevert.Linux</RootNamespace>

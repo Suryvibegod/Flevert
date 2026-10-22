@@ -74,11 +74,23 @@ public static class UnixInstallLocation
     private const int Sticky = 0x200; // S_ISVTX: only an entry's owner may rename or delete it
 
     /// <summary>
-    /// The folder and every folder above it are real folders (no link on the way), owned by this user or root, and
-    /// nobody else can write them; a folder above that others can write is fine only with the sticky bit, which keeps
-    /// them from renaming what is not theirs.
+    /// The whole app tree and every folder above it are owned by this user or root, without links or files others can
+    /// write. Only ancestors may be sticky and writable; the app itself and its descendants must never be writable by
+    /// other accounts, since that would let them change code the menu runs.
     /// </summary>
     public static bool IsWritableOnlyByOwner(string directory)
+    {
+        try
+        {
+            return Check(directory);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static bool Check(string directory)
     {
         var me = Libc.EffectiveUserId;
         var path = Path.GetFullPath(directory);
@@ -91,6 +103,30 @@ public static class UnixInstallLocation
             var othersMayWrite = (stat.Mode & OthersMayWrite) != 0;
             if (othersMayWrite && (current == path || (stat.Mode & Sticky) == 0))
                 return false;
+        }
+
+        return CheckTree(path, me);
+    }
+
+    private static bool CheckTree(string directory, uint me)
+    {
+        foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+        {
+            if (!Libc.TryStatNoFollow(entry, out var stat) || (stat.Uid != me && stat.Uid != 0)
+                || (stat.Mode & OthersMayWrite) != 0)
+            {
+                return false;
+            }
+
+            if (stat.Type == Libc.SIfDir)
+            {
+                if (!CheckTree(entry, me))
+                    return false;
+            }
+            else if (stat.Type != Libc.SIfReg || stat.Nlink != 1)
+            {
+                return false;
+            }
         }
 
         return true;

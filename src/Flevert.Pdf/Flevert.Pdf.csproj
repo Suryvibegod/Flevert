@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <GenerateSupportedOSPlatformAttribute>false</GenerateSupportedOSPlatformAttribute>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Fetched by scripts/fetch-deps.ps1, pinned by SHA256 (ADR-0008); never committed. -->
     <PdfiumDll>$(MSBuildThisFileDirectory)..\..\deps\pdfium\bin\pdfium.dll</PdfiumDll>

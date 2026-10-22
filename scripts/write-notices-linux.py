@@ -21,7 +21,7 @@ LICENCE_NAMES = {"Notice.txt", "Copyright.txt", "LICENSE.TXT", "LICENSE", "THIRD
 # Flevert's own (MIT, like the repository): the host and its settings, the empty OpenSSL configuration (ADR-0008), the
 # Nautilus extension, the installer script, and what this script and the build add.
 OWN = {"flevert", "flevert.deps.json", "flevert.runtimeconfig.json", "THIRD-PARTY-NOTICES.txt", "LICENSE.txt", "openssl.cnf",
-       "nautilus/flevert_menu.py", "install.sh"}
+       "nautilus/flevert_menu.py", "install.sh", "install.py"}
 RULE = "=" * 78
 
 

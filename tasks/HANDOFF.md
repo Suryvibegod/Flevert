@@ -51,6 +51,11 @@ Lưu ý kiểm thử:
 
 ## Việc tiếp theo
 
+### PR #5 — bản Linux của long89kev
+
+- Maintainer yêu cầu sửa các lỗi review ngày 2026-10-23, trên nhánh riêng `codex/fix-linux-pr5`; không trộn OCR. Phạm vi, test và reconcile ở [linux/pr5-fixes.md](linux/pr5-fixes.md).
+- Sửa nhả pin Windows sau Cancel, kiểm toàn bộ cây ứng dụng Linux, bộ cài có manifest sở hữu và giữ file lạ, cấu hình solution để formatter kiểm được trên Windows. README ghi nhận tlong (@long89kev). Đang kiểm thử; chỉ xét merge khi các gate đạt, giữ lịch sử commit contributor.
+
 1. **v1.4.0 OCR (đang làm, ưu tiên):** làm trên nhánh `feat/v1.4-ocr`, theo [ocr/todo.md](ocr/todo.md): T5b (README/CHANGELOG, `build-installer.ps1` thật), T6 (file độc, hủy giữa chừng, trang xoay), T7 (icon), rồi các bước trước release và PR vào main. Trên máy mới chạy `scripts/fetch-deps.ps1` để lấy bản tesseract tĩnh. Worktree cũ `D:\github\Flevert-wt\ocr-*` (≈ 15 GB) đã được gom; chỉ xóa khi người dùng đồng ý.
 2. **Ký số SignPath Foundation.** Đã có [code-signing-policy.md](../docs/code-signing-policy.md) và mục README; chưa xác nhận người dùng gửi đơn. Người dùng tự điền tên/email, đồng ý điều khoản và reCAPTCHA. Khi duyệt: action chính thức ghim SHA, secret GitHub, ký installer/binary Flevert, kiểm chữ ký; cập nhật ADR-0005, README/install.md/release notes. Không ghi token vào chat/file.
 3. **v1.3.1 (sau v1.4.0, số phiên bản xét lại khi bắt đầu):** menu Shift “Flevert: more video tools” (sửa nhãn trong media spec), Trim, Rotate, Remove sound, Make volume even, Save a frame, Merge videos, Send by Email/WhatsApp/Messenger. Audio một mũi tên, không cửa sổ công cụ.

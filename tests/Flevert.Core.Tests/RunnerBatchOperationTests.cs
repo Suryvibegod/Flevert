@@ -338,6 +338,40 @@ public sealed class RunnerBatchOperationTests : IDisposable
         }
     }
 
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task An_abandoned_join_reads_its_original_inputs_through_their_pins_until_it_finishes()
+    {
+        var files = new[] { _dir.File("1.txt", "first input"), _dir.File("2.txt", "second input") };
+        using var cts = new CancellationTokenSource();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var op = new LateReaderJoin(cts.Cancel, release.Task);
+        try
+        {
+            var outcome = await NewRunner().RunAsync(op, files, progress: null, cts.Token).WaitAsync(TimeSpan.FromSeconds(20));
+
+            Assert.Empty(outcome.Results);
+            Assert.Equal("Cancelled.", BatchSummary.Describe(outcome, _logs.Path).Text);
+            Assert.NotNull(op.Running);
+            Assert.False(op.Running.IsCompleted, "the join is still waiting after the runner abandoned it");
+            foreach (var file in files)
+            {
+                File.Delete(file);
+                await File.WriteAllTextAsync(file, "a replacement at the old name");
+            }
+
+            release.SetResult();
+
+            Assert.Equal("first input|second input", await op.Running.WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+        finally
+        {
+            release.TrySetResult();
+            if (op.Running is not null)
+                await op.Running.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+    }
+
     [Fact]
     public async Task Cancelling_while_files_are_still_arriving_runs_nothing()
     {
@@ -527,6 +561,30 @@ public sealed class RunnerBatchOperationTests : IDisposable
             var desired = Path.Combine(Path.GetDirectoryName(inputPaths[0])!, Path.GetFileNameWithoutExtension(inputPaths[0]) + " (stubborn).txt");
             return await OutputPath.WriteAtomicallyAsync(desired, (temp, _) => File.WriteAllTextAsync(temp, "joined", CancellationToken.None), CancellationToken.None)
                 .ConfigureAwait(false);
+        }
+    }
+
+    private sealed class LateReaderJoin(Action onStart, Task release) : IBatchOperation
+    {
+        public string Id => "test.late-reader-join";
+
+        public string MenuPath => "Test/Late reader join";
+
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+
+        public Task<string>? Running { get; private set; }
+
+        public Task<string> RunAsync(IReadOnlyList<string> inputPaths, IProgress<FileProgress>? progress, CancellationToken ct) =>
+            Running = ReadAfterReleaseAsync(inputPaths);
+
+        private async Task<string> ReadAfterReleaseAsync(IReadOnlyList<string> inputPaths)
+        {
+            onStart();
+            await release.ConfigureAwait(false);
+            var contents = new List<string>();
+            foreach (var input in inputPaths)
+                contents.Add(await File.ReadAllTextAsync(PinnedInput.ReadPath(input), CancellationToken.None).ConfigureAwait(false));
+            return string.Join('|', contents);
         }
     }
 

@@ -34,6 +34,7 @@ for task in "pdf.to-jpg rotations.pdf" "pdf.page-numbers rotations.pdf" "pdf.rot
 done
 install -m 644 "$root/LICENSE" "$publish/LICENSE.txt"
 install -m 755 "$root/packaging/linux/install.sh" "$publish/install.sh"
+install -m 644 "$root/packaging/linux/install.py" "$publish/install.py"
 packages=$(dotnet nuget locals global-packages --list | sed 's/^global-packages: //')
 "$python" -I "$root/scripts/write-notices-linux.py" --publish "$publish" --packages "$packages"
 
