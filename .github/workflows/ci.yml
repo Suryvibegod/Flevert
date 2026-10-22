@@ -18,7 +18,8 @@ env:
 jobs:
   build-and-test:
     runs-on: windows-latest
-    timeout-minutes: 30
+    # The media tests encode real video (a minute of 1080p in two passes among them): 30 minutes left no margin.
+    timeout-minutes: 45
     steps:
       # Actions are pinned by commit; the comment names the release.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,10 +29,21 @@ jobs:
         with:
           # The newest .NET 10 patch, as release.yml uses; global.json accepts any 10.0 SDK from 10.0.100.
           dotnet-version: 10.0.x
-      # pdfium and qpdf, each checked against the SHA256 in scripts/deps.json before it is unpacked (ADR-0008).
+      # pdfium, qpdf and ffmpeg, each checked against the SHA256 in scripts/deps.json before it is unpacked (ADR-0008,
+      # ADR-0009).
       - name: Fetch third-party tools
         shell: pwsh
         run: ./scripts/fetch-deps.ps1
+      # The ffmpeg fetched is the build scripts/deps.json pins (its SHA256 was checked): its version line names that
+      # release and commit (docs/specs/media.md, "Bảo mật").
+      - name: ffmpeg is the pinned build
+        shell: pwsh
+        run: |
+          $url = ((Get-Content scripts/deps.json -Raw | ConvertFrom-Json).items | Where-Object name -eq 'ffmpeg').url
+          $expected = [regex]::Match($url, '/ffmpeg-(n[\d.]+-\d+-g[0-9a-f]+)-').Groups[1].Value
+          $line = @(& deps/ffmpeg/bin/ffmpeg.exe -hide_banner -version)[0]
+          $line
+          if (-not $expected -or -not "$line".StartsWith("ffmpeg version $expected-")) { throw "Expected ffmpeg $expected." }
       - id: build
         run: dotnet build Flevert.sln -c Release
       - name: No build machine paths in the binaries
@@ -47,6 +59,8 @@ jobs:
         run: dotnet test tests/Flevert.Image.Tests -c Release --no-build
       - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: dotnet test tests/Flevert.Pdf.Tests -c Release --no-build
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/Flevert.Media.Tests -c Release --no-build
       - name: No known-vulnerable packages
         shell: pwsh
         run: |

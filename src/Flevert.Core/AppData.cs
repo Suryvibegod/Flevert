@@ -12,7 +12,10 @@ public static class AppData
     public const string MagickFolder = "magick";
     public const string UpdateFolder = "update";
 
-    public static IReadOnlyList<string> Subfolders { get; } = [LogsFolder, PipesFolder, MagickFolder, UpdateFolder];
+    /// <summary>x264's statistics between the two passes of Compress &gt; Under N MB, a folder per run (docs/specs/media.md).</summary>
+    public const string MediaFolder = "media";
+
+    public static IReadOnlyList<string> Subfolders { get; } = [LogsFolder, PipesFolder, MagickFolder, UpdateFolder, MediaFolder];
 
     public static string Root { get; } = Path.Combine(UserFolder(Environment.SpecialFolder.LocalApplicationData), FolderName);
 

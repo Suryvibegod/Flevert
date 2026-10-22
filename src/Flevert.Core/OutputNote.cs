@@ -26,6 +26,18 @@ public static class OutputNote
     }
 
     /// <summary>
+    /// Records how large the input was and how large the output written for it is, which the notification shows: "Done:
+    /// clip (under 25 MB).mp4 (24.3 MB, was 412 MB)", or the totals for several files. For operations whose point is
+    /// size (compress). Outside a run it does nothing.
+    /// </summary>
+    public static void AddSizes(long originalBytes, long outputBytes)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(originalBytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(outputBytes);
+        Current.Value?.SetSizes(new SizeChange(originalBytes, outputBytes));
+    }
+
+    /// <summary>
     /// Gives the calling flow a fresh place for notes and returns it. Called by the runner at the start of an async method
     /// that runs one file: the value then flows into that run only, and is gone when the method returns.
     /// </summary>
@@ -40,6 +52,23 @@ public static class OutputNote
     {
         private readonly Lock _gate = new();
         private readonly List<string> _notes = [];
+
+        private SizeChange? _sizes;
+
+        public SizeChange? Sizes
+        {
+            get
+            {
+                lock (_gate)
+                    return _sizes;
+            }
+        }
+
+        public void SetSizes(SizeChange sizes)
+        {
+            lock (_gate)
+                _sizes = sizes;
+        }
 
         public void Add(string note)
         {

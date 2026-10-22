@@ -3,6 +3,7 @@ using Flevert.Core.Menu;
 using Flevert.Core.Operations;
 using Flevert.Core.Updates;
 using Flevert.Image;
+using Flevert.Media;
 using Flevert.Pdf;
 
 namespace Flevert.Cli;
@@ -43,7 +44,7 @@ internal static class Program
             return PdfRenderWorker.Run(Console.OpenStandardInput(), Console.OpenStandardOutput());
 
         // Every operation, the PDF tools with the options of their place in the menus.
-        var catalog = new OperationCatalog([.. MenuOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
+        var catalog = new OperationCatalog([.. MenuOperations.All, .. MediaOperations.All, new DevCopy(), new DevSlowCopy(), new DevSplit(), new DevJoin()]);
         var log = new RunLog(RunLog.DefaultDirectory);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             log.Write("(process)", new FileResult(string.Join(' ', args), null, e.ExceptionObject.ToString()), TimeSpan.Zero);
@@ -96,7 +97,8 @@ internal static class Program
                 }
 
                 var ops = catalog.All.Where(op => install.IncludeDev || !op.Id.StartsWith("dev.", StringComparison.Ordinal));
-                new MenuInstaller(new WindowsRegistry(), exe).Install(ops, MenuOperations.Looks);
+                // Pictures and PDFs, then video and audio: a label both have (Convert to, Compress, Remove hidden info) looks the same.
+                new MenuInstaller(new WindowsRegistry(), exe).Install(ops, MenuEntryLook.Combine(MenuOperations.Looks, MediaOperations.Looks));
                 ShellNotify.AssociationsChanged();
                 return Ok;
 

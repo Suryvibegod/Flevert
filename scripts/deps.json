@@ -1,5 +1,5 @@
 {
-  "comment": "Third-party binaries fetched into deps/ by scripts/fetch-deps.ps1, never committed. Each download is pinned by SHA256 (GitHub publishes a digest for every release asset). Change a version here, then run the script and the tests. 'notices' names every file the installer ships from deps/ and its licences (paths from the repository root); scripts/write-notices.ps1 refuses a file that has none. qpdf links zlib, libjpeg-turbo and OpenSSL into qpdf30.dll at whatever versions vcpkg had on the day of its build: after a qpdf update, pin their licences at the versions the binary holds (QpdfDepsTests checks). docs/adr/0008-pdf-engines-pdfium-and-qpdf.md",
+  "comment": "Third-party binaries fetched into deps/ by scripts/fetch-deps.ps1, never committed. Each download is pinned by SHA256 (GitHub publishes a digest for every release asset). Change a version here, then run the script and the tests. 'notices' names every file the installer ships from deps/ and its licences (paths from the repository root); scripts/write-notices.ps1 refuses a file that has none. qpdf links zlib, libjpeg-turbo and OpenSSL into qpdf30.dll at whatever versions vcpkg had on the day of its build: after a qpdf update, pin their licences at the versions the binary holds (QpdfDepsTests checks). ffmpeg is pinned to the last BtbN build of a month, which BtbN keeps for two years (its daily builds go after 14 days). docs/adr/0008-pdf-engines-pdfium-and-qpdf.md, docs/adr/0009-ffmpeg-gpl-build.md",
   "items": [
     {
       "name": "pdfium",
@@ -58,8 +58,29 @@
       "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6",
       "kind": "file",
       "target": "qpdf/licenses/libjpeg-turbo-README.ijg"
+    },
+    {
+      "name": "ffmpeg",
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-shared-8.1.zip",
+      "sha256": "dfe81c3aa0a546ee81980b1b824486dd0fe0a1d452f00cb55135379a74be7bcf",
+      "kind": "zip",
+      "strip": "ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-shared-8.1/",
+      "keep": ["bin/ffmpeg.exe", "bin/ffprobe.exe", "bin/avcodec-62.dll", "bin/avdevice-62.dll", "bin/avfilter-11.dll", "bin/avformat-62.dll",
+        "bin/avutil-60.dll", "bin/swresample-6.dll", "bin/swscale-9.dll", "LICENSE.txt"]
     }
   ],
+  "ffmpegSource": {
+    "comment": "What scripts/fetch-ffmpeg-source.sh needs to write the complete corresponding source of the ffmpeg build above (GPL v3): the commit of BtbN's build scripts behind the release tag, the target, variant and addin of the asset, and the FFmpeg commit its name ends in. Change these with the ffmpeg item. docs/adr/0009-ffmpeg-gpl-build.md",
+    "tag": "autobuild-2026-09-30-13-08",
+    "builds": "https://github.com/BtbN/FFmpeg-Builds",
+    "buildsCommit": "6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b",
+    "target": "win64",
+    "variant": "gpl-shared",
+    "addin": "8.1",
+    "ffmpeg": "https://github.com/FFmpeg/FFmpeg",
+    "ffmpegCommit": "29e619e767cde9045a75c29bc9a8278ae7b3a98b",
+    "ffmpegVersion": "n8.1.3-9-g29e619e767"
+  },
   "notices": [
     {
       "title": "PDFium chromium/8100, as built by bblanchon/pdfium-binaries",
@@ -92,6 +113,13 @@
       "title": "Microsoft Visual C++ runtime 14.51, shipped with qpdf 12.4.2",
       "files": ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"],
       "licences": ["installer/notices/msvc-runtime.txt"]
+    },
+    {
+      "title": "FFmpeg 8.1.3 (n8.1.3-9-g29e619e767), as built by BtbN/FFmpeg-Builds (autobuild-2026-09-30-13-08, win64-gpl-shared)",
+      "files": ["ffmpeg\\ffmpeg.exe", "ffmpeg\\ffprobe.exe", "ffmpeg\\avcodec-62.dll", "ffmpeg\\avdevice-62.dll", "ffmpeg\\avfilter-11.dll",
+        "ffmpeg\\avformat-62.dll", "ffmpeg\\avutil-60.dll", "ffmpeg\\swresample-6.dll", "ffmpeg\\swscale-9.dll"],
+      "note": "FFmpeg runs as a separate program. It and the libraries built into it are distributed under the GNU General Public License version 3; every Flevert release publishes their complete corresponding source beside its setup, at https://github.com/Suryvibegod/Flevert/releases, as the files ffmpeg-source-autobuild-2026-09-30-13-08-*.tar. The licences of the libraries built into it follow BtbN's LICENSE.txt, each named after its build stage (50-x264-COPYING).",
+      "licences": ["deps/ffmpeg/LICENSE.txt", "installer/notices/ffmpeg/*"]
     }
   ]
 }

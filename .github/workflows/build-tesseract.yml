@@ -1,0 +1,116 @@
+name: Build Tesseract
+
+# Run by hand from main, once per Tesseract or vcpkg update: the release it creates is what scripts/deps.json pins.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: build-tesseract-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      zip-sha256: ${{ steps.package-info.outputs.zip-sha256 }}
+      zip-name: ${{ steps.package-info.outputs.zip-name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and validate static tesseract
+        shell: pwsh
+        run: ./scripts/build-tesseract.ps1 -ArtifactsDir artifacts
+      - name: Extract package info
+        id: package-info
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path artifacts/tesseract-*.zip | Select-Object -First 1
+          if (-not $zip) { throw "Artifact zip not found" }
+          $hash = (Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "zip-name=$($zip.Name)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding ascii
+          "zip-sha256=$hash" | Out-File $env:GITHUB_OUTPUT -Append -Encoding ascii
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tesseract-package
+          path: |
+            artifacts/tesseract-*.zip
+            artifacts/SHA256SUMS.txt
+          if-no-files-found: error
+
+  attest:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tesseract-package
+          path: artifacts
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: artifacts/tesseract-*.zip
+
+  release:
+    needs: [build, attest]
+    if: github.ref == 'refs/heads/main' && github.repository == 'Suryvibegod/Flevert'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tesseract-package
+          path: artifacts
+      - name: Verify package hash matches build output
+        env:
+          EXPECTED_SHA256: ${{ needs.build.outputs.zip-sha256 }}
+          ZIP_NAME: ${{ needs.build.outputs.zip-name }}
+        run: |
+          actual_sha256=$(sha256sum "artifacts/$ZIP_NAME" | cut -d' ' -f1)
+          if [ "$actual_sha256" != "$EXPECTED_SHA256" ]; then
+            echo "Hash mismatch: expected $EXPECTED_SHA256, got $actual_sha256"
+            exit 1
+          fi
+      - name: Ensure release is immutable and publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: deps-tesseract-5.5.3
+          ZIP_NAME: ${{ needs.build.outputs.zip-name }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists in $GH_REPO; releases are immutable."
+            exit 1
+          fi
+
+          cat << 'EOF' > notes.md
+          ## Standalone Tesseract 5.5.3 static binary for Windows x64
+
+          Built with Microsoft vcpkg 2026.10.16 (`9eec002df1cd109f8f104cd966a763daf9751489`) on Windows Server 2025 (`windows-latest`).
+
+          - Statically linked with CRT (`/MT`) and permissive dependencies only (Apache-2.0, BSD, MIT, zlib).
+          - No GPL or LGPL libraries included (no jbigkit, no libiconv/libintl/libunistring/libidn2).
+          - Verified: depends only on Microsoft-signed Windows system DLLs.
+          - Verified: Leptonica 1.87.0 with image codecs (png, jpeg, webp, openjpeg, tiff, gif, zlib).
+          - Verified: Vietnamese OCR smoke test passed with `vie.traineddata`.
+          - Build provenance attested via GitHub Actions (`actions/attest-build-provenance`).
+          EOF
+
+          gh release create "$RELEASE_TAG"             --target "$GITHUB_SHA" \
+            "artifacts/$ZIP_NAME" \
+            "artifacts/SHA256SUMS.txt" \
+            --repo "$GH_REPO" \
+            --title "Tesseract 5.5.3 (vcpkg 2026.10.16 static win64)" \
+            --notes-file notes.md \
+            --prerelease \
+            --latest=false

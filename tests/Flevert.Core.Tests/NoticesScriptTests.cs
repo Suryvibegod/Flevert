@@ -181,8 +181,9 @@ public sealed class NoticesScriptTests : IDisposable
     public void The_real_manifest_gives_every_binary_fetch_deps_keeps_its_licences()
     {
         // CI never builds the installer, so check here what a release would refuse: the files Flevert.Pdf.csproj copies
-        // next to flevert.exe (deps\pdfium\bin\pdfium.dll, deps\qpdf\bin\*.exe and *.dll) against the real deps.json
-        // and the licence files fetch-deps.ps1 put in the real deps\.
+        // next to flevert.exe (deps\pdfium\bin\pdfium.dll, deps\qpdf\bin\*.exe and *.dll) and those Flevert.Media.csproj
+        // copies into its ffmpeg folder (deps\ffmpeg\bin\*), against the real deps.json and the licence files fetch-deps.ps1
+        // put in the real deps\.
         var deps = Path.Combine(InstallerScriptTests.RepositoryRoot(), "deps");
         var shipped = Directory.GetFiles(Path.Combine(deps, @"pdfium\bin"), "pdfium.dll")
             .Concat(Directory.GetFiles(Path.Combine(deps, @"qpdf\bin"), "*.exe"))
@@ -191,6 +192,10 @@ public sealed class NoticesScriptTests : IDisposable
         Assert.True(shipped.Count >= 3, "deps\\ is incomplete: run scripts\\fetch-deps.ps1");
         foreach (var file in shipped)
             Write(Path.Combine(_publish, Path.GetFileName(file)), "binary");
+        var ffmpeg = Directory.GetFiles(Path.Combine(deps, @"ffmpeg\bin"));
+        Assert.True(ffmpeg.Length >= 2, "deps\\ffmpeg is incomplete: run scripts\\fetch-deps.ps1");
+        foreach (var file in ffmpeg)
+            Write(Path.Combine(_publish, "ffmpeg", Path.GetFileName(file)), "binary");
         // And the menu icons the build copies from assets\menu into icons\ (assets\notices.json).
         foreach (var icon in Directory.GetFiles(Path.Combine(InstallerScriptTests.RepositoryRoot(), "assets", "menu"), "*.ico"))
             Write(Path.Combine(_publish, "icons", Path.GetFileName(icon)), "icon");
@@ -263,6 +268,8 @@ public sealed class NoticesScriptTests : IDisposable
         "Jean-loup Gailly", // zlib
         "This software is based in part on the work of the Independent JPEG Group", // the IJG licence asks for this sentence
         "Microsoft Visual C++",
+        "FFmpeg 8.1.3",
+        "GNU GENERAL PUBLIC LICENSE",
         "Fluent UI System Icons", // the menu icons (assets\notices.json)
     ];
 

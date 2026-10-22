@@ -429,25 +429,98 @@ public sealed class RunnerTests : IDisposable
 
         await new Runner(new RunLog(_logs.Path)).RunAsync(new StubbornOp(), [file], progress: null, cts.Token);
 
-        // The two seconds it gets to stop, then it is abandoned.
-        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(4), $"took {timer.Elapsed}");
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(4), $"took {timer.Elapsed}"); // includes the bounded cleanup grace
     }
 
     [Fact]
-    public async Task A_cancelled_operation_gets_time_to_remove_what_it_wrote_before_the_batch_ends()
+    public async Task Cancellation_waits_for_cleanup_with_the_input_pinned_and_no_partial_left()
     {
-        // flevert may end right after the batch: a .partial left by an operation still stopping would stay (seen with a
-        // PDF to images cancelled from the progress window on Linux).
         var file = _dir.File("a.txt");
-        var op = new SlowToStopOp();
         using var cts = new CancellationTokenSource();
-        var progress = new SyncProgress<BatchProgress>(_ => { if (op.Wrote is not null) cts.Cancel(); });
+        var op = new StoppingOp();
+        var running = new Runner(new RunLog(_logs.Path)).RunAsync(op, [file], null, cts.Token);
+        try
+        {
+            await op.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await cts.CancelAsync();
+            await op.Stopping.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            // Windows locks the pinned input against a rename; Linux cannot, and reads through the pin instead.
+            if (OperatingSystem.IsWindows())
+                Assert.ThrowsAny<IOException>(() => File.Move(file, file + ".moved"));
+            Assert.False(running.IsCompleted);
+        }
+        finally
+        {
+            op.Release.TrySetResult();
+            await op.Finished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
 
-        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(op, [file], progress, cts.Token);
+        Assert.Empty((await running).Results);
+        Assert.Equal(["a.txt"], _dir.FileNames());
+        File.Move(file, file + ".moved"); // the pin is released after cleanup
+    }
 
-        Assert.Empty(outcome.Results);
-        Assert.NotNull(op.Wrote);
-        Assert.False(File.Exists(op.Wrote));
+    [Fact]
+    public async Task Cancellation_reports_an_output_committed_while_the_operation_stops()
+    {
+        var file = _dir.File("a.txt");
+        using var cts = new CancellationTokenSource();
+        var op = new StoppingOp(commit: true);
+        var running = new Runner(new RunLog(_logs.Path)).RunAsync(op, [file], null, cts.Token);
+        await op.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await cts.CancelAsync();
+        await op.Stopping.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        op.Release.TrySetResult();
+
+        var result = Assert.Single((await running).Results);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(file + ".out", result.Output);
+        Assert.True(File.Exists(result.Output));
+        Assert.Equal("Written before stopping.", result.Note);
+        Assert.Equal(new SizeChange(1, 1), result.Sizes);
+        await op.Finished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    private sealed class StoppingOp(bool commit = false) : IOperation
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Stopping { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Finished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public string Id => "test.stop";
+        public string MenuPath => "Test/Stop";
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+
+        public async Task<string> RunAsync(string inputPath, CancellationToken ct)
+        {
+            try
+            {
+                return await OutputPath.WriteAtomicallyAsync(inputPath + ".out", async (temp, _) =>
+                {
+                    await File.WriteAllTextAsync(temp, "x", CancellationToken.None);
+                    Started.TrySetResult();
+                    try
+                    {
+                        await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        Stopping.TrySetResult();
+                        await Release.Task;
+                    }
+
+                    if (!commit)
+                        ct.ThrowIfCancellationRequested();
+                    OutputNote.Add("Written before stopping.");
+                    OutputNote.AddSizes(1, 1);
+                }, CancellationToken.None); // commit can race the cancellation, like a final atomic move
+            }
+            finally
+            {
+                Finished.TrySetResult();
+            }
+        }
     }
 
     [LinuxFact]
@@ -569,35 +642,6 @@ public sealed class RunnerTests : IDisposable
         {
             Received = inputPath;
             return Task.FromResult(inputPath);
-        }
-    }
-
-    // Writes a temporary file, then takes half a second to remove it once cancelled.
-    private sealed class SlowToStopOp : IOperation
-    {
-        public string Id => "test.slow-to-stop";
-        public string MenuPath => "Test/Slow to stop";
-        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
-        public string? Wrote { get; private set; }
-
-        public async Task<string> RunAsync(string inputPath, CancellationToken ct) => await RunAsync(inputPath, null, ct);
-
-        public async Task<string> RunAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
-        {
-            var temp = inputPath + ".partial";
-            await File.WriteAllTextAsync(temp, "half", CancellationToken.None);
-            Wrote = temp;
-            progress?.Report(new FileProgress("step", 1, 2));
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(30), ct);
-                return inputPath;
-            }
-            finally
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(500), CancellationToken.None);
-                File.Delete(temp);
-            }
         }
     }
 

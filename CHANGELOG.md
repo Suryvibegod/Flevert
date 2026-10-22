@@ -6,11 +6,22 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ### Added
 
-- **Flevert for Linux**: the same picture and PDF tools in the right-click menu of GNOME Files (Nautilus), installed for you from a tarball with `install.sh`, without root. A progress window, the password and watermark dialogs and the notification at the end work as on Windows; the PDF tools that Windows shows only with Shift are under **Flevert > More PDF tools**. Merge PDFs and Combine into PDF join files in the order Files shows them.
+- **Flevert for Linux**: the same picture and PDF tools in the right-click menu of GNOME Files (Nautilus), installed for you from a tarball with `install.sh`, without root. A progress window, the password and watermark dialogs and the notification at the end work as on Windows; the PDF tools that Windows shows only with Shift are under **Flevert > More PDF tools**. Merge PDFs and Combine into PDF join files in the order Files shows them. Video and audio are on Windows only for now.
 
-### Fixed
+## [1.3.0] - 2026-10-21
 
-- **Cancel** in the progress window could leave a hidden `.flevert-….partial` folder beside a PDF being converted to images: Flevert closed before the conversion had removed the pages it had written. It now waits up to two seconds for the work to stop and clean up.
+Video and audio: convert, compress to a size you choose, take the sound out of a video, and remove where it was filmed, on your PC.
+
+### Added
+
+- Right-click a video (`.mp4`, `.mov`, `.m4v`, `.mkv`, `.webm`, `.avi`, `.wmv`, `.3gp`, `.mts`, `.m2ts`) and choose **Flevert**:
+  - **Compress**: Light (best quality), Balanced or Strong (smallest), or **Under 10 MB**, **Under 25 MB** or **Under 100 MB**, which are always smaller than that size, or say the video is too long to fit. The notification says the new size and the old one.
+  - **Convert to** MP4 or MOV (H.264 and AAC, which play everywhere), WEBM (VP9 and Opus), or GIF (at most 480 pixels and the first 30 seconds). Phone videos come out upright, iPhone HDR videos are converted to standard colours so they look right on every screen, and a camcorder's interlaced video (1080i) is deinterlaced.
+  - **Extract audio** as MP3 or M4A (an AAC sound is copied as it is).
+  - **Remove hidden info**: a copy without where it was filmed, the camera or the software, made in seconds, with the picture and sound untouched.
+- Right-click an audio file (`.mp3`, `.wav`, `.m4a`, `.aac`, `.flac`, `.ogg`, `.opus`, `.wma`, `.aiff`, `.aif`) and choose **Flevert > Convert to** MP3, M4A, WAV, FLAC, OGG or Opus.
+- Video and audio keep their title, artist and recording date, never the place they were recorded. A converted video keeps its first sound track, and the notification says when there were others. The progress window shows how far the current file is, as a percentage.
+- The installer includes ffmpeg, which is free software under the GNU GPL: each release has its complete source beside the setup, as the files `ffmpeg-source-<build>-<n>-of-<count>.tar`.
 
 ## [1.2.3] - 2026-10-21
 
@@ -136,7 +147,8 @@ The first release: pictures, and an installer.
 - A specially crafted TIFF file can make the bundled ImageMagick 7.1.2-33 overflow its stack ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity): Flevert then closes, and the rest of that batch is not converted. No code runs. It will be fixed by updating once a Magick.NET release includes ImageMagick 7.1.2-34.
 - Windows Smart App Control may block this unsigned release (see the README).
 
-[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/Suryvibegod/Flevert/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/Suryvibegod/Flevert/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/Suryvibegod/Flevert/compare/v0.2.1...v1.2.2
 [0.2.1]: https://github.com/Suryvibegod/Flevert/compare/v0.2.0...v0.2.1

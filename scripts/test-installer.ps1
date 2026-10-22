@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
 End-to-end test of the installer on this machine: installs silently without admin, checks files, licences, menu and
-real conversions (a picture, PDF operations through the bundled qpdf and pdfium, pictures combined into a PDF), installs
+real conversions (a picture, PDF operations through the bundled qpdf and pdfium, pictures combined into a PDF, a sound
+through the bundled ffmpeg), installs
 over itself, uninstalls and checks that nothing Flevert wrote is left. Further scenarios cover the update-check
 choice, the uninstall safety net, a classic-menu key the user created, a refused install folder, /DIR, uninstalling
 while flevert.exe runs, an install folder that is a junction, one that already holds someone else's files, setup
@@ -32,12 +33,13 @@ $classicKey = "$classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"
 $heic = Join-Path $root 'tests\Flevert.Image.Tests\fixtures\gradient-320x240.heic'
 $rotationsPdf = Join-Path $root 'tests\Flevert.Pdf.Tests\fixtures\rotations.pdf'
 # Every folder flevert.exe writes under app data (AppData.Subfolders); the uninstaller deletes exactly these.
-$appDataFolders = 'logs', 'pipes', 'magick', 'update'
+$appDataFolders = 'logs', 'pipes', 'magick', 'update', 'media'
 # Each "notices" entry of deps.json: files from deps\ the installer ships, with the title their licences carry.
 $bundled = @(([IO.File]::ReadAllText((Join-Path $root 'scripts\deps.json')) | ConvertFrom-Json).notices)
 $bundledFiles = @($bundled | ForEach-Object { $_.files } | Sort-Object -Unique)
 # What only a conversion loads: setup must not unpack it into %TEMP% to check the install folder (Flevert.iss, [Files]).
-$conversionOnly = $bundledFiles + 'openssl.cnf', 'Magick.Native-*.dll'
+# Inno's log names an unpacked file without its folder, so the files of the ffmpeg folder are listed by name too.
+$conversionOnly = $bundledFiles + @($bundledFiles | ForEach-Object { Split-Path $_ -Leaf }) + 'openssl.cnf', 'Magick.Native-*.dll'
 
 function Assert([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw "FAIL: $Message" }
@@ -161,8 +163,24 @@ function AssertImage([string]$Path, [Drawing.Imaging.ImageFormat]$Format, [strin
     finally { $image.Dispose() }
 }
 
+# A second of a 440 Hz tone, 8 kHz mono 8-bit PCM: no media file is kept in the repository.
+function WriteToneWav([string]$Path) {
+    $rate = 8000
+    $samples = [byte[]]::new($rate)
+    for ($i = 0; $i -lt $rate; $i++) { $samples[$i] = [byte](128 + 100 * [Math]::Sin(2 * [Math]::PI * 440 * $i / $rate)) }
+    $writer = [IO.BinaryWriter]::new([IO.File]::Create($Path))
+    try {
+        $writer.Write([Text.Encoding]::ASCII.GetBytes('RIFF')); $writer.Write([int](36 + $samples.Length))
+        $writer.Write([Text.Encoding]::ASCII.GetBytes('WAVEfmt ')); $writer.Write([int]16)
+        $writer.Write([int16]1); $writer.Write([int16]1); $writer.Write([int]$rate); $writer.Write([int]$rate)
+        $writer.Write([int16]1); $writer.Write([int16]8)
+        $writer.Write([Text.Encoding]::ASCII.GetBytes('data')); $writer.Write([int]$samples.Length); $writer.Write($samples)
+    }
+    finally { $writer.Dispose() }
+}
+
 # Real conversions with the installed flevert.exe, in a new folder: a picture (ImageMagick), a PDF rotated (qpdf) and
-# rendered (pdfium), and two pictures combined into a PDF.
+# rendered (pdfium), two pictures combined into a PDF, and a sound converted (ffmpeg).
 function AssertConversions([string]$Folder) {
     New-Item -ItemType Directory $Folder | Out-Null
     Copy-Item $heic "$Folder\photo.heic"
@@ -192,6 +210,12 @@ function AssertConversions([string]$Folder) {
     Assert ($code -eq 0) "installed flevert.exe combines two pictures into a PDF (exit $code)"
     $pageCount = Qpdf @('--show-npages', "$Folder\combine\a (+1).pdf")
     Assert ("$pageCount" -eq '2') "the PDF has one page per picture ($pageCount)"
+
+    WriteToneWav "$Folder\tone.wav"
+    $code = (RunFlevertHeadless @('run', 'audio.to-mp3', "`"$Folder\tone.wav`"")).ExitCode
+    Assert ($code -eq 0) "installed flevert.exe converts WAV to MP3 with the bundled ffmpeg (exit $code)"
+    $codec = & "$app\ffmpeg\ffprobe.exe" -v error -show_entries stream=codec_name -of csv=p=0 "$Folder\tone.mp3"
+    Assert ("$codec" -eq 'mp3') "tone.mp3 holds MP3 sound ($codec)"
 }
 
 if (-not $Setup) {
@@ -214,10 +238,11 @@ $work = Join-Path $env:TEMP "flevert-installer-test-$([guid]::NewGuid())"
 New-Item -ItemType Directory $work | Out-Null
 Write-Host "Testing $Setup"
 try {
-    # 0.1.0 was 42.6 MB and 0.2.0 47.3 MB (pdfium, qpdf and its runtime): a jump past the limit means something
-    # unexpected is packed (docs/specs/installer.md, Success Criteria 1).
+    # 0.1.0 was 42.6 MB and 0.2.0 47.3 MB (pdfium, qpdf and its runtime); ffmpeg adds about 46 MB (its folder packed
+    # with LZMA2, measured 2026-10-20). A jump past the limit means something unexpected is packed (docs/specs/installer.md,
+    # Success Criteria 1); docs/specs/media.md allows 150 MB at most.
     $size = (Get-Item $Setup).Length / 1MB
-    Assert ($size -le 60) ("the setup file is at most 60 MB ({0:N1} MB)" -f $size)
+    Assert ($size -le 110) ("the setup file is at most 110 MB ({0:N1} MB)" -f $size)
 
     Write-Host 'Scenario 1: install, convert, install again, uninstall'
     $run = Install '1'
@@ -234,6 +259,10 @@ try {
     Assert (Test-Path "$app\flevert.exe") 'flevert.exe is installed'
     Assert (Test-Path "$app\LICENSE.txt") 'LICENSE.txt is installed'
     foreach ($file in $bundledFiles + 'openssl.cnf') { Assert (Test-Path -LiteralPath "$app\$file") "$file is installed" }
+    # The build scripts\deps.json pins, and no other: its version line names the release and the commit.
+    $pinnedFfmpeg = ([IO.File]::ReadAllText((Join-Path $root 'scripts\deps.json')) | ConvertFrom-Json).ffmpegSource.ffmpegVersion
+    $ffmpegVersion = @(& "$app\ffmpeg\ffmpeg.exe" -hide_banner -version)[0]
+    Assert ("$ffmpegVersion".StartsWith("ffmpeg version $pinnedFfmpeg-")) "the installed ffmpeg is the pinned build $pinnedFfmpeg ($ffmpegVersion)"
     $settings = @(Get-Content "$app\openssl.cnf" | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') })
     Assert ($settings.Count -eq 0) 'the installed openssl.cnf holds no setting, so OpenSSL in qpdf loads nothing'
     $notices = Get-Content "$app\THIRD-PARTY-NOTICES.txt" -Raw -ErrorAction SilentlyContinue
@@ -260,9 +289,11 @@ try {
     Assert ($null -ne (Get-ItemProperty "$associations\.pdf\shell\Flevert.Tools").PSObject.Properties['Extended']) 'the second PDF menu appears only with Shift'
     Assert ($null -eq (Get-ItemProperty "$associations\.pdf\shell\Flevert").PSObject.Properties['Extended']) 'the Flevert menu appears without Shift'
     Assert (@(MenuCommands '.pdf.tools' | Where-Object { $_ -like '* run pdf.remove-blank-pages *' }).Count -eq 1) 'Flevert: more PDF tools removes blank pages'
-    # Every entry at the top of both PDF menus has an icon, installed beside flevert.exe (docs/specs/pdf.md, v0.2.2).
-    $icons = @(Get-ChildItem "$classes\Flevert.Menu.pdf\shell", "$classes\Flevert.Menu.pdf.tools\shell" | ForEach-Object { $_.GetValue('Icon') })
-    Assert ($icons.Count -gt 0 -and @($icons | Where-Object { -not ($_ -and (Test-Path -LiteralPath ($_ -replace '^"(.*)",0$', '$1'))) }).Count -eq 0) "every entry of the .pdf menus shows an icon from $app\icons"
+    # Every entry at the top of both PDF menus, and of the video and audio menus, has an icon, installed beside flevert.exe
+    # (docs/specs/pdf.md, v0.2.2; docs/specs/media.md, "Menu").
+    $icons = @(Get-ChildItem "$classes\Flevert.Menu.pdf\shell", "$classes\Flevert.Menu.pdf.tools\shell", "$classes\Flevert.Menu.mp4\shell", "$classes\Flevert.Menu.mp3\shell" | ForEach-Object { $_.GetValue('Icon') })
+    Assert ($icons.Count -gt 0 -and @($icons | Where-Object { -not ($_ -and (Test-Path -LiteralPath ($_ -replace '^"(.*)",0$', '$1'))) }).Count -eq 0) "every entry of the .pdf, .mp4 and .mp3 menus shows an icon from $app\icons ($($icons.Count))"
+    Assert (@(MenuCommands '.mp4' | Where-Object { $_ -like '* run video.compress-under-25mb *' }).Count -eq 1) 'the .mp4 menu compresses a video under 25 MB'
     $menuCount = @(MenuKeys).Count
 
     AssertConversions "$work\fresh"
@@ -335,9 +366,13 @@ try {
     Write-Host 'Scenario 6: uninstalling while flevert.exe runs is cancelled, never left half done'
     Install '0' | Out-Null
     $menuCount = @(MenuKeys).Count
-    # About 20 s of work (one second per file): long enough for a slow first start and the uninstaller's hand-over.
+    # About 20 s of work, long enough for a slow first start and the uninstaller's hand-over: slow copy runs 8 files at
+    # once, so 20 files of a second each took 3 s, and with ffmpeg just installed (Defender scanning it) the uninstaller
+    # took longer than that (1.3.0). Three rounds of 7 s.
     $inputs = 1..20 | ForEach-Object { $f = "$work\slow$_.txt"; Set-Content $f 'x'; "`"$f`"" }
-    $job = RunFlevertHeadless (@('run', 'dev.slow-copy') + $inputs) -NoWait
+    $env:FLEVERT_SLOW_COPY_MS = '7000'
+    try { $job = RunFlevertHeadless (@('run', 'dev.slow-copy') + $inputs) -NoWait }
+    finally { Remove-Item Env:\FLEVERT_SLOW_COPY_MS }
     # The uninstaller only sees flevert.exe once it holds the mutex; a fresh binary can take a while to start.
     $mutex = $null
     $deadline = (Get-Date).AddSeconds(15)

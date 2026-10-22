@@ -10,7 +10,7 @@ Video quay điện thoại quá nặng để gửi, định dạng không mở �
 
 ### User stories (ưu tiên từ trên xuống)
 
-1. Video 2 phút quay iPhone (MOV, HEVC, 400 MB) → **Compress > Under 25 MB** → MP4 dưới 25 MB, gửi được qua Messenger hay Discord, xem được trên mọi máy. (Gmail tính giới hạn 25 MB sau khi mã hóa base64, nên file gốc chỉ nên tới khoảng 18 MB: gửi email là việc của "For email" ở v1.3.1.)
+1. Video 2 phút quay iPhone (MOV, HEVC, 400 MB) → **Compress > Under 25 MB** → MP4 dưới 25 MB, gửi được qua Messenger, xem được trên mọi máy (Discord bản miễn phí chỉ nhận 10 MB: dùng Under 10 MB). (Gmail tính giới hạn 25 MB sau khi mã hóa base64, nên file gốc chỉ nên tới khoảng 18 MB: gửi email là việc của "For email" ở v1.3.1.)
 2. MOV/MKV/WEBM không mở được → **Convert to > MP4** (H.264 + AAC, chạy mọi nơi).
 3. Lấy nhạc/tiếng từ video → **Extract audio > MP3**.
 4. Đổi định dạng audio: FLAC/WAV/M4A/OGG/OPUS/WMA → MP3, M4A, FLAC, WAV…
@@ -33,7 +33,7 @@ Nguồn video: `.mp4 .mov .m4v .mkv .webm .avi .wmv .3gp .mts .m2ts`. Nguồn au
 | `video.compress-light` / `-balanced` / `-strong` | Compress > Light (best quality) / Balanced / Strong (smallest) | MP4 H.264 CRF 23 / 28 / 32; Strong thu về tối đa 720p; AAC 128k / 96k / 64k; không nhỏ hơn bản gốc thì bỏ qua (skipped) |
 | `video.compress-under-10mb` / `-25mb` / `-100mb` | Compress > Under 10 MB / 25 MB / 100 MB | MP4 2 lượt theo bitrate đích = (giới hạn × 8 × 0,97 / thời lượng) − audio; bitrate video < ngưỡng theo độ phân giải thì thu nhỏ (1080p → 720p → 480p); không thể (video quá dài) thì lỗi rõ "Too long to fit under 10 MB" |
 | `video.extract-mp3` / `video.extract-m4a` | Extract audio > MP3 / M4A | MP3 VBR V2 / AAC 192k (M4A giữ nguyên luồng AAC nếu nguồn đã là AAC: không mã hóa lại) |
-| `video.strip-metadata` | Remove hidden info | `<tên> (no metadata).<đuôi gốc>`: **không mã hóa lại** (`-c copy`), cùng container; bỏ metadata toàn cục **và** của từng luồng (GPS `location`, `com.apple.quicktime.location.ISO6709`, model máy, phần mềm), chỉ giữ `creation_time`; luồng video/audio trùng byte với nguồn. Không có gì để bỏ → skipped "This video has no hidden info to remove." |
+| `video.strip-metadata` | Remove hidden info | `<tên> (no metadata).<đuôi gốc>`: **không mã hóa lại** (`-c copy`), cùng container; bỏ metadata toàn cục **và** của từng luồng (GPS `location`, `com.apple.quicktime.location.ISO6709`, model máy, phần mềm), chỉ giữ `creation_time` (khi là một ngày hợp lệ); luồng video/audio chép nguyên, riêng H.264 có dữ liệu máy quay AVCHD (MDPM) bỏ các SEI nên gói không còn trùng byte, ảnh giải mã vẫn như nguồn. Không có gì để bỏ → skipped "This video has no hidden info to remove." |
 | `audio.to-mp3` / `-m4a` / `-wav` / `-flac` / `-ogg` / `-opus` | Convert to > … | MP3 V2; AAC 192k; PCM 16-bit; FLAC mức 5; Vorbis q5; Opus 128k. Không đề xuất đích trùng nguồn |
 
 Quy tắc chung:
@@ -84,25 +84,25 @@ Audio:
 | | Lựa chọn | Ghi chú |
 |---|---|---|
 | Nhị phân | `ffmpeg.exe` + `ffprobe.exe` bản dựng Windows của **BtbN/FFmpeg-Builds**, nhánh phát hành 8.x, **tag autobuild có ngày** (không dùng tag `latest`: file đổi mỗi ngày) + SHA256, tải bằng `scripts/fetch-deps.ps1` | Đã kiểm 2026-10-20: có bản `win64-gpl` và `win64-lgpl` cho n8.1 và n9.0 |
-| Bản GPL hay LGPL | **GPL** (có libx264: chất lượng/dung lượng H.264 tốt nhất, CRF). LGPL không có x264; `h264_mf` (Media Foundation) không có CRF và kém rõ ở cùng dung lượng | Chạy như **tiến trình riêng**: Flevert vẫn MIT (aggregation). **Cả hai** bản đều buộc kèm mã nguồn khi phân phối binary: LGPL 2.1 (mục 4, 6) cho ffmpeg và thư viện LGPL; GPL thêm x264 và mọi thư viện GPL trong bản dựng. Cách đáp ứng: asset `ffmpeg-source-<tag>.zip` của mỗi release Flevert gồm mã nguồn đúng commit của ffmpeg và từng thư viện trong bản dựng, cùng script build của BtbN ở đúng tag, sinh tự động bởi `scripts/fetch-ffmpeg-source.ps1` (ghim hash); kèm văn bản giấy phép trong `THIRD-PARTY-NOTICES.txt`. **Đã chốt GPL** (người dùng duyệt 2026-10-20, Open Question 1); ghi quyết định và nghĩa vụ mã nguồn vào ADR-0009 |
+| Bản GPL hay LGPL | **GPL** (có libx264: chất lượng/dung lượng H.264 tốt nhất, CRF). LGPL không có x264; `h264_mf` (Media Foundation) không có CRF và kém rõ ở cùng dung lượng | Chạy như **tiến trình riêng**: Flevert vẫn MIT (aggregation). **Cả hai** bản đều buộc kèm mã nguồn khi phân phối binary: LGPL 2.1 (mục 4, 6) cho ffmpeg và thư viện LGPL; GPL thêm x264 và mọi thư viện GPL trong bản dựng. Cách đáp ứng: asset `ffmpeg-source-<tag>.tar` của mỗi release Flevert gồm mã nguồn đúng commit của ffmpeg và từng thư viện trong bản dựng, cùng script build của BtbN ở đúng tag, sinh tự động bởi `scripts/fetch-ffmpeg-source.sh` (ghim commit; bash chứ không phải PowerShell vì `download.sh` của BtbN cần Docker Linux, ADR-0009); kèm văn bản giấy phép trong `THIRD-PARTY-NOTICES.txt`. **Đã chốt GPL** (người dùng duyệt 2026-10-20, Open Question 1); ghi quyết định và nghĩa vụ mã nguồn vào ADR-0009 |
 | Biến thể | Bản **shared** (`win64-gpl-shared`): `ffmpeg.exe` và `ffprobe.exe` dùng chung DLL, bộ cài nhỏ hơn hai exe static. Đo cỡ ở task đóng gói; bộ cài quá 150 MB → hỏi trước | DLL của ffmpeg nằm trong thư mục con `ffmpeg\` của thư mục cài, không lẫn với DLL của Flevert |
-| Gọi | Đường dẫn tuyệt đối trong thư mục cài; `ArgumentList`; `-nostdin -hide_banner -nostats -n`; input `file:<path>` với `-protocol_whitelist file` **và** `-format_whitelist <danh sách demuxer được phép>`; `-progress pipe:1`; chạy qua `ExternalTool` với `SingleProcess = true` (ffmpeg không tạo tiến trình con), trần bộ nhớ 2 GB mỗi tiến trình, ưu tiên `BelowNormal` | Video "độc" (playlist HLS, `concat`, `subfile`, URL) không được kéo mạng hay đọc file khác. **Chỉ whitelist giao thức là chưa đủ**: playlist HLS hay `concat` trỏ tới file cục bộ khác vẫn đi qua giao thức `file`, và nội dung file đó sẽ nằm trong output mà người dùng gửi đi (kiểu lỗi đọc file cục bộ đã biết của ffmpeg). Vì vậy demuxer bị giới hạn: `mov,mp4,m4a,3gp,3g2,mj2`, `matroska,webm`, `avi`, `asf`, `mpegts`, `mp3`, `wav`, `aac`, `flac`, `ogg`, `aiff`; `ffprobe` (cùng whitelist) đọc `format_name` trước, ngoài danh sách → từ chối trước khi chạy ffmpeg |
+| Gọi | Đường dẫn tuyệt đối trong thư mục cài; `ArgumentList`; `-nostdin -hide_banner -nostats -n`; input `file:<path>` với `-protocol_whitelist file` **và** `-format_whitelist <danh sách demuxer được phép>`; `-progress pipe:1`; chạy qua `ExternalTool` với `SingleProcess = true` (ffmpeg không tạo tiến trình con), trần bộ nhớ 4 GB mỗi tiến trình (đo 2026-10-20: 4K60 tốn ~2,2–2,5 GB, xem ADR-0009), ưu tiên `BelowNormal` | Video "độc" (playlist HLS, `concat`, `subfile`, URL) không được kéo mạng hay đọc file khác. **Chỉ whitelist giao thức là chưa đủ**: playlist HLS hay `concat` trỏ tới file cục bộ khác vẫn đi qua giao thức `file`, và nội dung file đó sẽ nằm trong output mà người dùng gửi đi (kiểu lỗi đọc file cục bộ đã biết của ffmpeg). Vì vậy demuxer bị giới hạn: `mov,mp4,m4a,3gp,3g2,mj2`, `matroska,webm`, `avi`, `asf`, `mpegts`, `mp3`, `wav`, `aac`, `flac`, `ogg`, `aiff`; `ffprobe` (cùng whitelist) đọc `format_name` trước, ngoài danh sách → từ chối trước khi chạy ffmpeg |
 | Song song | `MaxParallel = 1` cho video (x264 tự dùng mọi nhân); audio song song theo số nhân | |
 
 ## Thay đổi ở core
 
 Phần lớn đã làm ở v0.2 (`ExternalTool`, `IProgress<double>` trong file, output thư mục). Thêm:
 
-1. **Thời lượng và tiến độ**: `ffprobe` (JSON, timeout 10 s) lấy thời lượng, luồng, xoay, HDR; tiến độ = `out_time_us` / thời lượng; 2 lượt tính 0–50% và 50–100%.
-2. **Timeout theo nội dung**: thời lượng × 6 + 60 s cho mỗi lượt (máy yếu, 1080p, preset `medium` khoảng 1–2× thời gian thực); vượt thì giết cả cây tiến trình, báo lỗi.
+1. **Thời lượng và tiến độ**: `ffprobe` (JSON, timeout 1 phút: file OneDrive chỉ-trên-mạng hay ổ mạng chậm; 10 s làm hỏng chúng) lấy thời lượng, luồng, xoay, HDR; tiến độ = `out_time_us` / thời lượng; 2 lượt tính 0–50% và 50–100%.
+2. **Timeout theo nội dung**: thời lượng × 6 + 60 s cho mỗi lượt với 1080p30, nhiều hơn theo số điểm ảnh mỗi giây, gấp đôi cho HDR, trần 2 ngày (`VideoEncoding.Slowness`, `Ffmpeg.TimeoutFor`); vượt thì giết cả cây tiến trình, báo lỗi.
 3. **Không gian đĩa**: trước khi chạy, ước lượng output (bitrate × thời lượng) so với dung lượng trống; thiếu thì lỗi rõ.
 4. **Ưu tiên tiến trình**: ffmpeg chạy `BelowNormal` (video chạy lâu, không làm máy giật).
 5. Menu: các đuôi video/audio thêm vào; ảnh không đổi.
 
 ## Bảo mật
 
-- Input video/audio là không tin cậy: ffmpeg chạy với whitelist giao thức `file`, không `concat`/`subfile`/`hls` (`-f` không cho người dùng chọn), giới hạn thời gian, giới hạn kích thước output (≤ 4 × input + 100 MB), ưu tiên thấp.
-- `ffprobe` trước để từ chối sớm: không có luồng video/audio, thời lượng 0 hoặc > 12 giờ, độ phân giải > 8K, demuxer ngoài danh sách được phép.
+- Input video/audio là không tin cậy: ffmpeg chạy với whitelist giao thức `file`, không `concat`/`subfile`/`hls` (`-f` không cho người dùng chọn), giới hạn thời gian, giới hạn kích thước output (`-fs` theo ước lượng của thao tác và dung lượng trống, `MediaJob.MaxOutputBytes`), ưu tiên thấp.
+- `ffprobe` trước để từ chối sớm: không có luồng video/audio, thời lượng 0 hoặc > 12 giờ, độ phân giải > 8K, demuxer ngoài danh sách được phép. Video lớn hơn 4K (8K của điện thoại) được mã hóa ra 4K với ít luồng hơn (2 giải mã, 6 x264): ở cỡ gốc vượt trần 4 GB sau 2 giây (đo 2026-10-21, 16 nhân). HDR → SDR dùng tone map Mobius (Hable làm tối đi một phần năm).
 - Không bao giờ dùng `-f concat`, `-f hls`, `subfile:`, `-i` với URL, hay filter đọc file (`movie=`, `amovie=`, `subtitles=`); tham số là hằng của Flevert.
 - Bản dựng ghim hash; CI kiểm `ffmpeg -version` khớp bản mong đợi; Dependabot không theo dõi được nên lịch kiểm bản mới hằng tháng ghi trong RELEASING.
 
@@ -244,7 +244,7 @@ Ghi nguồn ở ADR của media và trong commit message khi lấy tham số hay
 **Gmail tính giới hạn 25 MB sau khi mã hóa base64**, tức file tăng khoảng một phần ba, nên file gốc chỉ nên tới khoảng **18 MB**. Nguồn: fast.io, compresto.app, compress.lol, kiểm 2026-10-20. Gmail không báo lỗi khi vượt: nó thay file đính kèm bằng link Google Drive.
 
 Hệ quả cho v1.3.0:
-- User story 1 và mọi lời nhắc tới Gmail không hứa "Under 25 MB gửi được qua Gmail". Ví dụ đúng là Messenger hay Discord.
+- User story 1 và mọi lời nhắc tới Gmail không hứa "Under 25 MB gửi được qua Gmail". Ví dụ đúng là Messenger.
 - Gửi email là việc của mục "For email" ở v1.3.1.
 
 ## Menu (≤ 16 mục mỗi mũi tên): thuần chuột phải
@@ -334,7 +334,7 @@ Mỗi công cụ: op-id riêng, tên output theo quy tắc của core, chạy đ
 ## Bảo mật (thêm cho v1.3.1)
 
 - Tên file có `%` (image2, segment): luôn ghi ra tên tạm cố định rồi đổi tên. Test với file tên `50%off.mp4`.
-- Ghép nhiều file: filter concat với nhiều `-i`, không bao giờ dùng demuxer concat hay danh sách file. Giới hạn số file, tổng thời lượng và bộ nhớ (trần job 2 GB).
+- Ghép nhiều file: filter concat với nhiều `-i`, không bao giờ dùng demuxer concat hay danh sách file. Giới hạn số file, tổng thời lượng và bộ nhớ (trần 4 GB mỗi tiến trình như v1.3.0).
 - Thời gian gõ vào: chỉ chữ số, `:` và `.`. Phân tích thành số; ngoài khoảng [0, thời lượng] thì báo lỗi ngay trong ô nhập.
 - Không dùng filter đọc file (`subtitles=`, `movie=`), nên **burn phụ đề** để sau. Cách an toàn duy nhất là Flevert tự đọc SRT rồi vẽ bằng `drawtext`.
 - `loudnorm`, `silencedetect`: đọc kết quả JSON và log của ffmpeg có giới hạn kích thước (1 MB như mọi output của `ExternalTool`).

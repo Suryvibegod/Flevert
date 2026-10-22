@@ -1,111 +1,61 @@
-# Bàn giao: làm tiếp Flevert
+# Flevert: trạng thái và việc tiếp theo
 
-File này thay cho trí nhớ của phiên làm việc trước: mọi bối cảnh cần để làm tiếp nằm ở đây và trong các file được trỏ tới. Cập nhật mỗi khi xong một việc.
+## Mục tiêu và quyết định
 
-## Quy trình agent-skills của Addy Osmani
+- Flevert là bộ chuyển đổi file miễn phí qua menu chuột phải trên Windows, repo public cho cộng đồng. Năm module trong [capability-map.md](../docs/specs/capability-map.md) đã có: core, image, installer, PDF, media.
+- Chỉ có menu chuột phải, không cửa sổ chọn công cụ. Hộp thoại dành cho chữ phải nhập (mật khẩu, watermark, thời điểm Trim), theo kiểu hộp thoại mật khẩu.
+- Menu thường chỉ một dòng Flevert cho mỗi loại file. Mũi tên thứ hai chỉ hiện khi giữ Shift, tên “Flevert: more … tools”, dùng MenuCascade với ShiftOnly: true. Explorer giới hạn 16 mục cho cả cây của một mục gốc; dài hạn cân nhắc IExplorerCommand sau khi ký số.
+- Phiên bản tính năng là 1.x.0, bản sửa/cập nhật là 1.x.y. Hai release bất biến v0.2.0, v0.2.1 giữ tên cũ và được xem là 1.2.0, 1.2.1. Lịch sử trong [CHANGELOG.md](../CHANGELOG.md).
+- UI, README và commit tiếng Anh; spec/plan nội bộ tiếng Việt. Tự quyết việc có đủ thông tin và có thể đảo ngược; giữ đúng phạm vi được phép khi phát hành, gửi file ra dịch vụ khác hoặc dùng file cá nhân.
+- Mọi thứ miễn phí: Inno Setup, không mua chứng chỉ; ký mã qua SignPath Foundation khi được duyệt.
 
-Mỗi task: viết code cùng test (TDD khi rẻ), build + format + ba project test xanh trước mỗi commit, ghi chú ngắn trong todo. Bước 4 (Verify) và 5 (Review) làm một lần cho cả bản phát hành, trước khi tag:
+## Quy trình
 
-1. **Define:** spec (`docs/specs/<module>.md`) đủ 6 mục, success criteria kiểm được; nếu thiếu thì `interview-me` / `idea-refine` trước.
-2. **Plan:** `planning-and-task-breakdown` ra `tasks/<module>/plan.md` + `todo.md`; không ghi đè plan còn việc dở.
-3. **Build:** `incremental-implementation` + `test-driven-development`: viết test, **chạy thấy RED**, rồi mới code cho GREEN. Test pass ngay lần đầu là dấu hiệu xấu: kiểm lại bằng đối chứng âm. `source-driven-development`: kiểm API/giấy phép ở nguồn chính thức trước khi dùng. Tối ưu hiệu năng: `performance-optimization` (đo → sửa một thứ → đo lại, giữ hoặc hoàn tác, ghi sổ).
-4. **Verify:** chạy thật (MenuProbe, tiến trình `flevert.exe` thật, ảnh chụp chỉ cửa sổ của app, UI Automation cho trợ năng), `debugging-and-error-recovery` khi lỗi.
-5. **Review:** `code-review-and-quality`, `security-and-hardening`, `doubt-driven-development` bằng reviewer bối cảnh trống, chỉ đọc; RECONCILE từng finding vào bảng trong `todo.md`; lặp tới khi không còn Critical/High/Required.
-6. **Ship:** `git-workflow-and-versioning` (commit nguyên tử, message nói vì sao), `documentation-and-adrs`, `shipping-and-launch` (lệnh `/ship`: 3 chuyên gia song song → go/no-go + rollback); quy trình phát hành: [docs/RELEASING.md](../docs/RELEASING.md).
+1. Đọc file này và [CLAUDE.md](../CLAUDE.md); trên máy mới chạy scripts/setup-dev.ps1. Đối chiếu ID tài khoản GitHub với chủ repo 79949229 trước việc phát hành.
+2. Dùng agent-skills của Addy Osmani. Spec có success criteria; plan/todo trong tasks/<module>/. Kiểm nguồn chính thức, bảo trì và giấy phép trước khi thêm thư viện; ưu tiên dependency được ghim (source-driven-development). Chỉ đưa mã MIT/BSD/Apache-2.0/Zlib/ISC vào Flevert; GPL như ffmpeg chạy thành tiến trình riêng.
+3. Làm đủ code trước, từng lát nhỏ cùng test; TDD khi rẻ, kiểm RED trên mã cũ rồi GREEN. Không review hay kiểm runtime lại sau từng task. Build, format (kiểm exit code) và **bốn project Core/Image/Pdf/Media** xanh trước mỗi commit; chạy lần lượt, không chạy cả solution cùng lúc.
+4. Một lần trước release: kiểm app thật, MenuProbe và installer; ba review bối cảnh trống, chỉ đọc (code, security, doubt) của thay đổi từ release trước; reconcile trong todo, sửa và một reviewer gộp kiểm lại tới khi không còn Critical/High/Required. Tối đa 2–3 agent đồng thời.
+5. Theo [docs/RELEASING.md](../docs/RELEASING.md): CI ba lần trên cùng commit, nguồn/giấy phép ffmpeg, tag trên main, installer do GitHub dựng, hash/attestation, cài mới và nâng cấp từ bản trước, Defender/VirusTotal, publish latest. Release đã publish bất biến, chỉ sửa tiến về phía trước.
+6. Commit nguyên tử, message nói vì sao, danh tính Suryvibegod <79949229+Suryvibegod@users.noreply.github.com> và dòng Co-Authored-By; không email cá nhân, không binary. Sau release ghim setup vừa phát hành trong scripts/get-previous-setup.ps1, cập nhật trạng thái và dọn nhánh/artifacts tạm.
 
-## Mục tiêu và cách làm việc (người dùng đã chốt)
+Lưu ý kiểm thử:
 
-- Làm **đủ 5 module** theo [docs/specs/capability-map.md](../docs/specs/capability-map.md): core → image → installer (v0.1) → pdf (v0.2) → media (v1.3).
-- **Không hỏi người dùng** những gì tự quyết được, ghi lý do vào spec/ADR; hỏi trước việc khó đảo ngược hoặc ra bên ngoài (xóa repo, publish, gửi file lên dịch vụ khác, dùng file cá nhân của người dùng).
-- Mọi thứ **miễn phí** (Inno Setup; không mua chứng chỉ; ký mã sau qua SignPath Foundation, người dùng tự nộp đơn).
-- Repo **public cho cộng đồng**, tên **Flevert**. Ngôn ngữ: UI/README/commit tiếng Anh; spec/plan nội bộ tiếng Việt.
-- Commit: tên **Suryvibegod** với email ẩn của GitHub `79949229+Suryvibegod@users.noreply.github.com` (script setup đặt khi `gh` đăng nhập đúng tài khoản ID 79949229; GitHub gắn email ẩn với tài khoản qua số ID); **không bao giờ** dùng email cá nhân; kết thúc message bằng dòng `Co-Authored-By`.
+- Test nhiều tiến trình phải nhận diện PID/tiến trình cha của chính nó. Test batch nhạy thời gian: đỏ thì chạy riêng trước; còn đỏ khi chạy riêng thì điều tra. Test PDF mở pdf-worker phải thuộc collection WorkerProcesses.
+- Báo người dùng trước khi test có hộp thoại trên cùng. scripts/test-installer.ps1 dùng HKCU và thư mục cài thật, cần máy/profile sạch, không Flevert/menu dev/tiến trình flevert.exe; không gỡ bản đang dùng chỉ để chạy test. Sau MenuProbe trên profile thật, gỡ menu dev đã tạo.
+- Smart App Control có thể chặn DLL vừa build (0xE0434352, 0x800711C7): xác nhận bằng chứng rồi build lại với SourceRevisionId mới, không đổi mã hay tắt bảo vệ.
+- Sau đổi scripts/deps.json, chạy lại scripts/fetch-deps.ps1. qpdf tự mở rộng wildcard, nên đường dẫn chuyển qua stdin @-; giá trị tùy chọn chứa *, ?, @ bị từ chối.
 
 ## Trạng thái
 
-| Module | Trạng thái |
+| Module | Trạng thái và lịch sử |
 |---|---|
-| core | Xong, review nhiều vòng ([todo.md](todo.md)). Chạy song song nhiều file trong một lô ([perf/todo.md](perf/todo.md)). Báo bản mới từ GitHub Releases ([update/todo.md](update/todo.md), ADR-0006). |
-| image | Xong ([image/todo.md](image/todo.md), ADR-0004). Ngân sách bộ nhớ chung khi chạy song song. |
-| installer (v0.1) | Xong, review 5 vòng ([installer/todo.md](installer/todo.md)); menu cổ điển kiểm tay đạt (ADR-0005); trang "New versions" (`/UPDATECHECK`). |
-| pdf (v0.2) | Xong, phát hành 0.2.0 ([pdf/todo.md](pdf/todo.md), ADR-0007, ADR-0008). |
-| media (v1.3) | Spec đã chốt: [docs/specs/media.md](../docs/specs/media.md). Chưa có plan/code. |
+| core | Xong; batch song song, ngân sách bộ nhớ chung, báo bản mới. [todo](todo.md), [perf](perf/todo.md), [update](update/todo.md), ADR-0006. |
+| image | Xong; [todo](image/todo.md), ADR-0004. |
+| installer | Xong; cài theo user, menu cổ điển, lựa chọn kiểm cập nhật; [todo](installer/todo.md), ADR-0005. |
+| PDF | Đã phát hành tới 1.2.3, menu thường một dòng và thêm công cụ qua Shift; [todo](pdf/todo.md), ADR-0007/0008. |
+| media 1.3.0 | Đã phát hành, latest và immutable; đã gộp main qua PR #3. [todo](media/todo.md), [plan](media/plan.md), [spec](../docs/specs/media.md), ADR-0009. |
+| ocr 1.4.0 | **Đang làm** trên nhánh `feat/v1.4-ocr` (đã push): engine, Tesseract dựng tĩnh bằng vcpkg (release `deps-tesseract-5.5.3`, ADR-0010), ảnh → Text, PDF Make searchable, PDF → Text đọc trang scan, đóng gói. [todo](ocr/todo.md), [spec](../docs/specs/ocr.md). |
 
-Test đầu-cuối installer: `scripts/test-installer.ps1` (10 kịch bản; kịch bản nâng cấp chạy khi `get-previous-setup.ps1` đã ghim một bản trước; chạy tay trên máy thật, `%LOCALAPPDATA%\Flevert` phải không tồn tại). CI: `.github/workflows/ci.yml`; phát hành: `release.yml` + [docs/RELEASING.md](../docs/RELEASING.md).
+### v1.3.0 — đã phát hành ngày 2026-10-21
 
-## v0.1.0 (2026-10-20)
+[Flevert v1.3.0](https://github.com/Suryvibegod/Flevert/releases/tag/v1.3.0), latest, immutable; công khai lúc 16:59 giờ Việt Nam. scripts/get-previous-setup.ps1 ghim đúng phiên bản và checksum 1.3.0 cho lần nâng cấp tiếp theo.
 
-Module core, image, installer xong và qua kiểm phát hành ([release/todo.md](release/todo.md)). Bản đầu tiên tải được trên GitHub Releases là 0.2.0.
+- Tag v1.3.0 trỏ commit 967ad3c5418773f066ba1910b1eed31f39f6b6f3. [Release workflow](https://github.com/Suryvibegod/Flevert/actions/runs/39568534419) đạt build, bốn suite, kiểm dependency, attestation và nguồn/giấy phép ffmpeg; kèm đủ hai phần source tar.
+- CI trước tag đạt ba lượt cùng commit: 39562578958, 39563402169, 39563407386; CI main 39568530658 cũng đạt. Lượt đầu sau tag có test batch 100 tiến trình lỗi thời gian; chạy riêng đạt rồi chạy lại job thất bại đạt, không đổi mã tag.
+- Bốn regression test bổ sung cho GIF một khung và cleanup khi hủy đã kiểm RED/GREEN; reviewer gộp độc lập không còn finding cần sửa. Ba review tổng thể và reconcile trong media todo. Gemini CLI bổ sung đã bỏ theo yêu cầu người dùng.
+- Kiểm runtime trước tag: installer 197 mục, nâng cấp từ 1.2.3, MenuProbe video/audio/PDF, 18 thao tác media và đo bộ nhớ; chi tiết trong media todo. Bộ cài chính thức đạt **198 kiểm tra** trên máy Windows tạm bằng tài khoản thường, gồm mười kịch bản, chuyển đổi thật, nâng cấp 1.2.3 và gỡ sạch: [installer verification](https://github.com/Suryvibegod/Flevert/actions/runs/39580335044). Bộ cài/menu đang dùng trên máy người dùng được giữ nguyên.
+- Flevert-Setup-1.3.0.exe: SHA256 48d484f477fefc5dc4c65ff368539ab41f4a2cec45463237abec0a5df3c7bf5c, 97.674.127 byte. Hash khớp checksum draft; strict attestation ghim tag, toàn bộ commit, workflow chính thức và cấm self-hosted đạt. Defender sạch; [VirusTotal 0/65](https://www.virustotal.com/gui/file/48d484f477fefc5dc4c65ff368539ab41f4a2cec45463237abec0a5df3c7bf5c/detection). Manifest sau cài xác nhận .NET 10.0.13, khớp bản vá mới nhất của Microsoft.
+- Kiểm trước commit ghi nhận release: build 0 warning/error, format mã 0, Core 531 đạt/3 skip, Image 245 đạt, Pdf 1368 đạt/1 skip, Media 225 đạt; kiểm ghim setup 1.3.0 bằng file thật đạt. Bài UI kiểm cập nhật quá giờ ở lượt đầu, chạy riêng đạt rồi chạy lại cả bốn suite đạt.
+- PR Dependabot #4 (Test SDK 18.11.0) đã đóng/xóa nhánh: chỉ đổi công cụ test, hoãn để giữ dependency đã kiểm cho 1.3.0; không có bản vá runtime cần đưa vào release này.
+- Còn mở đã chấp nhận: kiểm màu bằng mắt trên video HDR iPhone thật và ảnh menu sáng/tối; không lấy file cá nhân khi chưa được phép.
 
-## v1.2.3 (hotfix menu PDF): đã phát hành 2026-10-21
+## Việc tiếp theo
 
-https://github.com/Suryvibegod/Flevert/releases/tag/v1.2.3. Người dùng thấy hai dòng `Flevert` và `Flevert PDF tools` khi chuột phải PDF là rối, chọn "1 dòng + Shift": menu thường chỉ một dòng `Flevert` (16 mục, Add watermark… vào đây, Convert to còn JPG và Text); dòng thứ hai đổi tên `Flevert: more PDF tools`, đặt giá trị registry `Extended` nên chỉ hiện khi giữ Shift (thêm Convert to PNG images). Đo bằng MenuProbe: Explorer tính giới hạn 16 mục cho cả cây của một mục gốc, nên một dòng không chứa được 28 mục PDF. Lâu dài: `IExplorerCommand` (cần ký số trước). MenuProbe có `--shift` cho `list` và `invoke`. Kiểm: một reviewer gộp + sửa, Core/Image/Pdf xanh, CI ×3, `test-installer.ps1` đạt (gồm nâng cấp từ 1.2.2), MenuProbe trên bản cài (thường: một dòng; Shift: hai dòng), bấm thử mục trong menu Shift, 42 thao tác chạy thật. Bản nháp: hash và attestation khớp, `test-installer.ps1` đạt, Defender sạch; VirusTotal 1/75: chỉ DeepInstinct (ML tĩnh, tên chung "MALICIOUS"), cùng phiên bản engine 5.0.0.8 không báo 1.2.2, không đổi dependency/đóng gói so với 1.2.2 → coi là báo nhầm. **Việc của người dùng:** báo nhầm cho Deep Instinct (SHA256 `7addc80a6267ee5fa937ec6b4f11f14e21b54784c22828681946c12470d1b1fc`); ký số SignPath sẽ giảm loại báo nhầm này. `get-previous-setup.ps1` ghim 1.2.3.
+1. **v1.4.0 OCR (đang làm, ưu tiên):** làm trên nhánh `feat/v1.4-ocr`, theo [ocr/todo.md](ocr/todo.md): T5b (README/CHANGELOG, `build-installer.ps1` thật), T6 (file độc, hủy giữa chừng, trang xoay), T7 (icon), rồi các bước trước release và PR vào main. Trên máy mới chạy `scripts/fetch-deps.ps1` để lấy bản tesseract tĩnh. Worktree cũ `D:\github\Flevert-wt\ocr-*` (≈ 15 GB) đã được gom; chỉ xóa khi người dùng đồng ý.
+2. **Ký số SignPath Foundation.** Đã có [code-signing-policy.md](../docs/code-signing-policy.md) và mục README; chưa xác nhận người dùng gửi đơn. Người dùng tự điền tên/email, đồng ý điều khoản và reCAPTCHA. Khi duyệt: action chính thức ghim SHA, secret GitHub, ký installer/binary Flevert, kiểm chữ ký; cập nhật ADR-0005, README/install.md/release notes. Không ghi token vào chat/file.
+3. **v1.3.1 (sau v1.4.0, số phiên bản xét lại khi bắt đầu):** menu Shift “Flevert: more video tools” (sửa nhãn trong media spec), Trim, Rotate, Remove sound, Make volume even, Save a frame, Merge videos, Send by Email/WhatsApp/Messenger. Audio một mũi tên, không cửa sổ công cụ.
+4. **Hiệu năng, chỉ khi đo chậm.** performance-optimization: đo → sửa một chỗ → đo lại → giữ/hoàn tác, ghi sổ. Mục tiêu máy 4 nhân: khởi động lạnh ≤300 ms, HEIC 12 MP → JPG ≤1 s/ảnh, PDF → JPG A4 150 DPI ≤0,3 s/trang, Compress for sharing ≤2 s/trang, Merge/Rotate 100 trang ≤2 s, video 1080p Convert/Compress ≤2× thời lượng. Dùng scripts/measure-startup.ps1 và scripts/measure-convert.ps1. Ứng viên: qpdf đếm trang 3–8 s trên file lớn/độc; đã nhanh thì bỏ.
 
-**Quy tắc cho các bản sau:** mũi tên thứ hai cho một loại file (ví dụ "Flevert video tools" của 1.3.1) cũng chỉ hiện khi giữ Shift (`MenuCascade` với `ShiftOnly: true`), tên dạng `Flevert: more … tools`; menu thường chỉ một dòng `Flevert`.
+Bài học 2026-10-22: việc giao cho worker `ceo-worker-agent` phải được commit (hoặc ghi vào todo) trước khi phiên kết thúc; phiên 2026-10-21 để lại bốn worktree chưa commit mà HANDOFF không nhắc, nên phiên sau suýt làm v1.3.1 thay vì OCR.
 
-## v1.2.2: đã phát hành 2026-10-21
-
-https://github.com/Suryvibegod/Flevert/releases/tag/v1.2.2 (latest, immutable; bản đầu đánh số từ 1, sau 0.2.1). Menu ảnh và PDF sắp lại cho người dùng thật, nhãn dễ hiểu, icon Fluent (MIT); mũi tên thứ hai "Flevert PDF tools" (không cửa sổ công cụ, người dùng chốt) với 8 công cụ: bỏ trang trắng, đánh số trang, watermark (ô nhập kiểu mật khẩu), 2/4 trang mỗi tờ, vừa A4, khóa form đã điền, chia theo dung lượng, lấy ảnh. Ba review + hai vòng sửa + soát lại (bảng reconcile trong [pdf/todo.md](pdf/todo.md)); kiểm thật 45 thao tác qua bản cài, MenuProbe hai mũi tên PDF và menu ảnh, `test-installer.ps1` đạt trên file bản nháp gồm nâng cấp từ 0.2.1; CI ×3; Defender sạch, VirusTotal 0/66. `get-previous-setup.ps1` ghim 1.2.2.
-
-Còn mở cho bản sau: nhúng con font Arial cho watermark (HarfBuzz hb-subset); dòng `@-` của qpdf có kiểu (literal/path); Mark of the Web cho file lấy ra; lượt tách từng trang của Split by size vượt trần tạm ~50 ms; khối `finally` của `test-installer.ps1` để lại khóa khi gỡ cài không chạy được; đếm trang qpdf 3–8 s với file lớn/độc (ứng viên bản hiệu năng).
-
-## v0.2.1: đã phát hành 2026-10-20
-
-https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.1 (latest, immutable). Compress > For sharing, Convert > Text, báo PDF đã phải sửa, giới hạn T18 cho mọi thao tác ghi PDF, sửa các mục review của 0.2.0. Ba review + soát lại (bảng reconcile trong [pdf/todo.md](pdf/todo.md)); kiểm thật: 35 thao tác qua `flevert.exe` đã cài, For sharing 0,42 s/trang (26% cỡ), menu `.pdf` 16 mục (MenuProbe), `test-installer.ps1` đạt trên file bản nháp gồm nâng cấp từ 0.2.0; CI ×3; Defender sạch, VirusTotal 0/68. `get-previous-setup.ps1` ghim 0.2.1.
-
-Còn mở cho v1.2.2: lần thử lại của Lossless chưa lùi về bản không giải mã khi chậm; Compress for sharing coi mọi `IOException` là lỗi đĩa; khối `finally` của `test-installer.ps1` xóa thư mục cài nhưng để lại khóa Installed apps và menu khi gỡ cài không chạy được.
-
-## v0.2.0 (pdf): đã phát hành 2026-10-20
-
-https://github.com/Suryvibegod/Flevert/releases/tag/v0.2.0 (latest, immutable). Kiểm trước khi publish: CI ×3 xanh, hash và attestation khớp, `test-installer.ps1` đạt trên file của bản nháp, Defender sạch, VirusTotal 0/68. Sau khi publish: cài bản tải về, chạy thật cả 30 thao tác (ảnh, PDF, mật khẩu qua hộp thoại) và menu Explorer cho JPG, HEIC, PDF, đều đúng; đã gỡ. `get-previous-setup.ps1` ghim 0.2.0 nên lần phát hành sau chạy kịch bản nâng cấp.
-
-Plan: [pdf/plan.md](pdf/plan.md). Trạng thái từng task và bảng reconcile: [pdf/todo.md](pdf/todo.md). Spec: [docs/specs/pdf.md](../docs/specs/pdf.md). ADR: 0007 (tiến độ trong file, output thư mục, N→1), 0008 (pdfium + qpdf, deps ghim hash).
-
-Đã quyết: T15–T17 (nén ảnh scan, đảo trang, sửa PDF, rút chữ/ảnh) chuyển sang v0.2.1. Chấp nhận license Visual Studio Community: Flevert giữ 3 DLL MSVC runtime qpdf dùng.
-
-**Đánh số phiên bản** (người dùng đổi 2026-10-20): từ bản tiếp theo, số đầu là 1: bản tính năng tăng số giữa (1.3.0, 1.4.0), bản cập nhật/sửa lỗi tăng số cuối (1.2.2, 1.3.1). Hai bản đã phát hành v0.2.0 và v0.2.1 giữ tên cũ (release bất biến) và được xem là 1.2.0 và 1.2.1; bản đang làm là **1.2.2**. Tên nhánh `feat/v0.*` cũ giữ nguyên.
-
-**Việc tiếp theo** (cập nhật 2026-10-21, dừng theo yêu cầu người dùng). Làm theo thứ tự; người dùng muốn tự làm hết, không hỏi; mỗi bản: code đủ trước, rồi review tổng thể (code, security, doubt) + kiểm thật trên Windows + RELEASING.
-
-1. **v1.3.0 (video và âm thanh), nhánh `feat/v0.3-media`, PR #3.** Trước hết gộp `main` (1.2.3: menu PDF một dòng, `MenuCascade.ShiftOnly`, MenuProbe `--shift`) vào nhánh và sửa test menu nếu cần. Code của agent media xong; đã gộp `main` 1.2.2 (merge commit `56a6a9f`), menu video/audio theo nguyên tắc 1.2.2 (icon Fluent, đường kẻ, `music_note_2` mới), tài liệu đổi sang 1.3. CI `build-and-test` xanh trên `1c63f1e`. Còn lại, theo thứ tự:
-   1. **Giấy phép ffmpeg (chặn phát hành):** commit giấy phép của các thư viện trong bản dựng BtbN vào `installer/notices/ffmpeg/` từ artifact `ffmpeg-licences` của workflow `ffmpeg-source.yml` (`gh run list --workflow ffmpeg-source.yml --branch feat/v0.3-media`, rồi `gh run download`); chỉ giữ văn bản giấy phép (`.gitattributes` đã đặt `-text` cho thư mục đó). Rồi chạy lại cả bốn project test (Core đọc thư mục này).
-   2. Ba review bối cảnh trống trên `git diff main..feat/v0.3-media` (gồm workflow `ffmpeg-source.yml` tạo asset mã nguồn ~2,2 GB nhiều phần, trần bộ nhớ 4 GB của ffmpeg so với spec 2 GB), reconcile, sửa, một reviewer soát lại.
-   3. Kiểm thật trên Windows (báo người dùng trước): `build-installer.ps1` (bộ cài ước tính ~94 MB, giới hạn test 110 MB), `test-installer.ps1` (nâng cấp từ 1.2.2 đã ghim), cài rồi chạy từng thao tác video/âm thanh, MenuProbe `.mp4` `.mkv` `.mp3` (≤ 16 mục, icon), màu HDR, bộ nhớ trên máy nhiều nhân; `uninstall`.
-   4. `<Version>1.3.0`, CHANGELOG `[1.3.0]`, CI ×3, tag `v1.3.0`, kiểm bản nháp (hash, attestation, test-installer, Defender, VirusTotal), publish, ghim 1.3.0.
-2. **Ký số SignPath Foundation (miễn phí).** Đã có [docs/code-signing-policy.md](../docs/code-signing-policy.md) và mục "Code signing policy" trong README. Đơn: đã mở form đăng ký điền sẵn mọi ô về dự án; **chưa rõ người dùng đã bấm Submit chưa** → hỏi lại. Người dùng tự điền tên, email, tích 2 ô đồng ý, reCAPTCHA. Khi được duyệt: thêm bước ký vào `release.yml` (action chính thức của SignPath ghim SHA; token trong GitHub Secrets, không bao giờ dán vào chat), ký installer và `flevert.exe`/`Flevert.*.dll`, câu ghi công trong release notes, kiểm `Get-AuthenticodeSignature` ở bước kiểm bản nháp (RELEASING), bỏ câu "not code-signed" trong README/install.md, cập nhật ADR-0005.
-3. **v1.3.1** (sau 1.3.0): [docs/specs/media.md](../docs/specs/media.md), mục "v1.3.1": mũi tên thứ hai cho video, chỉ hiện khi giữ Shift như PDF từ 1.2.3 (sửa spec: tên `Flevert: more video tools`, các dòng 204, 252, 291 của media.md) (Trim, Rotate, Remove sound, Make volume even, Save a frame, Merge videos, Send by Email/WhatsApp/Messenger); âm thanh một mũi tên. Không cửa sổ công cụ.
-4. **Bản hiệu năng (1.3.2 hoặc số trống kế tiếp; 1.2.3 đã dùng cho hotfix menu), chỉ khi đo thấy chậm** (mục tiêu ở dòng dưới). Ứng viên đã thấy: qpdf đếm trang 3–8 s với PDF lớn/độc.
-5. **v1.4.0: OCR** (Tesseract Apache-2.0 + dữ liệu `vie`); viết spec khi bắt đầu.
-
-**Quy tắc người dùng đã chốt (2026-10-20/21):** Flevert chỉ là menu chuột phải, không cửa sổ chọn công cụ; thêm việc thì thêm mũi tên thứ hai cho loại file đó; hộp thoại chỉ cho chữ người dùng phải gõ (mật khẩu, watermark, thời điểm Trim), kiểu hộp thoại mật khẩu. Đánh số từ 1 (bản tính năng 1.x.0, cập nhật 1.x.y). Tối đa 2–3 agent cùng lúc. Test bật cửa sổ chỉ chạy khi đã báo người dùng (hộp thoại luôn ở trên cùng bắt phím người dùng đang gõ). `test-installer.ps1` từ chối chạy khi có menu Flevert dev hoặc bất kỳ `flevert.exe` nào đang chạy (agent đang chạy test): tạm dừng agent trước khi chạy.
-
-- **Mục tiêu tốc độ cho bản hiệu năng** (người dùng yêu cầu 2026-10-20, số phiên bản linh hoạt; 1.2.3 đã dùng cho hotfix menu nên là 1.3.2 hoặc số trống kế tiếp): sau v1.2.2 và v1.3.x, đo tốc độ theo skill `performance-optimization` (đo, sửa một chỗ, đo lại, giữ hoặc hoàn tác, ghi sổ). Chỉ phát hành khi số đo chậm hơn mục tiêu; đã nhanh thì bỏ. Mục tiêu trên máy 4 nhân: khởi động lạnh `flevert.exe run` ≤ 300 ms; ảnh HEIC 12 MP → JPG ≤ 1 s/ảnh; PDF → JPG ≤ 0,3 s/trang A4 ở 150 DPI; Compress for sharing ≤ 2 s/trang; Merge/Rotate 100 trang ≤ 2 s; video 1080p Convert/Compress ≤ 2× thời lượng. Công cụ đo có sẵn: `scripts/measure-startup.ps1`, `scripts/measure-convert.ps1`.
-
-**Ghi chú kỹ thuật:**
-- qpdf tự mở rộng ký tự đại diện trong đối số dòng lệnh (làm hỏng `\\?\` đường dẫn dài): đường dẫn đưa cho qpdf qua stdin `@-`; tùy chọn có `*`/`?`/`@` bị từ chối.
-- Test nào đếm tiến trình phải nhận diện đúng tiến trình của nó (PID, tiến trình cha), không đếm theo tên trên toàn máy: CI và nhiều lần chạy test có thể song song.
-- Test lô nhiều tiến trình nhạy thời gian khi máy bận: đỏ thì chạy lại riêng trước; đỏ cả khi chạy riêng thì điều tra.
-- Test Pdf khởi động `flevert.exe pdf-worker` nằm chung collection xUnit `WorkerProcesses`; lớp test mới nào khởi động worker cũng phải vào collection đó.
-- Smart App Control chặn ngẫu nhiên DLL vừa build (test tiến trình thoát `0xE0434352`, hoặc `0x800711C7`): build lại với `-p:SourceRevisionId=<chuỗi mới>`, không đổi mã nguồn.
-- Sau khi `scripts/deps.json` đổi: chạy lại `scripts/fetch-deps.ps1`.
-
-## Sau v0.2
-
-- v1.3 (media): ffmpeg bản GPL (đã chốt, ADR-0009 trên nhánh media).
-
-## Dựng máy mới
-
-Clone repo rồi chạy `scripts/setup-dev.ps1` (CLAUDE.md). Setup tải luôn pdfium/qpdf vào `deps/` (cần mạng; build Flevert.Pdf báo lỗi rõ nếu thiếu). [CLAUDE.md](../CLAUDE.md) chỉ Claude chạy `scripts/setup-dev.ps1`: cài .NET 10 SDK cho riêng user nếu thiếu, nhắc cài/đăng nhập GitHub CLI; **chỉ trên máy chủ repo** (gh đăng nhập tài khoản ID 79949229) mới cài Inno Setup, đặt danh tính commit, sửa rule git rewrite hỏng, cài plugin agent-skills; rồi build và chạy test từng project. Các việc phát hành (tag, publish) chỉ chủ repo làm. Plugin cài giữa phiên chỉ nạp sau khi khởi động lại hoặc `/reload-plugins`; trong lúc đó đọc skill từ `~/.claude/plugins/cache/addy-agent-skills/agent-skills/<version>/skills/`.
-
-Lưu ý môi trường (đã gặp):
-- SDK cài cho riêng user: shell mở trước khi chạy setup không có `dotnet` trong PATH; đặt `$env:Path = "$env:LOCALAPPDATA\Microsoft\dotnet;$env:Path"; $env:DOTNET_ROOT = "$env:LOCALAPPDATA\Microsoft\dotnet"`.
-- Smart App Control (enforce) chặn ngẫu nhiên theo hash từng file mới build; đổi nhẹ mã nguồn để ra hash mới. MenuProbe chạy qua host đã ký: `dotnet tools/MenuProbe/bin/Debug/net10.0-windows/MenuProbe.dll list <file>`.
-- `%TEMP%` có thể cho nhóm sandbox quyền ghi; code và test đã tính tới.
-- Đẩy file trong `.github/workflows` cần token có quyền `workflow`: `gh auth refresh -h github.com -s workflow`.
-- Inno Setup 6.7.3 cho riêng user: `winget install JRSoftware.InnoSetup -e --version 6.7.3 --scope user`.
-- Sửa text có `\` bằng công cụ Edit, không qua heredoc/Python (dễ thành ký tự điều khiển).
-- `dotnet format --verify-no-changes` là **lệnh riêng**; chỉ commit khi exit code 0 (đã có lần lệnh commit nối sau `;` vẫn chạy khi format đỏ).
-- Message commit có dấu `"` qua here-string của Windows PowerShell 5.1 bị tách thành nhiều đối số: viết message ra file rồi `git commit -F <file>`.
-- `dotnet test` tạo `%LOCALAPPDATA%\Flevert`; `test-installer.ps1` từ chối chạy khi thư mục này còn. Xóa trước khi chạy, và đừng chạy `dotnet test` song song với nó. Trên CI chạy hai project test ở hai bước riêng.
-- Khi bấm thử menu bằng bản build (không qua installer): `install-menu --allow-insecure-location` (thêm `--dev` nếu cần); nhớ `uninstall-menu`.
-- Đo tốc độ: `scripts/measure-convert.ps1` (ảnh tổng hợp từ `scripts/make_bench_photos.py`; ảnh HEIC tổng hợp một tile chậm hơn ảnh iPhone thật ~7 lần). Không dùng ảnh cá nhân của người dùng khi chưa hỏi.
+PDF còn mở (chi tiết trong todo): nhúng con Arial cho watermark bằng HarfBuzz hb-subset; kiểu literal/path cho qpdf @-; Mark of the Web cho file lấy ra; Split by size vượt trần tạm khoảng 50 ms khi tách từng trang; cleanup của test installer khi trình gỡ cài thất bại.

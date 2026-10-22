@@ -1,0 +1,72 @@
+name: ffmpeg source
+
+# The complete corresponding source of the bundled ffmpeg build (GPL v3, section 6) and the licences of the libraries
+# built into it, written by scripts/fetch-ffmpeg-source.sh from the pins in scripts/deps.json (ADR-0009). It runs BtbN's
+# own download.sh in Docker, which only Linux runners have. A pull request that changes the pin gets the licences as an
+# artifact, to commit into installer/notices/ffmpeg; release.yml calls it to attach the source to the release.
+on:
+  pull_request:
+    paths:
+      - scripts/deps.json
+      - scripts/fetch-ffmpeg-source.sh
+      - installer/notices/ffmpeg/**
+      - .github/workflows/ffmpeg-source.yml
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      keep-source:
+        description: Upload the source archive as the ffmpeg-source artifact (for the release).
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch the source of the pinned ffmpeg build
+        # /mnt has room for the sources of every library; the root disk of a hosted runner does not.
+        run: |
+          sudo mkdir -p /mnt/work && sudo chown "$(id -u):$(id -g)" /mnt/work
+          TMPDIR=/mnt/work scripts/fetch-ffmpeg-source.sh /mnt/work/out
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ffmpeg-licences
+          path: |
+            /mnt/work/out/licences
+            /mnt/work/out/licences-missing.txt
+          if-no-files-found: error
+      - name: Check the licences in the installer match the build's
+        # Each licence file the build's libraries carry must be in installer/notices/ffmpeg as it is; a new pin brings
+        # new ones, committed from the ffmpeg-licences artifact (docs/RELEASING.md). Extra files there (terms written out
+        # by hand for a library listed in licences-missing.txt) are allowed.
+        run: |
+          status=0
+          # Until they are committed, the FFmpeg notice in deps.json names BtbN's LICENSE.txt alone; then it must name them.
+          if ! jq -e '.notices[] | select(.files | index("ffmpeg\\ffmpeg.exe")) | .licences | index("installer/notices/ffmpeg/*")' scripts/deps.json > /dev/null; then
+            echo "The FFmpeg notice in scripts/deps.json does not list installer/notices/ffmpeg/*."; status=1
+          fi
+          while IFS= read -r -d '' file; do
+            relative="${file#/mnt/work/out/licences/}"
+            if ! cmp -s "$file" "installer/notices/ffmpeg/$relative"; then echo "Not in installer/notices/ffmpeg as built: $relative"; status=1; fi
+          done < <(find /mnt/work/out/licences -type f -print0)
+          # A library whose terms are only in its source files' headers needs them written out by hand (doubt review,
+          # 2026-10-21): otherwise a new one would pass with no licence at all.
+          while IFS= read -r stage; do
+            [ -n "$stage" ] || continue
+            if ! compgen -G "installer/notices/ffmpeg/$stage-terms*.txt" > /dev/null; then echo "No terms written out for $stage (installer/notices/ffmpeg/$stage-terms.txt)"; status=1; fi
+          done < <(cat /mnt/work/out/licences-missing.txt 2> /dev/null)
+          exit $status
+      - if: ${{ inputs.keep-source }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ffmpeg-source
+          path: /mnt/work/out/ffmpeg-source-*.tar
+          if-no-files-found: error
+          compression-level: 0

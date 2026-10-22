@@ -13,7 +13,13 @@ public sealed record FileResult(string Input, string? Output, string? Error, boo
 
     /// <summary>What the operation noted about the output (<see cref="OutputNote"/>), or <c>null</c>.</summary>
     public string? Note { get; init; }
+
+    /// <summary>The input's and the output's size, when the operation reported them (<see cref="OutputNote.AddSizes"/>).</summary>
+    public SizeChange? Sizes { get; init; }
 }
+
+/// <summary>How large a file was and how large its output is, in bytes.</summary>
+public readonly record struct SizeChange(long OriginalBytes, long OutputBytes);
 
 /// <summary>A file of a joining batch that never reached it (<see cref="BatchLeader.Missing"/>).</summary>
 /// <param name="StillRunning">Its process was still running when the batch closed: too slow to start, rather than ended.</param>
@@ -211,9 +217,18 @@ public sealed class Runner(RunLog log)
     }
 
     // How long a cancelled operation may take to stop and delete its temporary output before it is abandoned: a
-    // well-behaved one stops at its next token check, well within this. Without the wait, flevert could end right after
-    // the cancel and leave the .partial file or folder behind.
+    // well-behaved operation stops at its next token check, well within this.
     private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(2);
+
+    private static async Task WaitForStopAsync(Task<string>? running)
+    {
+        if (running is null)
+            return;
+        await Task.WhenAny(running, Task.Delay(StopGrace, CancellationToken.None)).ConfigureAwait(false);
+        // Also observe a failure that arrives after the grace expires and the operation has been abandoned.
+        _ = running.ContinueWith(static task => { _ = task.Exception; }, CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
 
     // Held until the operation has finished, also when it was abandoned: no input can be renamed, replaced or deleted (on
     // Windows) while it is used, and it may still read through them (PinnedInput, on Linux).
@@ -256,22 +271,20 @@ public sealed class Runner(RunLog log)
         try
         {
             running = operation.RunAsync([.. inputs.Select(i => i.Real)], within, ct);
-            result = new FileResult(first, await running.WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text };
+            result = new FileResult(first, await running.WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text, Sizes = notes.Sizes };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            if (running is not null)
-                await Task.WhenAny(running, Task.Delay(StopGrace, CancellationToken.None)).ConfigureAwait(false);
+            await WaitForStopAsync(running).ConfigureAwait(false);
             if (running is not { IsCompletedSuccessfully: true })
             {
-                _ = running?.Exception; // observed: it stopped as asked, failed, or is abandoned
                 lock (gate)
                     finished = true;
                 return Cancelled(operation, first, timer);
             }
 
             // It had already written its output when it stopped: the file exists, so report and log it like any other.
-            result = new FileResult(first, running.Result, null) { Note = notes.Text };
+            result = new FileResult(first, running.Result, null) { Note = notes.Text, Sizes = notes.Sizes };
         }
         catch (OperationSkippedException ex)
         {
@@ -433,8 +446,8 @@ public sealed class Runner(RunLog log)
         var timer = Stopwatch.StartNew();
         var notes = OutputNote.Begin(); // this file's own, also when files run in parallel
         SafeFileHandle? pin = null;
-        Task<string>? running = null;
         FileResult result;
+        Task<string>? running = null;
         try
         {
             var realPath = file;
@@ -443,31 +456,22 @@ public sealed class Runner(RunLog log)
                 PinnedInput.Use([(realPath, pin!)]);
             if (reason is null)
                 AfterPin?.Invoke(realPath);
-            if (reason is not null)
-            {
-                result = new FileResult(file, null, reason);
-            }
-            else
-            {
-                // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned,
-                // once it has had StopGrace to stop and remove what it wrote.
-                running = operation.RunAsync(realPath, within, ct);
-                result = new FileResult(file, await running.WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text };
-            }
+            // Keep the task so cancellation can wait for its child processes and temporary output to be cleaned up.
+            result = reason is not null
+                ? new FileResult(file, null, reason)
+                : new FileResult(file, await (running = operation.RunAsync(realPath, within, ct)).WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text, Sizes = notes.Sizes };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            if (running is not null)
-                await Task.WhenAny(running, Task.Delay(StopGrace, CancellationToken.None)).ConfigureAwait(false);
+            await WaitForStopAsync(running).ConfigureAwait(false);
             if (running is not { IsCompletedSuccessfully: true })
             {
-                _ = running?.Exception; // observed: it stopped as asked, failed, or is abandoned
                 log.Write(operation.Id, new FileResult(file, null, "cancelled"), timer.Elapsed);
                 return null;
             }
 
-            // It had already written its output when it stopped: the file exists, so report and log it like any other.
-            result = new FileResult(file, running.Result, null) { Note = notes.Text };
+            // An atomic commit may have won the race with cancellation: report the output that now exists.
+            result = new FileResult(file, running.Result, null) { Note = notes.Text, Sizes = notes.Sizes };
         }
         catch (OperationSkippedException ex)
         {

@@ -11,3 +11,6 @@
 *.gif binary
 # A PDF's cross-reference table holds byte offsets: converting line endings would break it.
 *.pdf binary
+# The licences of the bundled ffmpeg's libraries, kept byte for byte as the build carries them (some upstream files end
+# their lines in CRLF): the ffmpeg source workflow compares them with cmp.
+installer/notices/ffmpeg/** -text

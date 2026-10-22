@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Flevert.Core;
 
 /// <param name="HasFailures">Shown as a warning.</param>
@@ -70,14 +72,20 @@ public sealed record BatchSummary(string Text, bool HasFailures, bool ShowsLog)
         // A note about an output (OutputNote) is read with it: in full for one output, counted for several (each is in the
         // log line of its file).
         var noted = results.Count(r => r.Succeeded && r.Note is not null);
-        var text = $"Done: {CountOfFiles(succeeded)}" + (noted > 0 ? $", {noted} with a note" : "") + (skipped > 0 ? $", {skipped} skipped" : "");
+        // The sizes, added up, when every output has them (Compress): a total of some would mislead.
+        var outputs = results.Where(r => r.Succeeded).ToList();
+        var sizes = outputs.All(r => r.Sizes is not null)
+            ? $", {SizeText(outputs.Sum(r => r.Sizes!.Value.OriginalBytes))} → {SizeText(outputs.Sum(r => r.Sizes!.Value.OutputBytes))}"
+            : "";
+        var text = $"Done: {CountOfFiles(succeeded)}" + sizes + (noted > 0 ? $", {noted} with a note" : "") + (skipped > 0 ? $", {skipped} skipped" : "");
         if (failed > 0)
             // The balloon may be gone before the user reads it, so name the place rather than relying on a click.
             return new($"{text}, {failed} failed. Details: {logDirectory}", true, true);
 
         if (results.Count == 1)
         {
-            var done = $"Done: {Path.GetFileName(results[0].Output)}";
+            var done = $"Done: {Path.GetFileName(results[0].Output)}" +
+                (results[0].Sizes is { } size ? $" ({SizeText(size.OutputBytes)}, was {SizeText(size.OriginalBytes)})" : "");
             return new(results[0].Note is { } note ? $"{done}. {Reason(note)}" : done, false, false);
         }
 
@@ -85,4 +93,18 @@ public sealed record BatchSummary(string Text, bool HasFailures, bool ShowsLog)
     }
 
     private static string CountOfFiles(int n) => n == 1 ? "1 file" : $"{n} files";
+
+    /// <summary>
+    /// A size as people read it, 1 MB being 1 000 000 bytes as everywhere in Flevert: "850 KB", "24.3 MB", "412 MB",
+    /// "1.2 GB" (one decimal below 100, none above). Always rounded down, so a file of 24 960 000 bytes made to be under
+    /// 25 MB never reads "25 MB" (doubt-driven review, DD-8).
+    /// </summary>
+    public static string SizeText(long bytes) => bytes switch
+    {
+        < 1_000 => "<1 KB",
+        < 1_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1_000} KB"),
+        < 100_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 100_000 / 10.0:0.#} MB"),
+        < 1_000_000_000 => string.Create(CultureInfo.InvariantCulture, $"{bytes / 1_000_000} MB"),
+        _ => string.Create(CultureInfo.InvariantCulture, $"{bytes / 100_000_000 / 10.0:0.#} GB"),
+    };
 }

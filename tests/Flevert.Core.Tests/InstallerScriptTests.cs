@@ -142,7 +142,12 @@ public sealed class InstallerScriptTests
         File.Copy(Environment.ProcessPath!, Path.Combine(source, "flevert.exe"));
         // [Files] names each of these, and ISCC fails when one is missing.
         foreach (var file in ConversionOnlyFiles())
-            File.WriteAllText(Path.Combine(source, file), "stand-in");
+        {
+            // ffmpeg's files are in a folder of their own (ffmpeg\ffmpeg.exe).
+            var path = Path.Combine(source, file);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, "stand-in");
+        }
 
         var without = Compile(iscc!, source, dir.Combine("out"));
         File.WriteAllText(Path.Combine(source, "THIRD-PARTY-NOTICES.txt"), "notices");
@@ -245,7 +250,9 @@ public sealed class InstallerScriptTests
         var folder = Directory.CreateDirectory(dir.Combine("unpacked")).FullName;
         foreach (var file in Directory.EnumerateFiles(build, "*", SearchOption.AllDirectories))
         {
-            var name = Path.GetFileName(file);
+            // A file of the ffmpeg folder is named by its path there, as its [Files] entry and scripts\deps.json name it.
+            var relative = Path.GetRelativePath(build, file);
+            var name = relative.StartsWith(@"ffmpeg\", StringComparison.OrdinalIgnoreCase) ? relative : Path.GetFileName(file);
             if (!InstalledByOneEntry(name) || !UnpackedForTheCheck(name))
                 continue;
             var target = Path.Combine(folder, Path.GetRelativePath(build, file));
@@ -254,6 +261,7 @@ public sealed class InstallerScriptTests
         }
 
         Assert.True(File.Exists(Path.Combine(build, "qpdf.exe")) && !File.Exists(Path.Combine(folder, "qpdf.exe")), "the copy should lack qpdf.exe");
+        Assert.True(File.Exists(Path.Combine(build, @"ffmpeg\ffmpeg.exe")) && !Directory.Exists(Path.Combine(folder, "ffmpeg")), "the copy should lack ffmpeg");
         var start = new ProcessStartInfo(Path.Combine(folder, "flevert.exe")) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
         start.ArgumentList.Add("check-location");
         start.ArgumentList.Add(dir.Combine("missing"));
@@ -311,7 +319,7 @@ public sealed class InstallerScriptTests
     private static List<FilesEntry> EntriesInstalling(string fileName) =>
         [.. FilesEntries().Where(e => Wildcard(e.Source, fileName) && !e.Excludes.Any(x => Wildcard(x, fileName)))];
 
-    // Into the install folder, by one entry only: {app}, or the function that returns it.
+    // Into the install folder, or a folder in it, by one entry only: {app}, or the function that returns it.
     private static bool InstalledByOneEntry(string fileName)
     {
         var entries = EntriesInstalling(fileName);
@@ -320,7 +328,7 @@ public sealed class InstallerScriptTests
         var destination = entries[0].DestDir;
         if (destination == "{app}")
             return true;
-        var function = Regex.Match(destination, @"^\{code:(\w+)\}$");
+        var function = Regex.Match(destination, @"^\{code:(\w+)\}(\\[\w.-]+)*$");
         return function.Success && Regex.IsMatch(Script,
             $@"(?ms)^function {function.Groups[1].Value}\(Param: String\): String;\s*begin\s*Result := ExpandConstant\('\{{app\}}'\);\s*end;");
     }
