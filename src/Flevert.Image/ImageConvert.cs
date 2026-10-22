@@ -11,11 +11,11 @@ public sealed class ImageConvert(string extension, MagickFormat format, uint? qu
 
     public string MenuPath => "Convert to/" + (extension == ".webp" ? "WebP" : extension.TrimStart('.').ToUpperInvariant());
 
-    // Not to its own format, and not a HEIC or HEIF photo to GIF: 256 colours ruin a photo, and that entry would be the
+    // Not to its own format, and not a HEIC, HEIF or BMP photo to GIF: 256 colours ruin a photo, and that entry would be the
     // 17th of their menu, past the 16 Explorer shows (docs/specs/image.md).
     public IReadOnlyCollection<string> Extensions { get; } =
         [.. ImageFile.ReadableExtensions.Where(e => ImageFile.FormatOf(e) != format
-            && !(format == MagickFormat.Gif && ImageFile.FormatOf(e) is MagickFormat.Heic or MagickFormat.Heif))];
+            && !(format == MagickFormat.Gif && ImageFile.FormatOf(e) is MagickFormat.Heic or MagickFormat.Heif or MagickFormat.Bmp))];
 
     private bool HasAlpha => format is not (MagickFormat.Jpeg or MagickFormat.Bmp);
 

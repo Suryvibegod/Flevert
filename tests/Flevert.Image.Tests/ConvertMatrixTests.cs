@@ -14,7 +14,7 @@ public sealed class ConvertMatrixTests : IDisposable
     public static TheoryData<string, string> Pairs()
     {
         var data = new TheoryData<string, string>();
-        foreach (var op in ImageOperations.All.Where(op => op.Id.StartsWith("image.to-", StringComparison.Ordinal)))
+        foreach (var op in ImageOperations.All.Where(op => op.Id.StartsWith("image.to-", StringComparison.Ordinal) && op.Id != "image.to-text"))
         {
             foreach (var source in op.Extensions)
                 data.Add(source, op.Id);
@@ -27,7 +27,7 @@ public sealed class ConvertMatrixTests : IDisposable
     public void Every_target_format_in_the_spec_is_offered()
     {
         Assert.Equal(
-            ["image.to-avif", "image.to-bmp", "image.to-gif", "image.to-jpg", "image.to-png", "image.to-tiff", "image.to-webp"],
+            ["image.to-avif", "image.to-gif", "image.to-jpg", "image.to-png", "image.to-text", "image.to-tiff", "image.to-webp"],
             ImageOperations.All.Select(op => op.Id).Where(id => id.StartsWith("image.to-", StringComparison.Ordinal)).Order(StringComparer.Ordinal));
     }
 
@@ -45,10 +45,8 @@ public sealed class ConvertMatrixTests : IDisposable
         Assert.True(HasSignature(await File.ReadAllBytesAsync(output), target), $"{output} does not start like a {target} file");
     }
 
-    [Theory]
-    [InlineData("image.to-jpg")]
-    [InlineData("image.to-bmp")]
-    public async Task Transparent_areas_become_white_where_the_target_has_no_alpha(string operationId)
+    [Fact]
+    public async Task Transparent_areas_become_white_where_the_target_has_no_alpha()
     {
         var input = _dir.Combine("logo.png");
         using (var image = new MagickImage(MagickColors.Transparent, 20, 20))
@@ -57,7 +55,7 @@ public sealed class ConvertMatrixTests : IDisposable
             image.Write(input, MagickFormat.Png);
         }
 
-        var output = await Op(operationId).RunAsync(input, CancellationToken.None);
+        var output = await Op("image.to-jpg").RunAsync(input, CancellationToken.None);
 
         using var result = new MagickImage(output);
         var transparentSide = result.GetPixels().GetPixel(2, 10).ToColor()!;

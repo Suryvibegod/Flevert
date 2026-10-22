@@ -13,13 +13,14 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Flevert.Pdf" />
     <InternalsVisibleTo Include="Flevert.Image" />
+    <InternalsVisibleTo Include="Flevert.Image.Tests" />
     <InternalsVisibleTo Include="Flevert.Ocr.Tests" />
   </ItemGroup>
 
   <!-- tesseract.exe, the DLLs it needs, and tessdata go to a folder of their own next to every assembly that references
        this one (flevert.exe and the tests), so they never mix with Flevert's DLLs (docs/specs/ocr.md). -->
   <ItemGroup Condition="Exists('$(TesseractDir)tesseract.exe')">
-    <None Include="$(TesseractDir)**\*" Link="tesseract\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(TesseractDir)**\*" Link="tesseract\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" Visible="false" />
   </ItemGroup>
 
   <!-- Fail early and say how to fix it, rather than build something that fails at run time. -->

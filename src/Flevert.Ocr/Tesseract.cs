@@ -129,6 +129,7 @@ internal sealed class Tesseract
             throw new OcrException(OcrException.TooSlowMessage, e);
         }
 
+        ct.ThrowIfCancellationRequested();
         RequireMemory(run);
         CheckRunSuccess(run);
         return run.StandardOutput;
@@ -175,6 +176,7 @@ internal sealed class Tesseract
             throw new OcrException(OcrException.TooSlowMessage, e);
         }
 
+        ct.ThrowIfCancellationRequested();
         RequireMemory(run);
         CheckRunSuccess(run);
 
@@ -211,6 +213,7 @@ internal sealed class Tesseract
             throw new OcrException(OcrException.TooSlowMessage, e);
         }
 
+        ct.ThrowIfCancellationRequested();
         RequireMemory(run);
 
         // When page has too few characters or layout is ambiguous, OSD exits with code 1 or warning; return 0.

@@ -431,7 +431,7 @@ Mục tiêu: một người lần đầu chuột phải vào file thấy ngay vi
 ### Menu ảnh (≤ 16 mục; ví dụ `.jpg`)
 
 ```
-[icon] Convert to ▸      PNG · WebP · AVIF · GIF · BMP · TIFF (bỏ đích trùng nguồn)          (7)
+[icon] Convert to ▸      PNG · WebP · AVIF · GIF · TIFF · Text (bỏ đích trùng nguồn)         (7)
 [icon] Compress ▸        Light (best quality) · Balanced · Strong (smallest)
                          · Under 500 KB · Under 1 MB · Under 5 MB                             (7)
 ──────

@@ -169,8 +169,8 @@ public sealed class PdfMenuTests
     [Fact]
     public void A_jpg_converts_to_every_other_format_with_webp_spelled_as_people_write_it_and_heic_has_no_gif()
     {
-        Assert.Equal(["PNG", "WebP", "AVIF", "GIF", "BMP", "TIFF"], Labels(@"Flevert.Menu.jpg\Convert to\shell"));
-        Assert.Equal(["JPG", "PNG", "WebP", "AVIF", "BMP", "TIFF"], Labels(@"Flevert.Menu.heic\Convert to\shell"));
+        Assert.Equal(["PNG", "WebP", "AVIF", "GIF", "TIFF", "Text"], Labels(@"Flevert.Menu.jpg\Convert to\shell"));
+        Assert.Equal(["JPG", "PNG", "WebP", "AVIF", "TIFF", "Text"], Labels(@"Flevert.Menu.heic\Convert to\shell"));
         Assert.Equal(16, CountEntries(@"Flevert.Menu.jpg\shell"));
         Assert.Equal(16, CountEntries(@"Flevert.Menu.heic\shell"));
     }

@@ -3,13 +3,14 @@ using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 
-namespace Flevert.Pdf;
+namespace Flevert.Core;
 
 /// <summary>
-/// A folder only this user, SYSTEM and administrators can change, for files qpdf writes by a name anyone could predict:
-/// qpdf writes through whatever is at that name, so a link another account put there would have it write elsewhere.
+/// A folder only this user, SYSTEM and administrators can change, for files a tool writes or reads by a name anyone could
+/// predict: qpdf writes through whatever is at that name, so a link another account put there would have it write
+/// elsewhere, and tesseract would read a picture another account swapped in.
 /// </summary>
-internal static partial class PrivateFolder
+public static partial class PrivateFolder
 {
     private const int ErrorAlreadyExists = 183;
 
@@ -40,7 +41,7 @@ internal static partial class PrivateFolder
         {
             var attributes = new SecurityAttributes { Length = sizeof(SecurityAttributes), SecurityDescriptor = bytes };
             // The \\?\ form, so a folder deep inside a long path is created too.
-            if (CreateDirectoryW(Qpdf.ToExtendedPath(path), &attributes))
+            if (CreateDirectoryW(InputPin.ToExtendedPath(Path.GetFullPath(path)), &attributes))
                 return;
         }
 
