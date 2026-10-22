@@ -38,7 +38,7 @@ Options evaluated on 2026-10-21:
   ```
   Forces static library linkage, static MSVC C runtime (`/MT`), and release-only compilation to eliminate debug runtime overhead and external MSVC DLL dependencies.
 - **Permissive dependencies only**:
-  - The tesseract port requires libcurl (curl licence, MIT style) and libarchive (BSD-2-Clause), both without their default features, so no TLS library or extra compressors; they are linked in. libcurl lets `tesseract.exe` read an `http(s)://` input name and libarchive a zipped list of images, which is why Flevert only ever passes it image files it wrote itself (`Tesseract.cs`), never a name or list a stranger chose.
+  - The tesseract port requires libcurl and libarchive, which are linked in. The first build (2026-10-22, `vcpkg list` in the release's README.txt) has libcurl 8.23.0 on Schannel, libarchive 3.8.9 with bzip2, LZ4, liblzma, Zstandard, XAR and Windows CNG, and OpenSSL 3.6.5 installed with them: curl, BSD, 0BSD and Apache-2.0 licences, none copyleft. libcurl lets `tesseract.exe` read an `http(s)://` input name and libarchive a list of images, which is why Flevert only ever passes it image files it wrote itself (`Tesseract.cs`), never a name or list a stranger chose. A security fix in any of them means a new build and a new pin.
   - Leptonica statically links `giflib`, `libjpeg-turbo`, `libpng`, `libwebp`, `openjpeg`, `tiff`, and `zlib` (all under Apache-2.0, BSD-3-Clause, BSD-2-Clause, MIT, or zlib licenses).
   - Leptonica feature `jbigkit` (GPL) is omitted.
   - No GNU `libiconv` or `libintl` (LGPL) are included; standard Windows and C++ UTF-8 runtime facilities are used.
@@ -60,6 +60,6 @@ Options evaluated on 2026-10-21:
 ## Consequences
 
 - Completely clean license profile: zero GPL/LGPL code shipped, satisfying Flevert's MIT distribution model.
-- Minimal deployment footprint: standalone static `tesseract.exe` (~10 MB) requires no side-by-side CRT DLLs or codec runtime files.
+- Minimal deployment footprint: standalone static `tesseract.exe` (6.8 MB; 3.3 MB zipped, with every port's licence) requires no side-by-side CRT DLLs or codec runtime files.
 - Cryptographically attested build provenance directly verifiable via GitHub CLI (`gh attestation verify`).
 - Fast and reliable OCR execution with official lightweight `tessdata_fast` models.

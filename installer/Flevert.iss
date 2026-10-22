@@ -79,12 +79,12 @@ UninstallAppRunningError=Flevert is still running: a conversion, or its question
 [Files]
 ; Before copying anything, setup runs flevert.exe check-location from its temporary folder (LocationProblem), and unpacks
 ; for it the entries whose DestDir is written {app}. What only a conversion loads, the PDF engines with qpdf's MSVC runtime
-; and OpenSSL configuration, ImageMagick's native library (about 40 MB) and the ffmpeg folder (about 190 MB), goes to
+; and OpenSSL configuration, ImageMagick's native library (about 40 MB), the ffmpeg folder (about 190 MB) and the tesseract folder (about 22 MB), goes to
 ; {code:InstallFolder} instead: the same folder, left out of that unpacking. A file in neither list is unpacked, so a
 ; new managed assembly flevert.exe needs at start cannot be forgotten. InstallerScriptTests keeps this in step with
 ; scripts\deps.json. The menu icons (assets\menu\*.ico, which the build copies into icons\) go with the first entry to
 ; {app}\icons, where install-menu points the menu; the uninstaller removes them with the folder.
-Source: "{#SourceDir}\*"; Excludes: "*.pdb,pdfium.dll,qpdf.exe,qpdf30.dll,msvcp140.dll,vcruntime140.dll,vcruntime140_1.dll,openssl.cnf,Magick.Native-*.dll,ffmpeg\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceDir}\*"; Excludes: "*.pdb,pdfium.dll,qpdf.exe,qpdf30.dll,msvcp140.dll,vcruntime140.dll,vcruntime140_1.dll,openssl.cnf,Magick.Native-*.dll,ffmpeg\*,tesseract\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#SourceDir}\pdfium.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
 Source: "{#SourceDir}\qpdf.exe"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
 Source: "{#SourceDir}\qpdf30.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
@@ -95,6 +95,8 @@ Source: "{#SourceDir}\openssl.cnf"; DestDir: "{code:InstallFolder}"; Flags: igno
 Source: "{#SourceDir}\Magick.Native-*.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
 ; ffmpeg.exe, ffprobe.exe and their DLLs, in a folder of their own (docs/specs/media.md, ADR-0009).
 Source: "{#SourceDir}\ffmpeg\*"; DestDir: "{code:InstallFolder}\ffmpeg"; Flags: ignoreversion
+; tesseract.exe and its trained data, tessdata\ with a subfolder, in a folder of their own (docs/specs/ocr.md, ADR-0010).
+Source: "{#SourceDir}\tesseract\*"; DestDir: "{code:InstallFolder}\tesseract"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [InstallDelete]
 ; The runtime names this copy of mscordaccore.dll after its own version, and each release moves to the newest .NET patch:
