@@ -231,6 +231,27 @@ public class PdfToImagesTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task Cancelling_from_the_batch_leaves_nothing_beside_the_input_once_the_batch_has_ended()
+    {
+        // As the progress window's Cancel does: through the runner, which used to stop waiting at once, so flevert could
+        // end before the operation had removed its hidden folder of pages (seen on Linux, 50 pages left behind).
+        using var dir = new TempDir();
+        using var logs = new TempDir();
+        var input = dir.Combine("many.pdf");
+        TestPdf.WriteBlank(input, 200);
+        using var cts = new CancellationTokenSource();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Png(), [input], new SyncBatchProgress(report =>
+        {
+            if (report.Within?.Position >= 5)
+                cts.Cancel();
+        }), cts.Token);
+
+        Assert.Empty(outcome.Results);
+        Assert.Equal(["many.pdf"], Names(dir.Path));
+    }
+
+    [Fact]
     public async Task A_password_protected_pdf_fails_with_the_message_naming_the_fix_and_leaves_nothing()
     {
         using var dir = new TempDir();
@@ -447,5 +468,10 @@ public class PdfToImagesTests(ITestOutputHelper output)
                 _reports.Add(value);
             onReport?.Invoke(value);
         }
+    }
+
+    private sealed class SyncBatchProgress(Action<BatchProgress> report) : IProgress<BatchProgress>
+    {
+        public void Report(BatchProgress value) => report(value);
     }
 }

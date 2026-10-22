@@ -429,7 +429,38 @@ public sealed class RunnerTests : IDisposable
 
         await new Runner(new RunLog(_logs.Path)).RunAsync(new StubbornOp(), [file], progress: null, cts.Token);
 
-        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(2), $"took {timer.Elapsed}");
+        // The two seconds it gets to stop, then it is abandoned.
+        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(4), $"took {timer.Elapsed}");
+    }
+
+    [Fact]
+    public async Task A_cancelled_operation_gets_time_to_remove_what_it_wrote_before_the_batch_ends()
+    {
+        // flevert may end right after the batch: a .partial left by an operation still stopping would stay (seen with a
+        // PDF to images cancelled from the progress window on Linux).
+        var file = _dir.File("a.txt");
+        var op = new SlowToStopOp();
+        using var cts = new CancellationTokenSource();
+        var progress = new SyncProgress<BatchProgress>(_ => { if (op.Wrote is not null) cts.Cancel(); });
+
+        var outcome = await new Runner(new RunLog(_logs.Path)).RunAsync(op, [file], progress, cts.Token);
+
+        Assert.Empty(outcome.Results);
+        Assert.NotNull(op.Wrote);
+        Assert.False(File.Exists(op.Wrote));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task An_abandoned_operation_still_reads_the_file_it_was_given_through_its_pin()
+    {
+        var file = _dir.File("a.txt", "the input");
+        var op = new LateReaderOp();
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await new Runner(new RunLog(_logs.Path)).RunAsync(op, [file], progress: null, cts.Token);
+
+        Assert.Equal("the input", await op.Read.Task.WaitAsync(TimeSpan.FromSeconds(10)));
     }
 
     [WindowsFact]
@@ -538,6 +569,59 @@ public sealed class RunnerTests : IDisposable
         {
             Received = inputPath;
             return Task.FromResult(inputPath);
+        }
+    }
+
+    // Writes a temporary file, then takes half a second to remove it once cancelled.
+    private sealed class SlowToStopOp : IOperation
+    {
+        public string Id => "test.slow-to-stop";
+        public string MenuPath => "Test/Slow to stop";
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+        public string? Wrote { get; private set; }
+
+        public async Task<string> RunAsync(string inputPath, CancellationToken ct) => await RunAsync(inputPath, null, ct);
+
+        public async Task<string> RunAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
+        {
+            var temp = inputPath + ".partial";
+            await File.WriteAllTextAsync(temp, "half", CancellationToken.None);
+            Wrote = temp;
+            progress?.Report(new FileProgress("step", 1, 2));
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(30), ct);
+                return inputPath;
+            }
+            finally
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(500), CancellationToken.None);
+                File.Delete(temp);
+            }
+        }
+    }
+
+    // Ignores the token, and reads its input through its pin long after the runner gave up on it.
+    private sealed class LateReaderOp : IOperation
+    {
+        public string Id => "test.late-reader";
+        public string MenuPath => "Test/Late reader";
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+        public TaskCompletionSource<string> Read { get; } = new();
+
+        public async Task<string> RunAsync(string inputPath, CancellationToken ct)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3), CancellationToken.None);
+            try
+            {
+                Read.SetResult(await File.ReadAllTextAsync(PinnedInput.ReadPath(inputPath), CancellationToken.None));
+            }
+            catch (IOException e)
+            {
+                Read.SetResult(e.Message);
+            }
+
+            return inputPath;
         }
     }
 

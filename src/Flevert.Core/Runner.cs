@@ -141,12 +141,12 @@ public sealed class Runner(RunLog log)
             // Two spellings of one file (a short 8.3 name and the long one) pin the same real path: join it once.
             var ordered = inputs.Select(i => (i.Given, i.Real)).DistinctBy(i => i.Real, StringComparer.Ordinal)
                 .OrderBy(i => i.Real, NaturalOrder.PathComparer).ToList();
-            return await JoinAsync(operation, ordered, progress, timer, ct).ConfigureAwait(false);
+            var held = pins.ToList();
+            pins.Clear(); // JoinAsync releases them
+            return await JoinAsync(operation, ordered, held, progress, timer, ct).ConfigureAwait(false);
         }
         finally
         {
-            // Held until the operation has finished (or been abandoned): no input can be renamed, replaced or deleted while
-            // it is being joined.
             foreach (var pin in pins)
                 pin.Dispose();
         }
@@ -210,13 +210,32 @@ public sealed class Runner(RunLog log)
         return new BatchOutcome([new FileResult(first, null, message(Path.GetFileName(first), files.Count - 1))], 1) { OneOutput = true };
     }
 
-    // How long a cancelled join may take to stop and delete its temporary output before it is abandoned (and its inputs
-    // unpinned): a well-behaved operation stops at its next token check, well within this.
-    private static readonly TimeSpan JoinStopGrace = TimeSpan.FromSeconds(2);
+    // How long a cancelled operation may take to stop and delete its temporary output before it is abandoned: a
+    // well-behaved one stops at its next token check, well within this. Without the wait, flevert could end right after
+    // the cancel and leave the .partial file or folder behind.
+    private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(2);
+
+    // Held until the operation has finished, also when it was abandoned: no input can be renamed, replaced or deleted (on
+    // Windows) while it is used, and it may still read through them (PinnedInput, on Linux).
+    private static void Release(List<SafeFileHandle> pins, Task? running)
+    {
+        if (running is null || running.IsCompleted)
+        {
+            foreach (var pin in pins)
+                pin.Dispose();
+            return;
+        }
+
+        _ = running.ContinueWith(_ =>
+        {
+            foreach (var pin in pins)
+                pin.Dispose();
+        }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+    }
 
     private async Task<BatchOutcome> JoinAsync(
-        IBatchOperation operation, List<(string Given, string Real)> inputs, IProgress<BatchProgress>? progress, Stopwatch timer,
-        CancellationToken ct)
+        IBatchOperation operation, List<(string Given, string Real)> inputs, List<SafeFileHandle> pins, IProgress<BatchProgress>? progress,
+        Stopwatch timer, CancellationToken ct)
     {
         var notes = OutputNote.Begin();
         var first = inputs[0].Given;
@@ -242,7 +261,7 @@ public sealed class Runner(RunLog log)
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             if (running is not null)
-                await Task.WhenAny(running, Task.Delay(JoinStopGrace, CancellationToken.None)).ConfigureAwait(false);
+                await Task.WhenAny(running, Task.Delay(StopGrace, CancellationToken.None)).ConfigureAwait(false);
             if (running is not { IsCompletedSuccessfully: true })
             {
                 _ = running?.Exception; // observed: it stopped as asked, failed, or is abandoned
@@ -410,6 +429,7 @@ public sealed class Runner(RunLog log)
         var timer = Stopwatch.StartNew();
         var notes = OutputNote.Begin(); // this file's own, also when files run in parallel
         SafeFileHandle? pin = null;
+        Task<string>? running = null;
         FileResult result;
         try
         {
@@ -419,15 +439,31 @@ public sealed class Runner(RunLog log)
                 PinnedInput.Use([(realPath, pin!)]);
             if (reason is null)
                 AfterPin?.Invoke(realPath);
-            // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned.
-            result = reason is not null
-                ? new FileResult(file, null, reason)
-                : new FileResult(file, await operation.RunAsync(realPath, within, ct).WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text };
+            if (reason is not null)
+            {
+                result = new FileResult(file, null, reason);
+            }
+            else
+            {
+                // WaitAsync: an operation that ignores the token must not keep a cancelled batch alive; it is abandoned,
+                // once it has had StopGrace to stop and remove what it wrote.
+                running = operation.RunAsync(realPath, within, ct);
+                result = new FileResult(file, await running.WaitAsync(ct).ConfigureAwait(false), null) { Note = notes.Text };
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            log.Write(operation.Id, new FileResult(file, null, "cancelled"), timer.Elapsed);
-            return null;
+            if (running is not null)
+                await Task.WhenAny(running, Task.Delay(StopGrace, CancellationToken.None)).ConfigureAwait(false);
+            if (running is not { IsCompletedSuccessfully: true })
+            {
+                _ = running?.Exception; // observed: it stopped as asked, failed, or is abandoned
+                log.Write(operation.Id, new FileResult(file, null, "cancelled"), timer.Elapsed);
+                return null;
+            }
+
+            // It had already written its output when it stopped: the file exists, so report and log it like any other.
+            result = new FileResult(file, running.Result, null) { Note = notes.Text };
         }
         catch (OperationSkippedException ex)
         {
