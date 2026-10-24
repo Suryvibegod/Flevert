@@ -17,6 +17,7 @@
     <InternalsVisibleTo Include="Flevert.Image" />
     <InternalsVisibleTo Include="Flevert.Image.Tests" />
     <InternalsVisibleTo Include="Flevert.Ocr.Tests" />
+    <InternalsVisibleTo Include="Flevert.Pdf.Tests" />
   </ItemGroup>
 
   <!-- tesseract.exe and tessdata go to a folder of their own next to every assembly that references this one (flevert.exe

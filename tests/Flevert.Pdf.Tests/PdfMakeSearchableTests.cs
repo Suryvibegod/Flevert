@@ -99,8 +99,8 @@ public sealed class PdfMakeSearchableTests : IDisposable
     {
         // Nothing turns this page upright: OSD finds the words turned, and the page's /Rotate is turned to show them
         // upright (ocr.md, review R5: as OCRmyPDF --rotate-pages does, nothing re-encoded), with the text over them, so
-        // that a viewer reads each line in order. OSD is only sure of a page of text: two lines score about 3, under the
-        // threshold of 14, and are read as they are.
+        // that a viewer reads each line in order. OSD is sure (>= 14) of a page of text; a short page it is unsure of is
+        // read both ways (PdfMakeSearchableOrientationTests).
         var page = string.Join('\n', Enumerable.Repeat(FullPage, 6));
         var input = _dir.Combine("scan.pdf");
         await TestOcr.WriteScan(input, degrees, page);

@@ -84,15 +84,19 @@ public sealed class PdfMakeSearchable : IOperation
             await Parallel.ForEachAsync(ocrPages, parallelOptions, async (page, token) =>
             {
                 var imagePath = Path.Combine(scratch, string.Create(CultureInfo.InvariantCulture, $"page-{page}.png"));
-                var layerBase = Path.Combine(scratch, string.Create(CultureInfo.InvariantCulture, $"layer-{page}"));
                 // A page shown turned (scanned sideways or upside down) is read upright, and turned below to show upright
-                // too, so its text layer is upright as tesseract writes it.
-                var turned = await ImageToText.TurnUprightAsync(_tesseract, imagePath, token).ConfigureAwait(false);
-                var text = await _tesseract.WriteTextLayerAsync(imagePath, layerBase, token).ConfigureAwait(false);
+                // too, so its text layer is upright as tesseract writes it. Turned is how far its picture was turned for
+                // the layer kept: 0 when the page read better as it is.
+                var (turned, (layer, text)) = await ImageToText.ReadUprightAsync(
+                    _tesseract,
+                    imagePath,
+                    async (picture, t) => (await ReadLayerAsync(picture, t).ConfigureAwait(false)).Layer,
+                    ReadLayerAsync,
+                    token).ConfigureAwait(false);
 
                 lock (layers)
                 {
-                    layers[page] = layerBase + ".pdf";
+                    layers[page] = layer;
                     turns[page] = turned;
                 }
 
@@ -153,5 +157,14 @@ public sealed class PdfMakeSearchable : IOperation
                 // A folder left in %TEMP% must not hide the result or the real error.
             }
         }
+    }
+
+    // The text layer of a page's picture, beside it (page-3-layer.pdf, or page-3-turned-layer.pdf for its turned copy),
+    // with its text and how sure tesseract was of it.
+    private async Task<((string Pdf, string Text) Layer, ReadingQuality Quality)> ReadLayerAsync(string picture, CancellationToken ct)
+    {
+        var layerBase = Path.ChangeExtension(picture, null) + "-layer";
+        var reading = await _tesseract.ReadIntoTextLayerAsync(picture, layerBase, ct).ConfigureAwait(false);
+        return ((layerBase + ".pdf", reading.Text), reading.Quality);
     }
 }
