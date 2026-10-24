@@ -30,4 +30,4 @@ Flevert converts files on your computer and does not send them anywhere. It has 
 
 The only network use is the check for a new version: after a conversion, at most once a day, Flevert asks GitHub for the number of the latest release (`api.github.com`), which lets GitHub see your IP address, your Flevert version and the time. Nothing about your files is sent, and nothing is downloaded or installed by itself. You can turn the check off in setup or with `flevert.exe update-check off` ([ADR-0006](adr/0006-update-check-against-github-releases.md)). GitHub's handling of that request is covered by the [GitHub Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement).
 
-The bundled components (pdfium, qpdf, ImageMagick, FFmpeg) run only on files you choose and are not allowed to reach the network.
+The bundled components (pdfium, qpdf, ImageMagick, FFmpeg, Tesseract) run only on files you choose. Flevert never gives them a web address: it passes only local files it chose or wrote itself, so they have nothing to fetch.
