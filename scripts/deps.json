@@ -167,7 +167,7 @@
     {
       "title": "Tesseract 5.5.3, built statically by Flevert's build-tesseract workflow with vcpkg 2026.10.16 (release deps-tesseract-5.5.3)",
       "files": ["tesseract\\tesseract.exe"],
-      "note": "Tesseract runs as a separate program. tesseract.exe holds, linked in, the Microsoft C runtime and these libraries, whose licences follow, each named after its vcpkg port: Leptonica, libpng, libspng, libjpeg-turbo, libwebp, OpenJPEG, libtiff, giflib, zlib, libcurl, libarchive, bzip2, liblzma, LZ4, Zstandard and OpenSSL.",
+      "note": "Tesseract runs as a separate program. tesseract.exe holds, linked in, the Microsoft C runtime and these libraries, whose licences follow, each named after its vcpkg port: Leptonica, libpng, libspng, libjpeg-turbo, libwebp, OpenJPEG, libtiff, giflib, zlib, libcurl, libarchive, bzip2, liblzma, LZ4 and Zstandard. Zstandard is offered under the BSD licence or GPLv2: it is used here under the BSD licence. liblzma is under the BSD Zero Clause licence (0BSD); the GPL and LGPL texts in its licence file are for XZ Utils tools and scripts that are not in tesseract.exe. The OpenSSL licence follows too because vcpkg installed OpenSSL beside libcurl, but tesseract.exe contains no OpenSSL code (libcurl uses Windows Schannel).",
       "licences": ["deps/tesseract/licenses/*"]
     },
     {
