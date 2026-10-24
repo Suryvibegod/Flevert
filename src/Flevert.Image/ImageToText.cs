@@ -11,8 +11,8 @@ namespace Flevert.Image;
 /// </summary>
 /// <remarks>
 /// Decodes the picture with the existing safe Magick path (auto-orient by EXIF, first frame of GIF/multi-page TIFF).
-/// Preprocessed to an 8-bit grayscale PNG in a private temp folder, upscaled 2x if its shorter side is under 1000 px,
-/// and with resolution density set so Tesseract does not warn. When confident, DetectRotationAsync rotates the image upright,
+/// Preprocessed to an 8-bit grayscale PNG in a private temp folder, scaled to what tesseract reads well (<see cref="OcrSize"/>:
+/// small text doubled, very large pictures shrunk), and with resolution density set so Tesseract does not warn. When confident, DetectRotationAsync rotates the image upright,
 /// before ReadTextAsync recognises the text.
 /// If no text is recognised, the operation is skipped with "No text was found in this picture."
 /// </remarks>
@@ -66,16 +66,16 @@ public sealed class ImageToText : IOperation
                 ImageMetadata.AutoOrient(image);
                 ImageMetadata.FlattenOntoWhite(image);
 
-                if (Math.Min(image.Width, image.Height) < 1000)
-                    image.Resize(new Percentage(200));
+                var (width, height) = OcrSize(image.Width, image.Height);
+                if ((width, height) != (image.Width, image.Height))
+                    image.Resize(new MagickGeometry(width, height) { IgnoreAspectRatio = true });
 
                 image.ColorSpace = ColorSpace.Gray;
                 image.ColorType = ColorType.Grayscale;
                 image.Depth = 8;
                 image.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
 
-                image.Format = MagickFormat.Png;
-                image.Write(tempPng);
+                ImageFile.Write(image, tempPng, MagickFormat.Png);
             }, ct).ConfigureAwait(false);
 
             ct.ThrowIfCancellationRequested();
@@ -115,24 +115,75 @@ public sealed class ImageToText : IOperation
     /// Turns <paramref name="pngPath"/>, a grey PNG Flevert wrote at 300 DPI, upright in place when OSD is confident it
     /// is turned, and returns how many degrees clockwise it turned it (0, 90, 180 or 270).
     /// </summary>
+    /// <remarks>
+    /// OSD that fails (crashes, runs out of memory or time) leaves the page as it is: the orientation is a refinement,
+    /// and reading the text may still succeed. The PNG is read back as PNG only, under the module's policy and limits:
+    /// on the PDF paths the pdf worker wrote it, and nothing else in flevert.exe may have set ImageMagick up yet.
+    /// </remarks>
     internal static async Task<int> TurnUprightAsync(Tesseract tesseract, string pngPath, CancellationToken ct)
     {
-        var rotation = await tesseract.DetectRotationAsync(pngPath, ct).ConfigureAwait(false);
+        int rotation;
+        try
+        {
+            rotation = await tesseract.DetectRotationAsync(pngPath, ct).ConfigureAwait(false);
+        }
+        catch (OcrException)
+        {
+            ct.ThrowIfCancellationRequested();
+            rotation = 0;
+        }
+
         if (rotation != 0)
         {
             await ImageFile.RunAsync(() =>
             {
-                using var rotated = new MagickImage(pngPath);
-                ImageFile.StopOnCancel([rotated], ct);
-                rotated.Rotate(rotation);
-                rotated.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
-                rotated.Format = MagickFormat.Png;
-                rotated.Write(pngPath);
+                MagickSetup.EnsureInitialized();
+                byte[] png;
+                // Opened here and handed over as a stream with the format pinned: ImageMagick neither guesses the
+                // format from the content nor reads patterns in the path.
+                using (var stream = new FileStream(pngPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var rotated = new MagickImage(stream, new MagickReadSettings { Format = MagickFormat.Png }))
+                {
+                    ImageFile.StopOnCancel([rotated], ct);
+                    rotated.Rotate(rotation);
+                    rotated.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
+                    png = rotated.ToByteArray(MagickFormat.Png);
+                }
+
+                File.WriteAllBytes(pngPath, png);
             }, ct).ConfigureAwait(false);
         }
 
         ct.ThrowIfCancellationRequested();
         return rotation;
+    }
+
+    /// <summary>
+    /// The most pixels handed to tesseract: about a 6000 x 4200 px page. Tesseract's memory and time grow with the area,
+    /// and three A4 pages at 300 DPI read well within its 1 GB cap and 150 s.
+    /// </summary>
+    internal const ulong MaxOcrPixels = 25_000_000;
+
+    /// <summary>The longest side handed to tesseract, below the 32767 px it accepts and ImageMagick's 40000 px.</summary>
+    internal const uint MaxOcrSide = 30_000;
+
+    /// <summary>
+    /// The size a picture is read at: doubled when its shorter side is under 1000 px (screenshot text is too small for
+    /// tesseract), but only as far as <see cref="MaxOcrPixels"/> and <see cref="MaxOcrSide"/> allow, and shrunk to them
+    /// when it is larger (50-200 MP photos). The area, not the long side, is capped, so a long screenshot keeps its width
+    /// and stays readable.
+    /// </summary>
+    internal static (uint Width, uint Height) OcrSize(uint width, uint height)
+    {
+        var scale = Math.Min(width, height) < 1000 ? 2.0 : 1.0;
+        scale = Math.Min(scale, Math.Sqrt(MaxOcrPixels / ((double)width * height)));
+        scale = Math.Min(scale, (double)MaxOcrSide / Math.Max(width, height));
+        if (scale == 1.0)
+            return (width, height);
+
+        // The tiny allowance keeps a side that the side cap sets exactly (30000) from flooring to 29999.
+        return (Scaled(width), Scaled(height));
+        uint Scaled(uint side) => Math.Max(1u, (uint)Math.Floor(side * scale + 1e-6));
     }
 
     internal static string CleanText(string text)
