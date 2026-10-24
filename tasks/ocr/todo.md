@@ -26,7 +26,7 @@ Phiên trước giao việc cho worker của `ceo-worker-agent` trong 5 worktree
 - [x] T7 Icon riêng cho Make searchable: `scan_text` (Fluent Filled, ghim SHA256 trong `make-menu-icons.py`), lý do chọn ở ocr.md "Icon".
 - [x] T7b Make searchable bỏ qua (skipped "No text was found in the scanned pages of this PDF.") khi tesseract không thấy chữ trên trang scan nào, như Convert to > Text của ảnh; không ghi file. `WriteTextLayerAsync` trả về chữ của lớp (`-c tessedit_create_txt=1`, cùng lượt đọc). Bảng PDF độc: `pdf.make-searchable` giờ là Skipped với các file độc trang trắng (trước là Ok).
 - [x] Trước release: app thật, MenuProbe, installer (256 kiểm tra trên máy sạch), ba review, reconcile, hai reviewer gộp; phát hành 1.4.0 ngày 2026-10-25 (HANDOFF).
-- [x] Đã xóa worktree `D:githubFlevert-wt*` và nhánh `ceo/ocr-*` (người dùng đồng ý 2026-10-25).
+- [x] Đã xóa worktree `D:\github\Flevert-wt\*` và nhánh `ceo/ocr-*` (người dùng đồng ý 2026-10-25).
 
 ## Review trước release (2026-10-25): reconcile
 
