@@ -57,7 +57,10 @@ public sealed class TesseractTests(ITestOutputHelper output) : IDisposable
     [WindowsFact]
     public async Task Detects_rotation_on_upright_and_rotated_images()
     {
-        const string paragraph = """
+        // DetectRotationAsync turns a page only when OSD is confident (>= 14): a short page (2 lines score about 3) or
+        // the same 30 lines in Arial (11-18, often under 14) would report 0 at any angle; in Times New Roman they score
+        // 23-28 at every angle.
+        const string page = """
             Cộng hòa xã hội chủ nghĩa Việt Nam
             Độc lập - Tự do - Hạnh phúc
             Hóa đơn bán hàng kiêm phiếu xuất kho
@@ -66,23 +69,50 @@ public sealed class TesseractTests(ITestOutputHelper output) : IDisposable
             Địa chỉ: Số 123 Đường Giải Phóng, Quận Hai Bà Trưng, Hà Nội
             Mã số thuế: 0101234567
             Số tài khoản: 1902837465 tại Ngân hàng Ngoại thương Việt Nam
-            Sản phẩm chuyển đổi tài liệu Flevert phiên bản nâng cấp v1.4.0
-            Hệ thống nhận dạng ký tự quang học Tesseract Engine chạy an toàn
-            Cộng hòa xã hội chủ nghĩa Việt Nam
-            Độc lập - Tự do - Hạnh phúc
+            Người mua hàng: Nguyễn Văn An, điện thoại 0912 345 678
+            Hình thức thanh toán: chuyển khoản trong vòng mười ngày
+            Tên hàng hóa và dịch vụ được liệt kê dưới đây
+            Một bộ máy tính xách tay cùng túi đựng và chuột không dây
+            Hai màn hình rộng hai mươi bảy inch có chân đứng điều chỉnh
+            Ba bàn phím cơ dành cho nhân viên phòng kế toán
+            Bốn chiếc ghế văn phòng có tựa lưng và tay vịn
+            Năm hộp giấy in khổ A4 định lượng tám mươi gam
+            Sáu ổ cứng gắn ngoài dùng để sao lưu dữ liệu hằng tuần
+            Bảy bộ phần mềm văn phòng có bản quyền trong một năm
+            Tám cuộn dây cáp mạng loại tốt cho phòng họp lớn
+            Chín đèn bàn tiết kiệm điện cho khu vực làm việc chung
+            Mười bình nước uống đặt tại hành lang tầng hai
+            Cộng tiền hàng chưa có thuế giá trị gia tăng
+            Thuế suất thuế giá trị gia tăng là mười phần trăm
+            Tổng cộng tiền thanh toán đã bao gồm thuế
+            Số tiền viết bằng chữ: Bốn mươi hai triệu đồng chẵn
+            Hàng đã giao đủ và đúng chất lượng như hợp đồng
+            Bên bán chịu trách nhiệm bảo hành trong mười hai tháng
+            Mọi thắc mắc xin liên hệ phòng chăm sóc khách hàng
+            Người bán hàng ký và ghi rõ họ tên
+            Thủ trưởng đơn vị ký, đóng dấu và ghi rõ họ tên
             """;
 
         var uprightImg = _dir.Combine("upright.png");
-        TestHelpers.CreateMultiLineImage(uprightImg, paragraph, "Arial", fontSize: 20);
+        TestHelpers.CreateMultiLineImage(uprightImg, page, "Times New Roman", fontSize: 12, width: 2480, height: 2480);
 
-        var uprightRotation = await Tesseract.NextToApp.DetectRotationAsync(uprightImg, CancellationToken.None);
-        Assert.Equal(0, uprightRotation);
+        Assert.Equal(0, await Tesseract.NextToApp.DetectRotationAsync(uprightImg, CancellationToken.None));
 
-        var rotatedImg = _dir.Combine("rotated90.png");
-        TestHelpers.CreateRotatedImage(uprightImg, rotatedImg, RotateFlipType.Rotate90FlipNone);
+        // The page turned clockwise by the pixels, and how far clockwise it must turn back to stand upright.
+        (RotateFlipType Turn, int Expected)[] cases =
+        [
+            (RotateFlipType.Rotate90FlipNone, 270),
+            (RotateFlipType.Rotate180FlipNone, 180),
+            (RotateFlipType.Rotate270FlipNone, 90),
+        ];
+        foreach (var (turn, expected) in cases)
+        {
+            var rotatedImg = _dir.Combine($"{turn}.png");
+            TestHelpers.CreateRotatedImage(uprightImg, rotatedImg, turn);
 
-        var rotatedRotation = await Tesseract.NextToApp.DetectRotationAsync(rotatedImg, CancellationToken.None);
-        Assert.NotEqual(0, rotatedRotation);
+            var rotation = await Tesseract.NextToApp.DetectRotationAsync(rotatedImg, CancellationToken.None);
+            Assert.True(expected == rotation, $"{turn}: expected {expected}, got {rotation}.");
+        }
     }
 
     [WindowsFact]
