@@ -150,6 +150,19 @@ public sealed class PdfMakeSearchableTests : IDisposable
         Assert.Equal(["text.pdf"], FileNames(_dir.Path));
     }
 
+    [WindowsFact]
+    public async Task A_scan_without_words_is_skipped_and_leaves_nothing()
+    {
+        // As Convert to > Text skips a picture without text: a PDF with nothing added would only look done.
+        var input = _dir.Combine("blank.pdf");
+        await TestOcr.WriteScan(input, "");
+
+        var ex = await Assert.ThrowsAsync<OperationSkippedException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal("No text was found in the scanned pages of this PDF.", ex.Message);
+        Assert.Equal(["blank.pdf"], FileNames(_dir.Path));
+    }
+
     private sealed class SyncProgress(Action<FileProgress> report) : IProgress<FileProgress>
     {
         public void Report(FileProgress value) => report(value);

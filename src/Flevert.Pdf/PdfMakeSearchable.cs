@@ -15,6 +15,7 @@ public sealed class PdfMakeSearchable : IOperation
 {
     public const double OcrDpi = 300;
     internal const string AlreadySearchableMessage = "This PDF already has text you can search.";
+    internal const string NoTextFoundMessage = "No text was found in the scanned pages of this PDF.";
 
     private readonly Qpdf _qpdf;
     private readonly PdfWorker _worker;
@@ -71,6 +72,7 @@ public sealed class PdfMakeSearchable : IOperation
                 throw new OperationSkippedException(AlreadySearchableMessage);
 
             var ocrDone = 0;
+            var foundText = 0;
             var parallelOptions = new ParallelOptions
             {
                 MaxDegreeOfParallelism = Tesseract.MaxParallel,
@@ -86,7 +88,7 @@ public sealed class PdfMakeSearchable : IOperation
                 // A page shown turned (scanned sideways or upside down) is read upright, and turned below to show upright
                 // too, so its text layer is upright as tesseract writes it.
                 var turned = await ImageToText.TurnUprightAsync(_tesseract, imagePath, token).ConfigureAwait(false);
-                await _tesseract.WriteTextLayerAsync(imagePath, layerBase, token).ConfigureAwait(false);
+                var text = await _tesseract.WriteTextLayerAsync(imagePath, layerBase, token).ConfigureAwait(false);
 
                 lock (layers)
                 {
@@ -94,9 +96,15 @@ public sealed class PdfMakeSearchable : IOperation
                     turns[page] = turned;
                 }
 
+                if (!string.IsNullOrWhiteSpace(text))
+                    Interlocked.Exchange(ref foundText, 1);
                 var completed = Interlocked.Increment(ref ocrDone);
                 progress?.Report(new FileProgress(PdfExtractText.ScannedPageUnit, completed, ocrPages.Count));
             }).ConfigureAwait(false);
+
+            // As Convert to > Text skips a picture without text: a copy with nothing to find would only look done.
+            if (foundText == 0)
+                throw new OperationSkippedException(NoTextFoundMessage);
 
             string layerPdf;
             if (ocrPages.Count == 1)

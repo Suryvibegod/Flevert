@@ -23,6 +23,7 @@ Phiên trước giao việc cho worker của `ceo-worker-agent` trong 5 worktree
   - ~~Trang lộn ngược 180° giữ nguyên hướng nhìn (spec), nên pdfium đọc từ trong mỗi dòng theo thứ tự ngược (tìm từ đơn được, tìm cụm thì không).~~ **Thay bằng R5** (2026-10-25): trang OSD chắc là nằm ngang/lộn ngược được dựng thẳng bằng `/Rotate`, lớp chữ không xoay nữa.
   - Mỗi trang scan thêm một lượt tesseract OSD (như Convert to > Text).
 - [x] T7 Icon riêng cho Make searchable: `scan_text` (Fluent Filled, ghim SHA256 trong `make-menu-icons.py`), lý do chọn ở ocr.md "Icon".
+- [x] T7b Make searchable bỏ qua (skipped "No text was found in the scanned pages of this PDF.") khi tesseract không thấy chữ trên trang scan nào, như Convert to > Text của ảnh; không ghi file. `WriteTextLayerAsync` trả về chữ của lớp (`-c tessedit_create_txt=1`, cùng lượt đọc). Bảng PDF độc: `pdf.make-searchable` giờ là Skipped với các file độc trang trắng (trước là Ok).
 - [ ] Trước release: app thật, MenuProbe, installer, ba review, reconcile; theo docs/RELEASING.md.
 - [ ] Sau khi gom xong: xóa worktree `D:\github\Flevert-wt\*` và nhánh `ceo/ocr-*` (≈ 15 GB).
 

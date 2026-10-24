@@ -52,7 +52,7 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 
 | op-id | Menu | Output |
 |---|---|---|
-| `pdf.make-searchable` | Shift: Flevert: more PDF tools > Make searchable (OCR) | `<tên> (searchable).pdf`. Mọi trang đã có chữ → skipped "This PDF already has text you can search." |
+| `pdf.make-searchable` | Shift: Flevert: more PDF tools > Make searchable (OCR) | `<tên> (searchable).pdf`. Mọi trang đã có chữ → skipped "This PDF already has text you can search."; tesseract không thấy chữ nào trên các trang scan → skipped "No text was found in the scanned pages of this PDF." (như Convert to > Text của ảnh), không ghi file. |
 | `pdf.to-text` (đã có) | Convert to > Text | Trang có chữ: như cũ; trang scan: chữ OCR. |
 | `image.to-text` | Convert to > Text (thay BMP) | `<tên>.txt` UTF-8. Không nhận ra chữ nào → skipped "No text was found in this picture." |
 
