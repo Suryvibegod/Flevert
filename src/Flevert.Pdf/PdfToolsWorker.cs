@@ -20,6 +20,9 @@ namespace Flevert.Pdf;
 /// <item>extract images: once every page is looked at, <c>images &lt;count&gt;</c>, then for each image
 /// <c>extract &lt;i&gt; &lt;width&gt; &lt;height&gt;</c> before it is written and <c>extracted &lt;i&gt; jpg|png</c>
 /// after.</item>
+/// <item>scanned pages (OCR): <c>checked &lt;n&gt;</c> once page n's text is read, for every page before the first
+/// <c>page</c> line, then <c>ocr &lt;n&gt;</c> before <c>wrote &lt;n&gt;</c> when page n is a scan and its picture is
+/// written.</item>
 /// </list>
 /// A PDF the tool has nothing to do for ends with <c>error Skipped &lt;message&gt;</c>.
 /// </summary>
@@ -789,14 +792,24 @@ internal static class PdfToolsWorker
         using var pdf = PdfDocument.Open(file, PdfLimits.Default);
         var total = Start(pdf, lines);
 
-        long allPixels = 0;
+        // Which pages are scans first, by the test Convert to > Text makes of the same text: only their pictures are drawn,
+        // so only they count against the budget, and a long PDF of text with one blank page still fits. "checked <n>" once
+        // page n's text is read, which holds off the parent's watchdog through a long PDF.
+        var scanned = new bool[total];
+        long ocrPixels = 0;
         for (var index = 0; index < total; index++)
         {
-            var size = pdf.GetRenderSize(index, request.Dpi);
-            allPixels += (long)size.Width * size.Height;
+            if (PdfExtractText.IsScanned(PdfRenderWorker.PageText(pdf.GetText(index))))
+            {
+                scanned[index] = true;
+                var size = pdf.GetRenderSize(index, request.Dpi);
+                ocrPixels += (long)size.Width * size.Height;
+            }
+
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"checked {index + 1}"));
         }
 
-        if (PdfRenderBudget.Check(allPixels, PdfPageImageFormat.Png, PdfRenderBudget.FreeBytes(request.Folder)) is { } noRoom)
+        if (ocrPixels > 0 && PdfRenderBudget.CheckOcr(ocrPixels, PdfRenderBudget.FreeBytes(request.Folder)) is { } noRoom)
             throw new PdfRenderWorker.PageWriteException(noRoom, null);
 
         try
@@ -815,7 +828,7 @@ internal static class PdfToolsWorker
             var size = pdf.GetRenderSize(index, request.Dpi);
             lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"page {page} {size.Width} {size.Height}"));
 
-            if (pdf.CountChars(index) <= 10)
+            if (scanned[index])
             {
                 if (pixels.Length < size.Bytes)
                 {
