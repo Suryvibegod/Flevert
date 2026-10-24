@@ -49,8 +49,45 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
   - ảnh lớn hơn hai trần (ảnh 50–200 MP) thì thu nhỏ cho vừa. Trần đặt trên diện tích chứ không trên cạnh dài, nên ảnh chụp màn hình dài giữ nguyên bề ngang và vẫn đọc được.
   Trang PDF không qua quy tắc này: pdfium render 300 DPI (dưới đây) và ngân sách render OCR chỉ tính các trang sẽ đọc.
 - PDF: pdfium render từng trang 300 DPI (pdf-worker sẵn có). Trang đã có chữ (pdfium đếm > 10 ký tự, không tính khoảng trắng, như Convert to > Text) thì bỏ qua (`--skip-text` của OCRmyPDF). Trang cần OCR: tesseract `-c textonly_pdf=1 pdf` ra PDF chỉ có lớp chữ vô hình đúng khổ trang, rồi qpdf `--overlay` lên trang gốc (cách "sandwich" của OCRmyPDF, chỉ lấy ý tưởng, MPL-2.0 không chép mã). Trang gốc không bị mã hóa lại.
-- Tự xoay: OSD (`--psm 0 -l osd`) chỉ dùng khi độ tin cậy ≥ 14 (mặc định `rotate_pages_threshold` của OCRmyPDF): xoay ảnh trước khi nhận chữ để chữ đúng chiều. Trong Make searchable, trang PDF mà OSD chắc là đang hiện nằm ngang hoặc lộn ngược được dựng thẳng bằng cách tăng `/Rotate` của trang đúng góc đó (như `--rotate-pages` của OCRmyPDF; nội dung trang không bị mã hóa lại), và lớp chữ nằm đúng trên chữ, đọc đúng thứ tự từng dòng (người dùng chốt 2026-10-25, review R5: để trang lộn ngược thì Edge/Chrome đọc từ của mỗi dòng theo thứ tự ngược, Ctrl+F cụm từ không thấy). Trang đã hiện thẳng (kể cả nhờ `/Rotate` sẵn có) giữ nguyên.
+- Tự xoay: OSD (`--psm 0 -l osd`) cho góc cần xoay và độ tin cậy.
+  - Độ tin cậy ≥ 14 (mặc định `rotate_pages_threshold` của OCRmyPDF): tin luôn, xoay ảnh trước khi nhận chữ để chữ đúng chiều, như trước.
+  - Từ 1,5 đến dưới 14, góc ≠ 0: chưa chắc. Nhận chữ cả ảnh như nó đang nằm lẫn ảnh xoay theo góc OSD, hai lần đọc chạy cùng lúc (vẫn qua cổng tesseract chung của tiến trình), mỗi lần đọc ghi luôn chữ và TSV (`-c tessedit_create_txt=1 -c tessedit_create_tsv=1`, cùng một lần chạy), rồi giữ bản đọc có độ tin cậy trung bình của từ cao hơn. Hai độ tin cậy cách nhau không quá 2 điểm thì coi như bằng nhau: giữ bản có nhiều từ nằm trên dòng chạy ngang ảnh hơn (khung dòng trong TSV rộng hơn cao); vẫn bằng nhau thì giữ nguyên. Chỉ tốn thêm một lần đọc, chỉ trên những trang này. Góc trả về là góc thật sự đã xoay (0 khi bản giữ nguyên thắng), Make searchable dùng nó cho `/Rotate`.
+  - Dưới 1,5, góc 0, hoặc OSD lỗi (sập, quá bộ nhớ, quá giờ): đọc nguyên như ảnh đang nằm. Hủy vẫn hủy ngay.
+  - Vì sao (đo 2026-10-25, bảng dưới): OSD luôn đúng góc khi nó trả lời, kể cả trang 1–2 dòng, nhưng với chữ không chân (Arial, Segoe UI, Tahoma: ảnh chụp màn hình, tài liệu hiện đại) nó ít chắc: 5 dòng chỉ được 8–9, 30 dòng 13,5–19, nên với ngưỡng 14 trang lộn ngược bị đọc ra rác mà không báo gì. Độ tin cậy của từ tách rõ hai trường hợp: đọc đúng chiều 95,4–96,6; đọc lộn ngược hoặc nằm ngang ngược chiều kim đồng hồ 52,8–73,5 (giống văn bản gốc 9–18 %). Trang xoay 90° theo chiều kim đồng hồ thì tesseract tự đọc đúng mà không cần xoay: hai bản đọc chênh nhau ≤ 0,03 điểm, chỉ khác ở chỗ dòng của bản đọc nguyên đứng dọc, nên dùng hướng dòng để phân xử (và trang thẳng bị OSD nói nhầm 90° cũng giữ nguyên nhờ đó). Sàn 1,5: ảnh không có chữ (12 hình vẽ ngẫu nhiên) được 0,01–0,85 với góc ngẫu nhiên; một dòng chữ 1,7–2,7, hai dòng 2,8–4,7, lần nào cũng đúng góc.
+  - Trong Make searchable, trang PDF mà OSD (chắc, hoặc qua phép so ở trên) thấy đang hiện nằm ngang hoặc lộn ngược được dựng thẳng bằng cách tăng `/Rotate` của trang đúng góc đó (như `--rotate-pages` của OCRmyPDF; nội dung trang không bị mã hóa lại), và lớp chữ nằm đúng trên chữ, đọc đúng thứ tự từng dòng (người dùng chốt 2026-10-25, review R5: để trang lộn ngược thì Edge/Chrome đọc từ của mỗi dòng theo thứ tự ngược, Ctrl+F cụm từ không thấy). Trang đã hiện thẳng (kể cả nhờ `/Rotate` sẵn có) giữ nguyên.
 - Song song theo trang trong giới hạn lõi và ngân sách bộ nhớ chung (ADR-0006); tiến độ trong file theo số trang.
+
+### Đo OSD (2026-10-25)
+
+Trang A4 PNG xám 8-bit 300 DPI (2480 × 3508, đúng ảnh Flevert đưa tesseract), chữ 12 pt, các dòng đầu của trang hóa đơn tiếng Việt trong test, xoay bằng pixel theo chiều kim đồng hồ; tesseract 5.5.3, `osd.traineddata` của tessdata_fast 4.1.0. Ô là `Orientation confidence`; `Rotate` của OSD đúng ở mọi ô có số (0, 270, 180, 90), "—" là OSD không trả lời (quá ít ký tự). Không trang thẳng nào bị OSD nói là xoay.
+
+| Font | Dòng | 0° | 90° | 180° | 270° |
+|---|---|---|---|---|---|
+| Arial | 1 | — | 1,89 | — | 1,69 |
+| Arial | 2 | 3,08 | 3,04 | 3,22 | 2,88 |
+| Arial | 5 | 8,83 | 8,62 | 8,99 | 8,31 |
+| Arial | 10 | 17,84 | 16,91 | 18,86 | 16,33 |
+| Arial | 30 | 17,40 | 16,05 | 18,53 | 16,05 |
+| Segoe UI | 1 | — | 1,88 | — | 2,02 |
+| Segoe UI | 2 | 2,85 | 2,83 | 2,88 | 2,99 |
+| Segoe UI | 5 | 8,27 | 7,95 | 8,30 | 8,29 |
+| Segoe UI | 10 | 17,48 | 16,21 | 17,23 | 16,24 |
+| Segoe UI | 30 | 16,13 | 13,49 | 17,98 | 18,89 |
+| Tahoma | 1 | — | 1,87 | — | 1,90 |
+| Tahoma | 2 | 2,81 | 3,00 | 3,03 | 3,07 |
+| Tahoma | 5 | 8,07 | 8,74 | 8,55 | 8,68 |
+| Tahoma | 10 | 16,20 | 15,74 | 15,99 | 16,41 |
+| Tahoma | 30 | 16,49 | 17,08 | 15,92 | 15,69 |
+| Times New Roman | 1 | 2,25 | 2,67 | 2,43 | 2,70 |
+| Times New Roman | 2 | 4,13 | 4,58 | 4,34 | 4,65 |
+| Times New Roman | 5 | 12,01 | 12,82 | 12,50 | 13,14 |
+| Times New Roman | 10 | 25,47 | 25,49 | 26,64 | 25,39 |
+| Times New Roman | 30 | 28,46 | 28,58 | 32,25 | 27,79 |
+
+- Độ tin cậy trung bình của từ (TSV, `--oem 1 --psm 3 -l vie+eng`): đọc đúng chiều 95,4–96,6 ở mọi font và số dòng; trang xoay 180° hoặc 270° mà đọc nguyên 52,8–73,5. Trang xoay 90° đọc nguyên đúng như trang thẳng (giống văn bản ≥ 99 %, chênh ≤ 0,03 điểm), nhưng khung dòng trong TSV đứng dọc (ví dụ 49 × 814 px); trang thẳng xoay ép 90° cũng vậy.
+- 12 hình vẽ không chữ (đường, elip, ô chữ nhật ngẫu nhiên): OSD 0,01–0,85 hoặc không trả lời, góc lung tung (0, 90, 180).
+- Đo trên trang 30 dòng 2480 × 2480 (bản đo trước): Arial 11–18, 12,66 ở 180°; Times New Roman 23–28.
+- Thời gian (máy dev, OMP_THREAD_LIMIT=1): OSD 0,3–1,2 s; một lần đọc 0,23 s (1–2 dòng) đến 1,4 s (30 dòng). Trang Arial 5 dòng xoay 180° (chưa chắc, đọc cả hai): 1,44–1,51 s cả OSD, xoay và hai lần đọc cùng lúc, so với 1,36–1,59 s nếu OSD chắc (xoay rồi đọc một lần) và 0,75–0,78 s cho trang thẳng (OSD và một lần đọc). Tức là trang chưa chắc tốn thêm khoảng 0,7 s so với trước (khi nó bị đọc ra rác), phần lớn là xoay ảnh; lần đọc thêm tốn thêm CPU bằng một lần đọc (0,3 s cho 5 dòng, tới 1,4 s cho trang đầy), và cả thời gian đó khi mọi lõi đang bận (PDF nhiều trang).
 
 ## Thao tác
 
@@ -64,13 +101,13 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 
 - Trang scan đã có hơn 10 ký tự chữ thật (dòng tiêu đề đánh máy, "Scanned with …", số Bates, dấu đóng trang) được coi là trang có chữ và không được OCR, cả ở `Convert to > Text` lẫn `Make searchable (OCR)`: `Convert to > Text` chỉ lấy mấy ký tự đó, `Make searchable` để nguyên trang. Bỏ qua trang có chữ như `--skip-text` của OCRmyPDF để không chồng lớp chữ thứ hai lên trang có chữ (success criterion 2); ngưỡng 10 ký tự là của Flevert.
 - Ảnh lớn hơn 25 MP bị thu nhỏ về 25 MP trước khi đọc (`OcrSize` ở trên), nên chữ rất nhỏ trong ảnh rất lớn có thể bị sót. Mỗi ảnh hoặc trang có 150 s và 1 GB cho tesseract.
-- OSD chỉ chắc (≥ 14) khi trang đủ chữ, khoảng mười dòng; trang/ảnh xoay chỉ có một hai dòng được đọc nguyên trạng.
+- OSD chỉ chắc (≥ 14) khi trang đủ chữ, khoảng mười dòng; từ 1,5 đến dưới 14 thì đọc cả hai hướng và giữ bản có độ tin cậy chữ cao hơn (bảng đo ở trên), nên trang xoay từ khoảng một dòng đã được dựng thẳng. Khoảng trống đã đo: một dòng chữ không chân lộn ngược (0°/180°), OSD không trả lời, được đọc nguyên trạng.
 
 ## Success criteria
 
 1. PDF scan tiếng Việt mẫu (tạo trong test, có dấu) → `Make searchable`: pdfium lấy lại chữ trên mỗi trang, khớp văn bản gốc ≥ 95 % ký tự; trang render ra giống hệt trang gốc (so pixel), hoặc, với trang được dựng thẳng, giống hệt trang gốc xoay đúng góc đó; số trang và kích thước trang không đổi (trang dựng thẳng 90°/270° đổi chiều ngang/dọc khi hiện).
 2. PDF trộn trang có chữ và trang scan: trang có chữ không bị chồng lớp chữ thứ hai.
-3. Ảnh PNG/JPG/HEIC tiếng Việt → `.txt` đúng ≥ 95 % ký tự. Trang xoay 90°/180° vẫn nhận đúng (OSD).
+3. Ảnh PNG/JPG/HEIC tiếng Việt → `.txt` đúng ≥ 95 % ký tự. Trang xoay 90°/180°/270° vẫn nhận đúng (OSD), kể cả trang chữ không chân hay trang ngắn mà OSD ít chắc; trang thẳng không bị xoay nhầm.
 4. Hủy giữa chừng: tesseract dừng ngay, không file dở. File độc (ảnh/PDF trong bảng file độc hiện có) không treo, không làm sập flevert.exe.
 5. Tesseract chỉ chạy từ đường dẫn của Flevert, `TESSDATA_PREFIX` của Flevert, và chỉ nhận đường dẫn đầy đủ tới file PNG trên máy do Flevert tự ghi (không URL, không danh sách file), và bản dựng không có mã mạng (không libcurl, libarchive, ScrollView; chỉ import `KERNEL32.dll`). Đường dẫn có chữ ngoài code page ANSI (tài khoản `Dương`) đọc được nhờ manifest `activeCodePage=UTF-8`.
 6. Bộ cài kèm tesseract và giấy phép của mọi file; `scripts/write-notices.ps1` không từ chối file nào; installer test đạt, gỡ sạch.

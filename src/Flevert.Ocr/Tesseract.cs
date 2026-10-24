@@ -172,7 +172,30 @@ internal sealed class Tesseract
     /// <param name="ct">Token to cancel the OCR operation; kills the running process immediately.</param>
     /// <exception cref="OcrException">Tesseract failed, ran out of memory, timed out, or the output PDF was not produced.</exception>
     /// <exception cref="OperationCanceledException">The operation was cancelled.</exception>
-    public async Task<string> WriteTextLayerAsync(string imagePath, string outputBase, CancellationToken ct)
+    public async Task<string> WriteTextLayerAsync(string imagePath, string outputBase, CancellationToken ct) =>
+        (await ReadIntoTextLayerAsync(imagePath, outputBase, ct).ConfigureAwait(false)).Text;
+
+    /// <summary>
+    /// As <see cref="WriteTextLayerAsync"/>, with how sure tesseract was of the layer's words, from the same run (which
+    /// writes them to <paramref name="outputBase"/><c>.tsv</c>).
+    /// </summary>
+    internal Task<OcrReading> ReadIntoTextLayerAsync(string imagePath, string outputBase, CancellationToken ct) =>
+        ReadToFilesAsync(imagePath, outputBase, textLayer: true, ct);
+
+    /// <summary>
+    /// Reads <paramref name="imagePath"/> as <see cref="ReadTextAsync"/> does, and returns the text with how sure
+    /// tesseract was of its words, both from the same run, which writes them to <paramref name="outputBase"/><c>.txt</c>
+    /// and <c>.tsv</c>.
+    /// </summary>
+    /// <param name="imagePath">Absolute path of a trusted image file prepared by Flevert in a temporary directory.</param>
+    /// <param name="outputBase">Output base path without extension, in a folder of Flevert's own.</param>
+    /// <param name="ct">Token to cancel the OCR operation; kills the running process immediately.</param>
+    /// <exception cref="OcrException">Tesseract failed, ran out of memory, timed out, or wrote no text.</exception>
+    /// <exception cref="OperationCanceledException">The operation was cancelled.</exception>
+    internal Task<OcrReading> ReadAsync(string imagePath, string outputBase, CancellationToken ct) =>
+        ReadToFilesAsync(imagePath, outputBase, textLayer: false, ct);
+
+    private async Task<OcrReading> ReadToFilesAsync(string imagePath, string outputBase, bool textLayer, CancellationToken ct)
     {
         CheckInputPath(imagePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputBase);
@@ -183,19 +206,16 @@ internal sealed class Tesseract
             : outputBase;
         var expectedPdfPath = baseName + ".pdf";
         var textPath = baseName + ".txt";
+        var wordsPath = baseName + ".tsv";
 
-        string[] arguments =
-        [
-            imagePath,
-            baseName,
-            "-l", "vie+eng",
-            "--oem", "1",
-            "--psm", "3",
-            "-c", "textonly_pdf=1",
-            // The text as well, from the same reading: tessdata has no "txt" config file, so this is set directly.
-            "-c", "tessedit_create_txt=1",
-            "pdf",
-        ];
+        List<string> arguments = [imagePath, baseName, "-l", "vie+eng", "--oem", "1", "--psm", "3"];
+        if (textLayer)
+            arguments.AddRange(["-c", "textonly_pdf=1"]);
+        // The text, and each word with tesseract's confidence in it, from the same reading: tessdata has no "txt" or "tsv"
+        // config file, so these are set directly.
+        arguments.AddRange(["-c", "tessedit_create_txt=1", "-c", "tessedit_create_tsv=1"]);
+        if (textLayer)
+            arguments.Add("pdf");
 
         var run = await RunGatedAsync(arguments, ct).ConfigureAwait(false);
 
@@ -203,33 +223,53 @@ internal sealed class Tesseract
         RequireMemory(run);
         CheckRunSuccess(run);
 
-        if (!File.Exists(expectedPdfPath))
+        if (textLayer && !File.Exists(expectedPdfPath))
         {
             throw new OcrException(
                 OcrException.ToolFailedMessage,
                 new TesseractException("tesseract", run.ExitCode, $"Expected output PDF not found: {expectedPdfPath}"));
         }
 
-        if (!File.Exists(textPath))
+        foreach (var output in (string[])[textPath, wordsPath])
         {
-            throw new OcrException(
-                OcrException.ToolFailedMessage,
-                new TesseractException("tesseract", run.ExitCode, $"Expected output text not found: {textPath}"));
+            if (!File.Exists(output))
+            {
+                throw new OcrException(
+                    OcrException.ToolFailedMessage,
+                    new TesseractException("tesseract", run.ExitCode, $"Expected output text not found: {output}"));
+            }
         }
 
-        return await File.ReadAllTextAsync(textPath, ct).ConfigureAwait(false);
+        var text = await File.ReadAllTextAsync(textPath, ct).ConfigureAwait(false);
+        var words = await File.ReadAllTextAsync(wordsPath, ct).ConfigureAwait(false);
+        return new OcrReading(text, ReadingQuality.Parse(words));
     }
 
     /// <summary>
+    /// The OSD confidence from which its turn is taken on trust: 14, OCRmyPDF's default <c>rotate_pages_threshold</c>.
+    /// Under it, a caller checks the turn by reading the page both ways (docs/specs/ocr.md).
+    /// </summary>
+    public const double ConfidentOsd = 14;
+
+    /// <summary>
     /// Detects orientation and script of <paramref name="imagePath"/> using OSD (<c>--psm 0 -l osd</c>).
-    /// Parses "Rotate: N" and "Orientation confidence: C". Returns N when confidence C >= 14, else 0.
+    /// Parses "Rotate: N" and "Orientation confidence: C". Returns N when confidence C >= <see cref="ConfidentOsd"/>, else 0.
     /// </summary>
     /// <param name="imagePath">Absolute path of a trusted image file prepared by Flevert in a temporary directory.</param>
     /// <param name="ct">Token to cancel the operation; kills the running process immediately.</param>
     /// <returns>Degrees to rotate clockwise (0, 90, 180, 270) to make the text upright; 0 if confidence &lt; 14 or undetected.</returns>
     /// <exception cref="OcrException">Tesseract crashed, ran out of memory, or timed out.</exception>
     /// <exception cref="OperationCanceledException">The operation was cancelled.</exception>
-    public async Task<int> DetectRotationAsync(string imagePath, CancellationToken ct)
+    public async Task<int> DetectRotationAsync(string imagePath, CancellationToken ct) =>
+        Confident(await DetectOrientationAsync(imagePath, ct).ConfigureAwait(false));
+
+    /// <summary>
+    /// OSD's answer for <paramref name="imagePath"/> however unsure it is: no turn and no confidence when the page has too
+    /// few characters for OSD.
+    /// </summary>
+    /// <exception cref="OcrException">Tesseract crashed, ran out of memory, or timed out.</exception>
+    /// <exception cref="OperationCanceledException">The operation was cancelled.</exception>
+    internal async Task<OsdAnswer> DetectOrientationAsync(string imagePath, CancellationToken ct)
     {
         CheckInputPath(imagePath);
         RequireTool();
@@ -246,16 +286,20 @@ internal sealed class Tesseract
             if (run.StandardError.Contains("Too few characters", StringComparison.OrdinalIgnoreCase) ||
                 run.StandardOutput.Contains("Too few characters", StringComparison.OrdinalIgnoreCase))
             {
-                return 0;
+                return default;
             }
 
             CheckRunSuccess(run);
         }
 
-        return ParseOsdRotation(run.StandardOutput);
+        return ParseOsd(run.StandardOutput);
     }
 
-    internal static int ParseOsdRotation(string output)
+    internal static int ParseOsdRotation(string output) => Confident(ParseOsd(output));
+
+    private static int Confident(OsdAnswer orientation) => orientation.Confidence >= ConfidentOsd ? orientation.Rotate : 0;
+
+    internal static OsdAnswer ParseOsd(string output)
     {
         int? rotate = null;
         double? confidence = null;
@@ -272,16 +316,14 @@ internal sealed class Tesseract
             else if (line.StartsWith("Orientation confidence:", StringComparison.OrdinalIgnoreCase))
             {
                 var val = line.AsSpan("Orientation confidence:".Length).Trim();
-                if (double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out var c))
+                if (double.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out var c) && double.IsFinite(c))
                     confidence = c;
             }
         }
 
         // Tesseract only ever answers a quarter turn; anything else is not an answer to act on.
-        if (rotate is { } degrees && degrees is 0 or 90 or 180 or 270 && confidence is >= 14.0)
-            return degrees;
-
-        return 0;
+        var degrees = rotate is 0 or 90 or 180 or 270 ? rotate.Value : 0;
+        return new OsdAnswer(degrees, Math.Max(confidence ?? 0, 0));
     }
 
     private void RequireTool()

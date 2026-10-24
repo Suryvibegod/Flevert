@@ -12,8 +12,8 @@ namespace Flevert.Image;
 /// <remarks>
 /// Decodes the picture with the existing safe Magick path (auto-orient by EXIF, first frame of GIF/multi-page TIFF).
 /// Preprocessed to an 8-bit grayscale PNG in a private temp folder, scaled to what tesseract reads well (<see cref="OcrSize"/>:
-/// small text doubled, very large pictures shrunk), and with resolution density set so Tesseract does not warn. When confident, DetectRotationAsync rotates the image upright,
-/// before ReadTextAsync recognises the text.
+/// small text doubled, very large pictures shrunk), and with resolution density set so Tesseract does not warn. The picture
+/// is turned upright first when OSD finds it turned (<see cref="ReadUprightAsync{T}"/>), before ReadTextAsync recognises the text.
 /// If no text is recognised, the operation is skipped with "No text was found in this picture."
 /// </remarks>
 public sealed class ImageToText : IOperation
@@ -102,61 +102,198 @@ public sealed class ImageToText : IOperation
     }
 
     /// <summary>
-    /// The text of <paramref name="pngPath"/>, a grey PNG Flevert wrote at 300 DPI in a folder of its own: turned upright
-    /// first, in place, when OSD is confident it is turned (scanned pages of a PDF too).
+    /// The OSD confidence under which its answer is not acted on: 1.5. Pictures without text scored 0.01-0.85 with a turn
+    /// at random; a line of text 1.7-2.7 and two lines 2.8-4.7, each time with the right turn (docs/specs/ocr.md).
     /// </summary>
-    internal static async Task<string> ReadUprightAsync(Tesseract tesseract, string pngPath, CancellationToken ct)
-    {
-        await TurnUprightAsync(tesseract, pngPath, ct).ConfigureAwait(false);
-        return await tesseract.ReadTextAsync(pngPath, ct).ConfigureAwait(false);
-    }
+    internal const double UnsureOsdFloor = 1.5;
 
     /// <summary>
-    /// Turns <paramref name="pngPath"/>, a grey PNG Flevert wrote at 300 DPI, upright in place when OSD is confident it
-    /// is turned, and returns how many degrees clockwise it turned it (0, 90, 180 or 270).
+    /// How far apart the mean word confidences of two readings may be and still count as alike: 2 points. A page read
+    /// upright and the same page turned a quarter clockwise, which tesseract reads as well, differ by up to 0.03; a page
+    /// read upright and read upside down or turned a quarter back by 22 or more (docs/specs/ocr.md).
     /// </summary>
+    internal const double AlikeConfidence = 2;
+
+    /// <summary>
+    /// The text of <paramref name="pngPath"/>, a grey PNG Flevert wrote at 300 DPI in a folder of its own, read upright
+    /// (<see cref="ReadUprightAsync{T}"/>): scanned pages of a PDF too.
+    /// </summary>
+    internal static async Task<string> ReadUprightAsync(Tesseract tesseract, string pngPath, CancellationToken ct) =>
+        (await ReadTextUprightAsync(tesseract, pngPath, ct).ConfigureAwait(false)).Reading;
+
+    /// <inheritdoc cref="ReadUprightAsync(Tesseract, string, CancellationToken)"/>
+    internal static Task<Upright<string>> ReadTextUprightAsync(Tesseract tesseract, string pngPath, CancellationToken ct) =>
+        ReadUprightAsync(
+            tesseract,
+            pngPath,
+            tesseract.ReadTextAsync,
+            async (picture, token) =>
+            {
+                // Beside the picture, in Flevert's folder: <name>-text.txt and .tsv.
+                var reading = await tesseract.ReadAsync(picture, Path.ChangeExtension(picture, null) + "-text", token).ConfigureAwait(false);
+                return (reading.Text, reading.Quality);
+            },
+            ct);
+
+    /// <summary>
+    /// Reads <paramref name="pngPath"/>, a grey PNG Flevert wrote at 300 DPI in a folder of its own, upright, and returns
+    /// the reading with how many degrees clockwise the picture was turned for it (0, 90, 180 or 270). Callers use only
+    /// the reading, never the PNG again: it is turned in place when OSD is sure of the turn, and otherwise left as it was,
+    /// whichever reading is kept.
+    /// </summary>
+    /// <param name="read">Reads a picture once.</param>
+    /// <param name="readRated">Reads a picture once, with how sure tesseract was of the reading.</param>
     /// <remarks>
+    /// <para>
+    /// OSD sure of a turn (<see cref="Tesseract.ConfidentOsd"/>) turns the picture before it is read, as before. OSD finds
+    /// the right turn of pages in sans-serif fonts too, but less sure of it: five lines of Arial score 8-9, thirty 16-19, so
+    /// such a page was read upside down. Unsure (from <see cref="UnsureOsdFloor"/>), the picture is read both as it is
+    /// and turned, at once, and the better reading is kept (<see cref="TurnedReadsBetter"/>): one more reading, on those
+    /// pages only. An upright page stays as it is. Tesseract failing on one of the two keeps the other; any other failure
+    /// stops the other reading.
+    /// </para>
+    /// <para>
     /// OSD that fails (crashes, runs out of memory or time) leaves the page as it is: the orientation is a refinement,
     /// and reading the text may still succeed. The PNG is read back as PNG only, under the module's policy and limits:
     /// on the PDF paths the pdf worker wrote it, and nothing else in flevert.exe may have set ImageMagick up yet.
+    /// </para>
     /// </remarks>
-    internal static async Task<int> TurnUprightAsync(Tesseract tesseract, string pngPath, CancellationToken ct)
+    internal static async Task<Upright<T>> ReadUprightAsync<T>(
+        Tesseract tesseract,
+        string pngPath,
+        Func<string, CancellationToken, Task<T>> read,
+        Func<string, CancellationToken, Task<(T Reading, ReadingQuality Quality)>> readRated,
+        CancellationToken ct)
     {
-        int rotation;
+        OsdAnswer osd;
         try
         {
-            rotation = await tesseract.DetectRotationAsync(pngPath, ct).ConfigureAwait(false);
+            osd = await tesseract.DetectOrientationAsync(pngPath, ct).ConfigureAwait(false);
         }
         catch (OcrException)
         {
             ct.ThrowIfCancellationRequested();
-            rotation = 0;
+            osd = default;
         }
 
-        if (rotation != 0)
+        if (osd.Rotate == 0 || osd.Confidence < UnsureOsdFloor)
+            return new Upright<T>(0, await read(pngPath, ct).ConfigureAwait(false));
+
+        if (osd.Confidence >= Tesseract.ConfidentOsd)
         {
-            await ImageFile.RunAsync(() =>
-            {
-                MagickSetup.EnsureInitialized();
-                byte[] png;
-                // Opened here and handed over as a stream with the format pinned: ImageMagick neither guesses the
-                // format from the content nor reads patterns in the path.
-                using (var stream = new FileStream(pngPath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                using (var rotated = new MagickImage(stream, new MagickReadSettings { Format = MagickFormat.Png }))
-                {
-                    ImageFile.StopOnCancel([rotated], ct);
-                    rotated.Rotate(rotation);
-                    rotated.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
-                    png = rotated.ToByteArray(MagickFormat.Png);
-                }
-
-                File.WriteAllBytes(pngPath, png);
-            }, ct).ConfigureAwait(false);
+            await TurnAsync(pngPath, pngPath, osd.Rotate, ct).ConfigureAwait(false);
+            return new Upright<T>(osd.Rotate, await read(pngPath, ct).ConfigureAwait(false));
         }
+
+        var turnedPath = Path.ChangeExtension(pngPath, null) + "-turned.png";
+        using var both = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        try
+        {
+            await TurnAsync(pngPath, turnedPath, osd.Rotate, ct).ConfigureAwait(false);
+            // Both at once: through the gate, as any two readings.
+            var asIs = ReadOneWayAsync(pngPath);
+            var turned = ReadOneWayAsync(turnedPath);
+            await Task.WhenAll((Task)asIs, turned).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            ct.ThrowIfCancellationRequested();
+
+            // A failure other than tesseract's (the disk, a bug) fails the page, as it would a single reading; the other
+            // reading, cancelled for it, ends in OperationCanceledException.
+            foreach (var reading in (Task[])[asIs, turned])
+            {
+                if (reading.IsFaulted && reading.Exception?.InnerException is not OcrException)
+                    await reading.ConfigureAwait(false);
+            }
+
+            foreach (var reading in (Task[])[asIs, turned])
+            {
+                if (reading.IsCanceled)
+                    await reading.ConfigureAwait(false);
+            }
+
+            // Tesseract failing on one copy (a crash, too slow, too large) leaves the other: the page as it is, as before
+            // the fallback read it, or the turned copy. Failing on both, the page fails as it would read as it is.
+            if (!turned.IsCompletedSuccessfully)
+                return new Upright<T>(0, (await asIs.ConfigureAwait(false)).Reading);
+            if (!asIs.IsCompletedSuccessfully)
+                return new Upright<T>(osd.Rotate, turned.Result.Reading);
+
+            var (asIsReading, asIsQuality) = asIs.Result;
+            var (turnedReading, turnedQuality) = turned.Result;
+            return TurnedReadsBetter(asIsQuality, turnedQuality)
+                ? new Upright<T>(osd.Rotate, turnedReading)
+                : new Upright<T>(0, asIsReading);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(turnedPath);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Flevert's folder goes with it.
+            }
+        }
+
+        // One of the two readings; failing other than in tesseract, it stops the other.
+        async Task<(T Reading, ReadingQuality Quality)> ReadOneWayAsync(string picture)
+        {
+            try
+            {
+                return await readRated(picture, both.Token).ConfigureAwait(false);
+            }
+            catch (Exception e) when (e is not (OcrException or OperationCanceledException))
+            {
+                await both.CancelAsync().ConfigureAwait(false);
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether the picture read turned reads better than as it is: the higher mean word confidence, or, when the two are
+    /// alike (<see cref="AlikeConfidence"/>), more words on lines running across the picture, as an upright page's do.
+    /// Still alike, the page stays as it is.
+    /// </summary>
+    internal static bool TurnedReadsBetter(ReadingQuality asIs, ReadingQuality turned)
+    {
+        if (turned.Words == 0)
+            return false;
+        if (asIs.Words == 0)
+            return true;
+
+        var gain = turned.MeanConfidence - asIs.MeanConfidence;
+        if (Math.Abs(gain) > AlikeConfidence)
+            return gain > 0;
+        return turned.WordsAcross > asIs.WordsAcross;
+    }
+
+    // Writes the PNG at source turned clockwise to destination, which may be the same file.
+    private static async Task TurnAsync(string source, string destination, int degrees, CancellationToken ct)
+    {
+        await ImageFile.RunAsync(() =>
+        {
+            MagickSetup.EnsureInitialized();
+            byte[] png;
+            // Opened here and handed over as a stream with the format pinned: ImageMagick neither guesses the
+            // format from the content nor reads patterns in the path.
+            using (var stream = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var rotated = new MagickImage(stream, new MagickReadSettings { Format = MagickFormat.Png }))
+            {
+                ImageFile.StopOnCancel([rotated], ct);
+                rotated.Rotate(degrees);
+                rotated.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
+                png = rotated.ToByteArray(MagickFormat.Png);
+            }
+
+            File.WriteAllBytes(destination, png);
+        }, ct).ConfigureAwait(false);
 
         ct.ThrowIfCancellationRequested();
-        return rotation;
     }
+
+    /// <summary>A reading of a picture, and how many degrees clockwise the picture was turned for it.</summary>
+    internal readonly record struct Upright<T>(int Turned, T Reading);
 
     /// <summary>
     /// The most pixels handed to tesseract: about a 6000 x 4200 px page. Tesseract's memory and time grow with the area,

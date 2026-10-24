@@ -121,3 +121,8 @@ jobs:
       - if: ${{ success() }}
         name: Install, update, convert and uninstall the packaged app in a temporary profile
         run: bash scripts/test-linux-package.sh
+      # As release.yml checks the tarball it attaches, so a failure shows on the pull request rather than at the tag.
+      - if: ${{ success() }}
+        name: No build machine paths in the package
+        shell: pwsh
+        run: ./scripts/test-build-paths.ps1 -Folder artifacts/linux
