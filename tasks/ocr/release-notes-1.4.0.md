@@ -15,7 +15,7 @@ Text from pictures and scans, in Vietnamese and English, read on your PC. And Fl
 
 ### Text from pictures and scans (Windows)
 
-- **Pictures:** right-click a screenshot or a photo of a page (JPG, PNG, HEIC, WebP, AVIF, GIF, BMP, TIFF) and choose **Flevert > Convert to > Text**. You get `photo.txt` beside it, in UTF-8 that Notepad opens. A photo turned sideways or upside down is read the right way up when it has enough text for Tesseract to be sure which way is up.
+- **Pictures:** right-click a screenshot or a photo of a page (JPG, PNG, HEIC, WebP, AVIF, GIF, BMP, TIFF) and choose **Flevert > Convert to > Text**. You get `photo.txt` beside it, in UTF-8 that Notepad opens. A photo turned sideways or upside down is read the right way up, from about a line of text.
 - **Scanned PDFs you can search:** hold **Shift**, right-click a PDF and choose **Flevert: more PDF tools > Make searchable (OCR)**. `report (searchable).pdf` has the same pages with invisible text over the scanned ones, so Ctrl+F finds words and you can copy them with their Vietnamese accents. A page scanned sideways or upside down is turned the right way up, without re-encoding it; every other page looks exactly as it did.
 - **PDF to text reads scans:** **Convert to > Text** of a PDF now reads its scanned pages from their pictures, where 1.3.0 said the PDF had no text. If Tesseract cannot read one page, that page keeps the text the PDF itself had, and the notification names it.
 - Everything is read on your PC: no file leaves it, and nothing is downloaded.
@@ -32,7 +32,7 @@ The picture and PDF tools of Flevert, in the right-click menu of GNOME Files (Na
 
 - Text from pictures and scans is on Windows only.
 - A scanned page that already has more than 10 characters of real text on it (a typed header, a "Scanned with …" line, Bates numbers, a page stamp) counts as a text page and is not read by OCR, in **Convert to > Text** or **Make searchable (OCR)**.
-- Turned pages and photos are found only when they have enough text, about ten lines; one with a line or two is read as it is.
+- A picture or page with a single line of text, upside down, may be read as it is: Tesseract cannot always tell which way up one line is.
 - Pictures larger than 25 megapixels are shrunk to that size first, so very small print in a huge photo may be missed. Tesseract gets 150 seconds and 1 GB of memory for each picture or page.
 - Only Vietnamese and English are read.
 - Flevert is still not code-signed, so Windows shows **Windows protected your PC**: check the download as below, then **More info > Run anyway**.
