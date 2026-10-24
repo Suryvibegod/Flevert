@@ -56,6 +56,10 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 | `pdf.to-text` (đã có) | Convert to > Text | Trang có chữ: như cũ; trang scan: chữ OCR. |
 | `image.to-text` | Convert to > Text (thay BMP) | `<tên>.txt` UTF-8. Không nhận ra chữ nào → skipped "No text was found in this picture." |
 
+## Giới hạn đã biết
+
+- Trang scan đã có hơn 10 ký tự chữ thật (dòng tiêu đề đánh máy, "Scanned with …", số Bates, dấu đóng trang) được coi là trang có chữ và không được OCR, cả ở `Convert to > Text` lẫn `Make searchable (OCR)`: `Convert to > Text` chỉ lấy mấy ký tự đó, `Make searchable` để nguyên trang. Bỏ qua trang có chữ như `--skip-text` của OCRmyPDF để không chồng lớp chữ thứ hai lên trang có chữ (success criterion 2); ngưỡng 10 ký tự là của Flevert.
+
 ## Success criteria
 
 1. PDF scan tiếng Việt mẫu (tạo trong test, có dấu) → `Make searchable`: pdfium lấy lại chữ trên mỗi trang, khớp văn bản gốc ≥ 95 % ký tự; trang render ra giống hệt trang gốc (so pixel); số trang và kích thước trang không đổi.
