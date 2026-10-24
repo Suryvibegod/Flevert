@@ -128,17 +128,28 @@ public sealed class PdfExtractText : IOperation
             if (utf8.GetPreamble().Length + utf8.GetByteCount(whole) > PdfRenderWorker.MaxTextBytes)
                 throw new PdfException(PdfError.TooLarge, PdfRenderWorker.TooMuchTextMessage);
 
-            // Into the file the worker made, emptied: deleting it and making it again would leave a moment in which another
-            // account that may write in this folder could put its own file, or a link, at this name (review R12).
-            // The worker makes it before it reads a page, so it is there when it found no text too; Truncate fails rather than
-            // creates when it is gone. The writer starts with the byte order mark.
-            var options = new FileStreamOptions { Mode = FileMode.Truncate, Access = FileAccess.Write, Share = FileShare.None, Options = FileOptions.Asynchronous };
-            var stream = new FileStream(temp, options);
-            await using (stream.ConfigureAwait(false))
+            // Into a new file of our own, which then replaces the worker's name. Nothing is ever opened by that name: while the
+            // pages were read, another account that may write in this folder could have put a link there, and writing through
+            // it would empty the file it points to (review R12). Replacing swaps the entry, a link included, and writes
+            // through nothing. The writer starts with the byte order mark.
+            var fresh = Path.Combine(Path.GetDirectoryName(temp)!, $".flevert-{Guid.NewGuid():N}.partial");
+            try
             {
-                var writer = new StreamWriter(stream, utf8);
-                await using (writer.ConfigureAwait(false))
-                    await writer.WriteAsync(whole.AsMemory(), ct).ConfigureAwait(false);
+                var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None, Options = FileOptions.Asynchronous };
+                var stream = new FileStream(fresh, options);
+                await using (stream.ConfigureAwait(false))
+                {
+                    var writer = new StreamWriter(stream, utf8);
+                    await using (writer.ConfigureAwait(false))
+                        await writer.WriteAsync(whole.AsMemory(), ct).ConfigureAwait(false);
+                }
+
+                File.Move(fresh, temp, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(fresh))
+                    File.Delete(fresh);
             }
         }
 
