@@ -45,7 +45,7 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 - Ngôn ngữ mặc định `-l vie+eng`, `--oem 1` (LSTM), `--psm 3`; `TESSDATA_PREFIX` trỏ đúng thư mục `tessdata` của Flevert (không dùng biến môi trường của người dùng). Gọi qua `ExternalTool` trong job object (không mạng, giới hạn bộ nhớ, timeout, độ ưu tiên thấp) như ffmpeg/qpdf. Đường dẫn ảnh do Flevert tạo trong thư mục tạm riêng, không bao giờ là file của người lạ trực tiếp (tesseract đọc được URL và danh sách file).
 - Ảnh nguồn: giải mã bằng Magick.NET (đã có giới hạn) thành PNG xám trong thư mục tạm rồi mới đưa tesseract.
 - PDF: pdfium render từng trang 300 DPI (pdf-worker sẵn có). Trang đã có chữ (pdfium đếm > 10 ký tự, không tính khoảng trắng, như Convert to > Text) thì bỏ qua (`--skip-text` của OCRmyPDF). Trang cần OCR: tesseract `-c textonly_pdf=1 pdf` ra PDF chỉ có lớp chữ vô hình đúng khổ trang, rồi qpdf `--overlay` lên trang gốc (cách "sandwich" của OCRmyPDF, chỉ lấy ý tưởng, MPL-2.0 không chép mã). Trang gốc không bị mã hóa lại.
-- Tự xoay: OSD (`--psm 0 -l osd`) chỉ dùng khi độ tin cậy ≥ 14 (mặc định `rotate_pages_threshold` của OCRmyPDF): xoay ảnh trước khi nhận chữ để chữ đúng chiều; trang PDF output giữ nguyên hướng nhìn.
+- Tự xoay: OSD (`--psm 0 -l osd`) chỉ dùng khi độ tin cậy ≥ 14 (mặc định `rotate_pages_threshold` của OCRmyPDF): xoay ảnh trước khi nhận chữ để chữ đúng chiều. Trong Make searchable, trang PDF mà OSD chắc là đang hiện nằm ngang hoặc lộn ngược được dựng thẳng bằng cách tăng `/Rotate` của trang đúng góc đó (như `--rotate-pages` của OCRmyPDF; nội dung trang không bị mã hóa lại), và lớp chữ nằm đúng trên chữ, đọc đúng thứ tự từng dòng (người dùng chốt 2026-10-25, review R5: để trang lộn ngược thì Edge/Chrome đọc từ của mỗi dòng theo thứ tự ngược, Ctrl+F cụm từ không thấy). Trang đã hiện thẳng (kể cả nhờ `/Rotate` sẵn có) giữ nguyên.
 - Song song theo trang trong giới hạn lõi và ngân sách bộ nhớ chung (ADR-0006); tiến độ trong file theo số trang.
 
 ## Thao tác
@@ -58,7 +58,7 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 
 ## Success criteria
 
-1. PDF scan tiếng Việt mẫu (tạo trong test, có dấu) → `Make searchable`: pdfium lấy lại chữ trên mỗi trang, khớp văn bản gốc ≥ 95 % ký tự; trang render ra giống hệt trang gốc (so pixel); số trang và kích thước trang không đổi.
+1. PDF scan tiếng Việt mẫu (tạo trong test, có dấu) → `Make searchable`: pdfium lấy lại chữ trên mỗi trang, khớp văn bản gốc ≥ 95 % ký tự; trang render ra giống hệt trang gốc (so pixel), hoặc, với trang được dựng thẳng, giống hệt trang gốc xoay đúng góc đó; số trang và kích thước trang không đổi (trang dựng thẳng 90°/270° đổi chiều ngang/dọc khi hiện).
 2. PDF trộn trang có chữ và trang scan: trang có chữ không bị chồng lớp chữ thứ hai.
 3. Ảnh PNG/JPG/HEIC tiếng Việt → `.txt` đúng ≥ 95 % ký tự. Trang xoay 90°/180° vẫn nhận đúng (OSD).
 4. Hủy giữa chừng: tesseract dừng ngay, không file dở. File độc (ảnh/PDF trong bảng file độc hiện có) không treo, không làm sập flevert.exe.
