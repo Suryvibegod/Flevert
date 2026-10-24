@@ -25,8 +25,8 @@ Phiên trước giao việc cho worker của `ceo-worker-agent` trong 5 worktree
 - [x] T6c OSD chưa chắc (nhánh `fix/osd-fallback`): chữ không chân (Arial, Segoe UI, Tahoma) cho OSD 8–9 với 5 dòng, 13,5–19 với 30 dòng, nên trang lộn ngược bị đọc ra rác. Từ 1,5 đến dưới 14, góc ≠ 0: đọc cả nguyên lẫn xoay (cùng lúc), giữ bản có độ tin cậy từ trung bình cao hơn (chênh ≤ 2 thì theo hướng dòng trong TSV); Make searchable dùng góc thật sự đã xoay cho `/Rotate`. Bảng đo trong ocr.md "Đo OSD". Test RED trên mã cũ (ảnh 180/270 và 2 dòng; PDF 90/180/270 không `/Rotate`, Convert to > Text 180), GREEN sau sửa. Mã đo không commit.
 - [x] T7 Icon riêng cho Make searchable: `scan_text` (Fluent Filled, ghim SHA256 trong `make-menu-icons.py`), lý do chọn ở ocr.md "Icon".
 - [x] T7b Make searchable bỏ qua (skipped "No text was found in the scanned pages of this PDF.") khi tesseract không thấy chữ trên trang scan nào, như Convert to > Text của ảnh; không ghi file. `WriteTextLayerAsync` trả về chữ của lớp (`-c tessedit_create_txt=1`, cùng lượt đọc). Bảng PDF độc: `pdf.make-searchable` giờ là Skipped với các file độc trang trắng (trước là Ok).
-- [ ] Trước release: app thật, MenuProbe, installer, ba review, reconcile; theo docs/RELEASING.md.
-- [ ] Sau khi gom xong: xóa worktree `D:\github\Flevert-wt\*` và nhánh `ceo/ocr-*` (≈ 15 GB).
+- [x] Trước release: app thật, MenuProbe, installer (256 kiểm tra trên máy sạch), ba review, reconcile, hai reviewer gộp; phát hành 1.4.0 ngày 2026-10-25 (HANDOFF).
+- [x] Đã xóa worktree `D:\github\Flevert-wt\*` và nhánh `ceo/ocr-*` (người dùng đồng ý 2026-10-25).
 
 ## Review trước release (2026-10-25): reconcile
 
