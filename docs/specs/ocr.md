@@ -43,7 +43,11 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 ## Cách làm
 
 - Ngôn ngữ mặc định `-l vie+eng`, `--oem 1` (LSTM), `--psm 3`; `TESSDATA_PREFIX` trỏ đúng thư mục `tessdata` của Flevert (không dùng biến môi trường của người dùng). Gọi qua `ExternalTool` trong job object (giới hạn bộ nhớ, timeout, độ ưu tiên thấp) như ffmpeg/qpdf. Job object không chặn được mạng. Bảo đảm "không mạng" nằm ở đầu vào: Flevert chỉ đưa tesseract đường dẫn đầy đủ tới một file PNG trên máy do chính Flevert ghi trong thư mục tạm riêng, không bao giờ URL, danh sách file hay file của người lạ trực tiếp (bản hiện tại có libcurl nên đọc được `http(s)://`, và tesseract coi đầu vào không phải ảnh là danh sách file); `Tesseract.cs` từ chối đường dẫn không đầy đủ hoặc không phải file ảnh. Kế hoạch (chưa xong): dựng lại tesseract không có libcurl và libarchive.
-- Ảnh nguồn: giải mã bằng Magick.NET (đã có giới hạn) thành PNG xám trong thư mục tạm rồi mới đưa tesseract.
+- Ảnh nguồn: giải mã bằng Magick.NET (đã có giới hạn; khung đầu của GIF/TIFF nhiều trang, xoay theo EXIF, nền trong suốt thành trắng) thành PNG xám 8 bit, 300 DPI, trong thư mục tạm riêng rồi mới đưa tesseract. Cỡ ảnh đưa tesseract theo `ImageToText.OcrSize`, một hệ số chung cho hai chiều:
+  - cạnh ngắn dưới 1000 px (chữ chụp màn hình quá nhỏ với tesseract) thì phóng 2×, nhưng chỉ tới mức còn vừa hai trần dưới đây;
+  - trần diện tích 25 MP (`MaxOcrPixels`, khoảng trang 6000 × 4200 px: bộ nhớ và thời gian của tesseract tăng theo diện tích, ba trang A4 300 DPI vẫn trong trần 1 GB và 150 s) và trần cạnh dài 30000 px (`MaxOcrSide`, dưới 32767 px tesseract nhận và 40000 px của ImageMagick);
+  - ảnh lớn hơn hai trần (ảnh 50–200 MP) thì thu nhỏ cho vừa. Trần đặt trên diện tích chứ không trên cạnh dài, nên ảnh chụp màn hình dài giữ nguyên bề ngang và vẫn đọc được.
+  Trang PDF không qua quy tắc này: pdfium render 300 DPI (dưới đây) và ngân sách render OCR chỉ tính các trang sẽ đọc.
 - PDF: pdfium render từng trang 300 DPI (pdf-worker sẵn có). Trang đã có chữ (pdfium đếm > 10 ký tự, không tính khoảng trắng, như Convert to > Text) thì bỏ qua (`--skip-text` của OCRmyPDF). Trang cần OCR: tesseract `-c textonly_pdf=1 pdf` ra PDF chỉ có lớp chữ vô hình đúng khổ trang, rồi qpdf `--overlay` lên trang gốc (cách "sandwich" của OCRmyPDF, chỉ lấy ý tưởng, MPL-2.0 không chép mã). Trang gốc không bị mã hóa lại.
 - Tự xoay: OSD (`--psm 0 -l osd`) chỉ dùng khi độ tin cậy ≥ 14 (mặc định `rotate_pages_threshold` của OCRmyPDF): xoay ảnh trước khi nhận chữ để chữ đúng chiều. Trong Make searchable, trang PDF mà OSD chắc là đang hiện nằm ngang hoặc lộn ngược được dựng thẳng bằng cách tăng `/Rotate` của trang đúng góc đó (như `--rotate-pages` của OCRmyPDF; nội dung trang không bị mã hóa lại), và lớp chữ nằm đúng trên chữ, đọc đúng thứ tự từng dòng (người dùng chốt 2026-10-25, review R5: để trang lộn ngược thì Edge/Chrome đọc từ của mỗi dòng theo thứ tự ngược, Ctrl+F cụm từ không thấy). Trang đã hiện thẳng (kể cả nhờ `/Rotate` sẵn có) giữ nguyên.
 - Song song theo trang trong giới hạn lõi và ngân sách bộ nhớ chung (ADR-0006); tiến độ trong file theo số trang.
@@ -59,6 +63,8 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 ## Giới hạn đã biết
 
 - Trang scan đã có hơn 10 ký tự chữ thật (dòng tiêu đề đánh máy, "Scanned with …", số Bates, dấu đóng trang) được coi là trang có chữ và không được OCR, cả ở `Convert to > Text` lẫn `Make searchable (OCR)`: `Convert to > Text` chỉ lấy mấy ký tự đó, `Make searchable` để nguyên trang. Bỏ qua trang có chữ như `--skip-text` của OCRmyPDF để không chồng lớp chữ thứ hai lên trang có chữ (success criterion 2); ngưỡng 10 ký tự là của Flevert.
+- Ảnh lớn hơn 25 MP bị thu nhỏ về 25 MP trước khi đọc (`OcrSize` ở trên), nên chữ rất nhỏ trong ảnh rất lớn có thể bị sót. Mỗi ảnh hoặc trang có 150 s và 1 GB cho tesseract.
+- OSD chỉ chắc (≥ 14) khi trang đủ chữ, khoảng mười dòng; trang/ảnh xoay chỉ có một hai dòng được đọc nguyên trạng.
 
 ## Success criteria
 
