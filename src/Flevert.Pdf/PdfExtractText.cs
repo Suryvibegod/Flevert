@@ -177,7 +177,8 @@ public sealed class PdfExtractText : IOperation
         return message is null ? e : new OcrException(message, ocr);
     }
 
-    private static bool IsScanned(string page) => Letters(page) <= ScannedChars;
+    /// <summary>Whether a page of text, as the worker cleans it, is read as a scan; the worker draws for tesseract the same pages.</summary>
+    internal static bool IsScanned(string page) => Letters(page) <= ScannedChars;
 
     private static int Letters(string text) => text.Count(c => !char.IsWhiteSpace(c));
 

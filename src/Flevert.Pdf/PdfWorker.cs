@@ -221,9 +221,10 @@ public sealed class PdfWorker
     }
 
     /// <summary>
-    /// Renders pages of <paramref name="inputPath"/> that have &lt;= 10 characters at <paramref name="dpi"/> (typically 300)
-    /// as grayscale PNG images into <paramref name="folder"/> (<c>page-&lt;n&gt;.png</c>), reporting each page.
-    /// Pages with &gt; 10 characters are skipped.
+    /// Renders the scanned pages of <paramref name="inputPath"/>, those with at most <see cref="PdfExtractText.ScannedChars"/>
+    /// characters of text, white space aside (<see cref="PdfExtractText.IsScanned"/>), at <paramref name="dpi"/> (typically
+    /// 300) as grayscale PNG images into <paramref name="folder"/> (<c>page-&lt;n&gt;.png</c>), reporting each page. Only
+    /// they count against the budget (<see cref="PdfRenderBudget.CheckOcr"/>); the other pages are skipped.
     /// Returns the 1-based page numbers that were rendered and require OCR, and the total page count.
     /// </summary>
     /// <param name="folder">An empty folder the caller holds.</param>
@@ -370,6 +371,7 @@ public sealed class PdfWorker
 
         private readonly List<int> _blank = [];
         private readonly List<int> _ocrPages = [];
+        private int _checked;
         private int? _imageCount;
         private int _extracted;
         private int _extracting;
@@ -522,6 +524,11 @@ public sealed class PdfWorker
                         && (_blank.Count == 0 || _blank[^1] != _current):
                         _blank.Add(Number(parts[1], _current, _current));
                         return null;
+                    case "checked" when Task == PdfWorkerTask.OcrPages && parts.Length == 2 && _total > 0 && _current == 0 && _checked < _total:
+                        // Page n's text is read, before any page is drawn: proof of work through a long PDF.
+                        _checked = Number(parts[1], _checked + 1, _checked + 1);
+                        Watch(_worker.StallTimeout);
+                        return null;
                     case "ocr" when Task == PdfWorkerTask.OcrPages && parts.Length == 2 && _current > _written
                         && (_ocrPages.Count == 0 || _ocrPages[^1] != _current):
                         _ocrPages.Add(Number(parts[1], _current, _current));
@@ -561,7 +568,7 @@ public sealed class PdfWorker
                         Watch(_worker.StallTimeout); // it is about to exit
                         return null;
                     case "pages" or "page" or "busy" or "wrote" or "done" or "error" or "encode" or "image" or "kept"
-                        or "blank" or "ocr" or "saved" or "images" or "extract" or "extracted":
+                        or "blank" or "checked" or "ocr" or "saved" or "images" or "extract" or "extracted":
                         throw new ProtocolException(line);
                     default:
                         // Not the worker's: a native library writing to standard output. It proves nothing, so it does

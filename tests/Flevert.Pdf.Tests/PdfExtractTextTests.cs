@@ -146,9 +146,8 @@ public sealed class PdfExtractTextTests : IDisposable
     public async Task Reports_progress_once_per_page_in_order()
     {
         var input = _dir.Combine("three.pdf");
-        // More than 10 characters a page: none is read as a scan.
-        // ("Trang số ba" has 9 and was read as one: tesseract ran, and its pictures were counted too.)
-        TestTextPdf.Write(input, "Đây là trang số một", "Đây là trang số hai", "Đây là trang số ba");
+        // More than 10 characters a page, white space aside: none is read as a scan.
+        TestTextPdf.Write(input, "Trang số một của hồ sơ", "Trang số hai của hồ sơ", "Trang số ba của hồ sơ");
         var reports = new List<FileProgress>();
 
         await Op().RunAsync(input, new SyncProgress(reports.Add), CancellationToken.None);
