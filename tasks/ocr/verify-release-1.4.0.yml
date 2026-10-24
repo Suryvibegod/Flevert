@@ -1,0 +1,181 @@
+# Draft for the 1.4.0 release (docs/RELEASING.md, "Tag and check the draft"). Not a workflow here: at release time,
+# copy it to .github/workflows/verify-release-1.4.0.yml on its own branch release/verify-1.4.0 made from the tagged
+# commit, fill the three placeholders in env below, and push that branch once the draft release exists.
+#   FILL_TAG_SHA       the full commit v1.4.0 points to (rev-parse of v1.4.0^{commit})
+#   FILL_SETUP         the setup's file name on the draft: Flevert-Setup-1.4.0.exe unless the release names it otherwise
+#   FILL_RUNTIME_PATCH the newest .NET 10 patch on release day (10.0.x), which the installed flevert.deps.json must name
+# Copied from verify-release-1.3.0.yml (branch release/verify-1.3.0, commit 809b0230). What changed: the version, the
+# placeholders, and the time limits. scripts/test-installer.ps1 now also runs AssertOcr after the fresh install and
+# after the upgrade from 1.3.0: six more flevert.exe runs each (picture to Text, picture to PDF, PDF to Text, Make
+# searchable twice, PDF to Text of the searchable copy), two tesseract runs each and, without deps\, one 3 MB download
+# of the pinned tesseract zip for its licence names. 1.3.0's ten conversions and ten scenarios took 5 minutes of the
+# standard-user step; twelve OCR runs at up to 20 s each on a hosted runner add about 4, so its deadline goes from 20
+# to 40 minutes (four times the expected 10) and the job's limit from 90 to 120.
+
+name: Verify draft 1.4.0
+
+on:
+  push:
+    branches: [release/verify-1.4.0]
+
+permissions:
+  # GitHub shows draft releases only to a token with push access.
+  contents: write
+  attestations: read
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      TAG: v1.4.0
+      TAG_SHA: FILL_TAG_SHA
+      SETUP: FILL_SETUP
+      RUNTIME_PATCH: FILL_RUNTIME_PATCH
+    steps:
+      - name: Check the placeholders are filled
+        shell: pwsh
+        run: |
+          if ($env:TAG_SHA -notmatch '^[0-9a-f]{40}$') { throw 'Fill TAG_SHA with the full commit of the tag.' }
+          if ($env:SETUP -notmatch '^Flevert-Setup-\d+\.\d+\.\d+\.exe$') { throw 'Fill SETUP with the setup file name.' }
+          if ($env:RUNTIME_PATCH -notmatch '^10\.0\.\d+$') { throw 'Fill RUNTIME_PATCH with the newest .NET 10 patch.' }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TAG_SHA }}
+          persist-credentials: false
+      - name: Download and verify the draft installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $draft = gh release view $env:TAG --repo Suryvibegod/Flevert --json isDraft
+          if ($LASTEXITCODE -ne 0) { throw 'The official draft release is not accessible.' }
+          if (-not (($draft | ConvertFrom-Json).isDraft)) { throw 'Expected an unpublished draft.' }
+          New-Item -ItemType Directory artifacts/draft -Force | Out-Null
+          gh release download $env:TAG --repo Suryvibegod/Flevert --pattern $env:SETUP --pattern SHA256SUMS.txt --dir artifacts/draft
+          if ($LASTEXITCODE -ne 0) { throw 'Draft download failed.' }
+          $line = @(Get-Content artifacts/draft/SHA256SUMS.txt | Where-Object { $_ -match ('^([a-f0-9]{64})  ' + [regex]::Escape($env:SETUP) + '$') })
+          if ($line.Count -ne 1) { throw 'Missing or ambiguous setup checksum.' }
+          $expected = ($line[0] -split ' ')[0]
+          $actual = (Get-FileHash "artifacts/draft/$env:SETUP" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw 'Setup checksum mismatch.' }
+          gh attestation verify "artifacts/draft/$env:SETUP" --repo Suryvibegod/Flevert --signer-workflow Suryvibegod/Flevert/.github/workflows/release.yml --source-ref "refs/tags/$env:TAG" --source-digest $env:TAG_SHA --deny-self-hosted-runners
+          if ($LASTEXITCODE -ne 0) { throw 'Setup attestation verification failed.' }
+      - name: Test installation and upgrade as a standard user
+        shell: pwsh
+        run: |
+          # Use a real standard account in the runner's interactive session. Hosted images disable UAC,
+          # so RunLevel Limited on runneradmin still produces an administrator token.
+          $testName = 'FlevertReleaseCheck'
+          $password = [Guid]::NewGuid().ToString('N') + '!aA9'
+          $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+          $user = New-LocalUser -Name $testName -Password $securePassword -AccountNeverExpires -PasswordNeverExpires
+          Add-LocalGroupMember -SID 'S-1-5-32-545' -Member $user
+          Write-Host "Verification desktop session: $([Diagnostics.Process]::GetCurrentProcess().SessionId)"
+          $work = 'C:\FlevertReleaseVerify'
+          New-Item -ItemType Directory $work -Force | Out-Null
+          $acl = Get-Acl $work
+          $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($user.SID, 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+          Set-Acl -LiteralPath $work -AclObject $acl
+          # CreateProcessWithLogonW needs the alternate account to have access to the current
+          # window station and desktop. Grant only this disposable test account that access.
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class VerifyDesktop {
+            [DllImport("user32.dll")] public static extern IntPtr GetProcessWindowStation();
+            [DllImport("user32.dll")] public static extern IntPtr GetThreadDesktop(uint id);
+            [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+            [DllImport("user32.dll", SetLastError=true)] public static extern bool GetUserObjectSecurity(IntPtr handle, ref int info, [Out] byte[] buffer, uint length, out uint needed);
+            [DllImport("user32.dll", SetLastError=true)] public static extern bool SetUserObjectSecurity(IntPtr handle, ref int info, byte[] buffer);
+          }
+          '@
+          function Grant-TestDesktop([IntPtr]$Handle, [int]$Mask) {
+            $info = 4
+            [uint32]$needed = 0
+            [VerifyDesktop]::GetUserObjectSecurity($Handle, [ref]$info, $null, 0, [ref]$needed) | Out-Null
+            $buffer = [byte[]]::new($needed)
+            if (-not [VerifyDesktop]::GetUserObjectSecurity($Handle, [ref]$info, $buffer, $needed, [ref]$needed)) { throw [ComponentModel.Win32Exception]::new() }
+            $sd = [Security.AccessControl.RawSecurityDescriptor]::new($buffer, 0)
+            $ace = [Security.AccessControl.CommonAce]::new([Security.AccessControl.AceFlags]::None, [Security.AccessControl.AceQualifier]::AccessAllowed, $Mask, $user.SID, $false, $null)
+            $sd.DiscretionaryAcl.InsertAce($sd.DiscretionaryAcl.Count, $ace)
+            $updated = [byte[]]::new($sd.BinaryLength)
+            $sd.GetBinaryForm($updated, 0)
+            if (-not [VerifyDesktop]::SetUserObjectSecurity($Handle, [ref]$info, $updated)) { throw [ComponentModel.Win32Exception]::new() }
+          }
+          Grant-TestDesktop ([VerifyDesktop]::GetProcessWindowStation()) 0x000f037f
+          Grant-TestDesktop ([VerifyDesktop]::GetThreadDesktop([VerifyDesktop]::GetCurrentThreadId())) 0x000f01ff
+          $script = Join-Path $env:GITHUB_WORKSPACE 'scripts\test-installer.ps1'
+          $setup = Join-Path $env:GITHUB_WORKSPACE "artifacts\draft\$env:SETUP"
+          # Keep the installed runtime manifest before the existing harness uninstalls the app.
+          $marker = '    $freshFiles = InstalledFiles'
+          $probe = @'
+              Copy-Item "$app\flevert.deps.json" 'C:\FlevertReleaseVerify\installed-deps.json'
+              $runtime = @(([IO.File]::ReadAllText("$app\flevert.deps.json") | ConvertFrom-Json).libraries.PSObject.Properties.Name | Where-Object { $_ -like 'runtimepack.Microsoft.NETCore.App.Runtime.win-x64/*' })
+              Assert ($runtime.Count -eq 1 -and $runtime[0] -eq 'runtimepack.Microsoft.NETCore.App.Runtime.win-x64/@RUNTIME_PATCH@') "installed runtime is the current .NET 10 patch ($runtime)"
+          '@
+          $probe = $probe.Replace('@RUNTIME_PATCH@', $env:RUNTIME_PATCH)
+          $harness = [IO.File]::ReadAllText($script)
+          if (-not $harness.Contains($marker)) { throw 'Cannot locate the installed-runtime probe point.' }
+          [IO.File]::WriteAllText($script, $harness.Replace($marker, $probe + "`n" + $marker), [Text.UTF8Encoding]::new($true))
+          $wrapper = @'
+          $ErrorActionPreference = 'Stop'
+          Start-Transcript -Path 'C:\FlevertReleaseVerify\installer.log' -Force
+          try {
+              # The parent is PowerShell 7; do not inherit its incompatible module search path in 5.1.
+              $env:PSModulePath = "$PSHOME\Modules;$env:ProgramFiles\WindowsPowerShell\Modules"
+              Import-Module "$PSHOME\Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1" -Force
+              Import-Module "$PSHOME\Modules\Microsoft.PowerShell.Management\Microsoft.PowerShell.Management.psd1" -Force
+              Import-Module "$PSHOME\Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1" -Force
+              $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+              $profile = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$sid").ProfileImagePath
+              $env:USERPROFILE = [Environment]::ExpandEnvironmentVariables($profile)
+              $env:LOCALAPPDATA = Join-Path $env:USERPROFILE 'AppData\Local'
+              $env:APPDATA = Join-Path $env:USERPROFILE 'AppData\Roaming'
+              $env:TEMP = Join-Path $env:LOCALAPPDATA 'Temp'
+              $env:TMP = $env:TEMP
+              New-Item -ItemType Directory $env:TEMP -Force | Out-Null
+              & '__SCRIPT__' -Setup '__SETUP__'
+              'PASS' | Set-Content 'C:\FlevertReleaseVerify\result.txt'
+          } catch {
+              $_ | Out-String | Add-Content 'C:\FlevertReleaseVerify\error.txt'
+              'FAIL' | Set-Content 'C:\FlevertReleaseVerify\result.txt'
+              exit 1
+          } finally { Stop-Transcript }
+          '@
+          $wrapper.Replace('__SCRIPT__', $script.Replace("'", "''")).Replace('__SETUP__', $setup.Replace("'", "''")) | Set-Content "$work\run.ps1"
+          $credential = [PSCredential]::new("$env:COMPUTERNAME\$testName", $securePassword)
+          $process = Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File C:\FlevertReleaseVerify\run.ps1' -Credential $credential -LoadUserProfile -WorkingDirectory $work -WindowStyle Hidden -PassThru -RedirectStandardOutput "$work\launcher-output.log" -RedirectStandardError "$work\launcher-error.log"
+          $deadline = (Get-Date).AddMinutes(40)
+          $printed = 0
+          while (-not (Test-Path "$work\result.txt") -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 3
+            if (Test-Path "$work\installer.log") {
+              $lines = @(Get-Content "$work\installer.log")
+              if ($lines.Count -gt $printed) { $lines[$printed..($lines.Count - 1)] | Write-Host; $printed = $lines.Count }
+            }
+            if ($process.HasExited -and -not (Test-Path "$work\result.txt")) { Get-Content "$work\launcher-error.log"; throw "The standard-user process exited without a result (code $($process.ExitCode))." }
+          }
+          Get-Content "$work\installer.log" -ErrorAction SilentlyContinue
+          Get-Content "$work\error.txt" -ErrorAction SilentlyContinue
+          $result = Get-Content "$work\result.txt" -ErrorAction SilentlyContinue
+          if ($result -ne 'PASS') {
+            Get-Content "$work\launcher-error.log"
+            throw 'The standard-user installer/upgrade test did not pass.'
+          }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: release-verify-1.4.0
+          path: |
+            C:\FlevertReleaseVerify\*.txt
+            C:\FlevertReleaseVerify\installed-deps.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: release-verify-1.4.0-log
+          path: C:\FlevertReleaseVerify\*.log
+          if-no-files-found: ignore
+          retention-days: 7

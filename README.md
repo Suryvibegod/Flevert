@@ -20,7 +20,7 @@ iPhone photos to JPG, videos small enough to send, copies without GPS, photos in
 
 - **iPhone photos that open anywhere**: HEIC to JPG, the right way up.
 - **Photos that fit**: compress them for chat and email, or to under 500 KB, 1 MB or 5 MB.
-- **Seven formats**: convert between JPG, PNG, WebP, AVIF, GIF and TIFF (BMP opens too). Animations stay animated in GIF and WebP.
+- **Six formats**: convert between JPG, PNG, WebP, AVIF, GIF and TIFF (BMP opens too). Animations stay animated in GIF and WebP.
 - **Text from pictures and scans**: Vietnamese and English, read on your PC: a screenshot or a photo of a page to `.txt`, a scanned PDF to a PDF you can search and copy from.
 - **No location in what you share**: remove GPS and camera details first.
 - **Videos that fit**: compress to under 10, 25 or 100 MB, convert to MP4, MOV, WEBM or GIF, take the sound out as MP3, or remove where it was filmed.
