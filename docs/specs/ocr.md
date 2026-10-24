@@ -42,7 +42,7 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 
 ## Cách làm
 
-- Ngôn ngữ mặc định `-l vie+eng`, `--oem 1` (LSTM), `--psm 3`; `TESSDATA_PREFIX` trỏ đúng thư mục `tessdata` của Flevert (không dùng biến môi trường của người dùng). Gọi qua `ExternalTool` trong job object (không mạng, giới hạn bộ nhớ, timeout, độ ưu tiên thấp) như ffmpeg/qpdf. Đường dẫn ảnh do Flevert tạo trong thư mục tạm riêng, không bao giờ là file của người lạ trực tiếp (tesseract đọc được URL và danh sách file).
+- Ngôn ngữ mặc định `-l vie+eng`, `--oem 1` (LSTM), `--psm 3`; `TESSDATA_PREFIX` trỏ đúng thư mục `tessdata` của Flevert (không dùng biến môi trường của người dùng). Gọi qua `ExternalTool` trong job object (giới hạn bộ nhớ, timeout, độ ưu tiên thấp) như ffmpeg/qpdf. Job object không chặn được mạng. Bảo đảm "không mạng" nằm ở đầu vào: Flevert chỉ đưa tesseract đường dẫn đầy đủ tới một file PNG trên máy do chính Flevert ghi trong thư mục tạm riêng, không bao giờ URL, danh sách file hay file của người lạ trực tiếp (bản hiện tại có libcurl nên đọc được `http(s)://`, và tesseract coi đầu vào không phải ảnh là danh sách file); `Tesseract.cs` từ chối đường dẫn không đầy đủ hoặc không phải file ảnh. Kế hoạch (chưa xong): dựng lại tesseract không có libcurl và libarchive.
 - Ảnh nguồn: giải mã bằng Magick.NET (đã có giới hạn) thành PNG xám trong thư mục tạm rồi mới đưa tesseract.
 - PDF: pdfium render từng trang 300 DPI (pdf-worker sẵn có). Trang đã có chữ (pdfium đếm > 10 ký tự) thì bỏ qua (`--skip-text` của OCRmyPDF). Trang cần OCR: tesseract `-c textonly_pdf=1 pdf` ra PDF chỉ có lớp chữ vô hình đúng khổ trang, rồi qpdf `--overlay` lên trang gốc (cách "sandwich" của OCRmyPDF, chỉ lấy ý tưởng, MPL-2.0 không chép mã). Trang gốc không bị mã hóa lại.
 - Tự xoay: OSD (`--psm 0 -l osd`) chỉ dùng khi độ tin cậy ≥ 14 (mặc định `rotate_pages_threshold` của OCRmyPDF): xoay ảnh trước khi nhận chữ để chữ đúng chiều; trang PDF output giữ nguyên hướng nhìn.
@@ -62,7 +62,7 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 2. PDF trộn trang có chữ và trang scan: trang có chữ không bị chồng lớp chữ thứ hai.
 3. Ảnh PNG/JPG/HEIC tiếng Việt → `.txt` đúng ≥ 95 % ký tự. Trang xoay 90°/180° vẫn nhận đúng (OSD).
 4. Hủy giữa chừng: tesseract dừng ngay, không file dở. File độc (ảnh/PDF trong bảng file độc hiện có) không treo, không làm sập flevert.exe.
-5. Tesseract chỉ chạy từ đường dẫn của Flevert, `TESSDATA_PREFIX` của Flevert; không truy cập mạng.
+5. Tesseract chỉ chạy từ đường dẫn của Flevert, `TESSDATA_PREFIX` của Flevert, và chỉ nhận đường dẫn đầy đủ tới file PNG trên máy do Flevert tự ghi (không URL, không danh sách file), nên không có gì khiến nó mở mạng. Job object không chặn mạng; bản tesseract không libcurl/libarchive là kế hoạch.
 6. Bộ cài kèm tesseract và giấy phép của mọi file; `scripts/write-notices.ps1` không từ chối file nào; installer test đạt, gỡ sạch.
 7. Năm bộ test (Core, Image, Pdf, Media, Ocr) xanh, CI ba lần cùng commit.
 
