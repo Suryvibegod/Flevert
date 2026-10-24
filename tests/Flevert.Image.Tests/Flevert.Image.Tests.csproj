@@ -46,8 +46,7 @@
   <!-- Windows only: Text from pictures runs tesseract, which Flevert bundles for Windows only so far, and its tests draw
        with System.Drawing (GDI+). Not built on Linux (docs/specs/linux.md). -->
   <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
-    <Compile Remove="ImageToTextTests.cs" />
-    <Compile Remove="ImageToTextLimitsTests.cs" />
+    <Compile Remove="ImageToText*.cs" />
     <Compile Remove="ChildProcesses.cs" />
   </ItemGroup>
 
