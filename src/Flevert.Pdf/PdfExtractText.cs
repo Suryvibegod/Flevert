@@ -10,8 +10,9 @@ namespace Flevert.Pdf;
 /// <c>Convert to/Text</c> (docs/specs/pdf.md, P3; docs/specs/ocr.md): writes <c>&lt;name&gt;.txt</c> beside the PDF with
 /// the text of every page, in the order pdfium reads it: UTF-8 with a byte order mark (older Notepad then reads Vietnamese
 /// right), lines ended by <c>\r\n</c>, and a form feed between pages. A scanned page, one with at most
-/// <see cref="ScannedChars"/> characters of text, gets the text tesseract reads in its picture instead (v1.4.0). A PDF
-/// in which neither finds any text is skipped.
+/// <see cref="ScannedChars"/> characters of text, gets the text tesseract reads in its picture instead (v1.4.0); one
+/// tesseract cannot read keeps what pdfium found, and a note names it. A PDF in which neither finds any text is skipped,
+/// or fails with tesseract's error when it could not read a page.
 /// </summary>
 /// <remarks>
 /// pdfium reads the PDF in the worker (<see cref="PdfWorker.ExtractTextAsync"/>), as for pictures, so an untrusted PDF is
@@ -30,10 +31,15 @@ public sealed class PdfExtractText : IOperation
     /// </summary>
     internal const string ScannedPageUnit = "scanned page";
 
+    /// <summary>What the progress counts while the worker draws the pages for tesseract ("page picture 2 of 5").</summary>
+    internal const string DrawnPageUnit = "page picture";
+
+    // The most pages a note names, as for removed blank pages.
+    private const int MaxNamed = 20;
+
     internal const string NoTextMessage = "This PDF has no text, and Flevert found none in the pictures of its pages.";
 
     private readonly PdfWorker _worker;
-    private readonly Tesseract _tesseract;
 
     public PdfExtractText()
         : this(PdfWorker.NextToApp)
@@ -44,7 +50,8 @@ public sealed class PdfExtractText : IOperation
     internal PdfExtractText(PdfWorker worker, Tesseract? tesseract = null)
     {
         _worker = worker;
-        _tesseract = tesseract ?? Tesseract.NextToApp;
+        var engine = tesseract ?? Tesseract.NextToApp;
+        ReadPicture = (picture, ct) => ImageToText.ReadUprightAsync(engine, picture, ct);
     }
 
     public string Id => "pdf.extract-text";
@@ -58,6 +65,12 @@ public sealed class PdfExtractText : IOperation
 
     /// <summary>Where the pictures of scanned pages go, each run in a private folder: the user's temporary folder, or a test's.</summary>
     internal string ScratchRoot { get; init; } = Path.GetTempPath();
+
+    /// <summary>
+    /// Reads the text in the picture of a scanned page, <c>page-&lt;n&gt;.png</c>: tesseract, with the picture turned
+    /// upright first. Tests give one that fails as tesseract can.
+    /// </summary>
+    internal Func<string, CancellationToken, Task<string>> ReadPicture { get; init; }
 
     public Task<string> RunAsync(string inputPath, CancellationToken ct) => RunAsync(inputPath, null, ct);
 
@@ -86,60 +99,126 @@ public sealed class PdfExtractText : IOperation
         if (!OperatingSystem.IsWindows() || (pages is not null && !pages.Any(IsScanned)))
             return;
 
-        var (total, read) = await ReadScannedPagesAsync(inputPath, progress, ct).ConfigureAwait(false);
-        if (read.Count == 0 && pages is not null)
-            return;
+        var (total, read, unread) = await ReadScannedPagesAsync(inputPath, progress, ct).ConfigureAwait(false);
         pages ??= [.. Enumerable.Repeat("", total)];
         var anyText = false;
+        var changed = false;
         for (var i = 0; i < pages.Length; i++)
         {
             // A short page of real text ("Trang ba") is read too: what it holds stays unless the picture shows more.
             if (read.TryGetValue(i + 1, out var text) && Letters(text) > Letters(pages[i]))
+            {
                 pages[i] = text + "\r\n";
+                changed = true;
+            }
+
             anyText |= pages[i].Trim().Length > 0;
         }
 
+        // WriteAtomicallyAsync deletes what the worker wrote.
+        if (!anyText && unread.Count > 0)
+            throw ForPdf(unread.Values.First());
         if (!anyText)
-        {
-            // WriteAtomicallyAsync deletes what the worker wrote.
             throw new OperationSkippedException(NoTextMessage);
+
+        if (changed)
+        {
+            var whole = string.Join('\f', pages);
+            var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+            if (utf8.GetPreamble().Length + utf8.GetByteCount(whole) > PdfRenderWorker.MaxTextBytes)
+                throw new PdfException(PdfError.TooLarge, PdfRenderWorker.TooMuchTextMessage);
+
+            // Into the file the worker made, emptied: deleting it and making it again would leave a moment in which another
+            // account that may write in this folder could put its own file, or a link, at this name (review R12).
+            // The worker makes it before it reads a page, so it is there when it found no text too; Truncate fails rather than
+            // creates when it is gone. The writer starts with the byte order mark.
+            var options = new FileStreamOptions { Mode = FileMode.Truncate, Access = FileAccess.Write, Share = FileShare.None, Options = FileOptions.Asynchronous };
+            var stream = new FileStream(temp, options);
+            await using (stream.ConfigureAwait(false))
+            {
+                var writer = new StreamWriter(stream, utf8);
+                await using (writer.ConfigureAwait(false))
+                    await writer.WriteAsync(whole.AsMemory(), ct).ConfigureAwait(false);
+            }
         }
 
-        var whole = string.Join('\f', pages);
-        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
-        if (utf8.GetPreamble().Length + utf8.GetByteCount(whole) > PdfRenderWorker.MaxTextBytes)
-            throw new PdfException(PdfError.TooLarge, PdfRenderWorker.TooMuchTextMessage);
-        File.Delete(temp);
-        await File.WriteAllTextAsync(temp, whole, utf8, ct).ConfigureAwait(false);
+        if (unread.Count > 0)
+            OutputNote.Add(UnreadNote([.. unread.Keys], ForPdf(unread.Values.First()).Message));
+    }
+
+    /// <summary>
+    /// "The text of scanned page 2 could not be read. &lt;why&gt;" or "… scanned pages 2, 4 …", the first 20 named: the
+    /// pages keep what pdfium found on them.
+    /// </summary>
+    internal static string UnreadNote(IReadOnlyList<int> pages, string why)
+    {
+        var named = string.Join(", ", pages.Take(MaxNamed).Select(page => page.ToString(CultureInfo.InvariantCulture)));
+        var more = pages.Count > MaxNamed ? ", …" : "";
+        var which = pages.Count == 1 ? $"page {named}" : $"pages {named}{more}";
+        return $"The text of scanned {which} could not be read. {why}";
+    }
+
+    // Tesseract's words are about the picture it was given ("this image"); the user gave a PDF.
+    private static Exception ForPdf(Exception e)
+    {
+        if (e is not OcrException ocr)
+            return e;
+        var message = ocr.Message switch
+        {
+            OcrException.ToolFailedMessage =>
+                "Flevert's OCR tool stopped on a page of this PDF without finishing: the page may be damaged, or made to crash OCR tools.",
+            OcrException.TooSlowMessage =>
+                "Recognising text in a page of this PDF took too long: it may be damaged, or made to stall OCR tools.",
+            OcrException.NeedsTooMuchMemoryMessage =>
+                "A page of this PDF needs more memory than Flevert allows its OCR tool (1 GB): it is too large, or made to exhaust memory.",
+            OcrException.DiskFullMessage => "The disk filled up while recognising text in this PDF: free some space and try again.",
+            _ => null,
+        };
+        return message is null ? e : new OcrException(message, ocr);
     }
 
     private static bool IsScanned(string page) => Letters(page) <= ScannedChars;
 
     private static int Letters(string text) => text.Count(c => !char.IsWhiteSpace(c));
 
-    // The number of pages, and the text tesseract reads on each scanned page by its number from 1, cleaned as the worker
-    // cleans pdfium's.
-    private async Task<(int Total, IReadOnlyDictionary<int, string> Read)> ReadScannedPagesAsync(string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
+    // The number of pages; the text tesseract reads on each scanned page by its number from 1, cleaned as the worker cleans
+    // pdfium's; and why it could not read the others, in page order.
+    private async Task<(int Total, IReadOnlyDictionary<int, string> Read, SortedDictionary<int, Exception> Unread)> ReadScannedPagesAsync(
+        string inputPath, IProgress<FileProgress>? progress, CancellationToken ct)
     {
         // Only this user may change the pictures tesseract reads: %TEMP% may let other accounts swap them.
         var scratch = Path.Combine(Path.GetFullPath(ScratchRoot), $"flevert-ocr-{Guid.NewGuid():N}");
         PrivateFolder.Create(scratch);
         try
         {
-            // Drawing the pages takes a moment beside reading them: the bar counts the pages tesseract has read, once.
-            var (total, scanned) = await _worker.RenderOcrPagesAsync(inputPath, scratch, PdfMakeSearchable.OcrDpi, null, ct).ConfigureAwait(false);
+            // Drawing 300 DPI pictures takes a while: counted as pictures, so the bar neither sits still nor seems to read
+            // the pages again.
+            var drawing = progress is null ? null : new DrawnPages(progress);
+            var (total, scanned) = await _worker.RenderOcrPagesAsync(inputPath, scratch, PdfMakeSearchable.OcrDpi, drawing, ct).ConfigureAwait(false);
             var read = new Dictionary<int, string>();
+            var unread = new SortedDictionary<int, Exception>();
             var done = 0;
             var options = new ParallelOptions { MaxDegreeOfParallelism = Tesseract.MaxParallel, CancellationToken = ct };
             await Parallel.ForEachAsync(scanned, options, async (page, token) =>
             {
                 var picture = Path.Combine(scratch, string.Create(CultureInfo.InvariantCulture, $"page-{page}.png"));
-                var text = PdfRenderWorker.PageText(await ImageToText.ReadUprightAsync(_tesseract, picture, token).ConfigureAwait(false));
-                lock (read)
-                    read[page] = text;
+                try
+                {
+                    var text = PdfRenderWorker.PageText(await ReadPicture(picture, token).ConfigureAwait(false));
+                    lock (read)
+                        read[page] = text;
+                }
+                catch (Exception e) when (e is OcrException or FileNotFoundException or DirectoryNotFoundException)
+                {
+                    // One page tesseract cannot read (too slow, too large, a crash, tesseract or its data missing) keeps
+                    // what pdfium found on it, as before v1.4.0, rather than failing every other page (review R7).
+                    lock (unread)
+                        unread[page] = e;
+                }
+
                 progress?.Report(new FileProgress(ScannedPageUnit, Interlocked.Increment(ref done), scanned.Count));
             }).ConfigureAwait(false);
-            return (total, read);
+            return (total, read, unread);
         }
         finally
         {
@@ -152,5 +231,12 @@ public sealed class PdfExtractText : IOperation
                 // A folder left in %TEMP% must not hide the result or the real error.
             }
         }
+    }
+
+    // The worker's "page 3 of 10" while it draws the pictures, as "page picture 3 of 10".
+    private sealed class DrawnPages(IProgress<FileProgress> progress) : IProgress<FileProgress>
+    {
+        public void Report(FileProgress value) =>
+            progress.Report(value.Unit == "page" ? new FileProgress(DrawnPageUnit, value.Position, value.Total) : value);
     }
 }
