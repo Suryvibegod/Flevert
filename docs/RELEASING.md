@@ -69,3 +69,15 @@ ffmpeg is pinned the same way ([ADR-0009](adr/0009-ffmpeg-gpl-build.md)), to a b
 2. In `deps.json`: the URL, `sha256` and `strip` of the `ffmpeg` item, the DLL names in `keep` and in the FFmpeg notice when their numbers changed, and every pin under `ffmpegSource` (the commit the release tag points to, `git ls-remote https://github.com/BtbN/FFmpeg-Builds refs/tags/<tag>`; the full FFmpeg commit the asset name ends in, and its version). Run `scripts/fetch-deps.ps1` and every test project.
 3. Open the pull request: the **ffmpeg source** workflow fetches the new build's source and licences, and fails until the licences it brings are committed (step 6 of "Before tagging").
 
+Tesseract is built by Flevert itself ([ADR-0010](adr/0010-tesseract-static-build.md)): `.github/workflows/build-tesseract.yml` runs `scripts/build-tesseract.ps1` and publishes the zip as an immutable pre-release. Once a month, look for a new vcpkg tag with security fixes in Tesseract, Leptonica or the image codecs the zip's `README.txt` lists. To change the pin:
+
+1. In `scripts/build-tesseract.ps1`, set the vcpkg tag and the commit it points to (`git ls-remote https://github.com/microsoft/vcpkg refs/tags/<tag>^{}`), and the versions it should build. In the workflow, give the release a tag that was never used (`deps-tesseract-<version>-<n>`) and update its notes.
+2. A branch run (`gh workflow run build-tesseract.yml --ref <branch>`) builds and checks everything but attests and publishes nothing. When it fails on a port or feature that is not on the script's allow-list, review that port (licence, network or archive code, security record) before adding it there and to the Tesseract notice in `deps.json`.
+3. Merge to `main`, run it there (`gh workflow run build-tesseract.yml --ref main`), download the zip from the new release and check it was built by that workflow from `main`:
+
+   ```
+   gh attestation verify tesseract-<version>-vcpkg-<tag>-win64-static.zip --repo Suryvibegod/Flevert --signer-workflow Suryvibegod/Flevert/.github/workflows/build-tesseract.yml --source-ref refs/heads/main
+   ```
+
+4. Pin the release's URL and the SHA256 from its `SHA256SUMS.txt` (checked against the file downloaded) in `deps.json`, update the Tesseract notice to the ports in the zip's `licenses/` folder, run `scripts/fetch-deps.ps1` and every test project.
+
