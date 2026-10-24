@@ -111,6 +111,8 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
                 "pdf.extract-images" => render != Ok ? render : Skipped,
                 // Their pages are all empty: every page looks blank.
                 "pdf.remove-blank-pages" => AfterCount(nameof(PdfError.NoPages)),
+                // Nor any text: tesseract finds none on the pictures of their pages, so nothing is written.
+                "pdf.make-searchable" => AfterCount(Skipped),
                 _ => AfterCount(Ok),
             };
             yield return (tool, ToolOutcomes.TryGetValue((fixture, tool), out var outcome) ? outcome : rule);

@@ -198,15 +198,21 @@ public sealed partial class Qpdf
     /// </summary>
     /// <param name="toPages">Destination page range or list, e.g. <c>1,3,5</c>.</param>
     /// <param name="fromPages">Source page range from the overlay file, e.g. <c>1-3</c>.</param>
+    /// <param name="options">
+    /// More of qpdf's options, such as <c>--rotate</c>. qpdf turns the pages before it lays the overlay over them, and it
+    /// lays each overlay page over a page as that page is shown, its /Rotate applied.
+    /// </param>
     public async Task<bool> OverlayAsync(
-        string inputPath, string overlayPath, string toPages, string fromPages, string outputPath, CancellationToken ct)
+        string inputPath, string overlayPath, string toPages, string fromPages, string outputPath, IEnumerable<string> options,
+        CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(options);
         if (!IsPageRange(toPages))
             throw new ArgumentException($"Not a list of pages: {toPages}", nameof(toPages));
         if (!IsPageRange(fromPages))
             throw new ArgumentException($"Not a list of pages: {fromPages}", nameof(fromPages));
 
-        string[] options = [KeepStreamsAsTheyAre];
+        string[] arguments = [KeepStreamsAsTheyAre, .. options];
         string[] lines =
         [
             inputPath,
@@ -217,7 +223,7 @@ public sealed partial class Qpdf
             EndOfPages,
             outputPath,
         ];
-        var run = await RunCheckedAsync(options, [inputPath, overlayPath], lines, outputPath, ct).ConfigureAwait(false);
+        var run = await RunCheckedAsync(arguments, [inputPath, overlayPath], lines, outputPath, ct).ConfigureAwait(false);
         RequireOutput(run, outputPath);
         return Repaired(run);
     }

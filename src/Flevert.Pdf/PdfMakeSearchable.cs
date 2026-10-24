@@ -15,6 +15,7 @@ public sealed class PdfMakeSearchable : IOperation
 {
     public const double OcrDpi = 300;
     internal const string AlreadySearchableMessage = "This PDF already has text you can search.";
+    internal const string NoTextFoundMessage = "No text was found in the scanned pages of this PDF.";
 
     private readonly Qpdf _qpdf;
     private readonly PdfWorker _worker;
@@ -71,6 +72,7 @@ public sealed class PdfMakeSearchable : IOperation
                 throw new OperationSkippedException(AlreadySearchableMessage);
 
             var ocrDone = 0;
+            var foundText = 0;
             var parallelOptions = new ParallelOptions
             {
                 MaxDegreeOfParallelism = Tesseract.MaxParallel,
@@ -78,29 +80,31 @@ public sealed class PdfMakeSearchable : IOperation
             };
 
             var layers = new Dictionary<int, string>();
+            var turns = new Dictionary<int, int>();
             await Parallel.ForEachAsync(ocrPages, parallelOptions, async (page, token) =>
             {
                 var imagePath = Path.Combine(scratch, string.Create(CultureInfo.InvariantCulture, $"page-{page}.png"));
                 var layerBase = Path.Combine(scratch, string.Create(CultureInfo.InvariantCulture, $"layer-{page}"));
-                // A page shown turned (scanned sideways or upside down) is read upright; its text layer is then turned
-                // back the other way, and qpdf applies a page's /Rotate when it lays that page over another.
+                // A page shown turned (scanned sideways or upside down) is read upright, and turned below to show upright
+                // too, so its text layer is upright as tesseract writes it.
                 var turned = await ImageToText.TurnUprightAsync(_tesseract, imagePath, token).ConfigureAwait(false);
-                await _tesseract.WriteTextLayerAsync(imagePath, layerBase, token).ConfigureAwait(false);
-                var layer = layerBase + ".pdf";
-                if (turned != 0)
-                {
-                    var shown = layerBase + "-shown.pdf";
-                    var back = string.Create(CultureInfo.InvariantCulture, $"--rotate=+{360 - turned}:1");
-                    await _qpdf.TransformAsync(layer, shown, [Qpdf.KeepStreamsAsTheyAre, back], token).ConfigureAwait(false);
-                    layer = shown;
-                }
+                var text = await _tesseract.WriteTextLayerAsync(imagePath, layerBase, token).ConfigureAwait(false);
 
                 lock (layers)
-                    layers[page] = layer;
+                {
+                    layers[page] = layerBase + ".pdf";
+                    turns[page] = turned;
+                }
 
+                if (!string.IsNullOrWhiteSpace(text))
+                    Interlocked.Exchange(ref foundText, 1);
                 var completed = Interlocked.Increment(ref ocrDone);
                 progress?.Report(new FileProgress(PdfExtractText.ScannedPageUnit, completed, ocrPages.Count));
             }).ConfigureAwait(false);
+
+            // As Convert to > Text skips a picture without text: a copy with nothing to find would only look done.
+            if (foundText == 0)
+                throw new OperationSkippedException(NoTextFoundMessage);
 
             string layerPdf;
             if (ocrPages.Count == 1)
@@ -116,11 +120,20 @@ public sealed class PdfMakeSearchable : IOperation
 
             var toPages = PdfRemoveBlankPages.Ranges(ocrPages);
             var fromPages = ocrPages.Count == 1 ? "1" : string.Create(CultureInfo.InvariantCulture, $"1-{ocrPages.Count}");
+            // A page OSD found turned is made to show upright: its /Rotate turns as far as its picture was turned, as
+            // OCRmyPDF --rotate-pages does, nothing re-encoded (ocr.md, review R5). Left upside down, a page gives viewers
+            // each line's words last first, and Ctrl+F finds no phrase on it. qpdf turns the pages before it lays the
+            // layers over them, each as its page is shown.
+            var rotations = turns.Where(turn => turn.Value != 0)
+                .GroupBy(turn => turn.Value, turn => turn.Key)
+                .OrderBy(group => group.Key)
+                .Select(group => string.Create(CultureInfo.InvariantCulture, $"--rotate=+{group.Key}:{PdfRemoveBlankPages.Ranges(group.Order())}"))
+                .ToArray();
 
             var desired = Path.Combine(Path.GetDirectoryName(inputPath)!, Path.GetFileNameWithoutExtension(inputPath) + " (searchable).pdf");
             var output = await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
             {
-                var repaired = await _qpdf.OverlayAsync(inputPath, layerPdf, toPages, fromPages, temp, token).ConfigureAwait(false);
+                var repaired = await _qpdf.OverlayAsync(inputPath, layerPdf, toPages, fromPages, temp, rotations, token).ConfigureAwait(false);
                 await PdfRepair.CheckAsync(_qpdf, repaired, pages, temp, token).ConfigureAwait(false);
             }, ct).ConfigureAwait(false);
 

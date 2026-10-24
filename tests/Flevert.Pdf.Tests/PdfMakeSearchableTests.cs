@@ -47,6 +47,7 @@ public sealed class PdfMakeSearchableTests : IDisposable
             Assert.True(similarity >= 0.95, $"Page {page + 1}: {similarity:P1} for '{after.GetText(page)}'");
             // The text is invisible: the page draws exactly what it drew.
             Assert.True(before.Render(page, 72).Bgra.Span.SequenceEqual(after.Render(page, 72).Bgra.Span), $"Page {page + 1} looks different.");
+            TestTextBoxes.AssertTextOverInk(after, page);
         }
     }
 
@@ -87,32 +88,33 @@ public sealed class PdfMakeSearchableTests : IDisposable
         Assert.True(before.Render(0, 72).Bgra.Span.SequenceEqual(after.Render(0, 72).Bgra.Span), "The page looks different.");
         var similarity = TestOcr.Similarity(FirstPage, after.GetText(0));
         Assert.True(similarity >= 0.95, $"{similarity:P1} for '{after.GetText(0)}'");
+        TestTextBoxes.AssertTextOverInk(after, 0);
     }
 
     [WindowsTheory]
     [InlineData(90)]
     [InlineData(180)]
     [InlineData(270)]
-    public async Task A_page_scanned_turned_and_shown_so_is_read_upright_and_left_as_it_looks(int degrees)
+    public async Task A_page_scanned_turned_is_turned_upright_and_its_text_read_in_order(int degrees)
     {
-        // Nothing turns this page upright: OSD finds the words turned, tesseract reads them upright, and the text layer is
-        // turned back to lie over them as they are shown (ocr.md: the output keeps how the page looks). OSD is only sure
-        // of a page of text: two lines score about 3, under the threshold of 14, and are read as they are.
+        // Nothing turns this page upright: OSD finds the words turned, and the page's /Rotate is turned to show them
+        // upright (ocr.md, review R5: as OCRmyPDF --rotate-pages does, nothing re-encoded), with the text over them, so
+        // that a viewer reads each line in order. OSD is only sure of a page of text: two lines score about 3, under the
+        // threshold of 14, and are read as they are.
         var page = string.Join('\n', Enumerable.Repeat(FullPage, 6));
         var input = _dir.Combine("scan.pdf");
         await TestOcr.WriteScan(input, degrees, page);
 
         var output = await Op().RunAsync(input, CancellationToken.None);
 
-        using var before = PdfDocument.Open(input);
+        Assert.Equal([degrees], await ReadRotations(output));
+        var upright = await new PdfRotate(degrees, Qpdf.NextToApp).RunAsync(input, CancellationToken.None);
+        using var expected = PdfDocument.Open(upright);
         using var after = PdfDocument.Open(output);
-        Assert.True(before.Render(0, 72).Bgra.Span.SequenceEqual(after.Render(0, 72).Bgra.Span), "The page looks different.");
-        // pdfium reads words drawn upside down from the left of the page as shown: each line's words come back last first.
-        var expected = degrees == 180
-            ? string.Join('\n', page.Split('\n').Select(line => string.Join(' ', line.Split(' ').Reverse())))
-            : page;
-        var similarity = TestOcr.Similarity(expected, after.GetText(0));
+        Assert.True(expected.Render(0, 72).Bgra.Span.SequenceEqual(after.Render(0, 72).Bgra.Span), "The page does not look as the scan turned upright.");
+        var similarity = TestOcr.Similarity(page, after.GetText(0));
         Assert.True(similarity >= 0.95, $"{similarity:P1} for '{after.GetText(0)}'");
+        TestTextBoxes.AssertTextOverInk(after, 0);
     }
 
     [WindowsFact]
@@ -146,6 +148,19 @@ public sealed class PdfMakeSearchableTests : IDisposable
 
         Assert.Equal("This PDF already has text you can search.", ex.Message);
         Assert.Equal(["text.pdf"], FileNames(_dir.Path));
+    }
+
+    [WindowsFact]
+    public async Task A_scan_without_words_is_skipped_and_leaves_nothing()
+    {
+        // As Convert to > Text skips a picture without text: a PDF with nothing added would only look done.
+        var input = _dir.Combine("blank.pdf");
+        await TestOcr.WriteScan(input, "");
+
+        var ex = await Assert.ThrowsAsync<OperationSkippedException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal("No text was found in the scanned pages of this PDF.", ex.Message);
+        Assert.Equal(["blank.pdf"], FileNames(_dir.Path));
     }
 
     private sealed class SyncProgress(Action<FileProgress> report) : IProgress<FileProgress>

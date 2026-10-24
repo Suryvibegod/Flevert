@@ -9,7 +9,7 @@ Text from pictures and scans, in Vietnamese and English, read on your PC.
 ### Added
 
 - Right-click a picture and choose **Flevert > Convert to > Text**: `photo.txt` with the text in it. A photo of a page turned sideways or upside down is read the right way up when it has enough text for Tesseract to be sure which way is up; otherwise it is read as it is.
-- Hold **Shift**, right-click a PDF and choose **Flevert: more PDF tools > Make searchable (OCR)**: `report (searchable).pdf` looks the same, and Ctrl+F finds the words of its scanned pages, which you can copy with their accents.
+- Hold **Shift**, right-click a PDF and choose **Flevert: more PDF tools > Make searchable (OCR)**: `report (searchable).pdf` looks the same, and Ctrl+F finds the words of its scanned pages, which you can copy with their accents. A page scanned sideways or upside down is turned the right way up, without losing quality.
 - **Convert to > Text** of a PDF now reads scanned pages from their pictures instead of skipping a scanned PDF.
 - The installer includes Tesseract 5.5.3 (Apache-2.0) with its Vietnamese and English data, built for Flevert from source with permissive libraries only.
 - **Flevert for Linux**: the same picture and PDF tools in the right-click menu of GNOME Files (Nautilus), installed for you from a tarball with `install.sh`, without root. A progress window, the password and watermark dialogs and the notification at the end work as on Windows; the PDF tools that Windows shows only with Shift are under **Flevert > More PDF tools**. Merge PDFs and Combine into PDF join files in the order Files shows them. Video and audio, and text from pictures and scans, are on Windows only for now.

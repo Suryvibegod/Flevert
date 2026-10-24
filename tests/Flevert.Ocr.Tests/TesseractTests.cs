@@ -41,8 +41,9 @@ public sealed class TesseractTests(ITestOutputHelper output) : IDisposable
         var outputBase = _dir.Combine("invoice_layer");
         var expectedPdf = outputBase + ".pdf";
 
-        await Tesseract.NextToApp.WriteTextLayerAsync(img, outputBase, CancellationToken.None);
+        var text = await Tesseract.NextToApp.WriteTextLayerAsync(img, outputBase, CancellationToken.None);
 
+        Assert.Contains("123", text, StringComparison.Ordinal);
         Assert.True(File.Exists(expectedPdf), $"Expected PDF file at {expectedPdf}");
         var bytes = await File.ReadAllBytesAsync(expectedPdf);
         Assert.True(bytes.Length > 100, "PDF file is too small.");

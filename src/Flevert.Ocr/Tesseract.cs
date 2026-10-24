@@ -163,14 +163,16 @@ internal sealed class Tesseract
 
     /// <summary>
     /// Runs Tesseract on <paramref name="imagePath"/> to produce an invisible text-only PDF layer at
-    /// <paramref name="outputBase"/><c>.pdf</c> with page dimensions matching the image DPI.
+    /// <paramref name="outputBase"/><c>.pdf</c> with page dimensions matching the image DPI, and returns the text in that
+    /// layer, which the same run writes to <paramref name="outputBase"/><c>.txt</c>: blank when it found none, so that a
+    /// caller adds no empty layer.
     /// </summary>
     /// <param name="imagePath">Absolute path of a trusted image file prepared by Flevert in a temporary directory.</param>
     /// <param name="outputBase">Output base path without extension (or with <c>.pdf</c>). Tesseract produces <c>&lt;outputBase&gt;.pdf</c>.</param>
     /// <param name="ct">Token to cancel the OCR operation; kills the running process immediately.</param>
     /// <exception cref="OcrException">Tesseract failed, ran out of memory, timed out, or the output PDF was not produced.</exception>
     /// <exception cref="OperationCanceledException">The operation was cancelled.</exception>
-    public async Task WriteTextLayerAsync(string imagePath, string outputBase, CancellationToken ct)
+    public async Task<string> WriteTextLayerAsync(string imagePath, string outputBase, CancellationToken ct)
     {
         CheckInputPath(imagePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputBase);
@@ -180,6 +182,7 @@ internal sealed class Tesseract
             ? outputBase[..^4]
             : outputBase;
         var expectedPdfPath = baseName + ".pdf";
+        var textPath = baseName + ".txt";
 
         string[] arguments =
         [
@@ -189,6 +192,8 @@ internal sealed class Tesseract
             "--oem", "1",
             "--psm", "3",
             "-c", "textonly_pdf=1",
+            // The text as well, from the same reading: tessdata has no "txt" config file, so this is set directly.
+            "-c", "tessedit_create_txt=1",
             "pdf",
         ];
 
@@ -204,6 +209,15 @@ internal sealed class Tesseract
                 OcrException.ToolFailedMessage,
                 new TesseractException("tesseract", run.ExitCode, $"Expected output PDF not found: {expectedPdfPath}"));
         }
+
+        if (!File.Exists(textPath))
+        {
+            throw new OcrException(
+                OcrException.ToolFailedMessage,
+                new TesseractException("tesseract", run.ExitCode, $"Expected output text not found: {textPath}"));
+        }
+
+        return await File.ReadAllTextAsync(textPath, ct).ConfigureAwait(false);
     }
 
     /// <summary>

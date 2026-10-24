@@ -91,7 +91,7 @@ Less used PDF tools are one step away: hold **Shift** while you right-click a PD
 | **Split by size** > Under 10 MB, Under 25 MB | a folder `report (parts)` with `report part 1.pdf`, …, in page order. **Under 10 MB** is the safe size for email (Gmail counts 25 MB after encoding, about 18 MB of file; Outlook takes 20 MB); **Under 25 MB** is for chat apps |
 | **Convert to PNG images** | a folder `report (pages)` with `report 001.png`, …, lossless |
 | **Extract images** | a folder `report (images)` with `report 001.jpg`, `report 002.png`, …: photos exactly as they are in the PDF, other pictures as PNG |
-| **Make searchable (OCR)** | `report (searchable).pdf`: the same pages, with invisible text over the scanned ones, so Ctrl+F finds words and you can copy them with their Vietnamese accents |
+| **Make searchable (OCR)** | `report (searchable).pdf`: the same pages, with invisible text over the scanned ones, so Ctrl+F finds words and you can copy them with their Vietnamese accents; a page scanned sideways or upside down is turned the right way up |
 
 **Videos** (`.mp4 .mov .m4v .mkv .webm .avi .wmv .3gp .mts .m2ts`):
 
