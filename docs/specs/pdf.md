@@ -478,6 +478,7 @@ Mục tiêu: một người lần đầu chuột phải vào file thấy ngay vi
   | Lock filled forms | `layer` |
   | Split by size | `cut` |
   | Extract images | `image_multiple` |
+  | Make searchable (OCR) | `scan_text` (v1.4.0, [ocr.md](ocr.md), "Icon") |
 
 ### Hộp thoại watermark (mở từ `Add watermark…`)
 

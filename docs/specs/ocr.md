@@ -17,6 +17,14 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 - PDF: `Make searchable (OCR)` nằm ở menu Shift `Flevert: more PDF tools` (menu chính đã đủ 16 mục). `Convert to > Text` tự OCR trang không có chữ.
 - Ảnh: `Convert to > Text` thay `Convert to > BMP` (ít người cần BMP làm đích; BMP vẫn là nguồn). Menu ảnh giữ 16 mục.
 
+## Icon
+
+- `Make searchable (OCR)` dùng `scan_text` của Fluent (Filled, tô `#2F80ED` như các icon khác; ghim SHA256 các bản 16, 20, 24, 32, 48 px trong `scripts/make-menu-icons.py`): khung quét bao quanh dòng chữ, nghĩa là "tìm chữ trong trang scan". Trước đó mục này dùng chung `draw_text` với `Add watermark…`.
+- Đã xét (cùng commit Fluent đã ghim, so trên menu sáng và tối ở 16–32 px):
+  - `scan_type` (chữ T trong khung quét): cùng nghĩa, nhưng chỉ có 20 và 24 px, nên 16 px phải thu nhỏ từ 20 px, nhòe.
+  - `document_text_extract`, `document_search`: hình trang giấy, dễ lẫn với `document_dismiss`, `document_page_number`, `document_pdf` cạnh nó ở 16 px; kính lúp của `document_search` gợi "tìm file" hơn là nhận chữ.
+  - `text_box_settings`: bánh răng nói "cài đặt", sai nghĩa.
+
 ## Engine (source-driven, nghiên cứu 2026-10-21)
 
 | Phương án | Kết luận |

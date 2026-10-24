@@ -22,7 +22,7 @@ Phiên trước giao việc cho worker của `ceo-worker-agent` trong 5 worktree
   - OSD chỉ tin trang đủ chữ: 2 dòng cho độ tin cậy ≈ 2,6 (< 14, đọc nguyên trạng); 10 dòng ≈ 15; 30 dòng 16–19. Test dùng trang 30 dòng.
   - Trang lộn ngược 180° giữ nguyên hướng nhìn (spec), nên pdfium đọc từ trong mỗi dòng theo thứ tự ngược (tìm từ đơn được, tìm cụm thì không). Muốn sửa phải đổi `/Rotate` của trang, trái spec; giữ nguyên.
   - Mỗi trang scan thêm một lượt tesseract OSD (như Convert to > Text).
-- [ ] T7 Icon riêng cho Make searchable (đang dùng chung `draw_text` với Add watermark).
+- [x] T7 Icon riêng cho Make searchable: `scan_text` (Fluent Filled, ghim SHA256 trong `make-menu-icons.py`), lý do chọn ở ocr.md "Icon".
 - [ ] Trước release: app thật, MenuProbe, installer, ba review, reconcile; theo docs/RELEASING.md.
 - [ ] Sau khi gom xong: xóa worktree `D:\github\Flevert-wt\*` và nhánh `ceo/ocr-*` (≈ 15 GB).
 
