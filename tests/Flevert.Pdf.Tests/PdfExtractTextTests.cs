@@ -299,7 +299,7 @@ public sealed class PdfExtractTextTests : IDisposable
     public async Task The_pages_drawn_for_tesseract_are_counted_between_the_pages_read_and_the_scans_read()
     {
         var input = _dir.Combine("mixed.pdf");
-        TestTextPdf.Write(input, "Trang số một", "");
+        TestTextPdf.Write(input, "Trang số một của hồ sơ", "");
         var reports = new List<FileProgress>();
 
         await Op(_ => Task.FromResult("Chữ của trang hai")).RunAsync(input, new SyncProgress(reports.Add), CancellationToken.None);
