@@ -5,6 +5,8 @@
     <!-- Sentence-style test names read as specifications. -->
     <NoWarn>$(NoWarn);CA1707</NoWarn>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- ChildProcesses finds tesseract.exe children through LibraryImport. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
