@@ -48,7 +48,7 @@ $allowedTargetPorts = @{
 }
 $allowedHostPorts = @('vcpkg-cmake', 'vcpkg-cmake-config', 'vcpkg-cmake-get-vars')
 
-# DLLs for networking, TLS, certificates and XML that a build with libcurl or libarchive imports. They are signed
+# DLLs for networking, TLS, certificates and XML that a build with libcurl, libarchive or ScrollView imports. They are signed
 # system DLLs, so the System32 check below would let them through: listed here, they fail the build instead.
 $deniedImports = @(
     'ws2_32.dll', 'wsock32.dll', 'mswsock.dll', 'iphlpapi.dll', 'dnsapi.dll', 'secur32.dll', 'sspicli.dll',
@@ -112,7 +112,9 @@ try {
 
     # Flevert only ever hands tesseract.exe image files it wrote itself, so the URL input (libcurl) and the image list
     # in an archive (libarchive) are code that only an attacker could reach. The port at the pinned commit requires both;
-    # this overlay is that same port, with the two dependencies dropped and Tesseract's own switches turned on.
+    # this overlay is that same port, with the two dependencies dropped and Tesseract's own switches turned on. It also
+    # turns off ScrollView, Tesseract's debug viewer, which a config variable can make connect to a TCP server (and
+    # start java to run one); it is the only user of Winsock, which Tesseract otherwise links on Windows.
     "Writing an overlay of the tesseract port without libcurl and libarchive..."
     $overlayDir = Join-Path $work 'overlay-ports'
     $overlayPort = Join-Path $overlayDir 'tesseract'
@@ -138,7 +140,7 @@ try {
     $portfilePath = Join-Path $overlayPort 'portfile.cmake'
     $portfile = [IO.File]::ReadAllText($portfilePath)
     $portfile = Set-Once $portfile '-DCMAKE_REQUIRE_FIND_PACKAGE_LibArchive=ON' '-DDISABLE_ARCHIVE=ON' 'the libarchive option'
-    $portfile = Set-Once $portfile '-DCMAKE_REQUIRE_FIND_PACKAGE_CURL=ON' '-DDISABLE_CURL=ON' 'the curl option'
+    $portfile = Set-Once $portfile '-DCMAKE_REQUIRE_FIND_PACKAGE_CURL=ON' '-DDISABLE_CURL=ON -DGRAPHICS_DISABLED=ON' 'the curl option'
     $portfile = Set-Once $portfile 'find_dependency\(CURL\)\r?\n' '' 'find_dependency(CURL)'
     $portfile = Set-Once $portfile 'find_dependency\(LibArchive\)\r?\n' '' 'find_dependency(LibArchive)'
     [IO.File]::WriteAllText($portfilePath, $portfile, [Text.UTF8Encoding]::new($false))
@@ -266,7 +268,7 @@ try {
 
     foreach ($dll in $deps) {
         if ($deniedImports -contains $dll) {
-            throw "Network, TLS or XML DLL '$dll' is imported: libcurl or libarchive is linked in again. Build without them (DISABLE_CURL, DISABLE_ARCHIVE)."
+            throw "Network, TLS or XML DLL '$dll' is imported: network code is linked in again. Build without it (DISABLE_CURL, DISABLE_ARCHIVE, GRAPHICS_DISABLED)."
         }
         if ($dll -match '^(api-ms-win-|ext-ms-)') { continue }
         # The Visual C++ redistributable may sit in System32 on the runner, but not on a user's PC: its DLLs (the CRT,
