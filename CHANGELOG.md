@@ -4,7 +4,7 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
-## [1.4.0] - YYYY-MM-DD
+## [1.4.0] - 2026-10-25
 
 Text from pictures and scans, in Vietnamese and English, read on your PC.
 
