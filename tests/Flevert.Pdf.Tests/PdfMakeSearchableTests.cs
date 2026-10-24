@@ -135,7 +135,7 @@ public sealed class PdfMakeSearchableTests : IDisposable
 
         Assert.True(started.Elapsed < TimeSpan.FromSeconds(30), $"took {started.Elapsed}");
         Assert.Equal(["scan.pdf"], FileNames(_dir.Path));
-        Assert.Equal(0, TestProcesses.RunningChildren("tesseract"));
+        Assert.Empty(await TestProcesses.ChildrenStillRunningAsync("tesseract", TimeSpan.FromSeconds(5)));
     }
 
     [WindowsFact]

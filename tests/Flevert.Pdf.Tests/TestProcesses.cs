@@ -74,6 +74,36 @@ internal static partial class TestProcesses
         return count;
     }
 
+    /// <summary>
+    /// The command lines of the processes named <paramref name="name"/> this process started that still run after up to
+    /// <paramref name="within"/>: empty when they all ended. A process just killed may take a moment to be gone.
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> ChildrenStillRunningAsync(string name, TimeSpan within)
+    {
+        var timer = Stopwatch.StartNew();
+        while (RunningChildren(name) > 0 && timer.Elapsed < within)
+            await Task.Delay(100);
+
+        var left = new List<string>();
+        foreach (var process in Process.GetProcessesByName(name))
+        {
+            using (process)
+            {
+                try
+                {
+                    if (ParentId(process.Id) == Environment.ProcessId && IsRunning(process))
+                        left.Add($"{process.Id}: {CommandLine(process)}");
+                }
+                catch (Win32Exception)
+                {
+                    // Exited meanwhile.
+                }
+            }
+        }
+
+        return left;
+    }
+
     /// <summary>Waits until a worker runs, or fails the test.</summary>
     public static async Task<Process> WaitForWorkerAsync(TimeSpan within)
     {
