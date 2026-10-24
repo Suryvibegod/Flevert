@@ -2,14 +2,38 @@
   "extraKnownMarketplaces": {
     "addy-agent-skills": {
       "source": {
-        "source": "github",
-        "repo": "addyosmani/agent-skills"
+        "source": "settings",
+        "name": "addy-agent-skills",
+        "plugins": [
+          {
+            "name": "agent-skills",
+            "description": "Addy Osmani's engineering skills: spec, plan, build, verify, review, ship.",
+            "source": {
+              "source": "github",
+              "repo": "addyosmani/agent-skills",
+              "ref": "0.6.13",
+              "sha": "aeac41d4d005999432bb7312f7ff06383a91d59d"
+            }
+          }
+        ]
       }
     },
     "ceo-worker-agent": {
       "source": {
-        "source": "github",
-        "repo": "Suryvibegod/ceo-worker-agent"
+        "source": "settings",
+        "name": "ceo-worker-agent",
+        "plugins": [
+          {
+            "name": "ceo-worker-agent",
+            "description": "One model plans and verifies; worker models do the hands-on work as headless Claude Code sessions.",
+            "source": {
+              "source": "git-subdir",
+              "url": "Suryvibegod/ceo-worker-agent",
+              "path": "ceo-worker-agent",
+              "sha": "ac14ea092a8ce92faf45ef3dcd314e862f558bcd"
+            }
+          }
+        ]
       }
     }
   },
