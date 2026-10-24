@@ -122,6 +122,7 @@ public sealed class PinnedInputTests : IDisposable
             .. PdfTools.All.Select(tool => PdfTools.Create(tool.OperationId,
                 tool.OperationId == PdfWatermarkMenu.OperationId ? new Dictionary<string, string> { [PdfTools.Text] = "DRAFT" } : [], qpdf, worker)),
         ];
-        return operations;
+        // Those that run tesseract are left out, as Flevert.Linux leaves them out of its menu (Windows only so far).
+        return operations.Where(operation => !MenuOperations.NeedTesseract.Contains(operation.Id));
     }
 }
