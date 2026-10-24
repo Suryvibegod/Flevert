@@ -15,6 +15,15 @@ Flevert is not code-signed yet: a signing certificate costs money and this proje
    gh attestation verify Flevert-Setup-1.4.0.exe --repo Suryvibegod/Flevert --signer-workflow Suryvibegod/Flevert/.github/workflows/release.yml --source-ref refs/tags/v1.4.0 --deny-self-hosted-runners
    ```
 
+On Linux, check `Flevert-1.4.0-linux-x64.tar.gz` before you unpack it, with `SHA256SUMS.txt` from the same release in the same folder:
+
+1. `sha256sum -c --ignore-missing SHA256SUMS.txt` must print `Flevert-1.4.0-linux-x64.tar.gz: OK`.
+2. Its build provenance, with the GitHub CLI as above:
+
+   ```
+   gh attestation verify Flevert-1.4.0-linux-x64.tar.gz --repo Suryvibegod/Flevert --signer-workflow Suryvibegod/Flevert/.github/workflows/release.yml --source-ref refs/tags/v1.4.0 --deny-self-hosted-runners
+   ```
+
 A matching hash alone does not prove where the file came from: anyone who replaced the file could replace the hash beside it. The provenance check shows that this repository's release workflow built the file from the version's tag on GitHub's own machines.
 
 ## If the menu is missing
