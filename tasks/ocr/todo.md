@@ -115,7 +115,7 @@ Phát hiện:
   - Lần chạy sau không dọn: chỉ `VideoCompress` có `DeleteStaleRuns`, còn thư mục `flevert-*` của các công cụ PDF khác cũng để lại như vậy.
   - Hủy bằng nút Cancel thì đã có test tự động chứng minh dọn sạch (T6, R9).
   - Đề xuất: dọn `flevert-ocr-*`/`flevert-*` cũ hơn 1 ngày, như video đang làm.
-- **K3 (Nit, mở):** bảng thao tác trong docs/specs/ocr.md ghi op-id `pdf.to-text`, nhưng op-id thật là `pdf.extract-text` (theo `flevert list-ops` và lệnh menu).
+- **K3 (Nit, đã sửa):** bảng thao tác trong docs/specs/ocr.md ghi op-id `pdf.to-text`, nhưng op-id thật là `pdf.extract-text` (theo `flevert list-ops` và lệnh menu).
 - **Quy trình:** `feat/v1.4-ocr` có commit mới hai lần trong lúc kiểm (ac9ad88 → dc31f30 → f40c386). Bước 1–3 và 5 đã chạy lại toàn bộ trên f40c386; sau đó feat có thêm 32091d2 (chỉ `ImageToText.cs`), nên chạy lại phần ảnh và bộ cài trên commit đó (số ghi ở trên). Lần chạy trước của phần ảnh trên f40c386 cho cùng độ đúng. Một lượt PDF → Text 20 trang trên dc31f30 mất 93,73 s vì VBCSCompiler của agent khác chiếm CPU; chạy lại còn 26,41 / 18,13 s.
 
 ## Ghi chú
