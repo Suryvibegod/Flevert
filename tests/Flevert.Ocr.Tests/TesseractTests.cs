@@ -6,6 +6,7 @@ using Xunit.Abstractions;
 
 namespace Flevert.Ocr.Tests;
 
+[Collection(TesseractProcesses.Name)]
 public sealed class TesseractTests(ITestOutputHelper output) : IDisposable
 {
     private readonly TempDir _dir = new();
