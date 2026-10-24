@@ -17,7 +17,7 @@ public static class OutputPath
 
     /// <summary>
     /// Returns <paramref name="desiredPath"/> or the first free "name (n).ext" beside it. Anything with that name, file or
-    /// directory, counts as taken, and the stem is shortened so the name always fits in 255 characters.
+    /// directory, counts as taken, and the stem is shortened so the name always fits (<see cref="FitName"/>).
     /// </summary>
     public static string Reserve(string desiredPath) =>
         ReserveName(Path.GetDirectoryName(desiredPath)!, Path.GetFileNameWithoutExtension(desiredPath), "", Path.GetExtension(desiredPath));
@@ -35,8 +35,8 @@ public static class OutputPath
         {
             var name = FitName(stem, beforeCounter + (n == 0 ? "" : $" ({n})") + afterCounter);
             // Win32 drops a trailing dot or space from a path, and a shortened name can end in one; a folder is renamed
-            // through its handle, which would keep it and make a folder Explorer cannot open.
-            if (folder)
+            // through its handle, which would keep it and make a folder Explorer cannot open. Linux keeps them as they are.
+            if (folder && OperatingSystem.IsWindows())
                 name = name.TrimEnd('.', ' ');
             var candidate = Path.Combine(dir, name);
             if (!IsTaken(candidate))
@@ -122,11 +122,14 @@ public static class OutputPath
             throw new ArgumentException("The path names no folder.", nameof(desiredDirectory));
         if (!leafName.EndsWith(keepSuffix, StringComparison.Ordinal))
             throw new ArgumentException($"The folder name does not end with \"{keepSuffix}\".", nameof(keepSuffix));
-        using var folder = PartialFolder.Create(Path.Combine(dir, $".flevert-{Guid.NewGuid():N}.partial"));
+        var partial = Path.Combine(dir, $".flevert-{Guid.NewGuid():N}.partial");
+        using IPartialFolder folder = OperatingSystem.IsWindows() ? PartialFolder.Create(partial)
+            : OperatingSystem.IsLinux() ? UnixPartialFolder.Create(partial)
+            : throw new PlatformNotSupportedException();
         var keep = false;
         try
         {
-            await write(folder.Path, ct).ConfigureAwait(false);
+            await write(folder.WritePath, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             folder.PrepareForRename();
             var final = await RenameToFreeNameAsync(folder, leafName, keepSuffix, renameWait, ct).ConfigureAwait(false);
@@ -158,7 +161,7 @@ public static class OutputPath
     // denied): an antivirus scan, the search indexer, OneDrive or a thumbnailer, usually for milliseconds to a few seconds.
     // With the name free, the rename is retried for up to renameWait; null when it is still refused after that.
     private static async Task<string?> RenameToFreeNameAsync(
-        PartialFolder folder, string leafName, string keepSuffix, TimeSpan renameWait, CancellationToken ct)
+        IPartialFolder folder, string leafName, string keepSuffix, TimeSpan renameWait, CancellationToken ct)
     {
         // The real parent of the held folder, not a spelling the caller gave that a junction could still redirect.
         var parent = Path.GetDirectoryName(folder.Path)!;
@@ -170,7 +173,7 @@ public static class OutputPath
             // The rename takes the name as it is, where Win32 would read some names as something else (a device such as
             // NUL on Windows 10): only a name that a path keeps unchanged is used.
             var plain = @"C:\" + Path.GetFileName(final);
-            if (!string.Equals(Path.GetFullPath(plain), plain, StringComparison.Ordinal))
+            if (OperatingSystem.IsWindows() && !string.Equals(Path.GetFullPath(plain), plain, StringComparison.Ordinal))
                 throw new IOException($"\"{Path.GetFileName(final)}\" cannot be used as a folder name.");
             var error = folder.TryRenameTo(final);
             if (error == 0)
@@ -178,7 +181,8 @@ public static class OutputPath
             if (IsTaken(final) && attempt < MaxAttempts)
                 continue;
 
-            var busy = error is ErrorAccessDenied or ErrorSharingViolation;
+            // Only Windows refuses to rename a folder with a file open in it; on Linux these numbers are other errors.
+            var busy = OperatingSystem.IsWindows() && error is ErrorAccessDenied or ErrorSharingViolation;
             if (busy && waited < renameWait)
             {
                 var delay = pause < renameWait - waited ? pause : renameWait - waited;
@@ -238,8 +242,18 @@ public static class OutputPath
         catch (DirectoryNotFoundException) { return false; }
     }
 
-    private static string FitName(string stem, string tail)
+    /// <summary>
+    /// <paramref name="stem"/> followed by <paramref name="tail"/>, with the stem cut, never inside a character, so the
+    /// name fits the 255 a file system allows: UTF-16 characters on Windows, bytes of UTF-8 on Linux (where a Vietnamese
+    /// letter takes two or three).
+    /// </summary>
+    public static string FitName(string stem, string tail)
     {
+        ArgumentNullException.ThrowIfNull(stem);
+        ArgumentNullException.ThrowIfNull(tail);
+        if (!OperatingSystem.IsWindows())
+            return FitNameInBytes(stem, tail);
+
         var room = MaxFileNameLength - tail.Length;
         if (room < 1)
             throw new PathTooLongException($"The ending {tail[..Math.Min(tail.Length, 20)]}… leaves no room for a name.");
@@ -251,6 +265,23 @@ public static class OutputPath
         }
 
         return stem + tail;
+    }
+
+    private static string FitNameInBytes(string stem, string tail)
+    {
+        var room = MaxFileNameLength - System.Text.Encoding.UTF8.GetByteCount(tail);
+        if (room < 1)
+            throw new PathTooLongException($"The ending {tail[..Math.Min(tail.Length, 20)]}… leaves no room for a name.");
+        var (bytes, chars) = (0, 0);
+        foreach (var rune in stem.EnumerateRunes())
+        {
+            if (bytes + rune.Utf8SequenceLength > room)
+                break;
+            bytes += rune.Utf8SequenceLength;
+            chars += rune.Utf16SequenceLength;
+        }
+
+        return stem[..chars] + tail;
     }
 
     // A failed cleanup (e.g. antivirus holding the file) must not hide the original error.

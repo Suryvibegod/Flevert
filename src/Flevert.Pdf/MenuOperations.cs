@@ -15,6 +15,12 @@ public static class MenuOperations
     public static IReadOnlyList<IMenuOperation> All { get; } = [.. ImageOperations.All, new ImagesToPdf(), .. PdfOperations.All, .. PdfToolMenu.All];
 
     /// <summary>
+    /// The operations of <see cref="All"/> that only tesseract can do, which Flevert has for Windows only so far
+    /// (docs/specs/linux.md): the Linux app leaves them out of its menu.
+    /// </summary>
+    public static IReadOnlySet<string> NeedTesseract { get; } = new HashSet<string>(StringComparer.Ordinal) { "image.to-text", "pdf.make-searchable" };
+
+    /// <summary>
     /// The icon and group of each entry at the top of the menu (docs/specs/pdf.md, v0.2.2, "Icon"): a separator goes
     /// between groups. Flevert: 1 converting and arranging (Convert to, Compress, Merge, Split into pages, Rotate) · 2
     /// marking, protecting and sharing (Add watermark…, the passwords, Remove hidden info, Combine into PDF). Flevert: more PDF

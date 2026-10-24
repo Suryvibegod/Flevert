@@ -21,7 +21,7 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 
 | Phương án | Kết luận |
 |---|---|
-| **Tesseract 5.5.3 tự dựng tĩnh bằng vcpkg** (tag `2026.10.16`) trên GitHub Actions, chạy `tesseract.exe` thành tiến trình riêng | **Chọn** (người dùng chốt 2026-10-22, [ADR-0010](../adr/0010-tesseract-static-build.md)). Một file exe, CRT tĩnh, chỉ thư viện MIT/BSD/Apache/zlib (leptonica 1.87.0, libpng, libjpeg-turbo, libwebp, openjpeg, libtiff, zlib, giflib, cùng libcurl và libarchive mà port bắt buộc); không jbigkit (GPL), không libiconv/libintl (LGPL), nên không có nghĩa vụ phát hành mã nguồn. |
+| **Tesseract 5.5.3 tự dựng tĩnh bằng vcpkg** (tag `2026.10.16`) trên GitHub Actions, chạy `tesseract.exe` thành tiến trình riêng | **Chọn** (người dùng chốt 2026-10-22, [ADR-0011](../adr/0011-tesseract-static-build.md)). Một file exe, CRT tĩnh, chỉ thư viện MIT/BSD/Apache/zlib (leptonica 1.87.0, libpng, libjpeg-turbo, libwebp, openjpeg, libtiff, zlib, giflib, cùng libcurl và libarchive mà port bắt buộc); không jbigkit (GPL), không libiconv/libintl (LGPL), nên không có nghĩa vụ phát hành mã nguồn. |
 | Bộ cài Windows UB Mannheim 5.5.3 (`bee9e343…`) | Loại: leptonica nhúng jbigkit (GPL v2) và kèm 4 DLL LGPL, phải phát hành mã nguồn tương ứng như ffmpeg và ghi giấy phép cho 33 DLL. Chỉ dùng tạm khi phát triển engine (2026-10-21). |
 | NuGet `TesseractOCR` 5.5.2 | Loại: nhãn 5.5.2 nhưng `tesseract.exe` bên trong là 5.5.0, kèm libtiff 4.3.0, libpng 1.6.37, zlib 1.2.11 (cũ, có CVE). |
 | `charlesw/tesseract` NuGet | Loại: không bảo trì từ 2022, chạy trong tiến trình. |

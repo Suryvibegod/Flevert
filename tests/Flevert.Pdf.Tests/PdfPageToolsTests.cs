@@ -207,9 +207,12 @@ public sealed class PdfPageNumbersTests : IDisposable
         {
             Assert.Equal((page + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), pdf.GetText(page).Trim());
             var ink = Ink(pdf.Render(page, 72), _ => true);
-            // Black on the red and blue halves: about 1 cm from the bottom, in the middle.
+            // Black on the red and blue halves: about 1 cm from the bottom, in the middle. Helvetica is not embedded, so it is
+            // drawn with the system's stand-in: on Linux fontconfig's (Nimbus Sans), whose digits pdfium draws up to 5 pt
+            // higher on the same baseline (28 pt, checked in the content stream).
+            var lowest = OperatingSystem.IsWindows() ? 30 : 34;
             Assert.InRange(ink.CenterX, (pdf.GetPageSize(page).Width / 2) - 4, (pdf.GetPageSize(page).Width / 2) + 4);
-            Assert.InRange(ink.Bottom, pdf.GetPageSize(page).Height - 30, pdf.GetPageSize(page).Height - 26);
+            Assert.InRange(ink.Bottom, pdf.GetPageSize(page).Height - lowest, pdf.GetPageSize(page).Height - 26);
         }
     }
 

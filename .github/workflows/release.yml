@@ -83,6 +83,9 @@ jobs:
       - name: Test media
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: dotnet test tests/Flevert.Media.Tests -c Release --no-build
+      - name: Test OCR
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/Flevert.Ocr.Tests -c Release --no-build
       - name: No known-vulnerable packages
         shell: pwsh
         run: |

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- flevert for Linux: the Nautilus menu runs it with every selected file at once (docs/specs/linux.md). -->
+  <PropertyGroup>
+    <!-- Use the shared libraries' host target when compiling or formatting on Windows. Linux packages still target net10.0. -->
+    <!-- Program.cs declares Linux support explicitly; the host TFM must not add Windows to that platform contract. -->
+    <GenerateSupportedOSPlatformAttribute>false</GenerateSupportedOSPlatformAttribute>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>flevert</AssemblyName>
+    <RootNamespace>Flevert.Linux</RootNamespace>
+    <AssemblyTitle>Flevert</AssemblyTitle>
+    <Product>Flevert</Product>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- DOTNET_STARTUP_HOOKS would let anything that sets an environment variable inject code into flevert. -->
+    <StartupHookSupport>false</StartupHookSupport>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!-- The Nautilus extension, beside flevert in nautilus/: install-menu copies it where nautilus-python loads it from. -->
+  <ItemGroup>
+    <None Include="nautilus/flevert_menu.py" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flevert.Core\Flevert.Core.csproj" />
+    <ProjectReference Include="..\Flevert.Image\Flevert.Image.csproj" />
+    <ProjectReference Include="..\Flevert.Pdf\Flevert.Pdf.csproj" />
+  </ItemGroup>
+
+</Project>

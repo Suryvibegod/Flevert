@@ -231,6 +231,27 @@ public class PdfToImagesTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task Cancelling_from_the_batch_leaves_nothing_beside_the_input_once_the_batch_has_ended()
+    {
+        // As the progress window's Cancel does: through the runner, which used to stop waiting at once, so flevert could
+        // end before the operation had removed its hidden folder of pages (seen on Linux, 50 pages left behind).
+        using var dir = new TempDir();
+        using var logs = new TempDir();
+        var input = dir.Combine("many.pdf");
+        TestPdf.WriteBlank(input, 200);
+        using var cts = new CancellationTokenSource();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(Png(), [input], new SyncBatchProgress(report =>
+        {
+            if (report.Within?.Position >= 5)
+                cts.Cancel();
+        }), cts.Token);
+
+        Assert.Empty(outcome.Results);
+        Assert.Equal(["many.pdf"], Names(dir.Path));
+    }
+
+    [Fact]
     public async Task A_password_protected_pdf_fails_with_the_message_naming_the_fix_and_leaves_nothing()
     {
         using var dir = new TempDir();
@@ -280,7 +301,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         using var dir = new TempDir();
         var input = CopyFixture(dir, "three-colours.pdf", "colours.pdf");
         Directory.CreateDirectory(dir.Combine("colours (pages)"));
-        File.WriteAllText(dir.Combine(@"colours (pages)\mine.txt"), "keep me");
+        File.WriteAllText(dir.Combine(Path.Combine("colours (pages)", "mine.txt")), "keep me");
 
         var folder = await Jpg().RunAsync(input, CancellationToken.None);
 
@@ -303,7 +324,8 @@ public class PdfToImagesTests(ITestOutputHelper output)
         Assert.Equal(written, File.GetLastWriteTimeUtc(input));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_long_name_is_shortened_so_every_page_name_fits()
     {
         using var dir = new TempDir();
@@ -311,7 +333,7 @@ public class PdfToImagesTests(ITestOutputHelper output)
         var stem = string.Concat(Enumerable.Repeat("Ảnh chụp ", 30))[..251];
         var input = dir.Combine("x.pdf");
         File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
-        var longInput = @"\\?\" + dir.Combine(stem + ".pdf");
+        var longInput = TestPdf.Long(dir.Combine(stem + ".pdf"));
         File.Move(input, longInput);
 
         var folder = await Jpg(10).RunAsync(longInput, CancellationToken.None);
@@ -324,14 +346,15 @@ public class PdfToImagesTests(ITestOutputHelper output)
     }
 
     // Stems of 248 to 251 characters make "<stem> (pages)" longer than 255: the stem is shortened, not the suffix.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_long_name_keeps_the_pages_suffix_on_the_folder()
     {
         using var dir = new TempDir();
         var stem = string.Concat(Enumerable.Repeat("Ảnh chụp ", 30))[..249];
         var input = dir.Combine("x.pdf");
         File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
-        var longInput = @"\\?\" + dir.Combine(stem + ".pdf");
+        var longInput = TestPdf.Long(dir.Combine(stem + ".pdf"));
         File.Move(input, longInput);
 
         var folder = await Jpg(10).RunAsync(longInput, CancellationToken.None);
@@ -445,5 +468,10 @@ public class PdfToImagesTests(ITestOutputHelper output)
                 _reports.Add(value);
             onReport?.Invoke(value);
         }
+    }
+
+    private sealed class SyncBatchProgress(Action<BatchProgress> report) : IProgress<BatchProgress>
+    {
+        public void Report(BatchProgress value) => report(value);
     }
 }

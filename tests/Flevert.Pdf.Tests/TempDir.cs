@@ -21,7 +21,7 @@ public sealed class TempDir : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(@"\\?\" + Path, recursive: true); }
+        try { Directory.Delete(TestPdf.Long(Path), recursive: true); }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }

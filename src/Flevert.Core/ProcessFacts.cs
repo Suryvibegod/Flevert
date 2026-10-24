@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace Flevert.Core;
 
@@ -7,6 +8,7 @@ namespace Flevert.Core;
 /// Both are set by the creator before the process runs any code, so a process Explorer has just started is already
 /// visible, however long it then takes to start up.
 /// </summary>
+[SupportedOSPlatform("windows")]
 internal static partial class ProcessFacts
 {
     private const uint ProcessQueryLimitedInformation = 0x1000;

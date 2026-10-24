@@ -283,7 +283,8 @@ public sealed class PdfMergeTests : IDisposable
     [Fact]
     public async Task Works_on_pdfs_whose_folder_and_names_are_not_ascii_or_are_past_260_characters()
     {
-        var folder = @"\\?\" + _dir.Path;
+        // \\?\ is how a Windows path goes past 260 characters; Linux needs no prefix.
+        var folder = (OperatingSystem.IsWindows() ? @"\\?\" : "") + _dir.Path;
         while (folder.Length < 320)
             folder = Path.Combine(folder, "thư mục con rất dài để vượt quá giới hạn MAX_PATH");
         Directory.CreateDirectory(folder);

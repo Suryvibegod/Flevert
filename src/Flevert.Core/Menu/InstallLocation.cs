@@ -1,10 +1,12 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using Microsoft.Win32.SafeHandles;
 
 namespace Flevert.Core.Menu;
 
+[SupportedOSPlatform("windows")]
 public static partial class InstallLocation
 {
     private const uint FileReadAttributes = 0x80;

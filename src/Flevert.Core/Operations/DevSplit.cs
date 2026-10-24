@@ -8,7 +8,6 @@ namespace Flevert.Core.Operations;
 /// </summary>
 public sealed class DevSplit(int pages, TimeSpan pageDelay) : IOperation
 {
-    private const int MaxFileNameLength = 255;
     private const string FolderSuffix = " (pages)";
 
     // FLEVERT_DEV_PAGE_MS sets the time per page: 0 for fast integration tests, longer to look at the progress window.
@@ -52,14 +51,6 @@ public sealed class DevSplit(int pages, TimeSpan pageDelay) : IOperation
     private static string PageName(string stem, string number)
     {
         var suffix = $" {number}.txt";
-        var room = MaxFileNameLength - suffix.Length;
-        if (stem.Length > room)
-        {
-            stem = stem[..room];
-            if (char.IsHighSurrogate(stem[^1]))
-                stem = stem[..^1];
-        }
-
-        return stem + suffix;
+        return OutputPath.FitName(stem, suffix);
     }
 }

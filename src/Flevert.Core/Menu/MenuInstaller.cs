@@ -175,7 +175,7 @@ public sealed partial class MenuInstaller(IRegistry registry, string exePath, Fu
     [GeneratedRegex("^[a-z0-9_]+$")]
     private static partial Regex IconName();
 
-    private sealed class MenuNode(string label)
+    internal sealed class MenuNode(string label)
     {
         private readonly List<MenuNode> _children = [];
 

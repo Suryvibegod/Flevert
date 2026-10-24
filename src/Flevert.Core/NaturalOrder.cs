@@ -3,8 +3,9 @@ using System.Runtime.InteropServices;
 namespace Flevert.Core;
 
 /// <summary>
-/// The order Explorer shows file names in ("ảnh 2" before "ảnh 10", case ignored): Windows' own StrCmpLogicalW, which
-/// Explorer sorts with. The order in which Explorer starts one flevert.exe per file is not reliable (ADR-0002), so a batch
+/// The order the file manager shows file names in ("ảnh 2" before "ảnh 10"). On Windows Explorer's: Windows' own
+/// StrCmpLogicalW, which Explorer sorts with (case ignored). On Linux Nautilus': <see cref="UnixNaturalOrder"/>. The
+/// order in which Explorer starts one flevert.exe per file is not reliable (ADR-0002), so a batch
 /// joined into one output is sorted with this (ADR-0007, part 2).
 /// </summary>
 /// <remarks>
@@ -23,7 +24,23 @@ public static partial class NaturalOrder
     public static IComparer<string> PathComparer { get; } = Comparer<string>.Create(ComparePaths);
 
     public static int Compare(string? x, string? y) =>
-        x is null ? (y is null ? 0 : -1) : y is null ? 1 : StrCmpLogicalW(x, y);
+        x is null ? (y is null ? 0 : -1) : y is null ? 1 : CompareNames(x, y);
+
+    // Nautilus is the file manager on Linux: its own order there (UnixNaturalOrder).
+    private static int CompareNames(string x, string y) =>
+        OperatingSystem.IsWindows() ? StrCmpLogicalW(x, y)
+        : OperatingSystem.IsLinux() ? UnixNaturalOrder.Compare(x, y)
+        : throw new PlatformNotSupportedException();
+
+    /// <summary>
+    /// Readies the order before work starts on other threads: on Linux it sets the C library's collation (setlocale), which
+    /// is not thread-safe. Comparing first does it too, later.
+    /// </summary>
+    public static void Prepare()
+    {
+        if (OperatingSystem.IsLinux())
+            UnixNaturalOrder.Prepare();
+    }
 
     /// <summary>Sorts paths with <see cref="PathComparer"/>.</summary>
     public static IReadOnlyList<string> SortPaths(IEnumerable<string> paths) => [.. paths.Order(PathComparer)];

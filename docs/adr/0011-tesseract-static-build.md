@@ -1,4 +1,4 @@
-# ADR-0010: Static Tesseract 5.5.3 standalone binary built with vcpkg
+# ADR-0011: Static Tesseract 5.5.3 standalone binary built with vcpkg
 
 ## Status
 

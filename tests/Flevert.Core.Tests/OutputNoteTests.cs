@@ -65,7 +65,7 @@ public sealed class OutputNoteTests : IDisposable
     [Fact]
     public void The_notification_for_one_output_adds_its_note()
     {
-        var summary = BatchSummary.Describe([new FileResult("a.pdf", @"C:\x\a (rotated).pdf", null) { Note = "Signed PDF: the digital signature is not valid in the output." }], 1, LogDir);
+        var summary = BatchSummary.Describe([new FileResult("a.pdf", "C:/x/a (rotated).pdf", null) { Note = "Signed PDF: the digital signature is not valid in the output." }], 1, LogDir);
 
         Assert.Equal("Done: a (rotated).pdf. Signed PDF: the digital signature is not valid in the output.", summary.Text);
         Assert.False(summary.HasFailures);

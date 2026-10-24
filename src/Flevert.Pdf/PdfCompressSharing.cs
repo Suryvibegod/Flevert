@@ -81,7 +81,7 @@ public sealed class PdfCompressSharing : IOperation
         var drive = Path.GetPathRoot(root);
         // qpdf writes every stream of the PDF, as stored, into the folder, and the worker its JPEGs: about the PDF's size,
         // and room to spare. Checked before anything is written; a disk that fills meanwhile fails as a disk below.
-        if (FreeSpace(root) is { } free && free < 2 * new FileInfo(inputPath).Length)
+        if (FreeSpace(root) is { } free && free < 2 * PinnedInput.Length(inputPath))
             throw new IOException($"There is not enough free space on {drive} to compress this PDF for sharing.");
 
         var scratch = Path.Combine(root, $"flevert-{Guid.NewGuid():N}");
@@ -122,7 +122,7 @@ public sealed class PdfCompressSharing : IOperation
                 var repaired = await _qpdf.UpdateFromJsonAsync(inputPath, update, temp, token).ConfigureAwait(false);
                 await PdfRepair.CheckAsync(_qpdf, repaired, pages, temp, token).ConfigureAwait(false);
                 // Thrown before the output is committed: WriteAtomicallyAsync deletes the temporary file.
-                if (new FileInfo(temp).Length > new FileInfo(inputPath).Length * MaxShare)
+                if (new FileInfo(temp).Length > PinnedInput.Length(inputPath) * MaxShare)
                     throw new OperationSkippedException(AlreadySmallMessage);
             }, ct).ConfigureAwait(false);
         }

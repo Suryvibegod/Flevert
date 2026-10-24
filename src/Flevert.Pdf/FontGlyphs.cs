@@ -4,9 +4,9 @@ namespace Flevert.Pdf;
 
 /// <summary>
 /// Which characters a TrueType font has a glyph for, read from its character map (<c>cmap</c>, Unicode subtables of
-/// format 12 or 4: the OpenType specification). For the watermark dialog, which refuses a character Windows' Arial would
-/// draw as an empty box (docs/specs/pdf.md, v0.2.2). The font is Windows' own, so it is trusted; a map that cannot be read
-/// is treated as unknown and checks nothing.
+/// format 12 or 4: the OpenType specification). For the watermark dialog, which refuses a character the watermark's font
+/// (<see cref="SystemFont"/>: Windows' Arial) would draw as an empty box (docs/specs/pdf.md, v0.2.2). The font is the
+/// system's own, so it is trusted; a map that cannot be read is treated as unknown and checks nothing.
 /// </summary>
 internal sealed class FontGlyphs
 {
@@ -14,7 +14,7 @@ internal sealed class FontGlyphs
     {
         try
         {
-            return Read(File.ReadAllBytes(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "arial.ttf")));
+            return SystemFont.Path is { } font ? Read(File.ReadAllBytes(font)) : null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -26,7 +26,7 @@ internal sealed class FontGlyphs
 
     private FontGlyphs(Func<int, bool> has) => _has = has;
 
-    /// <summary>Windows' Arial, or <c>null</c> when it is missing or its map cannot be read.</summary>
+    /// <summary>The watermark's font (<see cref="SystemFont"/>), or <c>null</c> when it is missing or its map cannot be read.</summary>
     public static FontGlyphs? Arial => LazyArial.Value;
 
     public bool Has(int codePoint) => _has(codePoint);

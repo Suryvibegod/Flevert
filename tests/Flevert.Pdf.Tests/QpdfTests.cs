@@ -12,7 +12,9 @@ public sealed class QpdfTests : IDisposable
     [Fact]
     public void Finds_qpdf_next_to_the_running_program()
     {
-        Assert.Equal(Path.Combine(AppContext.BaseDirectory, "qpdf.exe"), Qpdf.NextToApp.ExePath);
+        // On Linux qpdf keeps the bin/ and lib/ of its release (it finds libqpdf through $ORIGIN/../lib).
+        var expected = OperatingSystem.IsWindows() ? "qpdf.exe" : Path.Combine("qpdf", "bin", "qpdf");
+        Assert.Equal(Path.Combine(AppContext.BaseDirectory, expected), Qpdf.NextToApp.ExePath);
         Assert.True(File.Exists(Qpdf.NextToApp.ExePath));
     }
 
@@ -71,8 +73,8 @@ public sealed class QpdfTests : IDisposable
     public async Task An_exit_code_qpdf_never_gives_fails_as_a_crash_rather_than_with_qpdfs_numbers()
     {
         // qpdf exits with 0, 2 or 3; anything else is a crash, or a kill. whoami.exe stands in for such a qpdf: it refuses
-        // qpdf's arguments with exit code 1.
-        var crashing = new Qpdf(Path.Combine(Environment.SystemDirectory, "whoami.exe"));
+        // qpdf's arguments with exit code 1 (on Linux, false exits with 1 whatever it is given).
+        var crashing = new Qpdf(OperatingSystem.IsWindows() ? Path.Combine(Environment.SystemDirectory, "whoami.exe") : "/bin/false");
         var input = _dir.Combine("in.pdf");
         File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
 
@@ -99,7 +101,8 @@ public sealed class QpdfTests : IDisposable
         Assert.Equal(PdfDocument.MaxPages, await Qpdf.NextToApp.CountPagesAsync(exact, CancellationToken.None));
     }
 
-    [Theory]
+    [WindowsTheory]
+    [SupportedOSPlatform("windows")]
     [InlineData(@"C:\Users\me\in.pdf", @"\\?\C:\Users\me\in.pdf")]
     [InlineData(@"\\?\C:\Users\me\in.pdf", @"\\?\C:\Users\me\in.pdf")]
     [InlineData(@"\\server\share\in.pdf", @"\\?\UNC\server\share\in.pdf")]
@@ -122,7 +125,7 @@ public sealed class QpdfTests : IDisposable
     [Fact]
     public async Task A_missing_qpdf_says_to_reinstall()
     {
-        var qpdf = new Qpdf(_dir.Combine("qpdf.exe"));
+        var qpdf = new Qpdf(_dir.Combine(Qpdf.FileName));
         var input = _dir.Combine("in.pdf");
         File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
 
@@ -130,7 +133,7 @@ public sealed class QpdfTests : IDisposable
             () => qpdf.TransformAsync(input, _dir.Combine("out.pdf"), ["--rotate=+90:1-z"], CancellationToken.None));
 
         Assert.Equal(qpdf.ExePath, ex.FileName);
-        Assert.Contains("qpdf.exe is missing", ex.Message, StringComparison.Ordinal);
+        Assert.Contains($"{Qpdf.FileName} is missing", ex.Message, StringComparison.Ordinal);
         Assert.Contains("Reinstall Flevert", ex.Message, StringComparison.Ordinal);
     }
 
@@ -201,7 +204,7 @@ public sealed class QpdfTests : IDisposable
         File.Copy(TestPdf.Fixture("three-colours.pdf"), input);
 
         var ex = await Assert.ThrowsAsync<IOException>(() => Qpdf.NextToApp.TransformAsync(
-            input, _dir.Combine(@"missing folder\out.pdf"), ["--rotate=+90:1-z"], CancellationToken.None));
+            input, _dir.Combine(Path.Combine("missing folder", "out.pdf")), ["--rotate=+90:1-z"], CancellationToken.None));
 
         Assert.Contains("could not write", ex.Message, StringComparison.Ordinal);
         Assert.Contains("No such file or directory", ex.Message, StringComparison.Ordinal);

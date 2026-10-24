@@ -139,7 +139,7 @@ public sealed class ImagesToPdf : IBatchOperation
         try
         {
             // Magick.NET refuses an empty stream as a wrong argument, not as a bad image.
-            if (new FileInfo(path).Length == 0)
+            if (PinnedInput.Length(path) == 0)
                 throw BatchInputException.ForInput(path, "The file is empty.");
             var format = ImageFile.RealFormat(path);
             var kind = format switch
@@ -170,7 +170,7 @@ public sealed class ImagesToPdf : IBatchOperation
 
             if (pages.Count == 0)
                 throw BatchInputException.ForInput(path, "The TIFF holds only thumbnails.");
-            return new ImagePlan(path, format, kind, new FileInfo(path).Length, pages);
+            return new ImagePlan(path, format, kind, PinnedInput.Length(path), pages);
         }
         catch (MagickException e)
         {
@@ -234,7 +234,7 @@ public sealed class ImagesToPdf : IBatchOperation
         {
             try
             {
-                jpeg = JpegSegments.Strip(await File.ReadAllBytesAsync(image.Path, ct).ConfigureAwait(false));
+                jpeg = JpegSegments.Strip(await File.ReadAllBytesAsync(PinnedInput.ReadPath(image.Path), ct).ConfigureAwait(false));
             }
             catch (NotSupportedException)
             {

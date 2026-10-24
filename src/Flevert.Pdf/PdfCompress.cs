@@ -81,7 +81,7 @@ public sealed class PdfCompress : IOperation
         var partly = false;
         var output = await OutputPath.WriteAtomicallyAsync(desired, async (temp, token) =>
         {
-            var length = new FileInfo(inputPath).Length;
+            var length = PinnedInput.Length(inputPath);
             bool repaired;
             try
             {

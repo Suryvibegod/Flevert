@@ -35,7 +35,7 @@ public sealed class ImageToTextTests : IDisposable
         Assert.Equal("Text", convertEntries.Last());
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Png_with_Vietnamese_text_extracts_to_txt_with_high_similarity()
     {
         const string text = "Cộng hòa xã hội chủ nghĩa Việt Nam";
@@ -58,7 +58,7 @@ public sealed class ImageToTextTests : IDisposable
         Assert.True(sim >= 0.95, $"Expected similarity >= 0.95, got {sim:P1} for text: '{content.Trim()}'");
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Jpg_with_Vietnamese_text_extracts_to_txt_with_high_similarity()
     {
         const string text = "Hóa đơn bán hàng số 12345";
@@ -78,7 +78,7 @@ public sealed class ImageToTextTests : IDisposable
         Assert.True(sim >= 0.95, $"Expected similarity >= 0.95, got {sim:P1} for text: '{content.Trim()}'");
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Small_96_dpi_screenshot_with_14_px_text_still_reads_due_to_upscale()
     {
         const string text = "Hệ thống Flevert chuyển đổi ảnh";
@@ -94,7 +94,7 @@ public sealed class ImageToTextTests : IDisposable
         Assert.True(sim >= 0.95, $"Expected similarity >= 0.95, got {sim:P1} for screenshot text: '{content.Trim()}'");
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Photo_rotated_90_degrees_via_pixels_reads_right()
     {
         const string paragraph = """
@@ -130,7 +130,7 @@ public sealed class ImageToTextTests : IDisposable
         Assert.True(sim >= 0.95, $"Expected similarity >= 0.95, got {sim:P1} for rotated text: '{content.Trim()}'");
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Blank_picture_is_skipped_with_message_and_leaves_no_file()
     {
         var input = _dir.Combine("blank.png");
@@ -142,7 +142,7 @@ public sealed class ImageToTextTests : IDisposable
         Assert.False(File.Exists(_dir.Combine("blank.txt")));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Heic_fixture_is_decoded_safely_and_skipped_when_blank()
     {
         var input = _dir.Combine("photo.heic");
@@ -153,7 +153,7 @@ public sealed class ImageToTextTests : IDisposable
         Assert.False(File.Exists(_dir.Combine("photo.txt")));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Cancel_leaves_no_txt_file()
     {
         const string text = "Văn bản mẫu để kiểm tra tính năng hủy";

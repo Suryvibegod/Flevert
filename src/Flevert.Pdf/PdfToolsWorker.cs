@@ -177,7 +177,7 @@ internal static class PdfToolsWorker
     public static void Edit(PdfRenderRequest request, SafeFileHandle file, StreamWriter lines)
     {
         var edit = PdfEdit.Decode(request.Options); // checked when the request was read
-        var font = edit.Kind == PdfEditKind.Watermark ? ReadArial() : null;
+        var font = edit.Kind == PdfEditKind.Watermark ? ReadArial(edit.Font) : null;
         using var pdf = PdfDocument.Open(file, PdfLimits.Default);
         var total = Start(pdf, lines);
         for (var index = 0; index < total; index++)
@@ -210,10 +210,13 @@ internal static class PdfToolsWorker
         lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"done {total}"));
     }
 
-    /// <summary>Windows' Arial (<c>%WINDIR%\Fonts\arial.ttf</c>), which has the Vietnamese letters; Flevert ships no font.</summary>
-    private static byte[] ReadArial()
+    /// <summary>
+    /// The watermark's font, the file the parent found (<see cref="SystemFont"/>: Windows' Arial,
+    /// <c>%WINDIR%\Fonts\arial.ttf</c>, or the TrueType font fontconfig gives for it), which has the Vietnamese letters;
+    /// Flevert ships no font.
+    /// </summary>
+    private static byte[] ReadArial(string path)
     {
-        var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "arial.ttf");
         try
         {
             return File.ReadAllBytes(path);

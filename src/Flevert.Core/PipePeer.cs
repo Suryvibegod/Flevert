@@ -1,5 +1,6 @@
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.Principal;
 
 namespace Flevert.Core;
@@ -9,6 +10,7 @@ namespace Flevert.Core;
 /// executable, in the same session, at an integrity level no lower than ours (a sandboxed low-integrity process of the
 /// same user must not be able to collect or swallow the user's selections).
 /// </summary>
+[SupportedOSPlatform("windows")]
 internal static partial class PipePeer
 {
     private const uint ProcessQueryLimitedInformation = 0x1000;

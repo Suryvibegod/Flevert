@@ -6,7 +6,7 @@
   Contains no GPL or LGPL libraries (no jbigkit, no libiconv/libintl/libunistring/libidn2).
   Validates that tesseract.exe depends only on Windows system DLLs, checks versions, runs smoke OCR,
   and packages tesseract.exe, port licenses, and README.txt into a zip archive with SHA256 checksums.
-  ADR-0010.
+  ADR-0011.
 #>
 param(
     [string]$VcpkgCommit = '9eec002df1cd109f8f104cd966a763daf9751489',
