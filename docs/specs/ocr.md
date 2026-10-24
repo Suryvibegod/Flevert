@@ -101,7 +101,7 @@ Trang A4 PNG xám 8-bit 300 DPI (2480 × 3508, đúng ảnh Flevert đưa tesser
 
 - Trang scan đã có hơn 10 ký tự chữ thật (dòng tiêu đề đánh máy, "Scanned with …", số Bates, dấu đóng trang) được coi là trang có chữ và không được OCR, cả ở `Convert to > Text` lẫn `Make searchable (OCR)`: `Convert to > Text` chỉ lấy mấy ký tự đó, `Make searchable` để nguyên trang. Bỏ qua trang có chữ như `--skip-text` của OCRmyPDF để không chồng lớp chữ thứ hai lên trang có chữ (success criterion 2); ngưỡng 10 ký tự là của Flevert.
 - Ảnh lớn hơn 25 MP bị thu nhỏ về 25 MP trước khi đọc (`OcrSize` ở trên), nên chữ rất nhỏ trong ảnh rất lớn có thể bị sót. Mỗi ảnh hoặc trang có 150 s và 1 GB cho tesseract.
-- OSD chỉ chắc (≥ 14) khi trang đủ chữ, khoảng mười dòng; trang/ảnh xoay chỉ có một hai dòng được đọc nguyên trạng.
+- OSD chỉ chắc (≥ 14) khi trang đủ chữ, khoảng mười dòng; từ 1,5 đến dưới 14 thì đọc cả hai hướng và giữ bản có độ tin cậy chữ cao hơn (bảng đo ở trên), nên trang xoay từ khoảng một dòng đã được dựng thẳng. Khoảng trống đã đo: một dòng chữ không chân lộn ngược (0°/180°), OSD không trả lời, được đọc nguyên trạng.
 
 ## Success criteria
 
