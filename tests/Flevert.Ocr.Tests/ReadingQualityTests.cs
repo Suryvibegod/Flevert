@@ -67,7 +67,7 @@ public sealed class ReadingQualityTests : IDisposable
     public async Task One_run_gives_the_text_and_how_sure_tesseract_is_of_it()
     {
         var image = TestHelpers.CreateTextImage(_dir.Combine("page.png"), "Hóa đơn số 123", "Arial", fontSize: 22);
-        // Tesseract cannot open paths with Vietnamese letters yet: its output goes beside the picture, in _dir.
+        // Read in an ASCII scratch folder, as Flevert's own: tesseract's output goes beside the picture.
         var scratch = Path.Combine(Path.GetTempPath(), "flevert-tests", $"ocr-scratch-{Guid.NewGuid():N}");
         Directory.CreateDirectory(scratch);
         try
