@@ -4,6 +4,7 @@ namespace Flevert.Ocr.Tests;
 /// What Flevert takes from tesseract to choose between a page read as it is and read turned (docs/specs/ocr.md): OSD's
 /// answer with its confidence, and how sure the reading was of its words.
 /// </summary>
+[Collection(TesseractProcesses.Name)]
 public sealed class ReadingQualityTests : IDisposable
 {
     private readonly TempDir _dir = new();
