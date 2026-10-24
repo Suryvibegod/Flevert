@@ -51,6 +51,29 @@ internal static partial class TestProcesses
         return children;
     }
 
+    /// <summary>How many processes named <paramref name="name"/> this process started are still running (tesseract).</summary>
+    public static int RunningChildren(string name)
+    {
+        var count = 0;
+        foreach (var process in Process.GetProcessesByName(name))
+        {
+            using (process)
+            {
+                try
+                {
+                    if (ParentId(process.Id) == Environment.ProcessId && IsRunning(process))
+                        count++;
+                }
+                catch (Win32Exception)
+                {
+                    // Exited meanwhile.
+                }
+            }
+        }
+
+        return count;
+    }
+
     /// <summary>Waits until a worker runs, or fails the test.</summary>
     public static async Task<Process> WaitForWorkerAsync(TimeSpan within)
     {

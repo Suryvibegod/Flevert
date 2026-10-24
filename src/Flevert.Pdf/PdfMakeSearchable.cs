@@ -1,5 +1,6 @@
 using System.Globalization;
 using Flevert.Core;
+using Flevert.Image;
 using Flevert.Ocr;
 
 namespace Flevert.Pdf;
@@ -76,11 +77,26 @@ public sealed class PdfMakeSearchable : IOperation
                 CancellationToken = ct,
             };
 
+            var layers = new Dictionary<int, string>();
             await Parallel.ForEachAsync(ocrPages, parallelOptions, async (page, token) =>
             {
                 var imagePath = Path.Combine(scratch, string.Create(CultureInfo.InvariantCulture, $"page-{page}.png"));
                 var layerBase = Path.Combine(scratch, string.Create(CultureInfo.InvariantCulture, $"layer-{page}"));
+                // A page shown turned (scanned sideways or upside down) is read upright; its text layer is then turned
+                // back the other way, and qpdf applies a page's /Rotate when it lays that page over another.
+                var turned = await ImageToText.TurnUprightAsync(_tesseract, imagePath, token).ConfigureAwait(false);
                 await _tesseract.WriteTextLayerAsync(imagePath, layerBase, token).ConfigureAwait(false);
+                var layer = layerBase + ".pdf";
+                if (turned != 0)
+                {
+                    var shown = layerBase + "-shown.pdf";
+                    var back = string.Create(CultureInfo.InvariantCulture, $"--rotate=+{360 - turned}:1");
+                    await _qpdf.TransformAsync(layer, shown, [Qpdf.KeepStreamsAsTheyAre, back], token).ConfigureAwait(false);
+                    layer = shown;
+                }
+
+                lock (layers)
+                    layers[page] = layer;
 
                 var completed = Interlocked.Increment(ref ocrDone);
                 progress?.Report(new FileProgress(PdfExtractText.ScannedPageUnit, completed, ocrPages.Count));
@@ -89,12 +105,12 @@ public sealed class PdfMakeSearchable : IOperation
             string layerPdf;
             if (ocrPages.Count == 1)
             {
-                layerPdf = Path.Combine(scratch, string.Create(CultureInfo.InvariantCulture, $"layer-{ocrPages[0]}.pdf"));
+                layerPdf = layers[ocrPages[0]];
             }
             else
             {
                 layerPdf = Path.Combine(scratch, "combined-layers.pdf");
-                var layerFiles = ocrPages.Select(p => Path.Combine(scratch, string.Create(CultureInfo.InvariantCulture, $"layer-{p}.pdf"))).ToList();
+                var layerFiles = ocrPages.Select(page => layers[page]).ToList();
                 await _qpdf.MergeAsync(layerFiles, layerPdf, ct).ConfigureAwait(false);
             }
 

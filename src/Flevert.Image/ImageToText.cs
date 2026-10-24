@@ -107,6 +107,16 @@ public sealed class ImageToText : IOperation
     /// </summary>
     internal static async Task<string> ReadUprightAsync(Tesseract tesseract, string pngPath, CancellationToken ct)
     {
+        await TurnUprightAsync(tesseract, pngPath, ct).ConfigureAwait(false);
+        return await tesseract.ReadTextAsync(pngPath, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Turns <paramref name="pngPath"/>, a grey PNG Flevert wrote at 300 DPI, upright in place when OSD is confident it
+    /// is turned, and returns how many degrees clockwise it turned it (0, 90, 180 or 270).
+    /// </summary>
+    internal static async Task<int> TurnUprightAsync(Tesseract tesseract, string pngPath, CancellationToken ct)
+    {
         var rotation = await tesseract.DetectRotationAsync(pngPath, ct).ConfigureAwait(false);
         if (rotation != 0)
         {
@@ -122,7 +132,7 @@ public sealed class ImageToText : IOperation
         }
 
         ct.ThrowIfCancellationRequested();
-        return await tesseract.ReadTextAsync(pngPath, ct).ConfigureAwait(false);
+        return rotation;
     }
 
     internal static string CleanText(string text)

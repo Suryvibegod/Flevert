@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Flevert.Core;
 using static Flevert.Pdf.Tests.TestPdf;
 
@@ -9,6 +10,7 @@ public sealed class PdfMakeSearchableTests : IDisposable
 {
     private const string FirstPage = "Cộng hòa xã hội chủ nghĩa Việt Nam\nĐộc lập - Tự do - Hạnh phúc";
     private const string SecondPage = "Hợp đồng mua bán hàng hóa\nSố 12 năm 2026";
+    private const string FullPage = FirstPage + "\nHóa đơn bán hàng kiêm phiếu xuất kho\nNgày 21 tháng 10 năm 2026\nKhách hàng: Công ty Cổ phần Công nghệ Mới";
 
     private readonly TempDir _dir = new();
 
@@ -66,6 +68,74 @@ public sealed class PdfMakeSearchableTests : IDisposable
         Assert.True(TestOcr.Similarity(FirstPage, pdf.GetText(1)) >= 0.95, pdf.GetText(1));
     }
 
+    [Theory]
+    [InlineData(90)]
+    [InlineData(180)]
+    [InlineData(270)]
+    public async Task A_page_shown_turned_gets_its_text_where_the_words_are_drawn(int degrees)
+    {
+        // A scan saved sideways and turned upright by the page's /Rotate, as scanner apps do: tesseract reads the page
+        // as it is shown, and qpdf must lay the text over it the same way.
+        var scan = _dir.Combine("scan.pdf");
+        await TestOcr.WriteScan(scan, degrees, FirstPage);
+        var input = await new PdfRotate(degrees, Qpdf.NextToApp).RunAsync(scan, CancellationToken.None);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        using var before = PdfDocument.Open(input);
+        using var after = PdfDocument.Open(output);
+        Assert.True(before.Render(0, 72).Bgra.Span.SequenceEqual(after.Render(0, 72).Bgra.Span), "The page looks different.");
+        var similarity = TestOcr.Similarity(FirstPage, after.GetText(0));
+        Assert.True(similarity >= 0.95, $"{similarity:P1} for '{after.GetText(0)}'");
+    }
+
+    [Theory]
+    [InlineData(90)]
+    [InlineData(180)]
+    [InlineData(270)]
+    public async Task A_page_scanned_turned_and_shown_so_is_read_upright_and_left_as_it_looks(int degrees)
+    {
+        // Nothing turns this page upright: OSD finds the words turned, tesseract reads them upright, and the text layer is
+        // turned back to lie over them as they are shown (ocr.md: the output keeps how the page looks). OSD is only sure
+        // of a page of text: two lines score about 3, under the threshold of 14, and are read as they are.
+        var page = string.Join('\n', Enumerable.Repeat(FullPage, 6));
+        var input = _dir.Combine("scan.pdf");
+        await TestOcr.WriteScan(input, degrees, page);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        using var before = PdfDocument.Open(input);
+        using var after = PdfDocument.Open(output);
+        Assert.True(before.Render(0, 72).Bgra.Span.SequenceEqual(after.Render(0, 72).Bgra.Span), "The page looks different.");
+        // pdfium reads words drawn upside down from the left of the page as shown: each line's words come back last first.
+        var expected = degrees == 180
+            ? string.Join('\n', page.Split('\n').Select(line => string.Join(' ', line.Split(' ').Reverse())))
+            : page;
+        var similarity = TestOcr.Similarity(expected, after.GetText(0));
+        Assert.True(similarity >= 0.95, $"{similarity:P1} for '{after.GetText(0)}'");
+    }
+
+    [Fact]
+    public async Task Cancel_while_tesseract_reads_stops_it_and_leaves_nothing()
+    {
+        var input = _dir.Combine("scan.pdf");
+        await TestOcr.WriteScan(input, [.. Enumerable.Repeat(FirstPage + "\n" + SecondPage, 8)]);
+        using var cancel = new CancellationTokenSource();
+        var progress = new SyncProgress(report =>
+        {
+            // The worker has drawn the pages and tesseract has read one: cancel while the others are being read.
+            if (report.Unit == PdfExtractText.ScannedPageUnit)
+                cancel.Cancel();
+        });
+
+        var started = Stopwatch.StartNew();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Op().RunAsync(input, progress, cancel.Token));
+
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(30), $"took {started.Elapsed}");
+        Assert.Equal(["scan.pdf"], FileNames(_dir.Path));
+        Assert.Equal(0, TestProcesses.RunningChildren("tesseract"));
+    }
+
     [Fact]
     public async Task A_pdf_that_already_has_text_everywhere_is_skipped_and_leaves_nothing()
     {
@@ -76,5 +146,10 @@ public sealed class PdfMakeSearchableTests : IDisposable
 
         Assert.Equal("This PDF already has text you can search.", ex.Message);
         Assert.Equal(["text.pdf"], FileNames(_dir.Path));
+    }
+
+    private sealed class SyncProgress(Action<FileProgress> report) : IProgress<FileProgress>
+    {
+        public void Report(FileProgress value) => report(value);
     }
 }

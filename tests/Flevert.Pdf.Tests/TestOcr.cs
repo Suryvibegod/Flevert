@@ -11,7 +11,13 @@ internal static class TestOcr
     public const double Dpi = 300;
 
     /// <summary>Writes one scanned A4 page per entry of <paramref name="pages"/>, its lines split at <c>\n</c>.</summary>
-    public static async Task WriteScan(string path, params string[] pages)
+    public static Task WriteScan(string path, params string[] pages) => WriteScan(path, 0, pages);
+
+    /// <summary>
+    /// As <see cref="WriteScan(string, string[])"/>, with each picture turned <paramref name="turnedLeft"/> degrees
+    /// counterclockwise, as a page scanned sideways is: turning the page as many degrees clockwise shows it upright.
+    /// </summary>
+    public static async Task WriteScan(string path, int turnedLeft, params string[] pages)
     {
         var work = Path.Combine(Path.GetDirectoryName(path)!, "scan-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(work);
@@ -28,6 +34,8 @@ internal static class TestOcr
                 image.ReadPixels(bitmap.Bgra.Span,
                     new PixelReadSettings((uint)bitmap.Width, (uint)bitmap.Height, StorageType.Char, PixelMapping.BGRA));
                 image.Alpha(AlphaAction.Off);
+                if (turnedLeft != 0)
+                    image.Rotate(360 - turnedLeft);
                 image.Density = new Density(Dpi, Dpi, DensityUnit.PixelsPerInch);
                 var picture = Path.Combine(work, $"page-{i + 1:D3}.png");
                 await image.WriteAsync(picture, MagickFormat.Png);
