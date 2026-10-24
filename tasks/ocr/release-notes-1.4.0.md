@@ -5,7 +5,7 @@ Ghi chú cho phiên phát hành (tiếng Việt, xóa trước khi dán):
 - `release.yml` tự viết phần đầu của release notes từ mục `## [1.4.0]` của CHANGELOG, rồi thêm "Check your download" (lệnh hash và `gh attestation verify` ghim commit) và "Source of the bundled ffmpeg". Bản nháp dưới đây là phần đầu đầy đủ hơn; khi draft đã có, so với notes workflow viết, điền chỗ trống rồi `gh release edit v1.4.0 --notes-file <file>` **trước khi publish** (sau publish release bất biến).
 - Điền: ngày trong CHANGELOG (`YYYY-MM-DD`), kích thước và SHA256 của `Flevert-Setup-1.4.0.exe` (từ `SHA256SUMS.txt` của draft, kiểm lại bằng `Get-FileHash`), kích thước và SHA256 của tarball Linux.
 - **Chặn trước khi tag:** `release.yml` hiện chỉ dựng và đính kèm bộ cài Windows, không có `Flevert-<version>-linux-x64.tar.gz`, nên README ("Download `Flevert-<version>-linux-x64.tar.gz`") và mục Linux bên dưới sai nếu phát hành như vậy. Hoặc thêm job Linux (`scripts/build-linux.sh`, attestation, `.sha256` vào `SHA256SUMS.txt`) vào `release.yml`, hoặc bỏ mục Linux khỏi release notes/README/CHANGELOG của 1.4.0.
-- Kích thước: bản dựng tesseract đang ghim (`deps-tesseract-5.5.3`, có libcurl/libarchive) cho setup 100,2 MB (1.3.0: 97,7 MB). Bản dựng lại UTF-8, không mạng sẽ khác một chút: lấy số thật từ draft.
+- Kích thước: với bản tesseract cũ (`deps-tesseract-5.5.3`, zip 3,3 MB, có libcurl/libarchive) setup là 100,2 MB (1.3.0: 97,7 MB). Bản đang ghim là `deps-tesseract-5.5.3-2` (UTF-8, không mã mạng, zip 2,6 MB; dựng từ main 1577b28, run 40121734076, attestation `--source-ref refs/heads/main` đã kiểm đạt 2026-10-25), nên setup nhỏ hơn một chút: lấy số thật từ draft.
 
 ---
 
@@ -48,6 +48,6 @@ The setup is a few MB larger than 1.3.0's, for Tesseract and its Vietnamese, Eng
 
 ## Licences
 
-- Text is read by [Tesseract](https://github.com/tesseract-ocr/tesseract) 5.5.3 (Apache-2.0), which Flevert builds from source on GitHub Actions ([build-tesseract workflow](https://github.com/Suryvibegod/Flevert/actions/workflows/build-tesseract.yml)) as one program with only permissive libraries linked in (Leptonica, libpng, libjpeg-turbo, libwebp, OpenJPEG, libtiff, giflib, zlib and others, all BSD, MIT, zlib or Apache style), no GPL or LGPL code. The build is attested and pinned by SHA256. It runs as a separate program with a memory limit, and is given only pictures Flevert wrote itself.
+- Text is read by [Tesseract](https://github.com/tesseract-ocr/tesseract) 5.5.3 (Apache-2.0), which Flevert builds from source on GitHub Actions ([build-tesseract workflow](https://github.com/Suryvibegod/Flevert/actions/workflows/build-tesseract.yml)) as one program with only permissive libraries linked in (Leptonica, libpng, libspng, libjpeg-turbo, libwebp, OpenJPEG, libtiff, giflib, zlib and liblzma, under BSD, MIT, zlib-style and 0BSD licences), no GPL or LGPL code and no network code. The build is attested and pinned by SHA256. It runs as a separate program with a memory limit, is given only pictures Flevert wrote itself, and works in a Windows account whose name has Vietnamese letters.
 - The trained data is `tessdata_fast` 4.1.0 (`vie`, `eng`, `osd`, Apache-2.0).
 - Every licence is in `THIRD-PARTY-NOTICES.txt` in the install folder. ffmpeg is still GPL and its complete source is attached below, as for 1.3.0.
