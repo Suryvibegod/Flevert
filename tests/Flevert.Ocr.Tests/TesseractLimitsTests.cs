@@ -6,6 +6,7 @@ namespace Flevert.Ocr.Tests;
 /// The process-wide gate on tesseract runs (pictures in a batch and pages of a PDF share it) and the OSD answers that are
 /// trusted.
 /// </summary>
+[Collection(TesseractProcesses.Name)]
 public sealed class TesseractLimitsTests : IDisposable
 {
     private readonly TempDir _dir = new();
