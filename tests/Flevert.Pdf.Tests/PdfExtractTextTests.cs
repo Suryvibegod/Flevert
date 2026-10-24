@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using Flevert.Core;
 using Flevert.Ocr;
@@ -311,25 +311,32 @@ public sealed class PdfExtractTextTests : IDisposable
     // v1.4.0 review R12: deleting the temporary file and making it again let another account in a shared folder put its
     // own file or link there in between.
     [WindowsFact]
-    public async Task The_text_of_scans_is_written_into_the_temporary_file_the_worker_made_never_deleting_it()
+    public async Task A_link_put_at_the_temporary_name_while_scans_are_read_is_replaced_never_written_through()
     {
         var input = _dir.Combine("mixed.pdf");
         TestTextPdf.Write(input, "Trang này đã có chữ thật", "");
-        var deleted = new ConcurrentQueue<string>();
-        var renamed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var watcher = new FileSystemWatcher(_dir.Path, "*.partial") { NotifyFilter = NotifyFilters.FileName };
-        watcher.Deleted += (_, e) => deleted.Enqueue(e.Name!);
-        watcher.Renamed += (_, _) => renamed.TrySetResult();
-        watcher.EnableRaisingEvents = true;
+        var victim = _dir.Combine("victim.txt");
+        await File.WriteAllTextAsync(victim, "the user's own file");
 
-        var output = await Op(_ => Task.FromResult("Chữ của trang hai")).RunAsync(input, CancellationToken.None);
+        // While tesseract reads, another account swaps the worker's file for a hard link to one of the user's files (a
+        // symbolic link needs Developer Mode; a hard link needs nothing).
+        var output = await Op(async _ =>
+        {
+            var partial = Assert.Single(Directory.GetFiles(_dir.Path, "*.partial"));
+            File.Delete(partial);
+            Assert.True(CreateHardLinkW(partial, victim, 0), "could not create a hard link");
+            return await Task.FromResult("Chữ của trang hai");
+        }).RunAsync(input, CancellationToken.None);
 
-        // Events come in order: a delete would come before the rename to the output's name.
-        await renamed.Task.WaitAsync(TimeSpan.FromSeconds(30));
-        Assert.Empty(deleted);
+        Assert.Equal("the user's own file", await File.ReadAllTextAsync(victim));
         Assert.Equal("Trang này đã có chữ thật\r\n\fChữ của trang hai\r\n", await File.ReadAllTextAsync(output));
         Assert.Equal([0xEF, 0xBB, 0xBF], (await File.ReadAllBytesAsync(output))[..3]);
+        Assert.Empty(Directory.GetFiles(_dir.Path, "*.partial"));
     }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateHardLinkW(string link, string target, nint security);
 
     // A PdfExtractText whose tesseract reads the scanned page numbered from 1 with readPage.
     private static PdfExtractText Op(Func<int, Task<string>> readPage) => new(TestPdf.Worker)

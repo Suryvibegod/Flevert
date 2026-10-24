@@ -29,21 +29,25 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 
 | Phương án | Kết luận |
 |---|---|
-| **Tesseract 5.5.3 tự dựng tĩnh bằng vcpkg** (tag `2026.10.16`) trên GitHub Actions, chạy `tesseract.exe` thành tiến trình riêng | **Chọn** (người dùng chốt 2026-10-22, [ADR-0011](../adr/0011-tesseract-static-build.md)). Một file exe, CRT tĩnh, chỉ thư viện MIT/BSD/Apache/zlib (leptonica 1.87.0, libpng, libjpeg-turbo, libwebp, openjpeg, libtiff, zlib, giflib, cùng libcurl và libarchive mà port bắt buộc); không jbigkit (GPL), không libiconv/libintl (LGPL), nên không có nghĩa vụ phát hành mã nguồn. |
+| **Tesseract 5.5.3 tự dựng tĩnh bằng vcpkg** (tag `2026.10.16`) trên GitHub Actions, chạy `tesseract.exe` thành tiến trình riêng | **Chọn** (người dùng chốt 2026-10-22, [ADR-0011](../adr/0011-tesseract-static-build.md)). Một file exe, CRT tĩnh, chỉ thư viện MIT/BSD/Apache/zlib (leptonica 1.87.0, libpng, libjpeg-turbo, libwebp, openjpeg, libtiff, zlib, giflib; libcurl và libarchive mà port bắt buộc được bỏ bằng overlay `DISABLE_CURL`/`DISABLE_ARCHIVE`, ScrollView bằng `GRAPHICS_DISABLED`, nên exe chỉ import `KERNEL32.dll`); không jbigkit (GPL), không libiconv/libintl (LGPL), nên không có nghĩa vụ phát hành mã nguồn. |
 | Bộ cài Windows UB Mannheim 5.5.3 (`bee9e343…`) | Loại: leptonica nhúng jbigkit (GPL v2) và kèm 4 DLL LGPL, phải phát hành mã nguồn tương ứng như ffmpeg và ghi giấy phép cho 33 DLL. Chỉ dùng tạm khi phát triển engine (2026-10-21). |
 | NuGet `TesseractOCR` 5.5.2 | Loại: nhãn 5.5.2 nhưng `tesseract.exe` bên trong là 5.5.0, kèm libtiff 4.3.0, libpng 1.6.37, zlib 1.2.11 (cũ, có CVE). |
 | `charlesw/tesseract` NuGet | Loại: không bảo trì từ 2022, chạy trong tiến trình. |
 | Windows.Media.Ocr | Loại: không có gói OCR tiếng Việt. |
 | PaddleOCR/RapidOCR (ONNX) | Loại cho v1.4.0: +100–150 MB, phải tự dựng lớp chữ PDF. |
 
-- `.github/workflows/build-tesseract.yml` (chạy tay từ main) dựng bằng `scripts/build-tesseract.ps1`, kiểm `dumpbin` chỉ còn DLL hệ thống của Microsoft, kiểm phiên bản, chạy thử OCR tiếng Việt, attest, rồi đăng release `deps-tesseract-5.5.3` (pre-release, không phải latest). `scripts/deps.json` ghim zip đó bằng SHA256.
+- `.github/workflows/build-tesseract.yml` (chạy tay từ main) dựng bằng `scripts/build-tesseract.ps1`, kiểm danh sách port vcpkg cho phép, nhúng manifest `activeCodePage=UTF-8` (đường dẫn có chữ Việt như `C:\Users\Dương\`), kiểm `dumpbin` chỉ còn DLL hệ thống của Microsoft và không DLL mạng, kiểm phiên bản, chạy thử OCR tiếng Việt trong thư mục tên Việt, attest (chỉ từ main), rồi đăng release `deps-tesseract-5.5.3-2` (pre-release, không phải latest). `scripts/deps.json` ghim zip đó bằng SHA256.
 - Dữ liệu: `tessdata_fast` tag 4.1.0 (Apache-2.0): `vie` (531 275 byte, SHA256 `79df64caf7bcfb2a27df5042ecb6121e196eada34da774956995747636d5bfa1`), `eng` (`7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2`), `osd` (`9cf5d576fcc47564f11265841e5ca839001e7e6f38ff7f7aacf46d15a96b00ff`); thêm `pdf.ttf` và `configs/pdf` từ tag 5.5.3 của tesseract-ocr/tesseract (lớp chữ PDF cần).
 - Bố cục: `deps/tesseract/` (dev) và `{app}\tesseract\` (đã cài): `tesseract.exe`, `tessdata/{vie,eng,osd}.traineddata`, `tessdata/pdf.ttf`, `tessdata/configs/pdf`, `licenses/`.
 
 ## Cách làm
 
-- Ngôn ngữ mặc định `-l vie+eng`, `--oem 1` (LSTM), `--psm 3`; `TESSDATA_PREFIX` trỏ đúng thư mục `tessdata` của Flevert (không dùng biến môi trường của người dùng). Gọi qua `ExternalTool` trong job object (giới hạn bộ nhớ, timeout, độ ưu tiên thấp) như ffmpeg/qpdf. Job object không chặn được mạng. Bảo đảm "không mạng" nằm ở đầu vào: Flevert chỉ đưa tesseract đường dẫn đầy đủ tới một file PNG trên máy do chính Flevert ghi trong thư mục tạm riêng, không bao giờ URL, danh sách file hay file của người lạ trực tiếp (bản hiện tại có libcurl nên đọc được `http(s)://`, và tesseract coi đầu vào không phải ảnh là danh sách file); `Tesseract.cs` từ chối đường dẫn không đầy đủ hoặc không phải file ảnh. Kế hoạch (chưa xong): dựng lại tesseract không có libcurl và libarchive.
-- Ảnh nguồn: giải mã bằng Magick.NET (đã có giới hạn) thành PNG xám trong thư mục tạm rồi mới đưa tesseract.
+- Ngôn ngữ mặc định `-l vie+eng`, `--oem 1` (LSTM), `--psm 3`; `TESSDATA_PREFIX` trỏ đúng thư mục `tessdata` của Flevert (không dùng biến môi trường của người dùng). Gọi qua `ExternalTool` trong job object (giới hạn bộ nhớ, timeout, độ ưu tiên thấp) như ffmpeg/qpdf. Job object không chặn được mạng, nhưng bản dựng `deps-tesseract-5.5.3-2` không có libcurl, libarchive, ScrollView và chỉ import `KERNEL32.dll`, nên không có mã mạng. Flevert vẫn chỉ đưa tesseract đường dẫn đầy đủ tới một file PNG trên máy do chính Flevert ghi trong thư mục tạm riêng, không bao giờ danh sách file hay file của người lạ trực tiếp (tesseract coi đầu vào không phải ảnh là danh sách file); `Tesseract.cs` từ chối đường dẫn không đầy đủ hoặc không phải file ảnh.
+- Ảnh nguồn: giải mã bằng Magick.NET (đã có giới hạn; khung đầu của GIF/TIFF nhiều trang, xoay theo EXIF, nền trong suốt thành trắng) thành PNG xám 8 bit, 300 DPI, trong thư mục tạm riêng rồi mới đưa tesseract. Cỡ ảnh đưa tesseract theo `ImageToText.OcrSize`, một hệ số chung cho hai chiều:
+  - cạnh ngắn dưới 1000 px (chữ chụp màn hình quá nhỏ với tesseract) thì phóng 2×, nhưng chỉ tới mức còn vừa hai trần dưới đây;
+  - trần diện tích 25 MP (`MaxOcrPixels`, khoảng trang 6000 × 4200 px: bộ nhớ và thời gian của tesseract tăng theo diện tích, ba trang A4 300 DPI vẫn trong trần 1 GB và 150 s) và trần cạnh dài 30000 px (`MaxOcrSide`, dưới 32767 px tesseract nhận và 40000 px của ImageMagick);
+  - ảnh lớn hơn hai trần (ảnh 50–200 MP) thì thu nhỏ cho vừa. Trần đặt trên diện tích chứ không trên cạnh dài, nên ảnh chụp màn hình dài giữ nguyên bề ngang và vẫn đọc được.
+  Trang PDF không qua quy tắc này: pdfium render 300 DPI (dưới đây) và ngân sách render OCR chỉ tính các trang sẽ đọc.
 - PDF: pdfium render từng trang 300 DPI (pdf-worker sẵn có). Trang đã có chữ (pdfium đếm > 10 ký tự, không tính khoảng trắng, như Convert to > Text) thì bỏ qua (`--skip-text` của OCRmyPDF). Trang cần OCR: tesseract `-c textonly_pdf=1 pdf` ra PDF chỉ có lớp chữ vô hình đúng khổ trang, rồi qpdf `--overlay` lên trang gốc (cách "sandwich" của OCRmyPDF, chỉ lấy ý tưởng, MPL-2.0 không chép mã). Trang gốc không bị mã hóa lại.
 - Tự xoay: OSD (`--psm 0 -l osd`) chỉ dùng khi độ tin cậy ≥ 14 (mặc định `rotate_pages_threshold` của OCRmyPDF): xoay ảnh trước khi nhận chữ để chữ đúng chiều. Trong Make searchable, trang PDF mà OSD chắc là đang hiện nằm ngang hoặc lộn ngược được dựng thẳng bằng cách tăng `/Rotate` của trang đúng góc đó (như `--rotate-pages` của OCRmyPDF; nội dung trang không bị mã hóa lại), và lớp chữ nằm đúng trên chữ, đọc đúng thứ tự từng dòng (người dùng chốt 2026-10-25, review R5: để trang lộn ngược thì Edge/Chrome đọc từ của mỗi dòng theo thứ tự ngược, Ctrl+F cụm từ không thấy). Trang đã hiện thẳng (kể cả nhờ `/Rotate` sẵn có) giữ nguyên.
 - Song song theo trang trong giới hạn lõi và ngân sách bộ nhớ chung (ADR-0006); tiến độ trong file theo số trang.
@@ -59,6 +63,8 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 ## Giới hạn đã biết
 
 - Trang scan đã có hơn 10 ký tự chữ thật (dòng tiêu đề đánh máy, "Scanned with …", số Bates, dấu đóng trang) được coi là trang có chữ và không được OCR, cả ở `Convert to > Text` lẫn `Make searchable (OCR)`: `Convert to > Text` chỉ lấy mấy ký tự đó, `Make searchable` để nguyên trang. Bỏ qua trang có chữ như `--skip-text` của OCRmyPDF để không chồng lớp chữ thứ hai lên trang có chữ (success criterion 2); ngưỡng 10 ký tự là của Flevert.
+- Ảnh lớn hơn 25 MP bị thu nhỏ về 25 MP trước khi đọc (`OcrSize` ở trên), nên chữ rất nhỏ trong ảnh rất lớn có thể bị sót. Mỗi ảnh hoặc trang có 150 s và 1 GB cho tesseract.
+- OSD chỉ chắc (≥ 14) khi trang đủ chữ, khoảng mười dòng; trang/ảnh xoay chỉ có một hai dòng được đọc nguyên trạng.
 
 ## Success criteria
 
@@ -66,7 +72,7 @@ Người dùng có PDF scan (hợp đồng, hóa đơn, giấy tờ chụp lại
 2. PDF trộn trang có chữ và trang scan: trang có chữ không bị chồng lớp chữ thứ hai.
 3. Ảnh PNG/JPG/HEIC tiếng Việt → `.txt` đúng ≥ 95 % ký tự. Trang xoay 90°/180° vẫn nhận đúng (OSD).
 4. Hủy giữa chừng: tesseract dừng ngay, không file dở. File độc (ảnh/PDF trong bảng file độc hiện có) không treo, không làm sập flevert.exe.
-5. Tesseract chỉ chạy từ đường dẫn của Flevert, `TESSDATA_PREFIX` của Flevert, và chỉ nhận đường dẫn đầy đủ tới file PNG trên máy do Flevert tự ghi (không URL, không danh sách file), nên không có gì khiến nó mở mạng. Job object không chặn mạng; bản tesseract không libcurl/libarchive là kế hoạch.
+5. Tesseract chỉ chạy từ đường dẫn của Flevert, `TESSDATA_PREFIX` của Flevert, và chỉ nhận đường dẫn đầy đủ tới file PNG trên máy do Flevert tự ghi (không URL, không danh sách file), và bản dựng không có mã mạng (không libcurl, libarchive, ScrollView; chỉ import `KERNEL32.dll`). Đường dẫn có chữ ngoài code page ANSI (tài khoản `Dương`) đọc được nhờ manifest `activeCodePage=UTF-8`.
 6. Bộ cài kèm tesseract và giấy phép của mọi file; `scripts/write-notices.ps1` không từ chối file nào; installer test đạt, gỡ sạch.
 7. Năm bộ test (Core, Image, Pdf, Media, Ocr) xanh, CI ba lần cùng commit.
 

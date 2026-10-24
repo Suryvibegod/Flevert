@@ -43,8 +43,11 @@ jobs:
             artifacts/SHA256SUMS.txt
           if-no-files-found: error
 
+  # Only a build from main is attested: an attestation for a branch build would be just as valid to a verifier that
+  # does not pin --source-ref, and nothing built off main is ever released.
   attest:
     needs: build
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -85,7 +88,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: deps-tesseract-5.5.3
+          RELEASE_TAG: deps-tesseract-5.5.3-2
           ZIP_NAME: ${{ needs.build.outputs.zip-name }}
         run: |
           if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
@@ -100,9 +103,11 @@ jobs:
 
           - Statically linked with CRT (`/MT`) and permissive dependencies only (Apache-2.0, BSD, MIT, zlib).
           - No GPL or LGPL libraries included (no jbigkit, no libiconv/libintl/libunistring/libidn2).
-          - Verified: depends only on Microsoft-signed Windows system DLLs.
+          - Built without libcurl and libarchive (`DISABLE_CURL`, `DISABLE_ARCHIVE`); every vcpkg port and feature is on an allow-list.
+          - Manifest sets the process code page to UTF-8 (`activeCodePage`), so paths outside the ANSI code page work.
+          - Verified: depends only on Microsoft-signed Windows system DLLs, none of them for networking.
           - Verified: Leptonica 1.87.0 with image codecs (png, jpeg, webp, openjpeg, tiff, gif, zlib).
-          - Verified: Vietnamese OCR smoke test passed with `vie.traineddata`.
+          - Verified: Vietnamese OCR smoke test passed with `vie.traineddata`, run from a folder named with Vietnamese letters.
           - Build provenance attested via GitHub Actions (`actions/attest-build-provenance`).
           EOF
 

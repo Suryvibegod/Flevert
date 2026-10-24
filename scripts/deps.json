@@ -70,8 +70,8 @@
     },
     {
       "name": "tesseract",
-      "url": "https://github.com/Suryvibegod/Flevert/releases/download/deps-tesseract-5.5.3/tesseract-5.5.3-vcpkg-2026.10.16-win64-static.zip",
-      "sha256": "f9e9f86bb2b380ac43ed7049504320af072ffb4e9c45f22ca6d07af937a345ec",
+      "url": "https://github.com/Suryvibegod/Flevert/releases/download/deps-tesseract-5.5.3-2/tesseract-5.5.3-vcpkg-2026.10.16-win64-static.zip",
+      "sha256": "178d6b485be5978e0dc57893d90672e15c8119317722113579764f8cab8cfc22",
       "kind": "zip",
       "strip": "",
       "keep": ["tesseract.exe", "licenses/*"]
@@ -165,9 +165,9 @@
       "licences": ["deps/ffmpeg/LICENSE.txt", "installer/notices/ffmpeg/*"]
     },
     {
-      "title": "Tesseract 5.5.3, built statically by Flevert's build-tesseract workflow with vcpkg 2026.10.16 (release deps-tesseract-5.5.3)",
+      "title": "Tesseract 5.5.3, built statically by Flevert's build-tesseract workflow with vcpkg 2026.10.16 (release deps-tesseract-5.5.3-2)",
       "files": ["tesseract\\tesseract.exe"],
-      "note": "Tesseract runs as a separate program. tesseract.exe holds, linked in, the Microsoft C runtime and these libraries, whose licences follow, each named after its vcpkg port: Leptonica, libpng, libspng, libjpeg-turbo, libwebp, OpenJPEG, libtiff, giflib, zlib, libcurl, libarchive, bzip2, liblzma, LZ4 and Zstandard. Zstandard is offered under the BSD licence or GPLv2: it is used here under the BSD licence. liblzma is under the BSD Zero Clause licence (0BSD); the GPL and LGPL texts in its licence file are for XZ Utils tools and scripts that are not in tesseract.exe. The OpenSSL licence follows too because vcpkg installed OpenSSL beside libcurl, but tesseract.exe contains no OpenSSL code (libcurl uses Windows Schannel).",
+      "note": "Tesseract runs as a separate program. tesseract.exe holds, linked in, the Microsoft C runtime and these libraries, whose licences follow, each named after its vcpkg port: Leptonica, libpng, libspng, libjpeg-turbo, libwebp, OpenJPEG, libtiff, giflib, zlib and liblzma. liblzma is under the BSD Zero Clause licence (0BSD); the GPL and LGPL texts in its licence file are for XZ Utils tools and scripts that are not in tesseract.exe.",
       "licences": ["deps/tesseract/licenses/*"]
     },
     {
