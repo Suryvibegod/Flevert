@@ -20,6 +20,19 @@ public class PdfDocumentTests
     }
 
     [Fact]
+    public unsafe void Pdfium_reads_the_file_length_as_its_unsigned_long()
+    {
+        // FPDF_FILEACCESS starts with an unsigned long: 8 bytes on Linux, 4 on Windows. A 4-byte field on Linux left the
+        // high half to whatever the memory held, and the ReadyToRun package refused every PDF as damaged.
+        var path = TestPdf.Fixture("three-colours.pdf");
+        using var source = new FileSource(File.OpenHandle(path), new FileInfo(path).Length);
+
+        var fileLength = OperatingSystem.IsWindows() ? *(uint*)source.Access : *(ulong*)source.Access;
+
+        Assert.Equal((ulong)new FileInfo(path).Length, fileLength);
+    }
+
+    [Fact]
     public void Renders_each_page_in_its_own_colour_at_the_size_its_dpi_gives()
     {
         using var pdf = PdfDocument.Open(TestPdf.Fixture("three-colours.pdf"));
@@ -87,7 +100,8 @@ public class PdfDocumentTests
         Assert.Equal(Red, TestPdf.Pixel(pdf.Render(0, 36), 10, 10));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Opens_a_pdf_at_a_long_path_given_with_the_extended_prefix()
     {
         using var dir = new TempDir();
@@ -199,7 +213,8 @@ public class PdfDocumentTests
         Assert.Throws<ObjectDisposedException>(() => pdf.Render(0, 72));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void The_file_can_be_read_but_not_replaced_while_the_document_is_open()
     {
         using var dir = new TempDir();

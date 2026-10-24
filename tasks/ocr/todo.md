@@ -1,6 +1,6 @@
 # Todo: ocr (v1.4.0)
 
-Spec: [docs/specs/ocr.md](../../docs/specs/ocr.md). ADR: [0010](../../docs/adr/0010-tesseract-static-build.md). Nhánh `feat/v1.4-ocr`.
+Spec: [docs/specs/ocr.md](../../docs/specs/ocr.md). ADR: [0011](../../docs/adr/0011-tesseract-static-build.md). Nhánh `feat/v1.4-ocr`.
 
 ## Bối cảnh phiên 2026-10-21
 
@@ -24,5 +24,5 @@ Phiên trước giao việc cho worker của `ceo-worker-agent` trong 5 worktree
 
 ## Ghi chú
 
-- 7-Zip/bộ cài UB Mannheim không còn cần (ADR-0010). Không đưa DLL GPL/LGPL nào vào bộ cài.
+- 7-Zip/bộ cài UB Mannheim không còn cần (ADR-0011). Không đưa DLL GPL/LGPL nào vào bộ cài.
 - Bộ test sau T5 (bản tĩnh): Core 532/2 skip, Image 240, Pdf 1410/1 skip, Media 225, Ocr 13.

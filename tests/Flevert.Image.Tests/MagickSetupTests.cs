@@ -14,7 +14,8 @@ public sealed class MagickSetupTests : IDisposable
     {
         MagickSetup.EnsureInitialized();
         // As the real configuration folder: files created here can be changed only by this user, SYSTEM and Administrators.
-        SecureDirectory.RestrictToOwnerAndAdmins(_dir.Path);
+        if (OperatingSystem.IsWindows())
+            SecureDirectory.RestrictToOwnerAndAdmins(_dir.Path);
     }
 
     public void Dispose() => _dir.Dispose();
@@ -149,7 +150,8 @@ public sealed class MagickSetupTests : IDisposable
         MagickSetup.VerifyPolicy();
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void The_folder_for_policy_and_decoded_image_caches_is_labelled_no_read_up()
     {
         // Pixel caches of decoded images live here; a low-integrity process of the same user must not read them.
@@ -184,7 +186,8 @@ public sealed class MagickSetupTests : IDisposable
     private static FileStream OpenLikeImageMagick(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_policy_that_is_already_right_is_kept_while_another_process_reads_it()
     {
         MagickSetup.WriteConfiguration(_dir.Path);
@@ -197,7 +200,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.Equal(expected, File.ReadAllBytes(policy));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task A_stale_policy_another_process_is_reading_is_replaced_once_it_lets_go()
     {
         var policy = Path.Combine(_dir.Path, "policy.xml");
@@ -217,7 +221,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.Contains("""<policy domain="coder" rights="none" pattern="*" />""", File.ReadAllText(policy), StringComparison.Ordinal);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_stale_policy_that_cannot_be_replaced_is_an_error_and_leaves_no_temporary_file()
     {
         var policy = Path.Combine(_dir.Path, "policy.xml");
@@ -230,7 +235,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.Empty(Directory.GetFiles(_dir.Path, "*.tmp"));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_right_policy_another_account_may_change_is_replaced()
     {
         MagickSetup.WriteConfiguration(_dir.Path);
@@ -247,7 +253,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.DoesNotContain(rules, r => r.IdentityReference.Equals(users));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void A_right_policy_reached_through_a_hard_link_is_replaced_by_a_file_of_its_own()
     {
         // The link's target keeps its own permissions, which other accounts may be able to change; only a file created
@@ -281,7 +288,8 @@ public sealed class MagickSetupTests : IDisposable
         Assert.Equal(File.ReadAllBytes(Path.Combine(right, "policy.xml")), File.ReadAllBytes(policy));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void Policy_and_temporary_files_live_in_a_folder_only_this_user_and_admins_can_open()
     {
         using var me = System.Security.Principal.WindowsIdentity.GetCurrent();
@@ -292,5 +300,96 @@ public sealed class MagickSetupTests : IDisposable
             .Cast<System.Security.AccessControl.FileSystemAccessRule>();
 
         Assert.All(rules, r => Assert.Contains(r.IdentityReference.Value, allowed));
+    }
+
+    private const UnixFileMode OwnerOnly = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void Policy_and_temporary_files_live_in_a_folder_only_this_user_can_open_on_linux()
+    {
+        Assert.Equal(OwnerOnly, File.GetUnixFileMode(MagickSetup.ConfigurationDirectory));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_policy_is_written_for_this_user_only_on_linux()
+    {
+        MagickSetup.WriteConfiguration(_dir.Path);
+
+        var mode = File.GetUnixFileMode(Path.Combine(_dir.Path, "policy.xml"));
+        Assert.Equal(UnixFileMode.None, mode & (UnixFileMode.GroupWrite | UnixFileMode.OtherWrite));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_right_policy_other_users_may_change_is_replaced_on_linux()
+    {
+        MagickSetup.WriteConfiguration(_dir.Path);
+        var policy = Path.Combine(_dir.Path, "policy.xml");
+        var before = new FileInfo(policy);
+        File.SetUnixFileMode(policy, File.GetUnixFileMode(policy) | UnixFileMode.OtherWrite);
+        var inode = Inode(policy);
+
+        MagickSetup.WriteConfiguration(_dir.Path);
+
+        Assert.NotEqual(inode, Inode(policy));
+        Assert.Equal(UnixFileMode.None, File.GetUnixFileMode(policy) & (UnixFileMode.GroupWrite | UnixFileMode.OtherWrite));
+        Assert.Equal(before.Length, new FileInfo(policy).Length);
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_right_policy_reached_through_a_hard_link_is_replaced_by_a_file_of_its_own_on_linux()
+    {
+        // The link's target can be changed through its other name, which may be in a folder others can write.
+        var right = Directory.CreateDirectory(_dir.Combine("right")).FullName;
+        MagickSetup.WriteConfiguration(right);
+        var outside = _dir.Combine("outside.xml");
+        File.Copy(Path.Combine(right, "policy.xml"), outside);
+        var config = Directory.CreateDirectory(_dir.Combine("config")).FullName;
+        MagickSetup.WriteConfiguration(config);
+        var policy = Path.Combine(config, "policy.xml");
+        File.Delete(policy);
+        Run("ln", outside, policy);
+
+        MagickSetup.WriteConfiguration(config);
+        File.WriteAllText(outside, "<policymap></policymap>");
+
+        Assert.Equal(File.ReadAllBytes(Path.Combine(right, "policy.xml")), File.ReadAllBytes(policy));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_right_policy_reached_through_a_symbolic_link_is_replaced_by_a_file_of_its_own_on_linux()
+    {
+        var right = Directory.CreateDirectory(_dir.Combine("right")).FullName;
+        MagickSetup.WriteConfiguration(right);
+        var config = Directory.CreateDirectory(_dir.Combine("config")).FullName;
+        MagickSetup.WriteConfiguration(config);
+        var policy = Path.Combine(config, "policy.xml");
+        File.Delete(policy);
+        File.CreateSymbolicLink(policy, Path.Combine(right, "policy.xml"));
+
+        MagickSetup.WriteConfiguration(config);
+
+        Assert.Null(new FileInfo(policy).LinkTarget);
+    }
+
+    private static string Inode(string path)
+    {
+        var start = new ProcessStartInfo("stat", ["-c", "%i", path]) { UseShellExecute = false, RedirectStandardOutput = true };
+        using var stat = Process.Start(start)!;
+        var output = stat.StandardOutput.ReadToEnd().Trim();
+        stat.WaitForExit();
+        return output;
+    }
+
+    private static void Run(string program, params string[] arguments)
+    {
+        var start = new ProcessStartInfo(program, arguments) { UseShellExecute = false };
+        using var process = Process.Start(start)!;
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
     }
 }

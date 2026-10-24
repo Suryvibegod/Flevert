@@ -630,17 +630,17 @@ public sealed class PdfBuilderTests : IDisposable
         return (process.ExitCode, output.Result + error);
     }
 
-    // deps\qpdf\bin\qpdf.exe in the repository the tests were built from (scripts/fetch-deps.ps1).
+    // deps/qpdf/bin/qpdf(.exe) in the repository the tests were built from (scripts/fetch-deps.ps1 or fetch-deps-linux.py).
     private static string QpdfPath()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            var candidate = Path.Combine(dir.FullName, "deps", "qpdf", "bin", "qpdf.exe");
+            var candidate = Path.Combine(dir.FullName, "deps", "qpdf", "bin", Flevert.Pdf.Qpdf.FileName);
             if (File.Exists(candidate))
                 return candidate;
         }
 
-        throw new FileNotFoundException("deps\\qpdf\\bin\\qpdf.exe is missing. Run scripts\\fetch-deps.ps1.");
+        throw new FileNotFoundException($"deps/qpdf/bin/{Flevert.Pdf.Qpdf.FileName} is missing: fetch the deps (CLAUDE.md).");
     }
 
     private sealed class FailingStream : MemoryStream

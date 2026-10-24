@@ -95,7 +95,7 @@ Source: "{#SourceDir}\openssl.cnf"; DestDir: "{code:InstallFolder}"; Flags: igno
 Source: "{#SourceDir}\Magick.Native-*.dll"; DestDir: "{code:InstallFolder}"; Flags: ignoreversion
 ; ffmpeg.exe, ffprobe.exe and their DLLs, in a folder of their own (docs/specs/media.md, ADR-0009).
 Source: "{#SourceDir}\ffmpeg\*"; DestDir: "{code:InstallFolder}\ffmpeg"; Flags: ignoreversion
-; tesseract.exe and its trained data, tessdata\ with a subfolder, in a folder of their own (docs/specs/ocr.md, ADR-0010).
+; tesseract.exe and its trained data, tessdata\ with a subfolder, in a folder of their own (docs/specs/ocr.md, ADR-0011).
 Source: "{#SourceDir}\tesseract\*"; DestDir: "{code:InstallFolder}\tesseract"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [InstallDelete]

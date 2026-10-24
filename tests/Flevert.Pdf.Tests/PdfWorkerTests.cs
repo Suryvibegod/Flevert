@@ -157,7 +157,8 @@ public sealed class PdfWorkerTests : IDisposable
             using var worker = await TestProcesses.WaitForWorkerAsync(TimeSpan.FromSeconds(5));
             var commandLine = TestProcesses.CommandLine(worker);
 
-            Assert.Equal($"\"{TestPdf.FlevertExe}\" pdf-worker", commandLine);
+            // Windows keeps one quoted line; Linux keeps the arguments, which /proc gives joined by spaces.
+            Assert.Equal(OperatingSystem.IsWindows() ? $"\"{TestPdf.FlevertExe}\" pdf-worker" : $"{TestPdf.FlevertExe} pdf-worker", commandLine);
         }
         finally
         {
@@ -187,7 +188,7 @@ public sealed class PdfWorkerTests : IDisposable
 
         var ex = await Assert.ThrowsAsync<FileNotFoundException>(() => Png(missing).RunAsync(input, CancellationToken.None));
 
-        Assert.Contains("flevert.exe is missing", ex.Message, StringComparison.Ordinal);
+        Assert.Contains($"{PdfWorker.FileName} is missing", ex.Message, StringComparison.Ordinal);
         Assert.Equal(["colours.pdf"], Names(_dir.Path));
     }
 

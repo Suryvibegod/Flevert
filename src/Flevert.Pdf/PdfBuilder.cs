@@ -92,7 +92,7 @@ internal sealed class PdfBuilder : IDisposable
             // and /Info would point at nothing. Reading an entry parses it.
             fixed (byte* tag = "Producer\0"u8)
             {
-                if (PdfiumNative.FPDF_GetMetaText(native, tag, null, 0) != (Producer.Length + 1) * sizeof(char))
+                if (PdfiumNative.FPDF_GetMetaText(native, tag, null, default).Value != (nuint)((Producer.Length + 1) * sizeof(char)))
                 {
                     _document.Dispose();
                     throw new InvalidOperationException("pdfium could not read the document it starts from.");

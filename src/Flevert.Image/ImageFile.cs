@@ -1,3 +1,4 @@
+using Flevert.Core;
 using ImageMagick;
 
 namespace Flevert.Image;
@@ -42,7 +43,7 @@ public static class ImageFile
         if (!Formats.TryGetValue(Path.GetExtension(path), out var format))
             throw new NotSupportedException($"{Path.GetExtension(path)} is not a supported image type.");
 
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var stream = new FileStream(PinnedInput.ReadPath(path), FileMode.Open, FileAccess.Read, FileShare.Read);
         // Downloads are often misnamed (a WebP or PNG saved as ".jpg"). Our own signature check may pick another decoder,
         // but only from the allow-list; ImageMagick itself is never asked to guess.
         format = Choose(format, Signature(stream));
@@ -94,7 +95,7 @@ public static class ImageFile
     {
         MagickSetup.EnsureInitialized();
         var format = FormatOf(Path.GetExtension(path));
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var stream = new FileStream(PinnedInput.ReadPath(path), FileMode.Open, FileAccess.Read, FileShare.Read);
         format = Choose(format, Signature(stream));
         stream.Position = 0;
 
@@ -171,7 +172,7 @@ public static class ImageFile
     public static MagickFormat RealFormat(string path)
     {
         var named = FormatOf(Path.GetExtension(path));
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var stream = new FileStream(PinnedInput.ReadPath(path), FileMode.Open, FileAccess.Read, FileShare.Read);
         return Choose(named, Signature(stream));
     }
 
@@ -295,7 +296,7 @@ public static class ImageFile
     /// <summary>Whether a WebP file stores its pixels losslessly (a VP8L chunk), which ImageMagick does not report.</summary>
     public static bool IsLosslessWebP(string path)
     {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var stream = new FileStream(PinnedInput.ReadPath(path), FileMode.Open, FileAccess.Read, FileShare.Read);
         Span<byte> header = stackalloc byte[12];
         if (stream.ReadAtLeast(header, 12, throwOnEndOfStream: false) != 12 || !header[..4].SequenceEqual("RIFF"u8) || !header[8..].SequenceEqual("WEBP"u8))
             return false;

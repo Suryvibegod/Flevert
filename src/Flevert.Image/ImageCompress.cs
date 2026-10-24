@@ -85,7 +85,7 @@ public sealed class ImageCompress(CompressLevel level) : IOperation
                 // An already well-compressed source (a chat download at quality 70, a tiny PNG) can grow; a bigger
                 // "compressed" copy would mislead, so refuse it and let the temporary file be deleted.
                 // Less than 5% saved is not worth a second, re-encoded copy (a q80 JPEG at Light saves a fraction of a percent).
-                if (new FileInfo(temp).Length > new FileInfo(inputPath).Length * MinSavedShare)
+                if (new FileInfo(temp).Length > PinnedInput.Length(inputPath) * MinSavedShare)
                 {
                     // An animated GIF is only re-optimised, never made lossier, so "already well compressed" would be false
                     // for a GIF that is simply too large to send. Say what would help.

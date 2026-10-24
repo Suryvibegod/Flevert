@@ -6,13 +6,13 @@ public sealed class BatchProgressTextTests
     public void Counts_finished_files_not_the_position_of_the_file_just_started()
     {
         // With files running in parallel, the seventh file can start while only two are done.
-        Assert.Equal("2 of 10 done: p7.heic", BatchProgressText.Describe(new BatchProgress(2, 10, @"C:\x\p7.heic"), lastStarted: null));
+        Assert.Equal("2 of 10 done: p7.heic", BatchProgressText.Describe(new BatchProgress(2, 10, "C:/x/p7.heic"), lastStarted: null));
     }
 
     [Fact]
     public void Keeps_naming_the_last_started_file_when_a_file_finishes()
     {
-        Assert.Equal("3 of 10 done: p7.heic", BatchProgressText.Describe(new BatchProgress(3, 10, null), lastStarted: @"C:\x\p7.heic"));
+        Assert.Equal("3 of 10 done: p7.heic", BatchProgressText.Describe(new BatchProgress(3, 10, null), lastStarted: "C:/x/p7.heic"));
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public sealed class BatchProgressTextTests
     [Fact]
     public void Describes_the_progress_inside_the_current_file_on_its_own_line()
     {
-        var progress = new BatchProgress(0, 1, @"C:\x\report.pdf", new FileProgress("page", 37, 200));
+        var progress = new BatchProgress(0, 1, "C:/x/report.pdf", new FileProgress("page", 37, 200));
 
         Assert.Equal("page 37 of 200", BatchProgressText.DescribeWithin(progress));
         Assert.Equal("0 of 1 done: report.pdf", BatchProgressText.Describe(progress, lastStarted: null));
@@ -57,27 +57,27 @@ public sealed class BatchProgressTextTests
     [Fact]
     public void Has_no_line_inside_the_file_when_the_operation_reports_none()
     {
-        Assert.Null(BatchProgressText.DescribeWithin(new BatchProgress(2, 10, @"C:\x\p7.heic")));
+        Assert.Null(BatchProgressText.DescribeWithin(new BatchProgress(2, 10, "C:/x/p7.heic")));
     }
 
     [Fact]
     public void The_bar_moves_inside_a_single_file_as_its_pages_go_by()
     {
         // One PDF of 4 pages: page N has started, so N - 1 are done (review CR nit: the bar stood at 0 until the end).
-        Assert.Equal((0, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, @"C:\x\a.pdf")));
-        Assert.Equal((0, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, @"C:\x\a.pdf", new FileProgress("page", 1, 4))));
-        Assert.Equal((500, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, @"C:\x\a.pdf", new FileProgress("page", 3, 4))));
+        Assert.Equal((0, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, "C:/x/a.pdf")));
+        Assert.Equal((0, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, "C:/x/a.pdf", new FileProgress("page", 1, 4))));
+        Assert.Equal((500, 1_000), BatchProgressText.Bar(new BatchProgress(0, 1, "C:/x/a.pdf", new FileProgress("page", 3, 4))));
         Assert.Equal((1_000, 1_000), BatchProgressText.Bar(new BatchProgress(1, 1, null)));
     }
 
     [Fact]
     public void The_bar_counts_finished_files_and_adds_the_part_of_the_current_one()
     {
-        Assert.Equal((3_000, 10_000), BatchProgressText.Bar(new BatchProgress(3, 10, @"C:\x\p7.heic")));
-        Assert.Equal((3_250, 10_000), BatchProgressText.Bar(new BatchProgress(3, 10, @"C:\x\d.pdf", new FileProgress("page", 2, 4))));
+        Assert.Equal((3_000, 10_000), BatchProgressText.Bar(new BatchProgress(3, 10, "C:/x/p7.heic")));
+        Assert.Equal((3_250, 10_000), BatchProgressText.Bar(new BatchProgress(3, 10, "C:/x/d.pdf", new FileProgress("page", 2, 4))));
         // Before anything is known the bar is empty, never past its end.
         Assert.Equal((0, 1_000), BatchProgressText.Bar(new BatchProgress(0, 0, null)));
-        Assert.Equal((2_000, 2_000), BatchProgressText.Bar(new BatchProgress(2, 2, @"C:\x\late.pdf", new FileProgress("page", 9, 9))));
+        Assert.Equal((2_000, 2_000), BatchProgressText.Bar(new BatchProgress(2, 2, "C:/x/late.pdf", new FileProgress("page", 9, 9))));
     }
 
     [Theory]

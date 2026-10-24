@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Video and audio are on Windows only for now (ffmpeg for Windows, ADR-0009; docs/specs/linux.md): on Linux it still
+         builds, so Windows-only compile errors show up there too, as for Flevert.Cli. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <!-- LibraryImport (the free space of a network share). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Fetched by scripts/fetch-deps.ps1, pinned by SHA256 (ADR-0009); never committed. -->
@@ -21,8 +25,9 @@
     <None Include="$(FfmpegBin)*.exe;$(FfmpegBin)*.dll" Link="ffmpeg\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
-  <!-- Fail early and say how to fix it, rather than build something that fails at run time. -->
-  <Target Name="RequireFfmpeg" BeforeTargets="BeforeBuild" Condition="!Exists('$(FfmpegBin)ffmpeg.exe') Or !Exists('$(FfmpegBin)ffprobe.exe')">
+  <!-- Fail early and say how to fix it, rather than build something that fails at run time. On Linux it is compiled only,
+       never run, so it needs no ffmpeg. -->
+  <Target Name="RequireFfmpeg" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT' And (!Exists('$(FfmpegBin)ffmpeg.exe') Or !Exists('$(FfmpegBin)ffprobe.exe'))">
     <Error Text="deps\ffmpeg\bin\ffmpeg.exe or ffprobe.exe is missing. Run: powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1" />
   </Target>
 

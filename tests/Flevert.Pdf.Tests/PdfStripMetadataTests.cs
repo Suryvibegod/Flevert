@@ -207,7 +207,8 @@ public sealed class PdfStripMetadataTests : IDisposable
     [Fact]
     public async Task Works_on_a_pdf_at_a_long_path_whose_names_are_not_ascii()
     {
-        var folder = @"\\?\" + _dir.Path;
+        // \\?\ is how a Windows path goes past 260 characters; Linux needs no prefix.
+        var folder = (OperatingSystem.IsWindows() ? @"\\?\" : "") + _dir.Path;
         while (folder.Length < 320)
             folder = Path.Combine(folder, "thư mục con rất dài để vượt quá giới hạn MAX_PATH \U0001F34A");
         Directory.CreateDirectory(folder);
@@ -251,7 +252,8 @@ public sealed class PdfStripMetadataTests : IDisposable
         Assert.Equal(_dir.Combine("Báo cáo (no metadata).pdf"), result.Output);
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public void The_private_folder_is_only_for_this_user_system_and_administrators()
     {
         var folder = Path.Combine(_scratch.Path, "private");
@@ -267,6 +269,29 @@ public sealed class PdfStripMetadataTests : IDisposable
         Assert.Equal(
             new[] { me.User!.Value, "S-1-5-18", "S-1-5-32-544" }.Order(StringComparer.Ordinal),
             rules.Select(rule => rule.IdentityReference.Value).Order(StringComparer.Ordinal));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void The_private_folder_is_only_for_this_user_on_linux()
+    {
+        var folder = Path.Combine(_scratch.Path, "private");
+
+        PrivateFolder.Create(folder);
+
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(folder));
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public void A_symbolic_link_at_the_private_folders_name_fails_and_its_target_is_not_used()
+    {
+        // qpdf would write through the link into a folder someone else chose.
+        var target = Directory.CreateDirectory(Path.Combine(_scratch.Path, "theirs")).FullName;
+        var folder = Path.Combine(_scratch.Path, "private");
+        Directory.CreateSymbolicLink(folder, target);
+
+        Assert.Throws<IOException>(() => PrivateFolder.Create(folder));
     }
 
     [Fact]

@@ -42,6 +42,13 @@ internal static unsafe partial class ProcessPeek
 
     public static Started? TryRead(int processId)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            return ProcFs.ParentId(processId) is { } parent && ProcFs.CommandLine(processId) is { } arguments
+                ? new Started(parent, arguments, ProcFs.Environment(processId) ?? "")
+                : null;
+        }
+
         using var handle = OpenProcess(ProcessQueryInformation | ProcessVmRead, false, (uint)processId);
         if (handle.IsInvalid)
             return null;

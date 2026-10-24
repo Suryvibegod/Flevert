@@ -43,7 +43,7 @@ public sealed class PdfExtractTextTests : IDisposable
             string.Join(' ', text.Select(c => ((int)c).ToString("X4", System.Globalization.CultureInfo.InvariantCulture))));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task A_vietnamese_scan_comes_out_as_the_text_tesseract_reads_page_by_page()
     {
         string[] pages = ["Cộng hòa xã hội chủ nghĩa Việt Nam\nĐộc lập - Tự do - Hạnh phúc", "Hợp đồng mua bán hàng hóa\nSố 12 năm 2026"];
@@ -67,7 +67,7 @@ public sealed class PdfExtractTextTests : IDisposable
         Assert.Equal(["scan.pdf", "scan.txt"], TestPdf.FileNames(_dir.Path));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task A_page_with_text_keeps_its_own_and_a_scanned_page_beside_it_gets_what_tesseract_reads()
     {
         var text = _dir.Combine("text.pdf");
@@ -85,7 +85,7 @@ public sealed class PdfExtractTextTests : IDisposable
         Assert.True(TestOcr.Similarity("Hóa đơn bán hàng số 12345", read[1]) >= 0.95, read[1]);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task A_pdf_without_text_even_in_its_pictures_is_skipped_and_leaves_nothing()
     {
         var input = _dir.Combine("scan.pdf");
@@ -97,7 +97,7 @@ public sealed class PdfExtractTextTests : IDisposable
         Assert.Equal(["scan.pdf"], TestPdf.FileNames(_dir.Path));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task Through_the_runner_a_pdf_without_text_is_skipped_not_failed()
     {
         var input = _dir.Combine("scan.pdf");
@@ -109,6 +109,18 @@ public sealed class PdfExtractTextTests : IDisposable
         var result = Assert.Single(outcome.Results);
         Assert.True(result.Skipped);
         Assert.Equal(NoTextMessage, result.Error);
+    }
+
+    [LinuxFact]
+    public async Task On_linux_a_pdf_without_text_is_skipped_without_tesseract_as_before_ocr()
+    {
+        var input = _dir.Combine("scan.pdf");
+        TestPdf.WriteBlank(input, 3);
+
+        var ex = await Assert.ThrowsAsync<OperationSkippedException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfRenderWorker.NoTextMessage, ex.Message);
+        Assert.Equal(["scan.pdf"], TestPdf.FileNames(_dir.Path));
     }
 
     [Fact]

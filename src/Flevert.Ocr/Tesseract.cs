@@ -12,7 +12,7 @@ internal delegate Task<ExternalToolResult> RunTool(
     CancellationToken ct);
 
 /// <summary>
-/// Safe wrapper around <c>tesseract.exe</c> (v5.5.3, Apache-2.0, ADR-0010/docs/specs/ocr.md) run as an isolated process
+/// Safe wrapper around <c>tesseract.exe</c> (v5.5.3, Apache-2.0, ADR-0011/docs/specs/ocr.md) run as an isolated process
 /// in a Windows job object with memory caps, single process restriction, and BelowNormal priority.
 /// Callers must guarantee that only paths Flevert created in its own temporary folders are passed.
 /// </summary>

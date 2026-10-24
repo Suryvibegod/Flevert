@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
 namespace Flevert.Pdf;
@@ -75,7 +76,7 @@ public sealed class PdfDocument : IDisposable
                 Pdfium.EnsureInitialized();
                 var native = PdfiumNative.FPDF_LoadCustomDocument(source.Access, null);
                 if (native == 0)
-                    throw LoadError(PdfiumNative.FPDF_GetLastError());
+                    throw LoadError(PdfiumNative.FPDF_GetLastError().Value);
 
                 var handle = new DocumentHandle(native, source);
                 source = null; // the handle owns it now
@@ -165,7 +166,7 @@ public sealed class PdfDocument : IDisposable
         {
             using var bitmap = BitmapHandle.Create(size.Width, size.Height, first, stride);
             var native = bitmap.DangerousGetHandle();
-            if (PdfiumNative.FPDFBitmap_FillRect(native, 0, 0, size.Width, size.Height, 0xFFFFFFFF) == 0)
+            if (PdfiumNative.FPDFBitmap_FillRect(native, 0, 0, size.Width, size.Height, new CULong(0xFFFFFFFF)) == 0)
                 throw new InvalidOperationException("pdfium could not clear the page bitmap.");
             PdfiumNative.FPDF_RenderPageBitmap(native, page.DangerousGetHandle(), 0, 0, size.Width, size.Height, 0, PdfiumNative.RenderAnnotations);
         }
@@ -219,7 +220,7 @@ public sealed class PdfDocument : IDisposable
                 for (var i = 0; i < count; i++)
                 {
                     path.Add(i);
-                    Collect(page, PdfiumNative.FPDFFormObj_GetObject(item, (uint)i), -1, depth + 1, path, images);
+                    Collect(page, PdfiumNative.FPDFFormObj_GetObject(item, new CULong((uint)i)), -1, depth + 1, path, images);
                     path.RemoveAt(path.Count - 1);
                 }
 
@@ -237,7 +238,7 @@ public sealed class PdfDocument : IDisposable
         {
             if (PdfiumNative.FPDFPageObj_GetType(item) != PdfiumNative.PageObjectForm || location[i] < 0)
                 return 0;
-            item = PdfiumNative.FPDFFormObj_GetObject(item, (uint)location[i]);
+            item = PdfiumNative.FPDFFormObj_GetObject(item, new CULong((uint)location[i]));
         }
 
         return item != 0 && PdfiumNative.FPDFPageObj_GetType(item) == PdfiumNative.PageObjectImage ? item : 0;
@@ -257,12 +258,12 @@ public sealed class PdfDocument : IDisposable
             var image = Find(page.DangerousGetHandle(), location);
             if (image == 0)
                 return null;
-            var length = PdfiumNative.FPDFImageObj_GetImageDataRaw(image, null, 0);
+            var length = PdfiumNative.FPDFImageObj_GetImageDataRaw(image, null, default).Value;
             if (length == 0 || length > MaxImageDataBytes)
                 return null;
             var data = GC.AllocateUninitializedArray<byte>((int)length);
             fixed (byte* buffer = data)
-                return PdfiumNative.FPDFImageObj_GetImageDataRaw(image, buffer, length) == length ? data : null;
+                return PdfiumNative.FPDFImageObj_GetImageDataRaw(image, buffer, new CULong(length)).Value == length ? data : null;
         }
     }
 
@@ -306,13 +307,13 @@ public sealed class PdfDocument : IDisposable
         PdfiumNative.ImageMetadata metadata;
         if (PdfiumNative.FPDFImageObj_GetImageMetadata(image, page, &metadata) == 0 || metadata.Width == 0 || metadata.Height == 0)
             return null;
-        var length = PdfiumNative.FPDFImageObj_GetImageDataRaw(image, null, 0);
+        var length = PdfiumNative.FPDFImageObj_GetImageDataRaw(image, null, default).Value;
         if (length == 0 || length > MaxImageDataBytes)
             return null;
         var data = GC.AllocateUninitializedArray<byte>((int)length);
         fixed (byte* buffer = data)
         {
-            if (PdfiumNative.FPDFImageObj_GetImageDataRaw(image, buffer, length) != length)
+            if (PdfiumNative.FPDFImageObj_GetImageDataRaw(image, buffer, new CULong(length)).Value != length)
                 return null;
         }
 
@@ -320,13 +321,13 @@ public sealed class PdfDocument : IDisposable
         var filterCount = PdfiumNative.FPDFImageObj_GetImageFilterCount(image);
         for (var i = 0; i < filterCount; i++)
         {
-            var nameLength = PdfiumNative.FPDFImageObj_GetImageFilter(image, i, null, 0);
+            var nameLength = PdfiumNative.FPDFImageObj_GetImageFilter(image, i, null, default).Value;
             if (nameLength is 0 or > 64)
                 return null;
             var name = new byte[nameLength];
             fixed (byte* buffer = name)
             {
-                if (PdfiumNative.FPDFImageObj_GetImageFilter(image, i, buffer, nameLength) != nameLength)
+                if (PdfiumNative.FPDFImageObj_GetImageFilter(image, i, buffer, new CULong(nameLength)).Value != nameLength)
                     return null;
             }
 
@@ -338,7 +339,7 @@ public sealed class PdfDocument : IDisposable
             (int)Math.Min(metadata.Width, int.MaxValue), (int)Math.Min(metadata.Height, int.MaxValue),
             double.IsFinite(dpi) && dpi > 0 ? dpi : 0, (int)metadata.BitsPerPixel, filters)
         {
-            DataLength = length,
+            DataLength = (long)length, // at most MaxImageDataBytes
         };
     }
 
@@ -449,7 +450,7 @@ public sealed class PdfDocument : IDisposable
     private static int Pixels(double points, double dpi, int maxPixels) =>
         (int)Math.Clamp(Math.Round(points * dpi / PointsPerInch), 1, maxPixels);
 
-    private static PdfException LoadError(uint error) => error switch
+    private static PdfException LoadError(nuint error) => error switch
     {
         PdfiumNative.ErrPassword => new PdfException(PdfError.PasswordRequired, PdfException.NeedsPasswordMessage),
         PdfiumNative.ErrSecurity => new PdfException(PdfError.UnsupportedEncryption, UnsupportedEncryptionMessage),

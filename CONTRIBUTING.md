@@ -29,6 +29,7 @@ dotnet test tests/Flevert.Core.Tests
 dotnet test tests/Flevert.Image.Tests
 dotnet test tests/Flevert.Pdf.Tests
 dotnet test tests/Flevert.Media.Tests
+dotnet test tests/Flevert.Ocr.Tests
 dotnet format Flevert.sln --verify-no-changes
 powershell -File scripts/build-installer.ps1
 ```
@@ -51,6 +52,25 @@ dotnet run --project tools/MenuProbe -- invoke "Flevert/Dev/Copy" "C:\path\file.
 ```
 
 The main design decisions: the menu is a classic entry under `HKCU`, so no administrator rights ([ADR-0001](docs/adr/0001-registry-extendedsubcommandskey.md)); selecting many files starts one `flevert.exe` per file and they join into one batch over a named pipe ([ADR-0002](docs/adr/0002-batching-over-a-single-instance-pipe.md)); the app is a self-contained .NET 10 build ([ADR-0003](docs/adr/0003-self-contained-readytorun-winforms.md)); images go through Magick.NET with an allow-list of formats and resource limits ([ADR-0004](docs/adr/0004-magick-net-for-images.md)); PDFs are read by pdfium in a separate worker process and changed by qpdf, also run as its own process ([ADR-0008](docs/adr/0008-pdf-engines-pdfium-and-qpdf.md)). The rest are in [docs/adr](docs/adr). The README's demo animations are drawn by `assets/demo/make_demo_gif.py` (`python make_demo_gif.py convert convert.gif`, or `combine combine.gif`).
+
+### On Linux
+
+The Linux version (docs/specs/linux.md, [ADR-0010](docs/adr/0010-linux-nautilus-port.md)) builds and tests on Linux with the .NET 10 SDK and the system Python. pdfium and qpdf for Linux come from `scripts/deps-linux.json`:
+
+```
+python3 -I scripts/fetch-deps-linux.py
+dotnet build Flevert.sln
+dotnet test tests/Flevert.Core.Tests
+dotnet test tests/Flevert.Image.Tests
+dotnet test tests/Flevert.Pdf.Tests
+dotnet format Flevert.sln --verify-no-changes
+python3 -I -m unittest discover -s scripts -p 'test_*.py'
+python3 -I -m unittest discover -s src/Flevert.Linux/nautilus -p 'test_*.py'
+python3 -I -m unittest discover -s packaging/linux -p 'test_*.py'
+scripts/build-linux.sh
+```
+
+Tests of Windows behaviour are skipped on Linux (`[WindowsFact]`), and the other way round (`[LinuxFact]`). On Linux, `dotnet build Flevert.sln` also compiles the Windows app, which catches Windows compile errors. To try the menu from a build, `src/Flevert.Linux/bin/Debug/net10.0/flevert install-menu --dev --allow-insecure-location`, `nautilus -q`, and `flevert uninstall-menu` afterwards; nautilus-python must be installed.
 
 How the project works:
 

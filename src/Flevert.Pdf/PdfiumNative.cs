@@ -36,12 +36,13 @@ internal static unsafe partial class PdfiumNative
         public uint V8EmbedderSlot;
     }
 
-    // FPDF_FILEACCESS: unsigned long is 32 bits on Windows, so pdfium reads at most 4 GB this way.
+    // FPDF_FILEACCESS. pdfium's unsigned long is CULong: 32 bits on Windows (so pdfium reads at most 4 GB this way) and
+    // 64 bits on Linux, where a uint length left 4 bytes of whatever the memory held for pdfium to read as the high half.
     [StructLayout(LayoutKind.Sequential)]
     public struct FileAccess
     {
-        public uint FileLength;
-        public delegate* unmanaged<nint, uint, byte*, uint, int> GetBlock;
+        public CULong FileLength;
+        public delegate* unmanaged<nint, CULong, byte*, CULong, int> GetBlock;
         public nint Param;
     }
 
@@ -59,7 +60,7 @@ internal static unsafe partial class PdfiumNative
     public static partial nint FPDF_LoadCustomDocument(FileAccess* fileAccess, byte* password);
 
     [LibraryImport(Library)]
-    public static partial uint FPDF_GetLastError();
+    public static partial CULong FPDF_GetLastError();
 
     [LibraryImport(Library)]
     public static partial void FPDF_CloseDocument(nint document);
@@ -80,7 +81,7 @@ internal static unsafe partial class PdfiumNative
     public static partial nint FPDFBitmap_CreateEx(int width, int height, int format, void* firstScan, int stride);
 
     [LibraryImport(Library)]
-    public static partial int FPDFBitmap_FillRect(nint bitmap, int left, int top, int width, int height, uint color);
+    public static partial int FPDFBitmap_FillRect(nint bitmap, int left, int top, int width, int height, CULong color);
 
     [LibraryImport(Library)]
     public static partial void FPDFBitmap_Destroy(nint bitmap);
@@ -142,7 +143,7 @@ internal static unsafe partial class PdfiumNative
     public static partial int FPDFFormObj_CountObjects(nint formObject);
 
     [LibraryImport(Library)]
-    public static partial nint FPDFFormObj_GetObject(nint formObject, uint index);
+    public static partial nint FPDFFormObj_GetObject(nint formObject, CULong index);
 
     /// <summary>The DPI is the image's pixels over the size its matrix draws it at; <paramref name="page"/> gives the bit depth and colorspace.</summary>
     [LibraryImport(Library)]
@@ -150,14 +151,14 @@ internal static unsafe partial class PdfiumNative
 
     /// <summary>The image's stream data as stored, filters not applied; returns its length (unsigned long: 32 bits on Windows).</summary>
     [LibraryImport(Library)]
-    public static partial uint FPDFImageObj_GetImageDataRaw(nint imageObject, void* buffer, uint bufferLength);
+    public static partial CULong FPDFImageObj_GetImageDataRaw(nint imageObject, void* buffer, CULong bufferLength);
 
     [LibraryImport(Library)]
     public static partial int FPDFImageObj_GetImageFilterCount(nint imageObject);
 
     /// <summary>The name of filter <paramref name="index"/>, NUL-terminated ASCII; returns its length with the NUL.</summary>
     [LibraryImport(Library)]
-    public static partial uint FPDFImageObj_GetImageFilter(nint imageObject, int index, void* buffer, uint bufferLength);
+    public static partial CULong FPDFImageObj_GetImageFilter(nint imageObject, int index, void* buffer, CULong bufferLength);
 
     /// <summary>The image's pixels, decoded and converted to gray or BGR by pdfium, without its mask or matrix; the caller destroys it.</summary>
     [LibraryImport(Library)]
@@ -183,7 +184,7 @@ internal static unsafe partial class PdfiumNative
     public const int BitmapBgr = 2;
 
     // FPDF_SaveAsCopy: write the whole document, never an update appended to an older one.
-    public const uint SaveNoIncremental = 1 << 1;
+    public static CULong SaveNoIncremental => new(1 << 1);
 
     /// <summary>
     /// FPDF_FILEWRITE (version 1), followed by a field of Flevert's own: pdfium hands the callback a pointer to this
@@ -193,13 +194,13 @@ internal static unsafe partial class PdfiumNative
     public struct FileWrite
     {
         public int Version;
-        public delegate* unmanaged<FileWrite*, void*, uint, int> WriteBlock;
+        public delegate* unmanaged<FileWrite*, void*, CULong, int> WriteBlock;
         public nint Param;
     }
 
     // fpdf_doc.h. The length in bytes of the tag's UTF-16LE text with its NUL; 0 when there is no Info dictionary.
     [LibraryImport(Library)]
-    public static partial uint FPDF_GetMetaText(nint document, byte* tag, void* buffer, uint bufferLength);
+    public static partial CULong FPDF_GetMetaText(nint document, byte* tag, void* buffer, CULong bufferLength);
 
     [LibraryImport(Library)]
     public static partial nint FPDFPage_New(nint document, int pageIndex, double width, double height);
@@ -232,7 +233,7 @@ internal static unsafe partial class PdfiumNative
     public static partial int FPDFPage_GenerateContent(nint page);
 
     [LibraryImport(Library)]
-    public static partial int FPDF_SaveAsCopy(nint document, FileWrite* fileWrite, uint flags);
+    public static partial int FPDF_SaveAsCopy(nint document, FileWrite* fileWrite, CULong flags);
 
     // Editing pages of an existing document (v0.2.2 PDF tools): fpdfview.h, fpdf_edit.h, fpdf_ppo.h, fpdf_flatten.h.
 

@@ -1,3 +1,4 @@
+using Flevert.Core;
 using ImageMagick;
 
 namespace Flevert.Image;
@@ -63,7 +64,7 @@ public sealed class MemoryBudget
     {
         try
         {
-            return checked((ulong)new FileInfo(path).Length * FileCopies);
+            return checked((ulong)PinnedInput.Length(path) * FileCopies);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or OverflowException)
         {

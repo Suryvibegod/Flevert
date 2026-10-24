@@ -75,13 +75,15 @@ public sealed class PdfExtractText : IOperation
             await _worker.ExtractTextAsync(inputPath, temp, progress, ct).ConfigureAwait(false);
             pages = (await File.ReadAllTextAsync(temp, ct).ConfigureAwait(false)).Split('\f');
         }
-        catch (OperationSkippedException)
+        catch (OperationSkippedException) when (OperatingSystem.IsWindows())
         {
             // No text anywhere: every page is a scan, or blank.
             pages = null;
         }
 
-        if (pages is not null && !pages.Any(IsScanned))
+        // Flevert has tesseract for Windows only so far (docs/specs/linux.md): elsewhere the text pdfium found is all there
+        // is, and a PDF without any is skipped, as before v1.4.0.
+        if (!OperatingSystem.IsWindows() || (pages is not null && !pages.Any(IsScanned)))
             return;
 
         var (total, read) = await ReadScannedPagesAsync(inputPath, progress, ct).ConfigureAwait(false);

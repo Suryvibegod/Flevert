@@ -21,6 +21,14 @@ internal readonly partial record struct FileIdentity(ulong Volume, UInt128 File)
     /// </remarks>
     public static FileIdentity Of(SafeFileHandle handle)
     {
+        // Linux: the device and inode numbers, the same through every name and handle of the file.
+        if (OperatingSystem.IsLinux())
+        {
+            return Flevert.Core.Libc.TryStat(handle, out var stat)
+                ? new FileIdentity(((ulong)stat.DevMajor << 32) | stat.DevMinor, stat.Ino)
+                : throw new IOException(Flevert.Core.Libc.ErrorMessage(Marshal.GetLastPInvokeError()));
+        }
+
         if (GetFileInformationByHandleEx(handle, FileIdInfoClass, out var info, (uint)Marshal.SizeOf<FileIdInfo>()))
             return new FileIdentity(info.VolumeSerialNumber, new UInt128(info.FileIdHigh, info.FileIdLow));
         if (!GetFileInformationByHandle(handle, out var basic))

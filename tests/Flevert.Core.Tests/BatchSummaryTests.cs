@@ -7,7 +7,7 @@ public sealed class BatchSummaryTests
     [Fact]
     public void Single_success_names_the_output_file()
     {
-        var summary = BatchSummary.Describe([Ok("a.jpg", @"C:\x\a.png")], total: 1, LogDir);
+        var summary = BatchSummary.Describe([Ok("a.jpg", "C:/x/a.png")], total: 1, LogDir);
 
         Assert.Equal("Done: a.png", summary.Text);
         Assert.False(summary.HasFailures);
@@ -93,7 +93,7 @@ public sealed class BatchSummaryTests
     public void A_single_file_that_failed_is_named_with_the_first_line_of_its_reason()
     {
         // Not "Done: 0 files, 1 failed": nothing was done, and the user should see why without opening the log.
-        var failed = new FileResult(@"C:\x\scan.pdf", null, $"This PDF is damaged.{Environment.NewLine}System.IO.InvalidDataException: …{Environment.NewLine}   at Op");
+        var failed = new FileResult("C:/x/scan.pdf", null, $"This PDF is damaged.{Environment.NewLine}System.IO.InvalidDataException: …{Environment.NewLine}   at Op");
 
         var summary = BatchSummary.Describe([failed], total: 1, LogDir);
 
@@ -186,7 +186,7 @@ public sealed class BatchSummaryTests
     [Fact]
     public void A_joined_output_that_failed_shows_the_first_line_of_the_reason_and_points_to_the_log()
     {
-        var outcome = new BatchOutcome([new FileResult(@"C:\x\2.md", null, "2.md: File type .md is not supported by dev.join.\r\n   at Runner")], 1)
+        var outcome = new BatchOutcome([new FileResult("C:/x/2.md", null, "2.md: File type .md is not supported by dev.join.\r\n   at Runner")], 1)
         {
             OneOutput = true,
         };
@@ -202,7 +202,7 @@ public sealed class BatchSummaryTests
     public void A_long_reason_for_a_joined_output_is_cut_so_the_notification_keeps_the_log_folder()
     {
         // A notification holds about 255 characters; the reason must not push the log folder out of it.
-        var outcome = new BatchOutcome([new FileResult(@"C:\x\a.txt", null, new string('x', 500))], 1) { OneOutput = true };
+        var outcome = new BatchOutcome([new FileResult("C:/x/a.txt", null, new string('x', 500))], 1) { OneOutput = true };
 
         var summary = BatchSummary.Describe(outcome, LogDir);
 

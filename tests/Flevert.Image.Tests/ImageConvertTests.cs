@@ -107,7 +107,7 @@ public sealed class ImageConvertTests : IDisposable
             image.Write(file, MagickFormat.Jpeg);
         }
 
-        var output = await ToPng().RunAsync(@"\\?\" + input, CancellationToken.None);
+        var output = await ToPng().RunAsync((OperatingSystem.IsWindows() ? @"\\?\" : "") + input, CancellationToken.None);
 
         Assert.Equal(Path.ChangeExtension(name, ".png"), Path.GetFileName(output));
         using var png = new MagickImage(output);

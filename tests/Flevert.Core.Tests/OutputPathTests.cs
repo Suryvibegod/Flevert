@@ -60,7 +60,8 @@ public sealed class OutputPathTests : IDisposable
         Assert.Throws<PathTooLongException>(() => OutputPath.Reserve(desired));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteAtomically_skips_a_dangling_link_that_occupies_the_desired_name()
     {
         var target = Directory.CreateDirectory(_dir.Combine("gone")).FullName;
@@ -150,7 +151,8 @@ public sealed class OutputPathTests : IDisposable
 
     // An empty folder can be turned into a junction in place by anyone who can write to it; a hidden file held open without
     // sharing keeps it from ever being empty, and is gone before the folder gets its name.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_hands_over_a_fixed_length_folder_beside_the_output_holding_only_its_hidden_anchor()
     {
         string? handed = null;
@@ -321,7 +323,8 @@ public sealed class OutputPathTests : IDisposable
         Assert.Empty(EntryNames(_dir.Path));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_cleanup_does_not_follow_a_junction_left_in_the_folder()
     {
         using var outside = new TempDir();
@@ -352,7 +355,8 @@ public sealed class OutputPathTests : IDisposable
     // Modify by default) renames the temporary folder away and puts a junction to the victim's files under its name, then
     // waits for a page to fail. A rename from another process is refused the same way as one from this process: sharing
     // is checked per handle, whichever process holds it.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_cleanup_does_not_follow_a_junction_swapped_in_for_the_temporary_folder()
     {
         using var victim = new TempDir();
@@ -385,8 +389,10 @@ public sealed class OutputPathTests : IDisposable
     // pages would be renamed into the attacker's tree. The folder is resolved to its real path when it is held, and every
     // path after that (writer, listing, deletes, the rename destination) uses the real path, so the junction is out of play.
     [SkippableFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_puts_the_output_in_the_real_folder_even_if_a_junction_above_is_repointed()
     {
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows only");
         var real = Directory.CreateDirectory(_dir.Combine("real")).FullName;
         Directory.CreateDirectory(Path.Combine(real, "sub"));
         using var attacker = new TempDir();
@@ -410,7 +416,8 @@ public sealed class OutputPathTests : IDisposable
 
     // The same account cannot rename the folder, but it can open it for FILE_WRITE_ATTRIBUTES (not subject to sharing) and
     // turn it into a junction in place, which only an empty folder allows: before the first page it is empty.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_cleanup_does_not_follow_the_temporary_folder_turned_into_a_junction()
     {
         using var victim = new TempDir();
@@ -433,7 +440,8 @@ public sealed class OutputPathTests : IDisposable
         Assert.Empty(EntryNames(_dir.Path));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_pages_cannot_be_redirected_by_turning_the_temporary_folder_into_a_junction()
     {
         using var victim = new TempDir();
@@ -453,7 +461,8 @@ public sealed class OutputPathTests : IDisposable
 
     // Renaming a folder fails with "access denied" while any file in it is open, even with delete sharing: an antivirus
     // scan, the search indexer, OneDrive or Explorer making a thumbnail must not cost a 200-page render at the very end.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_waits_for_another_program_to_close_a_file_in_the_folder()
     {
         Task? closed = null;
@@ -477,7 +486,8 @@ public sealed class OutputPathTests : IDisposable
 
     // A full scan of a large page by an antivirus or a sync app holding it open can take several seconds: a short wait
     // would still lose a long render at the very end.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_waits_several_seconds_for_another_program_to_close_a_file()
     {
         Task? closed = null;
@@ -500,7 +510,8 @@ public sealed class OutputPathTests : IDisposable
 
     // The wait is bounded. Giving up must not cost the pages: they are complete, only the name is missing, so the folder
     // is kept, visible, and the error says where it is.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_keeps_the_pages_when_a_file_stays_open_past_the_retry_window()
     {
         FileStream? scanner = null;
@@ -530,7 +541,8 @@ public sealed class OutputPathTests : IDisposable
         Assert.True(timer.Elapsed >= wait, $"{timer.Elapsed}");
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_stops_waiting_for_the_rename_when_cancelled()
     {
         using var cts = new CancellationTokenSource();
@@ -560,7 +572,8 @@ public sealed class OutputPathTests : IDisposable
 
     // Out of sight while it is written, so Explorer does not open its pages for a folder thumbnail, and out of the search
     // index; both would hold pages open and delay the rename.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_hides_the_temporary_folder_from_view_and_indexing_but_not_the_result()
     {
         File.SetAttributes(_dir.Path, File.GetAttributes(_dir.Path) & ~FileAttributes.NotContentIndexed);
@@ -586,8 +599,10 @@ public sealed class OutputPathTests : IDisposable
     // (FILE_ATTRIBUTE_PINNED) is an attribute set the same way: a page or folder created in a pinned OneDrive folder carries
     // it, and dropping it would let OneDrive free the output's space. Only the bits being changed may change.
     [SkippableFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_keeps_attributes_it_does_not_change_such_as_onedrive_pinning()
     {
+        Skip.IfNot(OperatingSystem.IsWindows(), "Windows only");
         const FileAttributes pinned = (FileAttributes)0x80000;
         string? page = null;
 
@@ -607,7 +622,8 @@ public sealed class OutputPathTests : IDisposable
     }
 
     // Guard for the hiding test: a folder the user excluded from indexing keeps its children excluded.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_keeps_the_result_out_of_indexing_when_the_folder_beside_it_is()
     {
         File.SetAttributes(_dir.Path, File.GetAttributes(_dir.Path) | FileAttributes.NotContentIndexed);
@@ -621,7 +637,8 @@ public sealed class OutputPathTests : IDisposable
 
     // Readying pages for the rename clears their inherited NotContentIndexed mark. A hard link someone planted points at a
     // file outside the folder; changing attributes through it would reach that file, so a multiply-linked entry is skipped.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_does_not_change_attributes_through_a_planted_hard_link()
     {
         using var outside = new TempDir();
@@ -649,7 +666,7 @@ public sealed class OutputPathTests : IDisposable
             _dir.Combine("a (pages)"),
             async (temp, ct) =>
             {
-                handed = temp;
+                handed = Located(temp);
                 await WritePages(1)(temp, ct);
                 Directory.CreateDirectory(Path.Combine(temp, "sub"));
                 await File.WriteAllTextAsync(Path.Combine(temp, "sub", "deep.txt"), "theirs", ct);
@@ -663,7 +680,8 @@ public sealed class OutputPathTests : IDisposable
 
     // What the cleanup has to leave (someone else's folder inside, a file it could not delete) must not stay hidden beside
     // the input, where the user would never find it.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_shows_a_temporary_folder_the_cleanup_could_not_remove()
     {
         File.SetAttributes(_dir.Path, File.GetAttributes(_dir.Path) & ~FileAttributes.NotContentIndexed);
@@ -691,7 +709,7 @@ public sealed class OutputPathTests : IDisposable
     public async Task WriteDirectoryAtomically_refuses_a_path_without_a_folder_name()
     {
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            OutputPath.WriteDirectoryAtomicallyAsync(_dir.Path + @"\", WritePages(1), CancellationToken.None));
+            OutputPath.WriteDirectoryAtomicallyAsync(_dir.Path + Path.DirectorySeparatorChar, WritePages(1), CancellationToken.None));
 
         Assert.Empty(EntryNames(_dir.Path));
     }
@@ -707,7 +725,8 @@ public sealed class OutputPathTests : IDisposable
 
     // A folder where this account may create folders but not files: the temporary folder is made, its anchor is refused.
     // The failure must say so (access denied, where), not claim that someone replaced the folder.
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task WriteDirectoryAtomically_reports_a_refused_anchor_as_the_access_error_it_is()
     {
         var beside = Directory.CreateDirectory(_dir.Combine("no files here"));
@@ -768,4 +787,8 @@ public sealed class OutputPathTests : IDisposable
 
     private static string[] EntryNames(string folder) =>
         Directory.GetFileSystemEntries(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray()!;
+
+    // Where the folder handed to a writer is: on Linux the writer gets the handle held (/proc/<pid>/fd/<n>), which leads
+    // nowhere once the folder is closed.
+    internal static string Located(string handed) => new DirectoryInfo(handed).ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? handed;
 }

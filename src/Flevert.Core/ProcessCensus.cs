@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.Versioning;
 
 namespace Flevert.Core;
 
@@ -8,6 +9,7 @@ namespace Flevert.Core;
 /// would pass the pipe's peer check count (same executable, session, integrity not lower), so another program or a
 /// sandboxed copy cannot hold a batch open. ADR-0007, part 2.
 /// </summary>
+[SupportedOSPlatform("windows")]
 internal static class ProcessCensus
 {
     // The command line and the peer check never change for a running process; its id may be reused, its stamp not.

@@ -68,12 +68,12 @@ public sealed class RunnerBatchOperationTests : IDisposable
     {
         Directory.CreateDirectory(_dir.Combine("a"));
         Directory.CreateDirectory(_dir.Combine("b"));
-        var later = _dir.File(@"a\x 10.txt");
-        var first = _dir.File(@"b\x 2.txt");
+        var later = _dir.File(Path.Combine("a", "x 10.txt"));
+        var first = _dir.File(Path.Combine("b", "x 2.txt"));
 
         var outcome = await NewRunner().RunAsync(new DevJoin(), [later, first], progress: null, CancellationToken.None);
 
-        Assert.Equal(_dir.Combine(@"b\x 2 (+1).txt"), Assert.Single(outcome.Results).Output);
+        Assert.Equal(_dir.Combine(Path.Combine("b", "x 2 (+1).txt")), Assert.Single(outcome.Results).Output);
     }
 
     [Fact]
@@ -179,7 +179,8 @@ public sealed class RunnerBatchOperationTests : IDisposable
         Assert.Contains(lines, line => line.Contains("3.txt", StringComparison.Ordinal));
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task Every_input_stays_pinned_while_the_operation_runs()
     {
         var files = new[] { _dir.File("1.txt"), _dir.File("2.txt"), _dir.File("3.txt") };
@@ -209,7 +210,8 @@ public sealed class RunnerBatchOperationTests : IDisposable
             File.Delete(file); // released once the run is over
     }
 
-    [Fact]
+    [WindowsFact]
+    [SupportedOSPlatform("windows")]
     public async Task The_same_file_given_twice_is_joined_once()
     {
         var file = _dir.File("ảnh 1.txt");
@@ -333,6 +335,40 @@ public sealed class RunnerBatchOperationTests : IDisposable
         finally
         {
             never.SetResult();
+        }
+    }
+
+    [LinuxFact]
+    [SupportedOSPlatform("linux")]
+    public async Task An_abandoned_join_reads_its_original_inputs_through_their_pins_until_it_finishes()
+    {
+        var files = new[] { _dir.File("1.txt", "first input"), _dir.File("2.txt", "second input") };
+        using var cts = new CancellationTokenSource();
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var op = new LateReaderJoin(cts.Cancel, release.Task);
+        try
+        {
+            var outcome = await NewRunner().RunAsync(op, files, progress: null, cts.Token).WaitAsync(TimeSpan.FromSeconds(20));
+
+            Assert.Empty(outcome.Results);
+            Assert.Equal("Cancelled.", BatchSummary.Describe(outcome, _logs.Path).Text);
+            Assert.NotNull(op.Running);
+            Assert.False(op.Running.IsCompleted, "the join is still waiting after the runner abandoned it");
+            foreach (var file in files)
+            {
+                File.Delete(file);
+                await File.WriteAllTextAsync(file, "a replacement at the old name");
+            }
+
+            release.SetResult();
+
+            Assert.Equal("first input|second input", await op.Running.WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+        finally
+        {
+            release.TrySetResult();
+            if (op.Running is not null)
+                await op.Running.WaitAsync(TimeSpan.FromSeconds(10));
         }
     }
 
@@ -525,6 +561,30 @@ public sealed class RunnerBatchOperationTests : IDisposable
             var desired = Path.Combine(Path.GetDirectoryName(inputPaths[0])!, Path.GetFileNameWithoutExtension(inputPaths[0]) + " (stubborn).txt");
             return await OutputPath.WriteAtomicallyAsync(desired, (temp, _) => File.WriteAllTextAsync(temp, "joined", CancellationToken.None), CancellationToken.None)
                 .ConfigureAwait(false);
+        }
+    }
+
+    private sealed class LateReaderJoin(Action onStart, Task release) : IBatchOperation
+    {
+        public string Id => "test.late-reader-join";
+
+        public string MenuPath => "Test/Late reader join";
+
+        public IReadOnlyCollection<string> Extensions { get; } = [".txt"];
+
+        public Task<string>? Running { get; private set; }
+
+        public Task<string> RunAsync(IReadOnlyList<string> inputPaths, IProgress<FileProgress>? progress, CancellationToken ct) =>
+            Running = ReadAfterReleaseAsync(inputPaths);
+
+        private async Task<string> ReadAfterReleaseAsync(IReadOnlyList<string> inputPaths)
+        {
+            onStart();
+            await release.ConfigureAwait(false);
+            var contents = new List<string>();
+            foreach (var input in inputPaths)
+                contents.Add(await File.ReadAllTextAsync(PinnedInput.ReadPath(input), CancellationToken.None).ConfigureAwait(false));
+            return string.Join('|', contents);
         }
     }
 

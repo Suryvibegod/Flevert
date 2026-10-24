@@ -25,7 +25,6 @@ public sealed class PdfToImages : IOperation
     /// <summary>Readable on a phone and small (docs/specs/pdf.md, "Render").</summary>
     public const double Dpi = 150;
 
-    private const int MaxFileNameLength = 255;
     private const string FolderSuffix = " (pages)";
 
     private readonly PdfPageImageFormat _format;
@@ -78,15 +77,7 @@ public sealed class PdfToImages : IOperation
         var digits = Math.Max(3, total.ToString(CultureInfo.InvariantCulture).Length);
         var suffix = string.Create(CultureInfo.InvariantCulture, $" {page.ToString("D" + digits, CultureInfo.InvariantCulture)}")
             + (format == PdfPageImageFormat.Jpeg ? ".jpg" : ".png");
-        var room = MaxFileNameLength - suffix.Length;
-        if (stem.Length > room)
-        {
-            stem = stem[..room];
-            if (char.IsHighSurrogate(stem[^1]))
-                stem = stem[..^1];
-        }
-
-        return stem + suffix;
+        return OutputPath.FitName(stem, suffix);
     }
 }
 

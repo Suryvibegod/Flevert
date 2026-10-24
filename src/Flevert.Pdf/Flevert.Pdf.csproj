@@ -1,10 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <GenerateSupportedOSPlatformAttribute>false</GenerateSupportedOSPlatformAttribute>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Fetched by scripts/fetch-deps.ps1, pinned by SHA256 (ADR-0008); never committed. -->
     <PdfiumDll>$(MSBuildThisFileDirectory)..\..\deps\pdfium\bin\pdfium.dll</PdfiumDll>
     <QpdfBin>$(MSBuildThisFileDirectory)..\..\deps\qpdf\bin\</QpdfBin>
+    <!-- Linux: scripts/fetch-deps-linux.py, pinned in scripts/deps-linux.json. -->
+    <PdfiumSo>$(MSBuildThisFileDirectory)..\..\deps\pdfium\lib\libpdfium.so</PdfiumSo>
+    <QpdfLinux>$(MSBuildThisFileDirectory)..\..\deps\qpdf\</QpdfLinux>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,17 +32,30 @@
     <None Include="$(QpdfBin)*.exe;$(QpdfBin)*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
+  <!-- Linux: qpdf keeps the bin/ and lib/ of its release (it finds libqpdf through $ORIGIN/../lib), under qpdf/. -->
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT' And Exists('$(PdfiumSo)')">
+    <None Include="$(PdfiumSo)" Link="libpdfium.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT' And Exists('$(QpdfLinux)bin/qpdf')">
+    <None Include="$(QpdfLinux)bin/qpdf" Link="qpdf/bin/qpdf" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(QpdfLinux)lib/*" Link="qpdf/lib/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
   <!-- The empty OpenSSL configuration qpdf reads instead of any other (ADR-0008); a text file kept in the repository. -->
   <ItemGroup>
     <None Update="openssl.cnf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Fail early and say how to fix it, rather than build something that fails at run time. -->
-  <Target Name="RequirePdfium" BeforeTargets="BeforeBuild" Condition="!Exists('$(PdfiumDll)')">
+  <Target Name="RequirePdfium" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT' And !Exists('$(PdfiumDll)')">
     <Error Text="deps\pdfium\bin\pdfium.dll is missing. Run: powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1" />
   </Target>
 
-  <Target Name="RequireQpdf" BeforeTargets="BeforeBuild" Condition="!Exists('$(QpdfBin)qpdf.exe')">
+  <Target Name="RequireLinuxDeps" BeforeTargets="BeforeBuild" Condition="'$(OS)' != 'Windows_NT' And (!Exists('$(PdfiumSo)') Or !Exists('$(QpdfLinux)bin/qpdf'))">
+    <Error Text="deps/pdfium/lib/libpdfium.so or deps/qpdf/bin/qpdf is missing. Run: python3 -I scripts/fetch-deps-linux.py" />
+  </Target>
+
+  <Target Name="RequireQpdf" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT' And !Exists('$(QpdfBin)qpdf.exe')">
     <Error Text="deps\qpdf\bin\qpdf.exe is missing. Run: powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1" />
   </Target>
 

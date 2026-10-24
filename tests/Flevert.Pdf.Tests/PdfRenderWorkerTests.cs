@@ -19,8 +19,10 @@ public sealed class PdfRenderWorkerTests : IDisposable
     [InlineData(@"\\?\C:\long\path.pdf")]
     public void The_request_carries_any_path_exactly(string path)
     {
+        path = TestPdf.Native(path);
         var request = new PdfRenderRequest(path, new FileIdentity(0x1234_5678_9ABC_DEF0, UInt128.MaxValue - 5), path + " (pages)",
-            PdfPageImageFormat.Png, 37.5);
+            PdfPageImageFormat.Png, 37.5)
+        { ReadPath = path + " (read)" };
 
         var decoded = PdfRenderRequest.Decode(request.Encode());
 
@@ -31,25 +33,28 @@ public sealed class PdfRenderWorkerTests : IDisposable
     [InlineData("not a request")]
     // 0.2.0's version: fields have changed meaning since (the text and shrink tasks and their lines).
     [InlineData("flevert-pdf-worker/1\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0")]
-    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0")]
-    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0gif\0150\0")]
-    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0-1\0")]
-    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0NaN\0")]
-    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\0xyz\0C:\\out\0png\0150\0")]
-    [InlineData("flevert-pdf-worker/2\0relative.pdf\01:2\0C:\\out\0png\0150\0")]
-    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0extra\0")]
+    [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\01:2\0C:\\out\0png\0")]
+    [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\01:2\0C:\\out\0gif\0150\0")]
+    [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\01:2\0C:\\out\0png\0-1\0")]
+    [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\01:2\0C:\\out\0png\0NaN\0")]
+    [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\0xyz\0C:\\out\0png\0150\0")]
+    [InlineData("flevert-pdf-worker/3\0relative.pdf\0relative.pdf\01:2\0C:\\out\0png\0150\0")]
+    // 0.2.x's version, without the path the worker reads from.
+    [InlineData("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0")]
+    [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0relative.pdf\01:2\0C:\\out\0png\0150\0")]
+    [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0extra\0")]
     public void A_damaged_request_is_refused(string text)
     {
-        Assert.Throws<FormatException>(() => PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(text)));
+        Assert.Throws<FormatException>(() => PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(TestPdf.Native(text))));
     }
 
     [Fact]
     public void A_request_of_this_version_is_read_and_written()
     {
-        var request = PdfRenderRequest.Decode(Encoding.Unicode.GetBytes("flevert-pdf-worker/2\0C:\\a.pdf\01:2\0C:\\out\0shrink\0150\0"));
+        var request = PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(TestPdf.Native("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\01:2\0C:\\out\0shrink\0150\0")));
 
         Assert.Equal(PdfWorkerTask.ShrinkImages, request.Task);
-        Assert.StartsWith("flevert-pdf-worker/2\0", Encoding.Unicode.GetString(request.Encode()), StringComparison.Ordinal);
+        Assert.StartsWith("flevert-pdf-worker/3\0", Encoding.Unicode.GetString(request.Encode()), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -83,11 +88,11 @@ public sealed class PdfRenderWorkerTests : IDisposable
     [Fact]
     public void Refuses_a_file_other_than_the_one_the_parent_pinned()
     {
-        // The parent names the file by path and by identity; a path that leads elsewhere is not read.
+        // The parent names the file by the path to read and by identity; a path that leads elsewhere is not read.
         var pinned = Copy("three-colours.pdf", "pinned.pdf");
         var other = Copy("three-colours.pdf", "other.pdf");
         var folder = Folder();
-        var request = Request(pinned, folder, PdfPageImageFormat.Png, 150) with { InputPath = other };
+        var request = Request(pinned, folder, PdfPageImageFormat.Png, 150) with { ReadPath = other };
 
         var (exit, lines) = Run(request);
 

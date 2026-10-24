@@ -25,7 +25,7 @@ public sealed class PdfMakeSearchableTests : IDisposable
         Assert.Equal([".pdf"], op.Extensions);
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task A_vietnamese_scan_gets_text_pdfium_reads_back_and_looks_the_same()
     {
         var input = _dir.Combine("Hợp đồng scan.pdf");
@@ -48,7 +48,7 @@ public sealed class PdfMakeSearchableTests : IDisposable
         }
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task A_page_that_has_text_gets_no_second_layer_and_a_scan_page_beside_it_gets_one()
     {
         var text = _dir.Combine("text.pdf");
@@ -66,7 +66,7 @@ public sealed class PdfMakeSearchableTests : IDisposable
         Assert.True(TestOcr.Similarity(FirstPage, pdf.GetText(1)) >= 0.95, pdf.GetText(1));
     }
 
-    [Fact]
+    [WindowsFact]
     public async Task A_pdf_that_already_has_text_everywhere_is_skipped_and_leaves_nothing()
     {
         var input = _dir.Combine("text.pdf");
