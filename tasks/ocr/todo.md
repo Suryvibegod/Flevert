@@ -18,7 +18,7 @@ Phiên trước giao việc cho worker của `ceo-worker-agent` trong 5 worktree
 - [x] T5 Đóng gói (f6ee52b): publish kèm `tesseract\` (trừ `licenses\`), `installer/Flevert.iss` thư mục riêng ngoài lượt giải nén check-location, notices, Installer/NoticesScriptTests.
 - [x] T5b README/CHANGELOG (mục Unreleased). `build-installer.ps1` thật đạt: setup 100,2 MB (1.3.0: 97,7 MB). Thử riêng với ISCC: `Excludes: "tesseract\*"` loại cả thư mục con, nên `tessdata\configs\pdf` không vào lượt giải nén check-location.
 - [ ] T6 File độc (bảng file độc hiện có cho ảnh/PDF qua OCR), hủy giữa chừng (tesseract dừng, không file dở), trang `/Rotate 90` cho Make searchable.
-- [ ] T7 Icon riêng cho Make searchable (đang dùng chung `draw_text` với Add watermark).
+- [x] T7 Icon riêng cho Make searchable: `scan_text` (Fluent Filled, ghim SHA256 trong `make-menu-icons.py`), lý do chọn ở ocr.md "Icon".
 - [ ] Trước release: app thật, MenuProbe, installer, ba review, reconcile; theo docs/RELEASING.md.
 - [ ] Sau khi gom xong: xóa worktree `D:\github\Flevert-wt\*` và nhánh `ceo/ocr-*` (≈ 15 GB).
 

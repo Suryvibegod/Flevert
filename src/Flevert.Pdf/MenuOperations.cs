@@ -42,6 +42,6 @@ public static class MenuOperations
         ["Split by size"] = new("cut", 5),
         ["Convert to PNG images"] = new("arrow_swap", 6),
         ["Extract images"] = new("image_multiple", 6),
-        ["Make searchable (OCR)"] = new("draw_text", 7),
+        ["Make searchable (OCR)"] = new("scan_text", 7),
     };
 }
