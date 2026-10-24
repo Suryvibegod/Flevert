@@ -108,7 +108,7 @@ Less used PDF tools are one step away: hold **Shift** while you right-click a PD
 
 Text in pictures is read by [Tesseract](https://github.com/tesseract-ocr/tesseract) (Apache-2.0), built for Flevert from source with permissive libraries only and included in the installer. Video and audio are converted by [ffmpeg](https://ffmpeg.org/), included in the installer. It is free software under the GNU GPL, and each [release](https://github.com/Suryvibegod/Flevert/releases) has its complete source beside the setup (`ffmpeg-source-*.tar`).
 
-PDFs, videos, songs and the text of pictures are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
+PDFs, videos and songs are read in a separate process with a memory limit, so a damaged or hostile file fails on its own. For the text of a picture, Flevert decodes the picture itself, within its size limits, and only Tesseract runs as a separate process with a memory limit. If Flevert had to repair a PDF to read it, the notification says so: check that the pages look right; a signed PDF's signature is not valid in what Flevert writes, and the notification says that too. A batch that takes more than two seconds shows a progress window with **Cancel**.
 
 <p align="center">
 <img src="assets/screenshots/progress.png" width="420" alt="The Flevert progress window converting twelve photos to JPG: 8 of 12 done, with a Cancel button">
