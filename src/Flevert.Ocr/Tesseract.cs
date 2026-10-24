@@ -29,18 +29,25 @@ internal sealed class Tesseract
     internal const ulong MaxMemoryBytes = 1UL << 30;
 
     /// <summary>
-    /// Maximum time allowed for one OCR page operation: 150 seconds (120 s base per page plus 30 s margin).
-    /// Typical 300 DPI pages finish in 1-10 seconds on modern CPUs. 150 seconds provides ample margin
-    /// for low-power or heavily loaded machines while ensuring hung processes or catastrophic backtracking
-    /// in layout analysis are terminated.
-    /// </summary>
-    /// <summary>
-    /// How many pages may be read at once: one per core (OMP_THREAD_LIMIT=1), but never more caps of
-    /// <see cref="MaxMemoryBytes"/> than a quarter of this PC's memory, as for pictures (ADR-0006).
+    /// How many tesseract processes may run at once in this process: one per core (OMP_THREAD_LIMIT=1), but never more
+    /// caps of <see cref="MaxMemoryBytes"/> than a quarter of this PC's memory, as for pictures (ADR-0006).
     /// </summary>
     internal static int MaxParallel { get; } = (int)Math.Clamp(
         (ulong)GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 4 / MaxMemoryBytes, 1, (ulong)Environment.ProcessorCount);
 
+    /// <summary>
+    /// Every tesseract run in this process waits here, whichever engine starts it: a batch of pictures (up to 8 at once,
+    /// whose memory budget counts only ImageMagick's pixels) and the pages of a PDF share <see cref="MaxParallel"/>, so
+    /// at most that many caps of <see cref="MaxMemoryBytes"/> are ever committed together.
+    /// </summary>
+    private static readonly SemaphoreSlim Gate = new(MaxParallel, MaxParallel);
+
+    /// <summary>
+    /// Maximum time allowed for one OCR page operation: 150 seconds (120 s base per page plus 30 s margin).
+    /// Typical 300 DPI pages finish in 1-10 seconds on modern CPUs. 150 seconds provides ample margin
+    /// for low-power or heavily loaded machines while ensuring hung processes or catastrophic backtracking
+    /// in layout analysis are terminated. Time spent waiting for <see cref="Gate"/> does not count.
+    /// </summary>
     public static readonly TimeSpan PageTimeout = TimeSpan.FromSeconds(150);
 
     private const int MaxDetailChars = 2_000;
@@ -98,6 +105,26 @@ internal sealed class Tesseract
             cancellationToken: ct);
 
     /// <summary>
+    /// Runs tesseract once <see cref="Gate"/> lets it; cancelling <paramref name="ct"/> also ends the wait.
+    /// </summary>
+    private async Task<ExternalToolResult> RunGatedAsync(IReadOnlyList<string> arguments, CancellationToken ct)
+    {
+        await Gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await Run(ExecutablePath, arguments, PageTimeout, null, ct).ConfigureAwait(false);
+        }
+        catch (TimeoutException e)
+        {
+            throw new OcrException(OcrException.TooSlowMessage, e);
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
+    /// <summary>
     /// Sets TESSDATA_PREFIX to Flevert's own tessdata folder (so user environment variable never leaks in)
     /// and OMP_THREAD_LIMIT=1 so page-level parallel processing does not cause thread contention.
     /// </summary>
@@ -126,15 +153,7 @@ internal sealed class Tesseract
         RequireTool();
 
         string[] arguments = [imagePath, "stdout", "-l", "vie+eng", "--oem", "1", "--psm", "3"];
-        ExternalToolResult run;
-        try
-        {
-            run = await Run(ExecutablePath, arguments, PageTimeout, null, ct).ConfigureAwait(false);
-        }
-        catch (TimeoutException e)
-        {
-            throw new OcrException(OcrException.TooSlowMessage, e);
-        }
+        var run = await RunGatedAsync(arguments, ct).ConfigureAwait(false);
 
         ct.ThrowIfCancellationRequested();
         RequireMemory(run);
@@ -173,15 +192,7 @@ internal sealed class Tesseract
             "pdf",
         ];
 
-        ExternalToolResult run;
-        try
-        {
-            run = await Run(ExecutablePath, arguments, PageTimeout, null, ct).ConfigureAwait(false);
-        }
-        catch (TimeoutException e)
-        {
-            throw new OcrException(OcrException.TooSlowMessage, e);
-        }
+        var run = await RunGatedAsync(arguments, ct).ConfigureAwait(false);
 
         ct.ThrowIfCancellationRequested();
         RequireMemory(run);
@@ -210,15 +221,7 @@ internal sealed class Tesseract
         RequireTool();
 
         string[] arguments = [imagePath, "stdout", "--psm", "0", "-l", "osd"];
-        ExternalToolResult run;
-        try
-        {
-            run = await Run(ExecutablePath, arguments, PageTimeout, null, ct).ConfigureAwait(false);
-        }
-        catch (TimeoutException e)
-        {
-            throw new OcrException(OcrException.TooSlowMessage, e);
-        }
+        var run = await RunGatedAsync(arguments, ct).ConfigureAwait(false);
 
         ct.ThrowIfCancellationRequested();
         RequireMemory(run);
@@ -260,8 +263,9 @@ internal sealed class Tesseract
             }
         }
 
-        if (rotate is { } degrees && confidence is >= 14.0)
-            return (degrees % 360 + 360) % 360;
+        // Tesseract only ever answers a quarter turn; anything else is not an answer to act on.
+        if (rotate is { } degrees && degrees is 0 or 90 or 180 or 270 && confidence is >= 14.0)
+            return degrees;
 
         return 0;
     }
