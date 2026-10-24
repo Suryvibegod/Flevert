@@ -7,7 +7,7 @@
      in the user PATH and DOTNET_ROOT); warns if the GitHub CLI is missing or signed out.
   2. On the maintainer's machines only (signed in to GitHub as account 79949229): installs Inno Setup, sets this
      repository's commit identity, repairs a known-broken global git rewrite that breaks plugin installs, and installs
-     the agent-skills plugin for Claude Code. Contributors keep their own tools, identity and global settings; for those
+     the Claude Code plugins pinned in .claude/settings.json. Contributors keep their own tools, identity and global settings; for those
      steps the script only prints advice.
   3. Warns when accounts other than this user, SYSTEM and Administrators can change the checkout (they could replace
      deps\ binaries or add git hooks), with the icacls command that fixes it; it changes no permissions itself.
@@ -131,20 +131,42 @@ if (-not $isMaintainer) {
     }
 }
 
-Step 'Claude Code plugin: agent-skills@addy-agent-skills'
+Step 'Claude Code plugins, pinned in .claude/settings.json'
+# Both plugins come from marketplaces declared inline in .claude/settings.json, with each plugin pinned to a reviewed
+# commit. `claude plugin marketplace add` would register the unpinned default branch instead, so it is not used here.
+$pluginIds = 'agent-skills@addy-agent-skills', 'ceo-worker-agent@ceo-worker-agent'
+$trustAdvice = 'Open Claude Code in this folder once, sign in if asked and accept the trust prompt (the inline marketplaces apply only in a trusted folder), then run this script again.'
 if (-not $isMaintainer) {
-    'Skipped. To follow the same process with Claude Code: /plugin install agent-skills@addy-agent-skills'
+    'Skipped. To follow the same process with Claude Code, open it in this folder, accept the trust prompt, then run:'
+    $pluginIds | ForEach-Object { "  claude plugin install $_ --scope project" }
 } elseif (Get-Command claude -ErrorAction SilentlyContinue) {
-    $plugins = & claude plugin list 2>&1 | Out-String
-    if ($plugins -notmatch 'agent-skills@addy-agent-skills') {
-        & claude plugin marketplace add addyosmani/agent-skills
-        & claude plugin install agent-skills@addy-agent-skills --scope project
-        'Installed. It loads in Claude Code after a restart or /reload-plugins; until then read the skills from the plugin cache.'
+    # The CLI cannot register an inline marketplace; a session start in a trusted folder does, and re-registers one whose
+    # declared source changed. A slash command runs no model turn; the variable makes the session wait for the fetch.
+    $savedSync = $env:CLAUDE_CODE_SYNC_PLUGIN_INSTALL
+    $env:CLAUDE_CODE_SYNC_PLUGIN_INSTALL = '1'
+    try { Invoke-Tolerant { & claude -p '/reload-plugins' 2>&1 | Out-Null } }
+    finally { $env:CLAUDE_CODE_SYNC_PLUGIN_INSTALL = $savedSync }
+    $marketplaces = Invoke-Tolerant { & claude plugin marketplace list --json 2>$null | Out-String | ConvertFrom-Json }
+    $unpinned = $pluginIds | Where-Object {
+        $name = ($_ -split '@')[1]
+        -not ($marketplaces | Where-Object { $_.name -eq $name -and $_.source -eq 'settings' })
+    }
+    if ($unpinned) {
+        Write-Warning "Marketplace not registered from .claude/settings.json for $($unpinned -join ', '). $trustAdvice"
     } else {
-        'Already installed'
+        $installed = Invoke-Tolerant { & claude plugin list --json 2>$null | Out-String | ConvertFrom-Json }
+        foreach ($id in $pluginIds) {
+            $here = $installed | Where-Object { $_.id -eq $id -and $_.scope -eq 'project' -and $_.projectPath -eq $repo.Path }
+            # update moves an existing install to the pinned commit and does nothing when it is there already.
+            $action = if ($here) { 'update' } else { 'install' }
+            $output = Invoke-Tolerant { & claude plugin $action $id --scope project 2>&1 | Out-String }
+            if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin $action $id failed ($LASTEXITCODE): $($output.Trim())" }
+            else { $output.Trim() }
+        }
+        'They load in Claude Code after a restart or /reload-plugins; until then read the skills from the plugin cache.'
     }
 } else {
-    Write-Warning 'claude CLI not found; install the plugin from Claude Code with /plugin install agent-skills@addy-agent-skills'
+    Write-Warning "claude CLI not found. Install Claude Code; $trustAdvice"
 }
 
 Step 'Who else can change this checkout'
@@ -163,7 +185,7 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 & dotnet build Flevert.sln -c Debug
 if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
 # One project at a time, as on CI: run together, the image encodes starve the process-batching tests of CPU.
-foreach ($project in 'tests\Flevert.Core.Tests', 'tests\Flevert.Image.Tests', 'tests\Flevert.Pdf.Tests', 'tests\Flevert.Media.Tests') {
+foreach ($project in 'tests\Flevert.Core.Tests', 'tests\Flevert.Image.Tests', 'tests\Flevert.Pdf.Tests', 'tests\Flevert.Media.Tests', 'tests\Flevert.Ocr.Tests') {
     & dotnet test $project --no-build
     if ($LASTEXITCODE -ne 0) { throw "Tests failed in $project." }
 }

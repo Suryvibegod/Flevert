@@ -101,7 +101,9 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
     {
         // After qpdf's count, the worker reads the pages as it does to draw them.
         string AfterCount(string worker) => rotate != Ok ? rotate : render != Ok ? render : worker;
-        foreach (var tool in PdfTools.All.Select(tool => tool.OperationId).Where(id => id != "pdf.extract-text"))
+        // Make searchable runs tesseract, which Flevert bundles for Windows only so far; Linux offers no such tool.
+        foreach (var tool in PdfTools.All.Select(tool => tool.OperationId)
+            .Where(id => id != "pdf.extract-text" && (OperatingSystem.IsWindows() || !MenuOperations.NeedTesseract.Contains(id))))
         {
             var rule = tool switch
             {
@@ -111,6 +113,8 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
                 "pdf.extract-images" => render != Ok ? render : Skipped,
                 // Their pages are all empty: every page looks blank.
                 "pdf.remove-blank-pages" => AfterCount(nameof(PdfError.NoPages)),
+                // Nor any text: tesseract finds none on the pictures of their pages, so nothing is written.
+                "pdf.make-searchable" => AfterCount(Skipped),
                 _ => AfterCount(Ok),
             };
             yield return (tool, ToolOutcomes.TryGetValue((fixture, tool), out var outcome) ? outcome : rule);

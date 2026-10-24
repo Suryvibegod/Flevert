@@ -25,21 +25,26 @@ Visitors judge a project by its branch list, its open pull requests and its root
 ## Tag and check the draft
 
 1. Push `main` first, then `git tag -a vX.Y.Z -m "Flevert X.Y.Z"` and `git push origin vX.Y.Z`. Only repository administrators can create `v*` tags (ruleset "Release tags"). The workflow refuses a tag that is not `vMAJOR.MINOR.PATCH`, does not match `<Version>`, or is not on `main`.
-2. The workflow tests, builds the installer, attests it and attaches it with `SHA256SUMS.txt` and the `ffmpeg-source-<tag>-<n>-of-<count>.tar` parts (the complete source of the bundled ffmpeg, GPL v3, split to stay under GitHub's 2 GiB per asset) to a **draft** release. The release notes are the version's CHANGELOG section plus how to check the download; the workflow fails if the CHANGELOG has no section for the version.
+2. The workflow tests and builds the Windows installer and, in a job of its own on Linux, the `Flevert-<version>-linux-x64.tar.gz` package (the tests, package and install check of CI's Linux job), attests each, and attaches both with `SHA256SUMS.txt` and the `ffmpeg-source-<tag>-<n>-of-<count>.tar` parts (the complete source of the bundled ffmpeg, GPL v3, split to stay under GitHub's 2 GiB per asset) to a **draft** release. Only the last job writes the lines of the tarball and the source parts into `SHA256SUMS.txt`, after the setup's, once every build has finished. The release notes are the version's CHANGELOG section plus how to check the downloads; the workflow fails if the CHANGELOG has no section for the version.
 3. Download the setup from the draft and check it as a user would:
    - `Get-FileHash` matches `SHA256SUMS.txt`.
    - The `gh attestation verify ...` command in the release notes passes. It pins the tag and the commit (`--source-digest`).
    - `powershell -File scripts/test-installer.ps1 -Setup <setup>` passes on a machine without Flevert. Running the tests leaves `%LOCALAPPDATA%\Flevert` behind, and the script refuses to run while it exists: delete it first, and do not run the tests at the same time.
    - The runtime in the installed `flevert.deps.json` (`runtimepack.Microsoft.NETCore.App.Runtime.win-x64/...`) is the newest .NET 10 patch.
    - Microsoft Defender and VirusTotal report nothing. A detection by one or two engines with a generic name is usually a false positive of an unsigned Inno Setup installer: report it to the vendor, and do not publish until it is understood.
-4. Publish the draft with **Set as the latest release** ticked. From then on, installed copies that check for new versions offer it after their next conversion, once a day has passed since their last check (they ask GitHub for the latest release, which never includes drafts or pre-releases). Never rename or delete the GitHub account or this repository: installed copies ask for releases by that name (ADR-0006).
+4. Download the Linux tarball and `SHA256SUMS.txt` from the draft into one folder and check them the same way:
+   - `sha256sum -c --ignore-missing SHA256SUMS.txt` prints `Flevert-<version>-linux-x64.tar.gz: OK`.
+   - The tarball's `gh attestation verify ...` command in the release notes passes.
+   - The runtime in `flevert-<version>/flevert.deps.json` (`runtimepack.Microsoft.NETCore.App.Runtime.linux-x64/...`) is the same .NET 10 patch as the setup's.
+   - On a Linux machine with GNOME Files (a virtual machine will do), install it as the README says, convert a picture and a PDF from the menu, and uninstall it.
+5. Publish the draft with **Set as the latest release** ticked. From then on, installed copies that check for new versions offer it after their next conversion, once a day has passed since their last check (they ask GitHub for the latest release, which never includes drafts or pre-releases). Never rename or delete the GitHub account or this repository: installed copies ask for releases by that name (ADR-0006).
 
 Until it is published, a draft may be thrown away and rebuilt: `gh release delete vX.Y.Z --cleanup-tag --yes`, then tag again. Delete the old run's artifacts too: the old build's attestation stays valid. The verify command in the release notes pins the commit (`--source-digest`), so a file built from any other commit fails it; the shorter command in `docs/install.md` pins only the tag, which is why that page points readers to the notes. Once published, the release is immutable (repository setting "Immutable releases"): its assets and tag cannot change, and the tag name can never be used again, even after the release is deleted.
 
 ## If the release workflow fails
 
 - **Build or tests fail:** no draft exists. Fix the cause on `main` (through review, as any change), delete the tag (`git push --delete origin vX.Y.Z`; administrators bypass the tag ruleset) and tag the fixed commit. Never tag a commit that is not on `main`.
-- **A flaky test, or the attest or release job fails** (network, GitHub outage): re-run the failed jobs from the run's page. Nothing has been published, and the build is not repeated if only a later job failed.
+- **A flaky test, or an attest job or the release job fails** (network, GitHub outage): re-run the failed jobs from the run's page. Nothing has been published, and a build is not repeated if only a later job failed. The Windows and Linux builds are separate jobs: when one fails, re-running it leaves the other's build as it was.
 - **The draft exists but is wrong:** throw it away as above.
 
 ## If a published release is bad
@@ -69,7 +74,7 @@ ffmpeg is pinned the same way ([ADR-0009](adr/0009-ffmpeg-gpl-build.md)), to a b
 2. In `deps.json`: the URL, `sha256` and `strip` of the `ffmpeg` item, the DLL names in `keep` and in the FFmpeg notice when their numbers changed, and every pin under `ffmpegSource` (the commit the release tag points to, `git ls-remote https://github.com/BtbN/FFmpeg-Builds refs/tags/<tag>`; the full FFmpeg commit the asset name ends in, and its version). Run `scripts/fetch-deps.ps1` and every test project.
 3. Open the pull request: the **ffmpeg source** workflow fetches the new build's source and licences, and fails until the licences it brings are committed (step 6 of "Before tagging").
 
-Tesseract is built by Flevert itself ([ADR-0010](adr/0010-tesseract-static-build.md)): `.github/workflows/build-tesseract.yml` runs `scripts/build-tesseract.ps1` and publishes the zip as an immutable pre-release. Once a month, look for a new vcpkg tag with security fixes in Tesseract, Leptonica or the image codecs the zip's `README.txt` lists. To change the pin:
+Tesseract is built by Flevert itself ([ADR-0011](adr/0011-tesseract-static-build.md)): `.github/workflows/build-tesseract.yml` runs `scripts/build-tesseract.ps1` and publishes the zip as an immutable pre-release. Once a month, look for a new vcpkg tag with security fixes in Tesseract, Leptonica or the image codecs the zip's `README.txt` lists. To change the pin:
 
 1. In `scripts/build-tesseract.ps1`, set the vcpkg tag and the commit it points to (`git ls-remote https://github.com/microsoft/vcpkg refs/tags/<tag>^{}`), and the versions it should build. In the workflow, give the release a tag that was never used (`deps-tesseract-<version>-<n>`) and update its notes.
 2. A branch run (`gh workflow run build-tesseract.yml --ref <branch>`) builds and checks everything but attests and publishes nothing. When it fails on a port or feature that is not on the script's allow-list, review that port (licence, network or archive code, security record) before adding it there and to the Tesseract notice in `deps.json`.

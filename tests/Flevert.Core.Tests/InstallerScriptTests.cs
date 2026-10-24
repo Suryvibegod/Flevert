@@ -250,9 +250,11 @@ public sealed class InstallerScriptTests
         var folder = Directory.CreateDirectory(dir.Combine("unpacked")).FullName;
         foreach (var file in Directory.EnumerateFiles(build, "*", SearchOption.AllDirectories))
         {
-            // A file of the ffmpeg folder is named by its path there, as its [Files] entry and scripts\deps.json name it.
+            // A file of the ffmpeg or tesseract folder is named by its path there, as its [Files] entry and scripts\deps.json name it.
             var relative = Path.GetRelativePath(build, file);
-            var name = relative.StartsWith(@"ffmpeg\", StringComparison.OrdinalIgnoreCase) ? relative : Path.GetFileName(file);
+            var name = relative.StartsWith(@"ffmpeg\", StringComparison.OrdinalIgnoreCase) || relative.StartsWith(@"tesseract\", StringComparison.OrdinalIgnoreCase)
+                ? relative
+                : Path.GetFileName(file);
             if (!InstalledByOneEntry(name) || !UnpackedForTheCheck(name))
                 continue;
             var target = Path.Combine(folder, Path.GetRelativePath(build, file));
@@ -262,6 +264,7 @@ public sealed class InstallerScriptTests
 
         Assert.True(File.Exists(Path.Combine(build, "qpdf.exe")) && !File.Exists(Path.Combine(folder, "qpdf.exe")), "the copy should lack qpdf.exe");
         Assert.True(File.Exists(Path.Combine(build, @"ffmpeg\ffmpeg.exe")) && !Directory.Exists(Path.Combine(folder, "ffmpeg")), "the copy should lack ffmpeg");
+        Assert.True(File.Exists(Path.Combine(build, @"tesseract\tesseract.exe")) && !Directory.Exists(Path.Combine(folder, "tesseract")), "the copy should lack tesseract");
         var start = new ProcessStartInfo(Path.Combine(folder, "flevert.exe")) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
         start.ArgumentList.Add("check-location");
         start.ArgumentList.Add(dir.Combine("missing"));

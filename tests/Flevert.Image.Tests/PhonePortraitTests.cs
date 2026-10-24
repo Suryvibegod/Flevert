@@ -16,7 +16,7 @@ public sealed class PhonePortraitTests : IDisposable
     private static IOperation Op(string id) => ImageOperations.All.Single(op => op.Id == id);
 
     public static TheoryData<string> OperationsOnHeic() =>
-        [.. ImageOperations.All.Where(op => op.Extensions.Contains(".heic")).Select(op => op.Id)];
+        [.. ImageOperations.All.Where(op => op.Extensions.Contains(".heic") && op.Id != "image.to-text").Select(op => op.Id)];
 
     [Theory]
     [MemberData(nameof(OperationsOnHeic))]

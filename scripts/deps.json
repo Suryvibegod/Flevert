@@ -1,5 +1,5 @@
 {
-  "comment": "Third-party binaries fetched into deps/ by scripts/fetch-deps.ps1, never committed. Each download is pinned by SHA256 (GitHub publishes a digest for every release asset). Change a version here, then run the script and the tests. 'notices' names every file the installer ships from deps/ and its licences (paths from the repository root); scripts/write-notices.ps1 refuses a file that has none. qpdf links zlib, libjpeg-turbo and OpenSSL into qpdf30.dll at whatever versions vcpkg had on the day of its build: after a qpdf update, pin their licences at the versions the binary holds (QpdfDepsTests checks). ffmpeg is pinned to the last BtbN build of a month, which BtbN keeps for two years (its daily builds go after 14 days). docs/adr/0008-pdf-engines-pdfium-and-qpdf.md, docs/adr/0009-ffmpeg-gpl-build.md",
+  "comment": "Third-party binaries fetched into deps/ by scripts/fetch-deps.ps1, never committed. Each download is pinned by SHA256 (GitHub publishes a digest for every release asset). Change a version here, then run the script and the tests. 'notices' names every file the installer ships from deps/ and its licences (paths from the repository root); scripts/write-notices.ps1 refuses a file that has none. qpdf links zlib, libjpeg-turbo and OpenSSL into qpdf30.dll at whatever versions vcpkg had on the day of its build: after a qpdf update, pin their licences at the versions the binary holds (QpdfDepsTests checks). ffmpeg is pinned to the last BtbN build of a month, which BtbN keeps for two years (its daily builds go after 14 days). docs/adr/0008-pdf-engines-pdfium-and-qpdf.md, docs/adr/0009-ffmpeg-gpl-build.md, docs/adr/0011-tesseract-static-build.md",
   "items": [
     {
       "name": "pdfium",
@@ -67,6 +67,49 @@
       "strip": "ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-shared-8.1/",
       "keep": ["bin/ffmpeg.exe", "bin/ffprobe.exe", "bin/avcodec-62.dll", "bin/avdevice-62.dll", "bin/avfilter-11.dll", "bin/avformat-62.dll",
         "bin/avutil-60.dll", "bin/swresample-6.dll", "bin/swscale-9.dll", "LICENSE.txt"]
+    },
+    {
+      "name": "tesseract",
+      "url": "https://github.com/Suryvibegod/Flevert/releases/download/deps-tesseract-5.5.3-2/tesseract-5.5.3-vcpkg-2026.10.16-win64-static.zip",
+      "sha256": "178d6b485be5978e0dc57893d90672e15c8119317722113579764f8cab8cfc22",
+      "kind": "zip",
+      "strip": "",
+      "keep": ["tesseract.exe", "licenses/*"]
+    },
+    {
+      "name": "tesseract-data-vie",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/vie.traineddata",
+      "sha256": "79df64caf7bcfb2a27df5042ecb6121e196eada34da774956995747636d5bfa1",
+      "kind": "file",
+      "target": "tesseract/tessdata/vie.traineddata"
+    },
+    {
+      "name": "tesseract-data-eng",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/eng.traineddata",
+      "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2",
+      "kind": "file",
+      "target": "tesseract/tessdata/eng.traineddata"
+    },
+    {
+      "name": "tesseract-data-osd",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/4.1.0/osd.traineddata",
+      "sha256": "9cf5d576fcc47564f11265841e5ca839001e7e6f38ff7f7aacf46d15a96b00ff",
+      "kind": "file",
+      "target": "tesseract/tessdata/osd.traineddata"
+    },
+    {
+      "name": "tesseract-pdf-ttf",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tesseract/5.5.3/tessdata/pdf.ttf",
+      "sha256": "c7845420925a23d88ed830a63957b8af85a66a8daf8d9fc90e843673b2ef1a59",
+      "kind": "file",
+      "target": "tesseract/tessdata/pdf.ttf"
+    },
+    {
+      "name": "tesseract-pdf-config",
+      "url": "https://raw.githubusercontent.com/tesseract-ocr/tesseract/5.5.3/tessdata/configs/pdf",
+      "sha256": "54d56e81dfefe289b0d2e4c7bc9bbe662711f5b8255c128b73bcd66efb6bba1a",
+      "kind": "file",
+      "target": "tesseract/tessdata/configs/pdf"
     }
   ],
   "ffmpegSource": {
@@ -120,6 +163,31 @@
         "ffmpeg\\avformat-62.dll", "ffmpeg\\avutil-60.dll", "ffmpeg\\swresample-6.dll", "ffmpeg\\swscale-9.dll"],
       "note": "FFmpeg runs as a separate program. It and the libraries built into it are distributed under the GNU General Public License version 3; every Flevert release publishes their complete corresponding source beside its setup, at https://github.com/Suryvibegod/Flevert/releases, as the files ffmpeg-source-autobuild-2026-09-30-13-08-*.tar. The licences of the libraries built into it follow BtbN's LICENSE.txt, each named after its build stage (50-x264-COPYING).",
       "licences": ["deps/ffmpeg/LICENSE.txt", "installer/notices/ffmpeg/*"]
+    },
+    {
+      "title": "Tesseract 5.5.3, built statically by Flevert's build-tesseract workflow with vcpkg 2026.10.16 (release deps-tesseract-5.5.3-2)",
+      "files": ["tesseract\\tesseract.exe"],
+      "note": "Tesseract runs as a separate program. tesseract.exe holds, linked in, the Microsoft C runtime and these libraries, whose licences follow, each named after its vcpkg port: Leptonica, libpng, libspng, libjpeg-turbo, libwebp, OpenJPEG, libtiff, giflib, zlib and liblzma. liblzma is under the BSD Zero Clause licence (0BSD); the GPL and LGPL texts in its licence file are for XZ Utils tools and scripts that are not in tesseract.exe.",
+      "licences": ["deps/tesseract/licenses/*"]
+    },
+    {
+      "title": "Tesseract fast trained data models 4.1.0 (vie, eng, osd)",
+      "files": [
+        "tesseract\\tessdata\\vie.traineddata",
+        "tesseract\\tessdata\\eng.traineddata",
+        "tesseract\\tessdata\\osd.traineddata"
+      ],
+      "note": "Trained models for Vietnamese, English, and orientation/script detection from tesseract-ocr/tessdata_fast.",
+      "licences": ["deps/tesseract/licenses/tesseract-copyright"]
+    },
+    {
+      "title": "Tesseract PDF renderer assets 5.5.3 (pdf.ttf, configs/pdf)",
+      "files": [
+        "tesseract\\tessdata\\pdf.ttf",
+        "tesseract\\tessdata\\configs\\pdf"
+      ],
+      "note": "Invisible glyphless font and PDF configuration for generating searchable PDF text layers from tesseract-ocr/tesseract.",
+      "licences": ["deps/tesseract/licenses/tesseract-copyright"]
     }
   ]
 }

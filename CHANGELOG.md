@@ -4,9 +4,28 @@ All notable changes to Flevert are listed here. The format follows [Keep a Chang
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-25
+
+Text from pictures and scans, in Vietnamese and English, read on your PC.
+
 ### Added
 
-- **Flevert for Linux**: the same picture and PDF tools in the right-click menu of GNOME Files (Nautilus), installed for you from a tarball with `install.sh`, without root. A progress window, the password and watermark dialogs and the notification at the end work as on Windows; the PDF tools that Windows shows only with Shift are under **Flevert > More PDF tools**. Merge PDFs and Combine into PDF join files in the order Files shows them. Video and audio are on Windows only for now.
+- Right-click a picture and choose **Flevert > Convert to > Text**: `photo.txt` with the text in it. A photo of a page turned sideways or upside down is read the right way up, from about a line of text.
+- Hold **Shift**, right-click a PDF and choose **Flevert: more PDF tools > Make searchable (OCR)**: `report (searchable).pdf` has the same pages, and Ctrl+F finds the words of its scanned pages, which you can copy with their accents. A page scanned sideways or upside down is turned the right way up, without losing quality; the other pages look exactly as they did. A PDF whose pages all have text already, or whose scans hold no text Tesseract can find, is left as it is, and the notification says why.
+- **Convert to > Text** of a PDF now reads scanned pages from their pictures instead of skipping a scanned PDF. When Tesseract cannot read a scanned page (it takes too long or needs too much memory), the page keeps the text the PDF itself had on it, and the notification names the page.
+- The installer includes Tesseract 5.5.3 (Apache-2.0) with its Vietnamese and English data, built for Flevert from source with permissive libraries only.
+- **Flevert for Linux**: the same picture and PDF tools in the right-click menu of GNOME Files (Nautilus), installed for you from a tarball with `install.sh`, without root. A progress window, the password and watermark dialogs and the notification at the end work as on Windows; the PDF tools that Windows shows only with Shift are under **Flevert > More PDF tools**. Merge PDFs and Combine into PDF join files in the order Files shows them. Video and audio, and text from pictures and scans, are on Windows only for now.
+
+### Changed
+
+- **Convert to > BMP** left the picture menu to make room for Text; BMP pictures still open in every tool.
+
+### Known issues
+
+- Text from pictures and scans is on Windows only for now.
+- A scanned page that already has more than 10 characters of real text on it (a typed header, a "Scanned with …" line, Bates numbers, a page stamp) counts as a text page and is not read by OCR, in **Convert to > Text** or **Make searchable (OCR)**.
+- A picture or page with a single line of text, upside down, may be read as it is: Tesseract cannot always tell which way up one line is.
+- Pictures larger than 25 megapixels are shrunk to that size before they are read, so very small print in them may be missed. Tesseract gets 150 seconds and 1 GB of memory for each picture or page.
 
 ## [1.3.0] - 2026-10-21
 
@@ -147,7 +166,8 @@ The first release: pictures, and an installer.
 - A specially crafted TIFF file can make the bundled ImageMagick 7.1.2-33 overflow its stack ([GHSA-g5j8-ff59-wp88](https://github.com/ImageMagick/ImageMagick/security/advisories/GHSA-g5j8-ff59-wp88), low severity): Flevert then closes, and the rest of that batch is not converted. No code runs. It will be fixed by updating once a Magick.NET release includes ImageMagick 7.1.2-34.
 - Windows Smart App Control may block this unsigned release (see the README).
 
-[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/Suryvibegod/Flevert/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/Suryvibegod/Flevert/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Suryvibegod/Flevert/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/Suryvibegod/Flevert/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/Suryvibegod/Flevert/compare/v0.2.1...v1.2.2

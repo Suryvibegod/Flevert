@@ -193,6 +193,42 @@ public sealed partial class Qpdf
     }
 
     /// <summary>
+    /// Overlays pages from <paramref name="overlayPath"/> onto <paramref name="inputPath"/> and writes the result to
+    /// <paramref name="outputPath"/>, copying streams as they are (<see cref="KeepStreamsAsTheyAre"/>).
+    /// </summary>
+    /// <param name="toPages">Destination page range or list, e.g. <c>1,3,5</c>.</param>
+    /// <param name="fromPages">Source page range from the overlay file, e.g. <c>1-3</c>.</param>
+    /// <param name="options">
+    /// More of qpdf's options, such as <c>--rotate</c>. qpdf turns the pages before it lays the overlay over them, and it
+    /// lays each overlay page over a page as that page is shown, its /Rotate applied.
+    /// </param>
+    public async Task<bool> OverlayAsync(
+        string inputPath, string overlayPath, string toPages, string fromPages, string outputPath, IEnumerable<string> options,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (!IsPageRange(toPages))
+            throw new ArgumentException($"Not a list of pages: {toPages}", nameof(toPages));
+        if (!IsPageRange(fromPages))
+            throw new ArgumentException($"Not a list of pages: {fromPages}", nameof(fromPages));
+
+        string[] arguments = [KeepStreamsAsTheyAre, .. options];
+        string[] lines =
+        [
+            inputPath,
+            OverlayOption,
+            overlayPath,
+            ToOption + toPages,
+            FromOption + fromPages,
+            EndOfPages,
+            outputPath,
+        ];
+        var run = await RunCheckedAsync(arguments, [inputPath, overlayPath], lines, outputPath, ct).ConfigureAwait(false);
+        RequireOutput(run, outputPath);
+        return Repaired(run);
+    }
+
+    /// <summary>
     /// Whether <paramref name="text"/> is a list of pages as <see cref="SelectPagesAsync"/> takes it: numbers from 1 and
     /// ranges <c>a-b</c>, separated by commas, without spaces. Nothing else reaches qpdf's <c>@-</c> in place of a path.
     /// </summary>
@@ -422,15 +458,23 @@ public sealed partial class Qpdf
     internal const string PageNumberInPathMessage =
         "The path of this PDF has \"%d\" in a folder name, which Flevert's PDF tool reads as a page number: rename that folder or move the PDF, and try again.";
 
-    // Ends the list of files after --pages. Not a path: it goes through @- as it is.
+    // Ends the list of files after --pages or --overlay. Not a path: it goes through @- as it is.
     private const string EndOfPages = "--";
 
     // --pages, and "." for the primary input after it (SelectPagesAsync): on @-, since the input must come before them.
     private const string PagesOption = "--pages";
     private const string PrimaryInput = ".";
 
+    private const string OverlayOption = "--overlay";
+    private const string ToOption = "--to=";
+    private const string FromOption = "--from=";
+
     // A line of @- that is not a path: given as it is.
-    private static bool IsLiteralLine(string line) => line is EndOfPages or PagesOption or PrimaryInput || IsPageRange(line);
+    private static bool IsLiteralLine(string line) =>
+        line is EndOfPages or PagesOption or PrimaryInput or OverlayOption
+        || (line.StartsWith(ToOption, StringComparison.Ordinal) && IsPageRange(line[ToOption.Length..]))
+        || (line.StartsWith(FromOption, StringComparison.Ordinal) && IsPageRange(line[FromOption.Length..]))
+        || IsPageRange(line);
 
     // qpdf's exit code 3: it wrote the output, and warned about the input, which it read by repairing what it could (a
     // damaged cross-reference table, say).

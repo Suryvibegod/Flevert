@@ -48,16 +48,16 @@ public sealed class PdfMenuTests
         Assert.Equal(@"""C:\Program Files\Flevert\icons\toolbox.ico"",0", _registry.GetValue(entry, "Icon"));
 
         Assert.Equal(
-            ["Remove blank pages", "Add page numbers", "Print layout", "Fit pages to A4", "Lock filled forms", "Split by size", "Convert to PNG images", "Extract images"],
+            ["Remove blank pages", "Add page numbers", "Print layout", "Fit pages to A4", "Lock filled forms", "Split by size", "Convert to PNG images", "Extract images", "Make searchable (OCR)"],
             Labels(@"Flevert.Menu.pdf.tools\shell"));
         Assert.Equal(
-            ["pdf.remove-blank-pages", "pdf.page-numbers", "pdf.fit-a4", "pdf.flatten", "pdf.to-png", "pdf.extract-images"],
+            ["pdf.remove-blank-pages", "pdf.page-numbers", "pdf.fit-a4", "pdf.flatten", "pdf.to-png", "pdf.extract-images", "pdf.make-searchable"],
             Commands(@"Flevert.Menu.pdf.tools\shell"));
         Assert.Equal(["2 pages per sheet", "4 pages per sheet"], Labels(@"Flevert.Menu.pdf.tools\Print layout\shell"));
         Assert.Equal(["pdf.n-up-2", "pdf.n-up-4"], Commands(@"Flevert.Menu.pdf.tools\Print layout\shell"));
         Assert.Equal(["Under 10 MB", "Under 25 MB"], Labels(@"Flevert.Menu.pdf.tools\Split by size\shell"));
         Assert.Equal(["pdf.split-10mb", "pdf.split-25mb"], Commands(@"Flevert.Menu.pdf.tools\Split by size\shell"));
-        Assert.Equal(12, CountEntries(@"Flevert.Menu.pdf.tools\shell"));
+        Assert.Equal(13, CountEntries(@"Flevert.Menu.pdf.tools\shell"));
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public sealed class PdfMenuTests
     {
         // ECF_SEPARATORBEFORE; separators do not count toward Explorer's 16 entries (measured with MenuProbe).
         Assert.Equal(["Add watermark…"], SeparatedBefore("Flevert.Menu.pdf"));
-        Assert.Equal(["Print layout", "Convert to PNG images"], SeparatedBefore("Flevert.Menu.pdf.tools"));
+        Assert.Equal(["Print layout", "Convert to PNG images", "Make searchable (OCR)"], SeparatedBefore("Flevert.Menu.pdf.tools"));
         Assert.Equal(["Remove hidden info"], SeparatedBefore("Flevert.Menu.jpg"));
         Assert.Equal(["Remove hidden info"], SeparatedBefore("Flevert.Menu.heic"));
     }
@@ -172,8 +172,8 @@ public sealed class PdfMenuTests
     [Fact]
     public void A_jpg_converts_to_every_other_format_with_webp_spelled_as_people_write_it_and_heic_has_no_gif()
     {
-        Assert.Equal(["PNG", "WebP", "AVIF", "GIF", "BMP", "TIFF"], Labels(@"Flevert.Menu.jpg\Convert to\shell"));
-        Assert.Equal(["JPG", "PNG", "WebP", "AVIF", "BMP", "TIFF"], Labels(@"Flevert.Menu.heic\Convert to\shell"));
+        Assert.Equal(["PNG", "WebP", "AVIF", "GIF", "TIFF", "Text"], Labels(@"Flevert.Menu.jpg\Convert to\shell"));
+        Assert.Equal(["JPG", "PNG", "WebP", "AVIF", "TIFF", "Text"], Labels(@"Flevert.Menu.heic\Convert to\shell"));
         Assert.Equal(16, CountEntries(@"Flevert.Menu.jpg\shell"));
         Assert.Equal(16, CountEntries(@"Flevert.Menu.heic\shell"));
     }

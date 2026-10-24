@@ -1,8 +1,8 @@
 name: Release
 
-# Push a tag such as v0.1.0 (matching <Version> in Directory.Build.props) on a commit of main. The installer is built
-# and tested with read-only rights, a separate job attests its build provenance, and another attaches it to a draft
-# release for a maintainer to publish.
+# Push a tag such as v0.1.0 (matching <Version> in Directory.Build.props) on a commit of main. The Windows installer and
+# the Linux tarball are built and tested with read-only rights, separate jobs attest their build provenance, and a last
+# job completes SHA256SUMS.txt and attaches everything to a draft release for a maintainer to publish.
 on:
   push:
     tags: ['v*']
@@ -83,6 +83,9 @@ jobs:
       - name: Test media
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: dotnet test tests/Flevert.Media.Tests -c Release --no-build
+      - name: Test OCR
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/Flevert.Ocr.Tests -c Release --no-build
       - name: No known-vulnerable packages
         shell: pwsh
         run: |
@@ -112,7 +115,9 @@ jobs:
         run: |
           $setup = Get-Item "artifacts/installer/Flevert-Setup-$($env:TAG.TrimStart('v')).exe" -ErrorAction Stop
           $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-          $hash + "  " + $setup.Name | Out-File artifacts/installer/SHA256SUMS.txt -Encoding ascii
+          # With LF, not Out-File's CRLF: the release job adds the other assets' lines from Linux, and sha256sum -c
+          # reads a CR as part of the file name.
+          [IO.File]::WriteAllText((Join-Path $setup.DirectoryName 'SHA256SUMS.txt'), "$hash  $($setup.Name)`n", [Text.Encoding]::ASCII)
           "sha256=$hash" | Out-File $env:GITHUB_OUTPUT -Append -Encoding ascii
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -120,6 +125,85 @@ jobs:
           path: |
             artifacts/installer/Flevert-Setup-*.exe
             artifacts/installer/SHA256SUMS.txt
+          if-no-files-found: error
+
+  # The Linux version (docs/specs/linux.md, ADR-0010): the tag checks of the build job, then the steps of the
+  # build-and-test-linux job in ci.yml on the same runner image, which pack the tarball with scripts/build-linux.sh.
+  build-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    outputs:
+      # The tarball's hash as this job wrote it: the release job checks the file it uploads against it.
+      tarball-sha256: ${{ steps.checksum.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The whole history, so the tag can be checked against main.
+          fetch-depth: 0
+      - name: Check the tag names the version being built
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "Tag $TAG is not vMAJOR.MINOR.PATCH; delete it and tag again."; exit 1; fi
+          # Read as scripts/build-linux.sh reads it, so the tarball is named after the version checked here.
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
+          if [ "${TAG#v}" != "$version" ]; then echo "Tag $TAG does not match <Version>$version</Version> in Directory.Build.props; fix one of them and tag again."; exit 1; fi
+      - name: Check the tag is on main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "$TAG is not on main; releases are built only from reviewed commits."; exit 1; }
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          # The newest .NET 10 patch: the tarball is self-contained and ships its runtime.
+          dotnet-version: 10.0.x
+      - name: Show the SDK and runtime that will ship
+        run: dotnet --info
+      # What the tests and install.sh need, as in ci.yml: fontconfig and a font with Vietnamese letters, GLib's Python
+      # bindings, zenity and gdbus.
+      - name: System packages
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fontconfig fonts-liberation2 python3-gi python3-nautilus zenity libglib2.0-bin
+      # pdfium and qpdf for Linux, each checked against the SHA256 in scripts/deps-linux.json before it is unpacked.
+      - name: Fetch third-party tools
+        run: python3 -I scripts/fetch-deps-linux.py
+      - name: Build
+        id: build
+        run: dotnet build Flevert.sln -c Release
+      # One project at a time, as in ci.yml. The Linux version has no video, audio or OCR, so no Media or OCR tests; the
+      # vulnerable-package check of the build job covers the same solution, Flevert.Linux included.
+      - name: Test core
+        run: dotnet test tests/Flevert.Core.Tests -c Release --no-build
+      - name: Test images
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/Flevert.Image.Tests -c Release --no-build
+      - name: Test PDF
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/Flevert.Pdf.Tests -c Release --no-build
+      - name: Python tests
+        if: ${{ !cancelled() }}
+        run: |
+          python3 -I -m unittest discover -s scripts -p 'test_*.py'
+          python3 -I -m unittest discover -s src/Flevert.Linux/nautilus -p 'test_*.py'
+          python3 -I -m unittest discover -s packaging/linux -p 'test_*.py'
+      # Publishes the self-contained flevert, runs it once per engine, writes the notices (failing on a file without its
+      # licence) and packs artifacts/linux/Flevert-<version>-linux-x64.tar.gz.
+      - name: Package
+        run: scripts/build-linux.sh
+      - name: Install, update, convert and uninstall the packaged app in a temporary profile
+        run: bash scripts/test-linux-package.sh
+      - name: No build machine paths in what ships
+        shell: pwsh
+        run: ./scripts/test-build-paths.ps1 -Folder artifacts/linux
+      - name: Write the checksum
+        id: checksum
+        run: |
+          tarball="artifacts/linux/Flevert-${TAG#v}-linux-x64.tar.gz"
+          hash=$(sha256sum "$tarball" | cut -d' ' -f1)
+          echo "$hash  ${tarball##*/}"
+          echo "sha256=$hash" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux
+          # The tarball alone: its hash goes into SHA256SUMS.txt in the release job, not the .sha256 beside it.
+          path: artifacts/linux/Flevert-*-linux-x64.tar.gz
           if-no-files-found: error
 
   attest:
@@ -140,6 +224,23 @@ jobs:
         with:
           subject-path: installer/Flevert-Setup-*.exe
 
+  attest-linux:
+    # As the attest job, for the tarball of the build-linux job.
+    needs: build-linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux
+          path: linux
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: linux/Flevert-*-linux-x64.tar.gz
+
   ffmpeg-source:
     # The complete corresponding source of the bundled ffmpeg (GPL v3, section 6), attached beside the installer that
     # carries it; the job also stops the release if installer/notices/ffmpeg lacks a licence the build's libraries carry.
@@ -150,9 +251,9 @@ jobs:
       contents: read
 
   release:
-    needs: [build, attest, ffmpeg-source]
+    needs: [build, build-linux, attest, attest-linux, ffmpeg-source]
     runs-on: ubuntu-latest
-    # Downloads the source archive (a gigabyte or more) and uploads it again with the setup.
+    # Downloads the source archive (a gigabyte or more) and uploads it again with the setup and the tarball.
     timeout-minutes: 30
     permissions:
       contents: write
@@ -165,6 +266,10 @@ jobs:
         with:
           name: installer
           path: installer
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux
+          path: linux
       # In a folder of its own: the ffmpeg-source job runs third-party build scripts, and nothing it wrote may land beside
       # the setup or replace it (security review, 2026-10-21).
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -174,12 +279,17 @@ jobs:
       - name: Check what will be attached
         env:
           SETUP_SHA256: ${{ needs.build.outputs.setup-sha256 }}
+          TARBALL_SHA256: ${{ needs.build-linux.outputs.tarball-sha256 }}
         run: |
           version="${TAG#v}"
           setup="installer/Flevert-Setup-$version.exe"
+          tarball="linux/Flevert-$version-linux-x64.tar.gz"
           # The setup the build job hashed (and the attest job attested), and only it with its checksums.
           [ "$(ls -A installer | LC_ALL=C sort | paste -sd ' ')" = "Flevert-Setup-$version.exe SHA256SUMS.txt" ] || { ls -la installer; echo "Unexpected files in the installer artifact"; exit 1; }
           [ -n "$SETUP_SHA256" ] && [ "$(sha256sum "$setup" | cut -d' ' -f1)" = "$SETUP_SHA256" ] || { echo "$setup is not the file the build job wrote"; exit 1; }
+          # The same for the tarball the build-linux job hashed (and the attest-linux job attested), alone in its artifact.
+          [ "$(ls -A linux | paste -sd ' ')" = "Flevert-$version-linux-x64.tar.gz" ] || { ls -la linux; echo "Unexpected files in the linux artifact"; exit 1; }
+          [ -n "$TARBALL_SHA256" ] && [ "$(sha256sum "$tarball" | cut -d' ' -f1)" = "$TARBALL_SHA256" ] || { echo "$tarball is not the file the build-linux job wrote"; exit 1; }
           # Only source parts, as regular files.
           for file in source/* source/.[!.]*; do
             [ -e "$file" ] || continue
@@ -190,7 +300,8 @@ jobs:
           done
           ls source/ffmpeg-source-*.tar > /dev/null
       - name: Write the release notes
-        # This version's CHANGELOG section, then how to check the download before "Run anyway" (unsigned build).
+        # This version's CHANGELOG section, then how to check the download before "Run anyway" (unsigned build) or before
+        # unpacking the tarball.
         run: |
           version="${TAG#v}"
           awk -v v="$version" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > notes.md
@@ -208,11 +319,24 @@ jobs:
              gh attestation verify Flevert-Setup-$version.exe --repo $GITHUB_REPOSITORY --signer-workflow $GITHUB_REPOSITORY/.github/workflows/release.yml --source-ref refs/tags/$TAG --source-digest $GITHUB_SHA --deny-self-hosted-runners
              \`\`\`
 
+          On Linux, check \`Flevert-$version-linux-x64.tar.gz\` the same way before you unpack it:
+
+          1. In the folder you downloaded it to, with \`SHA256SUMS.txt\` beside it: \`sha256sum -c --ignore-missing SHA256SUMS.txt\` must print \`Flevert-$version-linux-x64.tar.gz: OK\`.
+          2. With the GitHub CLI:
+
+             \`\`\`
+             gh attestation verify Flevert-$version-linux-x64.tar.gz --repo $GITHUB_REPOSITORY --signer-workflow $GITHUB_REPOSITORY/.github/workflows/release.yml --source-ref refs/tags/$TAG --source-digest $GITHUB_SHA --deny-self-hosted-runners
+             \`\`\`
+
           ## Source of the bundled ffmpeg
 
           Flevert runs ffmpeg, which is free software under the GNU GPL version 3, as a separate program. The $(ls source/ffmpeg-source-*.tar | wc -l) files \`ffmpeg-source-*.tar\` below are its complete corresponding source: FFmpeg, every library built into it, and the scripts that built it. Extract them all into one folder; the README.txt in each says what each holds.
           EOF
           cat notes.md
+      - name: Add the Linux tarball to the checksums
+        # After the setup's line, which the build job wrote. Only this job writes to the file it attaches, after both
+        # builds have finished, so nothing races on it.
+        run: (cd linux && sha256sum "Flevert-${TAG#v}-linux-x64.tar.gz") >> installer/SHA256SUMS.txt
       - name: Add the source archive to the checksums
         # Built by third-party scripts in the ffmpeg-source job: their hashes beside the setup's lets anyone check the copy
         # they downloaded is one this run attached.
@@ -221,4 +345,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$TAG" "installer/Flevert-Setup-${TAG#v}.exe" installer/SHA256SUMS.txt source/ffmpeg-source-*.tar --draft --notes-file notes.md --title "Flevert $TAG"
+        run: gh release create "$TAG" "installer/Flevert-Setup-${TAG#v}.exe" "linux/Flevert-${TAG#v}-linux-x64.tar.gz" installer/SHA256SUMS.txt source/ffmpeg-source-*.tar --draft --notes-file notes.md --title "Flevert $TAG"

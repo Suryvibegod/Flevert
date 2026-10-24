@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- As Flevert.Core, Image and Pdf, which call it: the build host must not make every API Windows-only. -->
+    <GenerateSupportedOSPlatformAttribute>false</GenerateSupportedOSPlatformAttribute>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Fetched by scripts/fetch-deps.ps1, pinned by SHA256 (docs/specs/ocr.md); never committed. -->
+    <TesseractDir>$(MSBuildThisFileDirectory)..\..\deps\tesseract\</TesseractDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Flevert.Core\Flevert.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flevert.Pdf" />
+    <InternalsVisibleTo Include="Flevert.Image" />
+    <InternalsVisibleTo Include="Flevert.Image.Tests" />
+    <InternalsVisibleTo Include="Flevert.Ocr.Tests" />
+    <InternalsVisibleTo Include="Flevert.Pdf.Tests" />
+  </ItemGroup>
+
+  <!-- tesseract.exe and tessdata go to a folder of their own next to every assembly that references this one (flevert.exe
+       and the tests), so they never mix with Flevert's files (docs/specs/ocr.md). Their licences go into
+       THIRD-PARTY-NOTICES.txt, not beside them. -->
+  <ItemGroup Condition="Exists('$(TesseractDir)tesseract.exe')">
+    <None Include="$(TesseractDir)**\*" Exclude="$(TesseractDir)licenses\**" Link="tesseract\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
+  <!-- Fail early and say how to fix it, rather than build something that fails at run time. On Linux, where OCR is not
+       offered yet, it is compiled only, so it needs no tesseract. -->
+  <Target Name="RequireTesseract" BeforeTargets="BeforeBuild" Condition="'$(OS)' == 'Windows_NT' And !Exists('$(TesseractDir)tesseract.exe')">
+    <Error Text="deps\tesseract\tesseract.exe is missing. Run: powershell -ExecutionPolicy Bypass -File scripts\fetch-deps.ps1" />
+  </Target>
+
+</Project>

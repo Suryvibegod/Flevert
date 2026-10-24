@@ -20,6 +20,9 @@ namespace Flevert.Pdf;
 /// <item>extract images: once every page is looked at, <c>images &lt;count&gt;</c>, then for each image
 /// <c>extract &lt;i&gt; &lt;width&gt; &lt;height&gt;</c> before it is written and <c>extracted &lt;i&gt; jpg|png</c>
 /// after.</item>
+/// <item>scanned pages (OCR): <c>checked &lt;n&gt;</c> once page n's text is read, for every page before the first
+/// <c>page</c> line, then <c>ocr &lt;n&gt;</c> before <c>wrote &lt;n&gt;</c> when page n is a scan and its picture is
+/// written.</item>
 /// </list>
 /// A PDF the tool has nothing to do for ends with <c>error Skipped &lt;message&gt;</c>.
 /// </summary>
@@ -775,6 +778,89 @@ internal static class PdfToolsWorker
         {
             using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             stream.Write(data);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw new PdfRenderWorker.PageWriteException($"Could not write {Path.GetFileName(path)}: {e.Message}", e);
+        }
+    }
+
+    // ---- Make searchable (OCR) ---------------------------------------------------------------------------------------
+
+    public static void RenderOcrPages(PdfRenderRequest request, SafeFileHandle file, StreamWriter lines)
+    {
+        using var pdf = PdfDocument.Open(file, PdfLimits.Default);
+        var total = Start(pdf, lines);
+
+        // Which pages are scans first, by the test Convert to > Text makes of the same text: only their pictures are drawn,
+        // so only they count against the budget, and a long PDF of text with one blank page still fits. "checked <n>" once
+        // page n's text is read, which holds off the parent's watchdog through a long PDF.
+        var scanned = new bool[total];
+        long ocrPixels = 0;
+        for (var index = 0; index < total; index++)
+        {
+            if (PdfExtractText.IsScanned(PdfRenderWorker.PageText(pdf.GetText(index))))
+            {
+                scanned[index] = true;
+                var size = pdf.GetRenderSize(index, request.Dpi);
+                ocrPixels += (long)size.Width * size.Height;
+            }
+
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"checked {index + 1}"));
+        }
+
+        if (ocrPixels > 0 && PdfRenderBudget.CheckOcr(ocrPixels, PdfRenderBudget.FreeBytes(request.Folder)) is { } noRoom)
+            throw new PdfRenderWorker.PageWriteException(noRoom, null);
+
+        try
+        {
+            MagickSetup.EnsureInitialized();
+        }
+        catch (Exception e) when (e is InvalidOperationException or IOException or UnauthorizedAccessException or MagickException)
+        {
+            throw new PdfRenderWorker.SetupException($"Flevert could not set up its image encoder: {e.Message}", e);
+        }
+
+        byte[] pixels = [];
+        for (var index = 0; index < total; index++)
+        {
+            var page = index + 1;
+            var size = pdf.GetRenderSize(index, request.Dpi);
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"page {page} {size.Width} {size.Height}"));
+
+            if (scanned[index])
+            {
+                if (pixels.Length < size.Bytes)
+                {
+                    pixels = [];
+                    pixels = GC.AllocateUninitializedArray<byte>(checked((int)size.Bytes));
+                }
+
+                pdf.RenderInto(index, request.Dpi, pixels);
+                var imagePath = Path.Combine(request.Folder, $"page-{page}.png");
+                EncodeOcrPng(pixels.AsSpan(0, (int)size.Bytes), size, imagePath, PdfRenderWorker.Busy(lines, page));
+                lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"ocr {page}"));
+            }
+
+            lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"wrote {page}"));
+        }
+
+        lines.WriteLine(string.Create(CultureInfo.InvariantCulture, $"done {total}"));
+    }
+
+    private static void EncodeOcrPng(ReadOnlySpan<byte> bgra, PdfRenderSize size, string path, Action busy)
+    {
+        using var image = new MagickImage();
+        image.ReadPixels(bgra, new PixelReadSettings((uint)size.Width, (uint)size.Height, StorageType.Char, PixelMapping.BGRA));
+        image.Alpha(AlphaAction.Off);
+        image.Density = new Density(size.Dpi, size.Dpi, DensityUnit.PixelsPerInch);
+        image.ColorSpace = ColorSpace.Gray;
+        image.ColorType = ColorType.Grayscale;
+        image.Progress += (_, _) => busy();
+        try
+        {
+            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            image.Write(stream, MagickFormat.Png);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

@@ -233,7 +233,7 @@ Người dùng: PDF scan 20 trang 25 MB, cần gửi qua Zalo/email.
 ### P3. Extract text (`pdf.extract-text`, menu `Convert > Text`)
 
 - pdfium trong worker (`FPDFText_LoadPage`, `FPDFText_GetText`), output `<tên>.txt`, UTF-8 **có BOM** (Notepad cũ đọc đúng tiếng Việt), xuống dòng `\r\n`, giữa các trang một ký tự form feed (`\f`). Thứ tự chữ là thứ tự pdfium trả về.
-- PDF không có chữ nào (scan) → skipped "This PDF has no text to extract: it may be a scanned document (Flevert does not recognise text in pictures)." Không làm OCR.
+- Từ v1.4.0 ([ocr.md](ocr.md)): trang có ≤ 10 ký tự (không kể khoảng trắng) được worker render PNG xám 300 DPI và tesseract đọc ở flevert.exe (worker không được sinh tiến trình); chữ OCR chỉ thay chữ sẵn có khi nhiều hơn. Tiến độ lượt đọc là "scanned page N of M". Không tìm được chữ nào, kể cả trong ảnh → skipped "This PDF has no text, and Flevert found none in the pictures of its pages."
 - Giới hạn: output tối đa 100 MB (quá → lỗi rõ, không ghi file dở); ngân sách thời gian của worker như render. Tiến độ "page N of M".
 
 ### P4. Báo khi PDF đã phải sửa (thay cho Repair; review DD-M7)
@@ -431,7 +431,7 @@ Mục tiêu: một người lần đầu chuột phải vào file thấy ngay vi
 ### Menu ảnh (≤ 16 mục; ví dụ `.jpg`)
 
 ```
-[icon] Convert to ▸      PNG · WebP · AVIF · GIF · BMP · TIFF (bỏ đích trùng nguồn)          (7)
+[icon] Convert to ▸      PNG · WebP · AVIF · GIF · TIFF · Text (bỏ đích trùng nguồn)         (7)
 [icon] Compress ▸        Light (best quality) · Balanced · Strong (smallest)
                          · Under 500 KB · Under 1 MB · Under 5 MB                             (7)
 ──────
@@ -478,6 +478,7 @@ Mục tiêu: một người lần đầu chuột phải vào file thấy ngay vi
   | Lock filled forms | `layer` |
   | Split by size | `cut` |
   | Extract images | `image_multiple` |
+  | Make searchable (OCR) | `scan_text` (v1.4.0, [ocr.md](ocr.md), "Icon") |
 
 ### Hộp thoại watermark (mở từ `Add watermark…`)
 
@@ -623,7 +624,7 @@ Người dùng chọn (2026-10-21): **một dòng `Flevert`** với 16 việc ha
 Flevert ▸  Compress ▸ (2) · Merge PDFs · Split into pages · Convert to ▸ (JPG images · Text) · Rotate ▸ (3)
            ── Add watermark… · Protect with password · Remove password · Remove hidden info          (16)
 Shift: Flevert: more PDF tools ▸  Remove blank pages · Add page numbers ── Print layout ▸ (2) · Fit pages to A4
-           · Lock filled forms · Split by size ▸ (2) ── Convert to PNG images · Extract images        (12)
+           · Lock filled forms · Split by size ▸ (2) ── Convert to PNG images · Extract images ── Make searchable (OCR) (13)
 ```
 
 - op-id không đổi; PNG chuyển từ `Convert to` sang menu Shift (`Convert to PNG images`); Add watermark… sang menu chính (nhóm bảo vệ và chia sẻ).

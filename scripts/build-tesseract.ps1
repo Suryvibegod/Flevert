@@ -10,7 +10,7 @@
   Fails on a vcpkg port or feature not on the allow-list below, on any import that is not a Microsoft system DLL or
   that is a network DLL, on a version mismatch, or when a smoke OCR run from a folder with Vietnamese letters does
   not read the text. Packages tesseract.exe, port licenses, and README.txt into a zip archive with SHA256 checksums.
-  ADR-0010.
+  ADR-0011.
 #>
 param(
     [string]$VcpkgCommit = '9eec002df1cd109f8f104cd966a763daf9751489',

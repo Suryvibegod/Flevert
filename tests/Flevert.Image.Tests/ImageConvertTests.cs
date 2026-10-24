@@ -29,7 +29,7 @@ public sealed class ImageConvertTests : IDisposable
         var op = ImageOperations.All.Single(op => op.Id == "image.to-gif");
 
         Assert.Equal(
-            ImageFile.ReadableExtensions.Where(e => e is not (".gif" or ".heic" or ".heif")).Order(StringComparer.Ordinal),
+            ImageFile.ReadableExtensions.Where(e => e is not (".gif" or ".heic" or ".heif" or ".bmp")).Order(StringComparer.Ordinal),
             op.Extensions.Order(StringComparer.Ordinal));
     }
 

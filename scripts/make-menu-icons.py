@@ -55,6 +55,7 @@ ICONS = [
     ("layer", "filled"),                   # Lock filled forms
     ("cut", "filled"),                     # Split by size
     ("image_multiple", "filled"),          # Extract images
+    ("scan_text", "filled"),               # Make searchable (OCR)
     # The video menu (docs/specs/media.md, "Menu"); Compress, Convert to and Remove hidden info share the icons above.
     ("music_note_2", "filled"),            # Extract audio
 ]
@@ -130,6 +131,11 @@ SOURCES = {
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_24_filled.svg": "095e0446adef1be2e40b0bb79548109398e45d478fbaed2e6d07e52c6cd8d717",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_32_filled.svg": "16d2103eef3fff8f99543d1b460e6aff7643c21dd012139345ad87da3bacbe86",
     "assets/Image Multiple/SVG/ic_fluent_image_multiple_48_filled.svg": "45ed2703baff95e741edfb73d9f39d16863a5061ae7fb1212248241610290ccb",
+    "assets/Scan Text/SVG/ic_fluent_scan_text_16_filled.svg": "d8cd065c94b166a23c6d7426f82ee2f9cdf2ae007c5096ad122a0a54512e18c3",
+    "assets/Scan Text/SVG/ic_fluent_scan_text_20_filled.svg": "059637204a8d0a595c295f3f4a7ca1d104c981d8e0b63fec09cac77a49c49002",
+    "assets/Scan Text/SVG/ic_fluent_scan_text_24_filled.svg": "6dd224cc9e261f2e0c3d39444f2133e8b3b6dc6c2247b4c1adba22c7e599a9c6",
+    "assets/Scan Text/SVG/ic_fluent_scan_text_32_filled.svg": "ea0740cdaf4074cc8a07675eca3ccd8d78e157fcecf0793e269cf645b4955e8b",
+    "assets/Scan Text/SVG/ic_fluent_scan_text_48_filled.svg": "dac80a1ab6e517a67fb8066fa48c380271663120e33071ac496959890e4e393a",
     "assets/Music Note 2/SVG/ic_fluent_music_note_2_16_filled.svg": "073c9dbc1a768e0281f7bbe2640c68e33c430c8ea3e357582703c9c7aa5cbd10",
     "assets/Music Note 2/SVG/ic_fluent_music_note_2_20_filled.svg": "9dd38c62dac5532a5ee8c0bf2b6d153c7511f768d8dac47a18b02cbe34471cef",
     "assets/Music Note 2/SVG/ic_fluent_music_note_2_24_filled.svg": "7bbe41434729ca7a48c7c06a2d9798356ec9efaeaef343f1357a8650bfdba461",

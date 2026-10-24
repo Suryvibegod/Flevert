@@ -112,6 +112,10 @@ public sealed class UnixFlevertTests : IDisposable
         Assert.Equal(0, flevert.ExitCode);
         Assert.Contains("image.to-jpg\tConvert to/JPG\t", output, StringComparison.Ordinal);
         Assert.Contains("pdf.merge\t", output, StringComparison.Ordinal);
+        // Tesseract is for Windows only so far: no text from pictures, no Make searchable; a PDF's own text stays.
+        Assert.DoesNotContain("image.to-text\t", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("pdf.make-searchable\t", output, StringComparison.Ordinal);
+        Assert.Contains("pdf.extract-text\t", output, StringComparison.Ordinal);
     }
 
     private (int ExitCode, string Error) Run(string[] arguments, string? workingDirectory = null)

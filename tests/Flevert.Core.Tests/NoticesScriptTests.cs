@@ -196,6 +196,15 @@ public sealed class NoticesScriptTests : IDisposable
         Assert.True(ffmpeg.Length >= 2, "deps\\ffmpeg is incomplete: run scripts\\fetch-deps.ps1");
         foreach (var file in ffmpeg)
             Write(Path.Combine(_publish, "ffmpeg", Path.GetFileName(file)), "binary");
+        // Flevert.Ocr.csproj copies deps\tesseract into its tesseract folder, all but the licences.
+        var tesseract = Path.Combine(deps, "tesseract");
+        var ocr = Directory.GetFiles(tesseract, "*", SearchOption.AllDirectories)
+            .Select(file => Path.GetRelativePath(tesseract, file))
+            .Where(file => !file.StartsWith(@"licenses\", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.True(ocr.Contains("tesseract.exe"), "deps\\tesseract is incomplete: run scripts\\fetch-deps.ps1");
+        foreach (var file in ocr)
+            Write(Path.Combine(_publish, "tesseract", file), "binary");
         // And the menu icons the build copies from assets\menu into icons\ (assets\notices.json).
         foreach (var icon in Directory.GetFiles(Path.Combine(InstallerScriptTests.RepositoryRoot(), "assets", "menu"), "*.ico"))
             Write(Path.Combine(_publish, "icons", Path.GetFileName(icon)), "icon");

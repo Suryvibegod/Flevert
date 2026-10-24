@@ -41,7 +41,7 @@ public sealed class NautilusMenuTests : IDisposable
         var tree = Show("/home/u/IMG_0001.HEIC");
 
         var top = JsonNode.Parse(tree)!["Flevert"]!.AsArray();
-        Assert.True(JsonNode.DeepEquals(Menu("Convert to", "JPG", "PNG", "WebP", "AVIF", "BMP", "TIFF"), top[0]), tree);
+        Assert.True(JsonNode.DeepEquals(Menu("Convert to", "JPG", "PNG", "WebP", "AVIF", "TIFF"), top[0]), tree);
         Assert.Equal("Compress", ((JsonObject)top[1]!).Single().Key);
         Assert.Contains(top, entry => entry is JsonValue value && (string?)value == "Remove hidden info");
         Assert.Equal("Combine into PDF", (string?)top[^1]);
@@ -54,7 +54,9 @@ public sealed class NautilusMenuTests : IDisposable
         Skip.IfNot(File.Exists("/usr/bin/python3"), "no system Python");
         var flevert = _dir.File("flevert", "#!/bin/sh\n");
         File.SetUnixFileMode(flevert, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        var menu = _dir.File("menu.json", NautilusMenu.Build(MenuOperations.All, flevert, 1000));
+        // The operations Flevert.Linux installs: those that need tesseract are left out (Windows only so far).
+        var operations = MenuOperations.All.Where(op => !MenuOperations.NeedTesseract.Contains(op.Id));
+        var menu = _dir.File("menu.json", NautilusMenu.Build(operations, flevert, 1000));
         var extension = Path.Combine(Repository(), "src", "Flevert.Linux", "nautilus");
         var script = $$"""
             import json, sys

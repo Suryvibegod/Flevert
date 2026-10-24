@@ -2,7 +2,7 @@
 .SYNOPSIS
 End-to-end test of the installer on this machine: installs silently without admin, checks files, licences, menu and
 real conversions (a picture, PDF operations through the bundled qpdf and pdfium, pictures combined into a PDF, a sound
-through the bundled ffmpeg), installs
+through the bundled ffmpeg, text read from a picture and a scanned page through the bundled tesseract), installs
 over itself, uninstalls and checks that nothing Flevert wrote is left. Further scenarios cover the update-check
 choice, the uninstall safety net, a classic-menu key the user created, a refused install folder, /DIR, uninstalling
 while flevert.exe runs, an install folder that is a junction, one that already holds someone else's files, setup
@@ -41,8 +41,10 @@ $bundledFiles = @($bundled | ForEach-Object { $_.files } | Sort-Object -Unique)
 # Inno's log names an unpacked file without its folder, so the files of the ffmpeg folder are listed by name too.
 $conversionOnly = $bundledFiles + @($bundledFiles | ForEach-Object { Split-Path $_ -Leaf }) + 'openssl.cnf', 'Magick.Native-*.dll'
 
+$checks = 0
 function Assert([bool]$Condition, [string]$Message) {
-    if (-not $Condition) { throw "FAIL: $Message" }
+    if (-not $Condition) { throw "FAIL: $Message (after $script:checks checks passed)" }
+    $script:checks++
     Write-Host "  ok  $Message"
 }
 
@@ -104,6 +106,8 @@ function Uninstall {
 }
 
 function AssertClean {
+    # Named first so a failure says what was left: tesseract runs from its own folder (Flevert.iss, [Files]).
+    Assert (-not (Test-Path "$app\tesseract")) "no tesseract folder ($app\tesseract)"
     Assert (-not (Test-Path $app)) "no install folder ($app)"
     Assert (-not (Test-Path $appData)) "no app data ($appData)"
     Assert (-not (Test-Path $arpKey)) 'no entry in Installed apps'
@@ -218,6 +222,142 @@ function AssertConversions([string]$Folder) {
     Assert ("$codec" -eq 'mp3') "tone.mp3 holds MP3 sound ($codec)"
 }
 
+# The words WriteTextPicture prints, one line each, and the ones the recognised text must hold.
+$ocrLines = 'Flevert installer check', 'reads these printed words', 'from a picture and a scan'
+$ocrWords = 'Flevert', 'installer', 'printed', 'words', 'picture'
+
+# Black print on white at 200 DPI, large enough for tesseract to read every word: no picture is kept in the repository.
+function WriteTextPicture([string]$Path) {
+    $bitmap = [Drawing.Bitmap]::new(1700, 1100)
+    try {
+        $bitmap.SetResolution(200, 200)
+        $graphics = [Drawing.Graphics]::FromImage($bitmap)
+        $font = [Drawing.Font]::new('Arial', 64, [Drawing.FontStyle]::Regular, [Drawing.GraphicsUnit]::Pixel)
+        try {
+            $graphics.Clear([Drawing.Color]::White)
+            $graphics.TextRenderingHint = [Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+            $y = 200
+            foreach ($line in $ocrLines) { $graphics.DrawString($line, $font, [Drawing.Brushes]::Black, 150, $y); $y += 200 }
+        }
+        finally { $font.Dispose(); $graphics.Dispose() }
+        $bitmap.Save($Path, [Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally { $bitmap.Dispose() }
+}
+
+function AssertWords([string]$Path, [string]$Message) {
+    $text = if (Test-Path -LiteralPath $Path) { [IO.File]::ReadAllText($Path) } else { '' }
+    $missing = @($ocrWords | Where-Object { $text.IndexOf($_, [StringComparison]::OrdinalIgnoreCase) -lt 0 })
+    Assert ($missing.Count -eq 0) "$Message ($($ocrWords.Count - $missing.Count) of $($ocrWords.Count) words; missing: $($missing -join ', '))"
+}
+
+# The names of the licence files in the pinned tesseract package: from deps\ when fetch-deps.ps1 fetched this
+# manifest there, else from the pinned zip itself (the release check has no deps\), checked against its SHA256. Only the
+# names of its entries are read: nothing in it is unpacked or run.
+$tesseractLicences = $null
+function TesseractLicenceNames {
+    if ($null -ne $script:tesseractLicences) { return $script:tesseractLicences }
+    $manifestPath = Join-Path $root 'scripts\deps.json'
+    $stamp = Join-Path $root 'deps\.fetched'
+    $local = Join-Path $root 'deps\tesseract\licenses'
+    $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ((Test-Path -LiteralPath $stamp) -and (Test-Path -LiteralPath $local) -and
+        @(Get-Content -LiteralPath $stamp -TotalCount 1)[0] -eq $manifestHash) {
+        $script:tesseractLicences = @(Get-ChildItem -LiteralPath $local -File -Force | ForEach-Object { $_.Name })
+        return $script:tesseractLicences
+    }
+    $item = @(([IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json).items | Where-Object { $_.name -eq 'tesseract' })
+    if ($item.Count -ne 1) { throw 'scripts\deps.json has no single item named tesseract.' }
+    $zip = Join-Path $work 'tesseract-package.zip'
+    $ProgressPreference = 'SilentlyContinue' # the progress bar makes Invoke-WebRequest many times slower
+    Invoke-WebRequest $item[0].url -OutFile $zip -UseBasicParsing
+    $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $item[0].sha256) { throw "The tesseract package from $($item[0].url) is not the pinned one (SHA256 $actual)." }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+    try {
+        $prefix = "$($item[0].strip)licenses/"
+        $script:tesseractLicences = @($archive.Entries | Where-Object { $_.Name -and ($_.FullName -replace '\\', '/').StartsWith($prefix) } |
+            ForEach-Object { $_.Name })
+    }
+    finally { $archive.Dispose() }
+    return $script:tesseractLicences
+}
+
+# OCR with the installed app (docs/specs/ocr.md), in a new folder: {app}\tesseract holds what deps.json pins and the
+# notices hold every licence of it; then Convert to > Text on a picture, PDF to Text on a scanned page (a picture made
+# into a PDF, so it has no text), and Make searchable on that page.
+function AssertOcr([string]$Folder) {
+    $manifest = [IO.File]::ReadAllText((Join-Path $root 'scripts\deps.json')) | ConvertFrom-Json
+    # Exactly the files of the tesseract entries of "notices": anything else would ship without its licence.
+    $expected = @($bundledFiles | Where-Object { $_ -like 'tesseract\*' } | Sort-Object)
+    foreach ($file in 'tesseract.exe', 'tessdata\eng.traineddata', 'tessdata\vie.traineddata', 'tessdata\osd.traineddata', 'tessdata\pdf.ttf', 'tessdata\configs\pdf') {
+        Assert ($expected -contains "tesseract\$file" -and (Test-Path -LiteralPath "$app\tesseract\$file" -PathType Leaf)) "tesseract\$file is installed and listed in the notices"
+    }
+    $shipped = @(Get-ChildItem -LiteralPath "$app\tesseract" -Recurse -File -Force -ErrorAction SilentlyContinue |
+        ForEach-Object { $_.FullName.Substring($app.Length + 1) } | Sort-Object)
+    $missing = @($expected | Where-Object { $shipped -notcontains $_ })
+    Assert ($missing.Count -eq 0) "$app\tesseract holds every file deps.json lists ($($shipped.Count) of $($expected.Count); missing: $($missing -join ', '))"
+    $extra = @($shipped | Where-Object { $expected -notcontains $_ })
+    Assert ($extra.Count -eq 0) "$app\tesseract holds nothing else, no licences folder either ($($extra -join ', '))"
+
+    $package = @($manifest.items | Where-Object { $_.name -eq 'tesseract' })[0]
+    $pinnedTesseract = [regex]::Match($package.url, '/tesseract-(\d+\.\d+\.\d+)-').Groups[1].Value
+    $tesseractVersion = @(& "$app\tesseract\tesseract.exe" --version)[0]
+    Assert ($LASTEXITCODE -eq 0 -and "$tesseractVersion" -eq "tesseract $pinnedTesseract") "the installed tesseract is the pinned $pinnedTesseract ($tesseractVersion)"
+    # The first line names the folder; one language per line follows.
+    $languages = @(& "$app\tesseract\tesseract.exe" --list-langs --tessdata-dir "$app\tesseract\tessdata" | Select-Object -Skip 1 | Sort-Object) -join ','
+    Assert ($LASTEXITCODE -eq 0 -and $languages -eq 'eng,osd,vie') "the installed tesseract has the English, Vietnamese and orientation models ($languages)"
+
+    # write-notices.ps1 heads each licence "<title> - <file>"; every licence of the package must be there, under the
+    # title of each entry that names it.
+    $notices = Get-Content "$app\THIRD-PARTY-NOTICES.txt" -Raw -Encoding UTF8
+    $licences = @(TesseractLicenceNames)
+    $headings = @(foreach ($entry in @($manifest.notices | Where-Object { @($_.files | Where-Object { $_ -like 'tesseract\*' }).Count -gt 0 })) {
+            foreach ($pattern in $entry.licences) {
+                if (-not $pattern.StartsWith('deps/tesseract/licenses/')) { throw "The tesseract notice ""$($entry.title)"" names a licence outside deps/tesseract/licenses: $pattern" }
+                $leaf = $pattern.Substring('deps/tesseract/licenses/'.Length)
+                $matched = @($licences | Where-Object { $_ -like $leaf })
+                if ($matched.Count -eq 0) { "$($entry.title) - $leaf" } # no such licence in the package: reported missing
+                foreach ($name in $matched) { "$($entry.title) - $name" }
+            }
+        })
+    $unlisted = @($headings | Where-Object { -not $notices.Contains($_) })
+    Assert ($licences.Count -gt 0 -and $unlisted.Count -eq 0) "third-party notices hold every licence of the tesseract package ($($licences.Count) files, $($headings.Count) headings; missing: $($unlisted -join '; '))"
+
+    New-Item -ItemType Directory $Folder, "$Folder\scan" | Out-Null
+    WriteTextPicture "$Folder\picture.png"
+    $code = (RunFlevertHeadless @('run', 'image.to-text', "`"$Folder\picture.png`"")).ExitCode
+    Assert ($code -eq 0) "installed flevert.exe reads the text of a picture with the bundled tesseract (exit $code)"
+    AssertWords "$Folder\picture.txt" 'picture.txt holds the printed words'
+
+    Copy-Item "$Folder\picture.png" "$Folder\scan\page.png"
+    $code = (RunFlevertHeadless @('run', 'pdf.from-images', "`"$Folder\scan\page.png`"")).ExitCode
+    Assert ($code -eq 0 -and (Test-Path -LiteralPath "$Folder\scan\page.pdf")) "installed flevert.exe makes a one-page scan, a PDF of the picture (exit $code)"
+    $code = (RunFlevertHeadless @('run', 'pdf.extract-text', "`"$Folder\scan\page.pdf`"")).ExitCode
+    Assert ($code -eq 0) "installed flevert.exe reads the text of the scanned page with the bundled tesseract (exit $code)"
+    AssertWords "$Folder\scan\page.txt" 'page.txt holds the printed words'
+
+    $code = (RunFlevertHeadless @('run', 'pdf.make-searchable', "`"$Folder\scan\page.pdf`"")).ExitCode
+    $searchable = "$Folder\scan\page (searchable).pdf"
+    Assert ($code -eq 0 -and (Test-Path -LiteralPath $searchable)) "installed flevert.exe makes the scan searchable (exit $code)"
+    $pageCount = Qpdf @('--show-npages', $searchable)
+    Assert ("$pageCount" -eq '1') "the searchable PDF keeps its one page ($pageCount)"
+    # The page now holds text pdfium finds: Make searchable skips it, and PDF to Text reads that text instead of OCR.
+    $code = (RunFlevertHeadless @('run', 'pdf.make-searchable', "`"$searchable`"")).ExitCode
+    # RunLog: time, pid, operation, input, status, ms, output or error.
+    $skips = @(Get-ChildItem "$appData\logs" -Filter *.log | Get-Content -Encoding UTF8 | Where-Object {
+            $fields = $_ -split "`t"
+            $fields.Count -ge 7 -and $fields[2] -eq 'pdf.make-searchable' -and $fields[4] -eq 'skipped' -and
+            # The log names the input as flevert.exe resolved it, which may spell %TEMP% differently.
+            $fields[3].EndsWith("$(Split-Path $Folder -Leaf)\scan\page (searchable).pdf", [StringComparison]::OrdinalIgnoreCase) -and
+            $fields[6] -like '*already has text you can search*' })
+    Assert ($code -eq 0 -and $skips.Count -eq 1 -and -not (Test-Path -LiteralPath "$Folder\scan\page (searchable) (searchable).pdf")) "the searchable PDF has a text layer: Make searchable skips it (exit $code, $($skips.Count) log line)"
+    $code = (RunFlevertHeadless @('run', 'pdf.extract-text', "`"$searchable`"")).ExitCode
+    Assert ($code -eq 0) "installed flevert.exe reads the text layer of the searchable PDF (exit $code)"
+    AssertWords "$Folder\scan\page (searchable).txt" 'the text layer holds the printed words'
+}
+
 if (-not $Setup) {
     $Setup = Get-ChildItem (Join-Path $root 'artifacts\installer\Flevert-Setup-*.exe') -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
@@ -297,6 +437,7 @@ try {
     $menuCount = @(MenuKeys).Count
 
     AssertConversions "$work\fresh"
+    AssertOcr "$work\fresh-ocr"
     Assert (Test-Path "$appData\logs") 'the conversion wrote its log under app data'
     $unknown = @(Get-ChildItem $appData -Force | Where-Object { $appDataFolders -notcontains $_.Name } | ForEach-Object { $_.Name })
     Assert ($unknown.Count -eq 0) "app data holds only folders the uninstaller deletes ($($unknown -join ', '))"
@@ -460,11 +601,12 @@ try {
         Assert ($missing.Count -eq 0) "every file of a fresh install is there ($($missing -join ', '))"
         Write-Host "      the previous release had $($previousFiles.Count) files, this one $($upgraded.Count)"
         AssertConversions "$work\upgraded"
+        AssertOcr "$work\upgraded-ocr"
         Uninstall
         AssertClean
     }
 
-    Write-Host 'PASS'
+    Write-Host "PASS ($checks checks)"
 }
 finally {
     WaitForUninstaller

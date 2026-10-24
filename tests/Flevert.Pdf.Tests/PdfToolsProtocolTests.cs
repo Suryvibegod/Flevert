@@ -16,6 +16,7 @@ public sealed class PdfToolsProtocolTests
         { "Edit", new PdfEdit(PdfEditKind.PageNumbers) { Position = PdfPageNumberPosition.TopRight, Style = PdfPageNumberStyle.Words }.Encode() },
         { "Edit", new PdfEdit(PdfEditKind.FourPerSheet).Encode() },
         { "ExtractImages", "" },
+        { "OcrPages", "" },
     };
 
     [Theory]
@@ -50,6 +51,7 @@ public sealed class PdfToolsProtocolTests
     [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\01:2\0C:\\out\0png\0150\0\0")] // an old task with an eighth field
     [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\01:2\0C:\\out\0blank\0150\0something\0")] // options for a task that takes none
     [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\01:2\0C:\\out\0images\0150\0something\0")]
+    [InlineData("flevert-pdf-worker/3\0C:\\a.pdf\0C:\\a.pdf\01:2\0C:\\out\0ocr-pages\0150\0something\0")]
     public void A_damaged_request_of_a_new_task_is_refused(string text) =>
         Assert.Throws<FormatException>(() => PdfRenderRequest.Decode(Encoding.Unicode.GetBytes(TestPdf.Native(text))));
 
@@ -69,11 +71,23 @@ public sealed class PdfToolsProtocolTests
         Assert.Equal([2, 3], session.Blank);
     }
 
+    [Fact]
+    public void Ocr_pages_are_said_between_a_page_and_its_end()
+    {
+        using var session = Session(PdfWorkerTask.OcrPages, "pages 3", "page 1 10 10", "wrote 1", "page 2 10 10", "ocr 2", "wrote 2", "page 3 10 10", "ocr 3", "wrote 3", "done 3");
+
+        Assert.Equal([2, 3], session.OcrPages);
+    }
+
     [Theory]
     [InlineData("Pictures", "pages 2", "page 1 10 10", "blank 1")] // not this task's line
     [InlineData("BlankPages", "pages 2", "page 1 10 10", "wrote 1", "blank 1")] // after the page
     [InlineData("BlankPages", "pages 2", "page 1 10 10", "blank 2")] // another page
     [InlineData("BlankPages", "pages 2", "page 1 10 10", "blank 1", "blank 1")] // twice
+    [InlineData("Pictures", "pages 2", "page 1 10 10", "ocr 1")]
+    [InlineData("OcrPages", "pages 2", "page 1 10 10", "wrote 1", "ocr 1")]
+    [InlineData("OcrPages", "pages 2", "page 1 10 10", "ocr 2")]
+    [InlineData("OcrPages", "pages 2", "page 1 10 10", "ocr 1", "ocr 1")]
     [InlineData("Edit", "pages 1", "page 1 1 1", "saved 16")] // before every page is done
     [InlineData("Edit", "pages 1", "page 1 1 1", "wrote 1", "saved 16", "saved 16")] // not growing
     [InlineData("ExtractImages", "pages 1", "page 1 1 1", "images 1")] // before every page is seen

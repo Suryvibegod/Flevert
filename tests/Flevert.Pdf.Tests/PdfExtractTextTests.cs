@@ -1,5 +1,8 @@
+using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using Flevert.Core;
+using Flevert.Ocr;
 
 namespace Flevert.Pdf.Tests;
 
@@ -7,8 +10,12 @@ namespace Flevert.Pdf.Tests;
 [Collection(WorkerProcesses.Name)]
 public sealed class PdfExtractTextTests : IDisposable
 {
-    private const string NoTextMessage =
-        "This PDF has no text to extract: it may be a scanned document (Flevert does not recognise text in pictures).";
+    private const string NoTextMessage = "This PDF has no text, and Flevert found none in the pictures of its pages.";
+
+    // What Tesseract says when it fails on a picture (OcrException).
+    private const string TooSlowImageMessage = "Recognising text in this image took too long: it may be damaged, or made to stall OCR tools.";
+    private const string ToolFailedImageMessage =
+        "Flevert's OCR tool stopped on this image without finishing: the image may be damaged, or made to crash OCR tools.";
 
     private readonly TempDir _dir = new();
 
@@ -44,8 +51,50 @@ public sealed class PdfExtractTextTests : IDisposable
             string.Join(' ', text.Select(c => ((int)c).ToString("X4", System.Globalization.CultureInfo.InvariantCulture))));
     }
 
-    [Fact]
-    public async Task A_pdf_without_text_is_skipped_as_a_scan_and_leaves_nothing()
+    [WindowsFact]
+    public async Task A_vietnamese_scan_comes_out_as_the_text_tesseract_reads_page_by_page()
+    {
+        string[] pages = ["Cộng hòa xã hội chủ nghĩa Việt Nam\nĐộc lập - Tự do - Hạnh phúc", "Hợp đồng mua bán hàng hóa\nSố 12 năm 2026"];
+        var input = _dir.Combine("scan.pdf");
+        await TestOcr.WriteScan(input, pages);
+
+        var reports = new List<FileProgress>();
+
+        var output = await Op().RunAsync(input, new SyncProgress(reports.Add), CancellationToken.None);
+
+        // The worker counts the pages it reads, then the pages it draws for tesseract, then each page tesseract has read.
+        Assert.Equal([("page", 1, 2), ("page", 2, 2), ("page picture", 1, 2), ("page picture", 2, 2), ("scanned page", 1, 2), ("scanned page", 2, 2)],
+            reports.Select(r => (r.Unit, r.Position, r.Total)));
+        var bytes = await File.ReadAllBytesAsync(output);
+        Assert.Equal([0xEF, 0xBB, 0xBF], bytes[..3]);
+        var read = new UTF8Encoding(false).GetString(bytes, 3, bytes.Length - 3).Split('\f');
+        Assert.Equal(2, read.Length);
+        for (var i = 0; i < 2; i++)
+            Assert.True(TestOcr.Similarity(pages[i], read[i]) >= 0.95, $"Page {i + 1}: '{read[i]}'");
+        Assert.All(read, page => Assert.EndsWith("\r\n", page, StringComparison.Ordinal));
+        Assert.Equal(["scan.pdf", "scan.txt"], TestPdf.FileNames(_dir.Path));
+    }
+
+    [WindowsFact]
+    public async Task A_page_with_text_keeps_its_own_and_a_scanned_page_beside_it_gets_what_tesseract_reads()
+    {
+        var text = _dir.Combine("text.pdf");
+        TestTextPdf.Write(text, "Trang này đã có chữ thật");
+        var scan = _dir.Combine("scan.pdf");
+        await TestOcr.WriteScan(scan, "Hóa đơn bán hàng số 12345");
+        var input = _dir.Combine("mixed.pdf");
+        await Qpdf.NextToApp.MergeAsync([text, scan], input, CancellationToken.None);
+
+        var output = await Op().RunAsync(input, CancellationToken.None);
+
+        var read = (await File.ReadAllTextAsync(output)).Split('\f');
+        Assert.Equal(2, read.Length);
+        Assert.Equal("Trang này đã có chữ thật\r\n", read[0]);
+        Assert.True(TestOcr.Similarity("Hóa đơn bán hàng số 12345", read[1]) >= 0.95, read[1]);
+    }
+
+    [WindowsFact]
+    public async Task A_pdf_without_text_even_in_its_pictures_is_skipped_and_leaves_nothing()
     {
         var input = _dir.Combine("scan.pdf");
         TestPdf.WriteBlank(input, 3);
@@ -56,8 +105,8 @@ public sealed class PdfExtractTextTests : IDisposable
         Assert.Equal(["scan.pdf"], TestPdf.FileNames(_dir.Path));
     }
 
-    [Fact]
-    public async Task Through_the_runner_a_scan_is_skipped_not_failed()
+    [WindowsFact]
+    public async Task Through_the_runner_a_pdf_without_text_is_skipped_not_failed()
     {
         var input = _dir.Combine("scan.pdf");
         TestPdf.WriteBlank(input, 1);
@@ -68,6 +117,18 @@ public sealed class PdfExtractTextTests : IDisposable
         var result = Assert.Single(outcome.Results);
         Assert.True(result.Skipped);
         Assert.Equal(NoTextMessage, result.Error);
+    }
+
+    [LinuxFact]
+    public async Task On_linux_a_pdf_without_text_is_skipped_without_tesseract_as_before_ocr()
+    {
+        var input = _dir.Combine("scan.pdf");
+        TestPdf.WriteBlank(input, 3);
+
+        var ex = await Assert.ThrowsAsync<OperationSkippedException>(() => Op().RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(PdfRenderWorker.NoTextMessage, ex.Message);
+        Assert.Equal(["scan.pdf"], TestPdf.FileNames(_dir.Path));
     }
 
     [Fact]
@@ -85,7 +146,8 @@ public sealed class PdfExtractTextTests : IDisposable
     public async Task Reports_progress_once_per_page_in_order()
     {
         var input = _dir.Combine("three.pdf");
-        TestTextPdf.Write(input, "1", "2", "3");
+        // More than 10 characters a page, white space aside: none is read as a scan.
+        TestTextPdf.Write(input, "Trang số một của hồ sơ", "Trang số hai của hồ sơ", "Trang số ba của hồ sơ");
         var reports = new List<FileProgress>();
 
         await Op().RunAsync(input, new SyncProgress(reports.Add), CancellationToken.None);
@@ -147,6 +209,140 @@ public sealed class PdfExtractTextTests : IDisposable
     {
         Assert.Equal(written, PdfRenderWorker.PageText(pdfium));
     }
+
+    // v1.4.0 review R7: v1.3.0 wrote pdfium's text whatever the scans held; one page tesseract cannot read must not lose it.
+    [WindowsTheory]
+    [InlineData("timeout")]
+    [InlineData("no tesseract")]
+    [InlineData("no tessdata")]
+    public async Task A_scanned_page_tesseract_cannot_read_keeps_what_pdfium_has_and_a_note_names_it(string failure)
+    {
+        var input = _dir.Combine("mixed.pdf");
+        TestTextPdf.Write(input, "Trang này đã có chữ thật", "");
+        var op = Op(_ => throw failure switch
+        {
+            "timeout" => new OcrException(TooSlowImageMessage),
+            "no tesseract" => new FileNotFoundException("tesseract.exe is missing."),
+            _ => new DirectoryNotFoundException("tessdata folder is missing."),
+        });
+        using var logs = new TempDir();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(op, [input], null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        var read = (await File.ReadAllTextAsync(result.Output!)).Split('\f');
+        Assert.Equal(2, read.Length);
+        Assert.Equal("Trang này đã có chữ thật\r\n", read[0]);
+        Assert.Equal("", read[1].Trim());
+        Assert.StartsWith("The text of scanned page 2 could not be read.", result.Note, StringComparison.Ordinal);
+    }
+
+    [WindowsFact]
+    public async Task Only_the_scanned_pages_tesseract_cannot_read_are_named_and_the_others_get_its_text()
+    {
+        var input = _dir.Combine("mixed.pdf");
+        TestTextPdf.Write(input, "Trang có chữ thật", "", "", "");
+        var op = Op(page => page == 3 ? Task.FromResult("Chữ trong ảnh trang ba") : throw new OcrException(ToolFailedImageMessage));
+        using var logs = new TempDir();
+
+        var outcome = await new Runner(new RunLog(logs.Path)).RunAsync(op, [input], null, CancellationToken.None);
+
+        var result = Assert.Single(outcome.Results);
+        Assert.True(result.Succeeded, result.Error);
+        var read = (await File.ReadAllTextAsync(result.Output!)).Split('\f');
+        Assert.Equal(["Trang có chữ thật\r\n", "", "Chữ trong ảnh trang ba\r\n", ""], read.Select((page, i) => i is 1 or 3 ? page.Trim() : page));
+        Assert.Equal("The text of scanned pages 2, 4 could not be read. Flevert's OCR tool stopped on a page of this PDF without "
+            + "finishing: the page may be damaged, or made to crash OCR tools.", result.Note);
+    }
+
+    [WindowsFact]
+    public async Task A_pdf_without_text_whose_scans_tesseract_cannot_read_fails_with_the_error_for_a_pdf_and_leaves_nothing()
+    {
+        var input = _dir.Combine("scan.pdf");
+        TestPdf.WriteBlank(input, 2);
+        var op = Op(_ => throw new OcrException(TooSlowImageMessage));
+
+        var ex = await Assert.ThrowsAsync<OcrException>(() => op.RunAsync(input, CancellationToken.None));
+
+        Assert.Equal("Recognising text in a page of this PDF took too long: it may be damaged, or made to stall OCR tools.", ex.Message);
+        Assert.Equal(["scan.pdf"], TestPdf.FileNames(_dir.Path));
+    }
+
+    [WindowsFact]
+    public async Task A_pdf_without_text_and_without_tesseract_fails_saying_tesseract_is_missing()
+    {
+        var input = _dir.Combine("scan.pdf");
+        TestPdf.WriteBlank(input, 1);
+        var op = Op(_ => throw new FileNotFoundException("tesseract.exe is missing."));
+
+        var ex = await Assert.ThrowsAsync<FileNotFoundException>(() => op.RunAsync(input, CancellationToken.None));
+
+        Assert.Equal("tesseract.exe is missing.", ex.Message);
+        Assert.Equal(["scan.pdf"], TestPdf.FileNames(_dir.Path));
+    }
+
+    [WindowsFact]
+    public async Task Cancelling_while_tesseract_reads_cancels_rather_than_counting_the_page_as_unread()
+    {
+        var input = _dir.Combine("mixed.pdf");
+        TestTextPdf.Write(input, "Trang này đã có chữ thật", "");
+        var op = Op(_ => throw new OperationCanceledException());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => op.RunAsync(input, CancellationToken.None));
+
+        Assert.Equal(["mixed.pdf"], TestPdf.FileNames(_dir.Path));
+    }
+
+    // v1.4.0 review R16: drawing pages at 300 DPI takes a while; the bar must not sit at "page 2 of 2" meanwhile.
+    [WindowsFact]
+    public async Task The_pages_drawn_for_tesseract_are_counted_between_the_pages_read_and_the_scans_read()
+    {
+        var input = _dir.Combine("mixed.pdf");
+        TestTextPdf.Write(input, "Trang số một của hồ sơ", "");
+        var reports = new List<FileProgress>();
+
+        await Op(_ => Task.FromResult("Chữ của trang hai")).RunAsync(input, new SyncProgress(reports.Add), CancellationToken.None);
+
+        Assert.Equal([("page", 1, 2), ("page", 2, 2), ("page picture", 1, 2), ("page picture", 2, 2), ("scanned page", 1, 1)],
+            reports.Select(r => (r.Unit, r.Position, r.Total)));
+    }
+
+    // v1.4.0 review R12: deleting the temporary file and making it again let another account in a shared folder put its
+    // own file or link there in between.
+    [WindowsFact]
+    public async Task A_link_put_at_the_temporary_name_while_scans_are_read_is_replaced_never_written_through()
+    {
+        var input = _dir.Combine("mixed.pdf");
+        TestTextPdf.Write(input, "Trang này đã có chữ thật", "");
+        var victim = _dir.Combine("victim.txt");
+        await File.WriteAllTextAsync(victim, "the user's own file");
+
+        // While tesseract reads, another account swaps the worker's file for a hard link to one of the user's files (a
+        // symbolic link needs Developer Mode; a hard link needs nothing).
+        var output = await Op(async _ =>
+        {
+            var partial = Assert.Single(Directory.GetFiles(_dir.Path, "*.partial"));
+            File.Delete(partial);
+            Assert.True(CreateHardLinkW(partial, victim, 0), "could not create a hard link");
+            return await Task.FromResult("Chữ của trang hai");
+        }).RunAsync(input, CancellationToken.None);
+
+        Assert.Equal("the user's own file", await File.ReadAllTextAsync(victim));
+        Assert.Equal("Trang này đã có chữ thật\r\n\fChữ của trang hai\r\n", await File.ReadAllTextAsync(output));
+        Assert.Equal([0xEF, 0xBB, 0xBF], (await File.ReadAllBytesAsync(output))[..3]);
+        Assert.Empty(Directory.GetFiles(_dir.Path, "*.partial"));
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CreateHardLinkW(string link, string target, nint security);
+
+    // A PdfExtractText whose tesseract reads the scanned page numbered from 1 with readPage.
+    private static PdfExtractText Op(Func<int, Task<string>> readPage) => new(TestPdf.Worker)
+    {
+        ReadPicture = (picture, _) => readPage(int.Parse(Path.GetFileNameWithoutExtension(picture)["page-".Length..], CultureInfo.InvariantCulture)),
+    };
 
     private sealed class SyncProgress(Action<FileProgress> report) : IProgress<FileProgress>
     {

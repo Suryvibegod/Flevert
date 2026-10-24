@@ -23,6 +23,10 @@ internal static partial class PdfRenderBudget
     public const string TooLargeMessage =
         "This PDF is too large to convert to pictures: its pages together would be more than 5000 megapixels.";
 
+    /// <summary>The same limit for the pictures of the scanned pages tesseract reads (<see cref="CheckOcr"/>).</summary>
+    public const string TooManyScannedPagesMessage =
+        "This PDF has too many scanned pages to read: their pictures together would be more than 5000 megapixels.";
+
     /// <summary>What the disk is left with on top of the pictures, for the system and the folder's own bookkeeping.</summary>
     public const long MarginBytes = 64L << 20;
 
@@ -42,6 +46,21 @@ internal static partial class PdfRenderBudget
         var needed = EstimateBytes(pixels, format);
         return freeBytes is { } free && needed > free
             ? $"There is not enough free space for the pictures of this PDF: they need about {Describe(needed)}, and {Describe(free)} is free."
+            : null;
+    }
+
+    /// <summary>
+    /// As <see cref="Check"/>, for the grey PNGs of the scanned pages that tesseract reads (Make searchable, Convert to >
+    /// Text): <paramref name="pixels"/> counts those pages only, and the words say what they are for.
+    /// </summary>
+    /// <exception cref="PdfException"><see cref="PdfError.TooLarge"/> past <see cref="MaxTotalPixels"/>.</exception>
+    public static string? CheckOcr(long pixels, long? freeBytes)
+    {
+        if (pixels > MaxTotalPixels)
+            throw new PdfException(PdfError.TooLarge, TooManyScannedPagesMessage);
+        var needed = EstimateBytes(pixels, PdfPageImageFormat.Png);
+        return freeBytes is { } free && needed > free
+            ? $"There is not enough free space to read the scanned pages of this PDF: their pictures need about {Describe(needed)}, and {Describe(free)} is free."
             : null;
     }
 
