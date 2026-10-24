@@ -35,7 +35,7 @@ public sealed class TesseractTests(ITestOutputHelper output) : IDisposable
 
     // A Vietnamese user's profile (C:\Users\Dương\) holds %TEMP% and the per-user install folder, so tesseract.exe, its
     // tessdata and every page image Flevert hands it sit under a name the ANSI code page cannot spell. The binary
-    // reads its arguments and TESSDATA_PREFIX as UTF-8 only because its manifest sets activeCodePage (ADR-0010).
+    // reads its arguments and TESSDATA_PREFIX as UTF-8 only because its manifest sets activeCodePage (ADR-0011).
     [WindowsFact]
     public async Task Reads_image_and_tessdata_from_a_folder_with_Vietnamese_letters()
     {

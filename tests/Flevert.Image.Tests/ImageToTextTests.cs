@@ -21,8 +21,8 @@ public sealed class ImageToTextTests : IDisposable
         """;
     private readonly TempDir _dir = new();
 
-    // Not inside _dir: its name has Vietnamese letters, which tesseract cannot open (see
-    // Scratch_root_with_Vietnamese_letters_still_reads).
+    // Not inside _dir: the pictures tesseract reads are kept in a plain ASCII folder of their own (a folder with
+    // Vietnamese letters is Scratch_root_with_Vietnamese_letters_still_reads).
     private readonly string _scratch = Path.Combine(Path.GetTempPath(), "flevert-tests", $"ocr-scratch-{Guid.NewGuid():N}");
 
     // A page of 30 lines, as a scanned letter or invoice has: enough text for OSD to be confident about its orientation.
@@ -283,10 +283,10 @@ public sealed class ImageToTextTests : IDisposable
         Assert.Empty(Directory.EnumerateFileSystemEntries(scratch));
     }
 
-    // Product bug found by this test: tesseract.exe opens its input through the ANSI code page, so a scratch folder
-    // under a %TEMP% with letters outside it (a Windows account named "Nguyễn", "Đức") fails every OCR with "cannot read
-    // input file ... Invalid argument". Unskip once ImageToText/PdfMakeSearchable pass tesseract a path it can open.
-    [WindowsFact(Skip = "Product bug: tesseract cannot open a scratch path outside the ANSI code page (R9 test pass).")]
+    // A %TEMP% with letters outside the ANSI code page (a Windows account named "Nguyễn", "Đức"): the tesseract.exe first
+    // pinned for v1.4.0 failed every OCR there with "cannot read input file ... Invalid argument"; the build pinned now
+    // reads paths as UTF-8 (ADR-0011).
+    [WindowsFact]
     public async Task Scratch_root_with_Vietnamese_letters_still_reads()
     {
         var root = _dir.Combine("Tạm của Đức");

@@ -137,8 +137,9 @@ public sealed class ImageToText : IOperation
 
     /// <summary>
     /// Reads <paramref name="pngPath"/>, a grey PNG Flevert wrote at 300 DPI in a folder of its own, upright, and returns
-    /// the reading with how many degrees clockwise the picture was turned for it (0, 90, 180 or 270); the picture is left
-    /// turned as it was read.
+    /// the reading with how many degrees clockwise the picture was turned for it (0, 90, 180 or 270). Callers use only
+    /// the reading, never the PNG again: it is turned in place when OSD is sure of the turn, and otherwise left as it was,
+    /// whichever reading is kept.
     /// </summary>
     /// <param name="read">Reads a picture once.</param>
     /// <param name="readRated">Reads a picture once, with how sure tesseract was of the reading.</param>
@@ -148,7 +149,8 @@ public sealed class ImageToText : IOperation
     /// the right turn of pages in sans-serif fonts too, but less sure of it: five lines of Arial score 8-9, thirty 16-19, so
     /// such a page was read upside down. Unsure (from <see cref="UnsureOsdFloor"/>), the picture is read both as it is
     /// and turned, at once, and the better reading is kept (<see cref="TurnedReadsBetter"/>): one more reading, on those
-    /// pages only. An upright page stays as it is.
+    /// pages only. An upright page stays as it is. Tesseract failing on one of the two keeps the other; any other failure
+    /// stops the other reading.
     /// </para>
     /// <para>
     /// OSD that fails (crashes, runs out of memory or time) leaves the page as it is: the orientation is a refinement,
@@ -184,22 +186,42 @@ public sealed class ImageToText : IOperation
         }
 
         var turnedPath = Path.ChangeExtension(pngPath, null) + "-turned.png";
+        using var both = CancellationTokenSource.CreateLinkedTokenSource(ct);
         try
         {
             await TurnAsync(pngPath, turnedPath, osd.Rotate, ct).ConfigureAwait(false);
             // Both at once: through the gate, as any two readings.
-            var asIs = readRated(pngPath, ct);
-            var turned = readRated(turnedPath, ct);
-            await Task.WhenAll(asIs, turned).ConfigureAwait(false);
-            var (asIsReading, asIsQuality) = await asIs.ConfigureAwait(false);
-            var (turnedReading, turnedQuality) = await turned.ConfigureAwait(false);
+            var asIs = ReadOneWayAsync(pngPath);
+            var turned = ReadOneWayAsync(turnedPath);
+            await Task.WhenAll((Task)asIs, turned).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             ct.ThrowIfCancellationRequested();
 
-            if (!TurnedReadsBetter(asIsQuality, turnedQuality))
-                return new Upright<T>(0, asIsReading);
+            // A failure other than tesseract's (the disk, a bug) fails the page, as it would a single reading; the other
+            // reading, cancelled for it, ends in OperationCanceledException.
+            foreach (var reading in (Task[])[asIs, turned])
+            {
+                if (reading.IsFaulted && reading.Exception?.InnerException is not OcrException)
+                    await reading.ConfigureAwait(false);
+            }
 
-            File.Move(turnedPath, pngPath, overwrite: true);
-            return new Upright<T>(osd.Rotate, turnedReading);
+            foreach (var reading in (Task[])[asIs, turned])
+            {
+                if (reading.IsCanceled)
+                    await reading.ConfigureAwait(false);
+            }
+
+            // Tesseract failing on one copy (a crash, too slow, too large) leaves the other: the page as it is, as before
+            // the fallback read it, or the turned copy. Failing on both, the page fails as it would read as it is.
+            if (!turned.IsCompletedSuccessfully)
+                return new Upright<T>(0, (await asIs.ConfigureAwait(false)).Reading);
+            if (!asIs.IsCompletedSuccessfully)
+                return new Upright<T>(osd.Rotate, turned.Result.Reading);
+
+            var (asIsReading, asIsQuality) = asIs.Result;
+            var (turnedReading, turnedQuality) = turned.Result;
+            return TurnedReadsBetter(asIsQuality, turnedQuality)
+                ? new Upright<T>(osd.Rotate, turnedReading)
+                : new Upright<T>(0, asIsReading);
         }
         finally
         {
@@ -210,6 +232,20 @@ public sealed class ImageToText : IOperation
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 // Flevert's folder goes with it.
+            }
+        }
+
+        // One of the two readings; failing other than in tesseract, it stops the other.
+        async Task<(T Reading, ReadingQuality Quality)> ReadOneWayAsync(string picture)
+        {
+            try
+            {
+                return await readRated(picture, both.Token).ConfigureAwait(false);
+            }
+            catch (Exception e) when (e is not (OcrException or OperationCanceledException))
+            {
+                await both.CancelAsync().ConfigureAwait(false);
+                throw;
             }
         }
     }

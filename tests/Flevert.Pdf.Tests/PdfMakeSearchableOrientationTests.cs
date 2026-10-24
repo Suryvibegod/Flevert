@@ -22,7 +22,7 @@ public sealed class PdfMakeSearchableOrientationTests : IDisposable
 
     private readonly TempDir _dir = new();
 
-    // Not inside _dir: its name has Vietnamese letters, which tesseract cannot open yet.
+    // Not inside _dir: the pictures tesseract reads are kept in a plain ASCII folder of their own.
     private readonly string _scratch = Path.Combine(Path.GetTempPath(), "flevert-tests", $"ocr-scratch-{Guid.NewGuid():N}");
 
     public PdfMakeSearchableOrientationTests() => Directory.CreateDirectory(_scratch);

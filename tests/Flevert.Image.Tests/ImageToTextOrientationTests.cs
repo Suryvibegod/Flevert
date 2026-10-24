@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Globalization;
@@ -26,7 +27,7 @@ public sealed class ImageToTextOrientationTests : IDisposable
 
     private readonly TempDir _dir = new();
 
-    // Not inside _dir: its name has Vietnamese letters, which tesseract cannot open yet.
+    // Not inside _dir: the pictures tesseract reads are kept in a plain ASCII folder of their own.
     private readonly string _scratch = Path.Combine(Path.GetTempPath(), "flevert-tests", $"ocr-scratch-{Guid.NewGuid():N}");
 
     public ImageToTextOrientationTests() => Directory.CreateDirectory(_scratch);
@@ -112,8 +113,11 @@ public sealed class ImageToTextOrientationTests : IDisposable
         var upright = await ImageToText.ReadTextUprightAsync(Tesseract.NextToApp, page, CancellationToken.None);
 
         Assert.Equal(270, upright.Turned);
+        var similarity = Similarity(string.Join('\n', Lines), upright.Reading);
+        Assert.True(similarity >= 0.95, $"{similarity:P1}: '{upright.Reading.Trim()}'");
+        // The page is left as drawn (nothing reads it again), and the turned copy is gone.
         using var info = ImageFile.Ping(page);
-        Assert.Equal((2480u, 3508u), (info[0].Width, info[0].Height));
+        Assert.Equal((3508u, 2480u), (info[0].Width, info[0].Height));
         Assert.Equal("input.png", Path.GetFileName(Assert.Single(Directory.GetFiles(_scratch, "*.png"))));
     }
 
@@ -151,6 +155,140 @@ public sealed class ImageToTextOrientationTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => ImageToText.ReadTextUprightAsync(fake.Engine, page, cts.Token));
     }
+
+    // Before the fallback such a page was read once, as it is: a turned copy tesseract cannot read (a crash, too slow,
+    // too large) must not fail it.
+    [WindowsFact]
+    public async Task The_turned_reading_failing_keeps_the_page_as_it_is()
+    {
+        var page = Path.Combine(_scratch, "input.png");
+        WriteBlank(page, 40, 20);
+        var fake = new FakeTesseract(UnsureTurned)
+        {
+            Read = (turned, _) => Task.FromResult(turned ? Crash : null),
+        };
+
+        var upright = await ImageToText.ReadTextUprightAsync(fake.Engine, page, CancellationToken.None);
+
+        Assert.Equal(0, upright.Turned);
+        Assert.Equal("as is", upright.Reading.Trim());
+    }
+
+    [WindowsFact]
+    public async Task The_page_as_it_is_failing_keeps_the_turned_reading()
+    {
+        var page = Path.Combine(_scratch, "input.png");
+        WriteBlank(page, 40, 20);
+        var fake = new FakeTesseract(UnsureTurned)
+        {
+            Read = (turned, _) => Task.FromResult(turned ? null : Crash),
+        };
+
+        var upright = await ImageToText.ReadTextUprightAsync(fake.Engine, page, CancellationToken.None);
+
+        Assert.Equal(90, upright.Turned);
+        Assert.Equal("turned", upright.Reading.Trim());
+    }
+
+    [WindowsFact]
+    public async Task Both_readings_failing_gives_the_error_of_the_page_as_it_is()
+    {
+        var page = Path.Combine(_scratch, "input.png");
+        WriteBlank(page, 40, 20);
+        var fake = new FakeTesseract(UnsureTurned)
+        {
+            Read = (turned, _) => Task.FromResult<ExternalToolResult?>(turned ? Crash : TooMuchMemory),
+        };
+
+        var error = await Assert.ThrowsAsync<OcrException>(
+            () => ImageToText.ReadTextUprightAsync(fake.Engine, page, CancellationToken.None));
+
+        Assert.Equal(OcrException.NeedsTooMuchMemoryMessage, error.Message);
+    }
+
+    // Any other failure fails the page, as a single reading would, without waiting for the other reading to end.
+    [WindowsFact]
+    public async Task A_reading_failing_otherwise_stops_the_other()
+    {
+        var page = Path.Combine(_scratch, "input.png");
+        WriteBlank(page, 40, 20);
+        var turnedStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var turnedRunning = 0;
+        var turnedFinished = false;
+        var fake = new FakeTesseract(UnsureTurned)
+        {
+            Read = async (turned, ct) =>
+            {
+                if (!turned)
+                {
+                    // Fails once the turned reading runs; on a gate of one, that reading waits for this one, so not
+                    // for longer than a few seconds.
+                    await Task.WhenAny(turnedStarted.Task, Task.Delay(TimeSpan.FromSeconds(3), ct));
+                    throw new IOException("The disk is full.");
+                }
+
+                Interlocked.Increment(ref turnedRunning);
+                try
+                {
+                    turnedStarted.TrySetResult();
+                    await Task.Delay(TimeSpan.FromSeconds(20), ct);
+                    turnedFinished = true;
+                    return null;
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref turnedRunning);
+                }
+            },
+        };
+
+        var clock = Stopwatch.StartNew();
+        await Assert.ThrowsAsync<IOException>(() => ImageToText.ReadTextUprightAsync(fake.Engine, page, CancellationToken.None));
+
+        Assert.False(turnedFinished, $"The turned reading ran on for {clock.Elapsed}.");
+        Assert.Equal(0, Volatile.Read(ref turnedRunning));
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(15), $"Failed after {clock.Elapsed}.");
+    }
+
+    [WindowsFact]
+    public async Task Cancelling_while_both_readings_run_stops_both()
+    {
+        var page = Path.Combine(_scratch, "input.png");
+        WriteBlank(page, 40, 20);
+        using var cts = new CancellationTokenSource();
+        var running = 0;
+        var started = 0;
+        var fake = new FakeTesseract(UnsureTurned)
+        {
+            Read = async (_, ct) =>
+            {
+                Interlocked.Increment(ref running);
+                try
+                {
+                    // Cancelled once a reading runs; on a gate of one, the other waits for its turn and stops waiting.
+                    if (Interlocked.Increment(ref started) == 1)
+                        cts.CancelAfter(TimeSpan.FromMilliseconds(100));
+                    await Task.Delay(Timeout.Infinite, ct);
+                    return null;
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref running);
+                }
+            },
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => ImageToText.ReadTextUprightAsync(fake.Engine, page, cts.Token));
+
+        Assert.Equal(0, Volatile.Read(ref running));
+    }
+
+    private const string UnsureTurned = "Rotate: 90\nOrientation confidence: 8.00\n";
+
+    private static readonly ExternalToolResult Crash = new(-1073741819, "", "access violation", false, false);
+
+    private static readonly ExternalToolResult TooMuchMemory = new(1, "", "", false, false) { MemoryLimitExceeded = true };
 
     public static TheoryData<int, double, int, int, double, int, bool> Readings => new()
     {
@@ -222,12 +360,18 @@ public sealed class ImageToTextOrientationTests : IDisposable
 
         public Action? OnRead { get; init; }
 
+        /// <summary>
+        /// Runs first for each reading, told whether it reads the turned copy: the run tesseract's would end in, or null
+        /// to read as above. It may also throw, or wait for the reading to be cancelled.
+        /// </summary>
+        public Func<bool, CancellationToken, Task<ExternalToolResult?>>? Read { get; init; }
+
         public Tesseract Engine => new(Tesseract.NextToApp.ExecutablePath, Tesseract.NextToApp.TessDataPath, Run);
 
-        private Task<ExternalToolResult> Run(string path, IReadOnlyList<string> args, TimeSpan timeout, Action<string>? onLine, CancellationToken ct)
+        private async Task<ExternalToolResult> Run(string path, IReadOnlyList<string> args, TimeSpan timeout, Action<string>? onLine, CancellationToken ct)
         {
             if (args.Contains("osd"))
-                return Task.FromResult(new ExternalToolResult(0, osd, "", false, false));
+                return new ExternalToolResult(0, osd, "", false, false);
 
             Interlocked.Increment(ref _reads);
             OnRead?.Invoke();
@@ -235,9 +379,12 @@ public sealed class ImageToTextOrientationTests : IDisposable
             bool turned;
             using (var info = ImageFile.Ping(args[0]))
                 turned = info[0].Width < info[0].Height;
+            if (Read is not null && await Read(turned, ct) is { } run)
+                return run;
+
             var text = turned ? "turned" : "as is";
             if (args[1] == "stdout")
-                return Task.FromResult(new ExternalToolResult(0, text, "", false, false));
+                return new ExternalToolResult(0, text, "", false, false);
 
             var confidence = turned ? "95.5" : "55.5";
             File.WriteAllText(args[1] + ".txt", text);
@@ -248,7 +395,7 @@ public sealed class ImageToTextOrientationTests : IDisposable
                 5	1	1	1	1	1	2	2	30	8	{confidence}	{text}
 
                 """);
-            return Task.FromResult(new ExternalToolResult(0, "", "", false, false));
+            return new ExternalToolResult(0, "", "", false, false);
         }
     }
 
