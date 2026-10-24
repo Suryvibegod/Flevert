@@ -4,7 +4,8 @@
     <IsPackable>false</IsPackable>
     <!-- Sentence-style test names read as specifications. -->
     <NoWarn>$(NoWarn);CA1707</NoWarn>
-    <UseWindowsForms>true</UseWindowsForms>
+    <!-- System.Drawing for the pictures of text the OCR tests draw: Windows only, as OCR is. -->
+    <UseWindowsForms Condition="'$(OS)' == 'Windows_NT'">true</UseWindowsForms>
     <!-- ChildProcesses finds tesseract.exe children through LibraryImport. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
@@ -40,6 +41,14 @@
 
   <ItemGroup>
     <None Include="fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Windows only: Text from pictures runs tesseract, which Flevert bundles for Windows only so far, and its tests draw
+       with System.Drawing (GDI+). Not built on Linux (docs/specs/linux.md). -->
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+    <Compile Remove="ImageToTextTests.cs" />
+    <Compile Remove="ImageToTextLimitsTests.cs" />
+    <Compile Remove="ChildProcesses.cs" />
   </ItemGroup>
 
 </Project>
