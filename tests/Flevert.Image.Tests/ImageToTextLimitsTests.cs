@@ -113,7 +113,7 @@ public sealed class ImageToTextLimitsTests : IDisposable
             await File.WriteAllBytesAsync(page, bmp.ToByteArray(MagickFormat.Bmp));
         var tesseract = new FakeTesseract { Osd = () => Ok("Rotate: 90\nOrientation confidence: 30\n") };
 
-        await Assert.ThrowsAnyAsync<MagickException>(() => ImageToText.TurnUprightAsync(tesseract.Engine, page, CancellationToken.None));
+        await Assert.ThrowsAnyAsync<MagickException>(() => ImageToText.ReadTextUprightAsync(tesseract.Engine, page, CancellationToken.None));
     }
 
     [WindowsFact]
@@ -124,7 +124,7 @@ public sealed class ImageToTextLimitsTests : IDisposable
         WriteBlank(page, 40, 20);
         var tesseract = new FakeTesseract { Osd = () => Ok("Rotate: 90\nOrientation confidence: 30\n") };
 
-        var turned = await ImageToText.TurnUprightAsync(tesseract.Engine, page, CancellationToken.None);
+        var turned = (await ImageToText.ReadTextUprightAsync(tesseract.Engine, page, CancellationToken.None)).Turned;
 
         Assert.Equal(90, turned);
         using var info = ImageFile.Ping(page);
@@ -151,7 +151,7 @@ public sealed class ImageToTextLimitsTests : IDisposable
             },
         };
 
-        Assert.Equal(0, await ImageToText.TurnUprightAsync(tesseract.Engine, page, CancellationToken.None));
+        Assert.Equal(0, (await ImageToText.ReadTextUprightAsync(tesseract.Engine, page, CancellationToken.None)).Turned);
         Assert.Equal("hello", await ImageToText.ReadUprightAsync(tesseract.Engine, page, CancellationToken.None));
     }
 
@@ -171,7 +171,7 @@ public sealed class ImageToTextLimitsTests : IDisposable
             },
         };
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ImageToText.TurnUprightAsync(tesseract.Engine, page, cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ImageToText.ReadTextUprightAsync(tesseract.Engine, page, cts.Token));
     }
 
     private static void WriteBlank(string path, uint width, uint height)

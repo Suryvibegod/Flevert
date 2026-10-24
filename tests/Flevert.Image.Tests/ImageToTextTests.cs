@@ -150,9 +150,9 @@ public sealed class ImageToTextTests : IDisposable
     }
 
     // Tesseract reads a page turned 90 degrees clockwise without OSD, so that case alone would pass with OSD broken; at
-    // 180 and 270 degrees it reads garbage unless the page is turned upright first. OSD must be confident (>= 14): a
-    // page of 30 lines in Times New Roman scores 23-28 at every angle, where a short page (2 lines about 3) or the
-    // same page in Arial (11-18, often under 14 at 180 degrees) would not be turned at all.
+    // 180 and 270 degrees it reads garbage unless the page is turned upright first. A page of 30 lines in Times New Roman
+    // scores 23-28 at every angle, so OSD is sure (>= 14) and the page is turned on trust; pages it is unsure of (Arial,
+    // short pages) are in ImageToTextOrientationTests.
     [WindowsTheory]
     [InlineData(RotateFlipType.Rotate90FlipNone)]
     [InlineData(RotateFlipType.Rotate180FlipNone)]
