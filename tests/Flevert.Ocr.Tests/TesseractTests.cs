@@ -32,6 +32,38 @@ public sealed class TesseractTests(ITestOutputHelper output) : IDisposable
         Assert.True(sim2 >= 0.95, $"Expected similarity >= 0.95, got {sim2:P1} for text: '{result2.Trim()}'");
     }
 
+    // A Vietnamese user's profile (C:\Users\Dương\) holds %TEMP% and the per-user install folder, so tesseract.exe, its
+    // tessdata and every page image Flevert hands it sit under a name the ANSI code page cannot spell. The binary
+    // reads its arguments and TESSDATA_PREFIX as UTF-8 only because its manifest sets activeCodePage (ADR-0010).
+    [WindowsFact]
+    public async Task Reads_image_and_tessdata_from_a_folder_with_Vietnamese_letters()
+    {
+        var folder = _dir.Combine("Cộng hòa Dương");
+        CopyTree(Path.GetDirectoryName(Tesseract.NextToApp.ExecutablePath)!, folder);
+        var engine = new Tesseract(folder);
+
+        const string text = "Hóa đơn số 123";
+        var image = Path.Combine(folder, "ảnh trang 1.png");
+        TestHelpers.CreateTextImage(image, text, "Arial", fontSize: 24);
+
+        var result = await engine.ReadTextAsync(image, CancellationToken.None);
+        var similarity = TestHelpers.Similarity(text, result);
+        Assert.True(similarity >= 0.95, $"Expected similarity >= 0.95, got {similarity:P1} for text: '{result.Trim()}'");
+
+        var layer = Path.Combine(folder, "lớp chữ");
+        await engine.WriteTextLayerAsync(image, layer, CancellationToken.None);
+        Assert.True(File.Exists(layer + ".pdf"), $"Expected PDF file at {layer}.pdf");
+    }
+
+    private static void CopyTree(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.GetFiles(source))
+            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
+        foreach (var dir in Directory.GetDirectories(source))
+            CopyTree(dir, Path.Combine(destination, Path.GetFileName(dir)));
+    }
+
     [WindowsFact]
     public async Task Writes_text_layer_pdf_with_glyphless_font()
     {
