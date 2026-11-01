@@ -36,6 +36,7 @@
     <Compile Remove="BatchTests.cs" />
     <Compile Remove="BuildPathsScriptTests.cs" />
     <Compile Remove="CheckoutScriptTests.cs" />
+    <Compile Remove="ExternalToolEndTests.cs" />
     <Compile Remove="ExternalToolLineTests.cs" />
     <Compile Remove="ExternalToolTests.cs" />
     <Compile Remove="FetchDepsScriptTests.cs" />
