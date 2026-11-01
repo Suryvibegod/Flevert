@@ -280,6 +280,22 @@ public sealed class JoinRulesTests
     }
 
     [Fact]
+    public void A_gate_that_surveyed_as_its_leader_started_names_a_process_that_ended_before_any_sender_came()
+    {
+        // The followers are close to the leader on the chain, so admitting them never makes the gate look: without the
+        // survey, a process killed before the first idle window was never seen, and the join went ahead without its file.
+        var census = new List<Sighting> { Seen(1, 0.1, @"C:\1.jpg"), Seen(2, 0.2, @"C:\2.jpg") };
+        var gate = new JoinGate(P(9, 0), previousClose: null, () => census);
+        gate.Survey();
+        census.RemoveAt(1); // process 2 died
+
+        Assert.True(gate.Admits(P(1, 0.1)));
+        gate.Accept(P(1, 0.1));
+        Assert.False(gate.ExpectsMore());
+        Assert.Equal([new MissingFile(@"C:\2.jpg", StillRunning: false)], gate.Missing());
+    }
+
+    [Fact]
     public void A_gate_tells_a_process_still_starting_from_one_that_ended()
     {
         var census = new List<Sighting> { Seen(1, 0.1, @"C:\1.jpg"), Seen(2, 0.2, @"C:\2.jpg"), Seen(3, 0.3, @"C:\3.jpg") };

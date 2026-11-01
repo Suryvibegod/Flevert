@@ -66,6 +66,17 @@ internal sealed class JoinGate(ProcessStamp leader, DateTime? previousClose, Fun
         }
     }
 
+    /// <summary>
+    /// Looks at the processes running now; called as the leader starts. A process of the selection that ends before the
+    /// gate would otherwise have looked (at the first idle window, or at a sender far from the chain) is then known, and
+    /// named missing instead of silently left out of the output.
+    /// </summary>
+    public void Survey()
+    {
+        lock (_gate)
+            Look();
+    }
+
     public void Accept(ProcessStamp sender)
     {
         lock (_gate)
