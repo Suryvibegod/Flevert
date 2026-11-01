@@ -19,6 +19,10 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
 {
     private const string Ok = "ok";
     private const string Skipped = "skipped";
+
+    // Ok when the full run of PdfCompress finishes inside its budget, skipped when it runs out of it (see Cases).
+    private const string OkOrSkipped = "ok or skipped";
+
     private const string Password = "Hardening test 42";
     private static readonly TimeSpan Limit = TimeSpan.FromSeconds(10);
 
@@ -35,14 +39,18 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
         var encryption = nameof(PdfError.UnsupportedEncryption);
         var damaged = nameof(PdfError.DamagedPage);
         // Compress: a small PDF gets no smaller, and is skipped unless qpdf repaired it (cycle-self-reference, and the two
-        // without a trailer, which it writes without object streams: PdfCompress).
+        // without a trailer, which it writes without object streams: PdfCompress). The two single-Flate bombs (4 MB) sit on
+        // the edge of the full run's budget (PdfCompress.FullRunTimeoutFor, 14 s): qpdf takes 13 to 22 s to inflate their
+        // 4 GiB and pack it again, and its copy is 1.6 % smaller. A machine that finishes in time writes that copy; one that
+        // does not packs the objects alone, which leaves the file 100 bytes larger, and skips it. The budget is the
+        // product's defence against decoding bombs, so both are right, and which one a run gets depends on the machine.
         // fixture: rotate, split, merge, to-png and to-jpg (the worker), compress, remove metadata, protect
         (string Fixture, string Rotate, string Split, string Merge, string Render, string Compress, string Strip, string Protect)[] table =
         [
-            ("bomb-content", Ok, Ok, Ok, memory, Skipped, Ok, Ok),
+            ("bomb-content", Ok, Ok, Ok, memory, OkOrSkipped, Ok, Ok),
             ("bomb-double-flate", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
             ("bomb-double-flate-content", Ok, Ok, Ok, memory, Skipped, Ok, Ok),
-            ("bomb-image", Ok, Ok, Ok, Ok, Skipped, Ok, Ok),
+            ("bomb-image", Ok, Ok, Ok, Ok, OkOrSkipped, Ok, Ok),
             ("bomb-object-stream", memory, memory, memory, memory, memory, memory, memory),
             ("cycle-kids-self", notPdf, notPdf, notPdf, damaged, notPdf, notPdf, notPdf),
             ("cycle-kids-loop", notPdf, notPdf, notPdf, Ok, notPdf, notPdf, notPdf),
@@ -174,8 +182,19 @@ public sealed class PdfHardeningTests(ITestOutputHelper output) : IDisposable
 
         output.WriteLine($"{fixture} {operation}: {outcome} in {timer.Elapsed.TotalSeconds:0.0} s ({result})");
         Assert.True(timer.Elapsed < LimitFor(operation, input), $"{fixture} {operation} took {timer.Elapsed}");
-        Assert.Equal(expected, outcome);
-        var expectedEntries = expected == Ok ? [.. before, Path.GetFileName(result)!] : before;
+        if (expected == OkOrSkipped)
+        {
+            Assert.Contains(outcome, (string[])[Ok, Skipped]);
+            // Skipped only once the full run has used its whole budget: sooner would mean compressing made it no smaller.
+            Assert.True(outcome == Ok || timer.Elapsed >= PdfCompress.FullRunTimeoutFor(new FileInfo(input).Length),
+                $"{fixture} {operation} was skipped after {timer.Elapsed}, before the full run's budget ran out");
+        }
+        else
+        {
+            Assert.Equal(expected, outcome);
+        }
+
+        var expectedEntries = outcome == Ok ? [.. before, Path.GetFileName(result)!] : before;
         Assert.Equal(expectedEntries.Order(StringComparer.Ordinal), Entries());
         Assert.Empty(TestProcesses.Workers());
         if (fixture == "launch-action")
