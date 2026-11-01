@@ -173,10 +173,47 @@ public sealed class JoinRulesTests
     {
         // The user selected more files and chose the same command while this batch was still collecting.
         var census = new List<Sighting> { Seen(1, 0.2), Seen(5, 3.5), Seen(6, 3.6) };
-        var gate = new JoinGate(P(9, 0), previousClose: null, () => census);
+        var now = T0.AddSeconds(0.3);
+        var gate = new JoinGate(P(9, 0), previousClose: null, () => census, () => now);
 
         Assert.True(gate.Admits(P(1, 0.2)));
+        now = T0.AddSeconds(0.5);
+        gate.Accept(P(1, 0.2));
+        now = T0.AddSeconds(3.7);
         Assert.False(gate.Admits(P(5, 3.5)));
+    }
+
+    [Fact]
+    public void A_gate_lets_in_a_process_created_after_a_pause_while_its_selection_is_still_starting()
+    {
+        // 100 processes starting on four cores starved the test creating them: it paused 2.7 s after the 51st.
+        var census = new List<Sighting> { Seen(1, 0.2), Seen(2, 0.3), Seen(5, 3.5), Seen(6, 3.6) };
+        var now = T0.AddSeconds(0.4);
+        var gate = new JoinGate(P(9, 0), previousClose: null, () => census, () => now);
+        now = T0.AddSeconds(0.6);
+        gate.Accept(P(1, 0.2)); // process 2 is still starting when 5 is created
+
+        now = T0.AddSeconds(3.7);
+        Assert.True(gate.Admits(P(5, 3.5)));
+        Assert.True(gate.ExpectsMore());
+
+        gate.Accept(P(2, 0.3));
+        gate.Accept(P(5, 3.5));
+        Assert.True(gate.ExpectsMore()); // 6, created after 5, is on the chain too
+        Assert.Equal([new MissingFile(@"C:\6.txt", StillRunning: true)], gate.Missing());
+    }
+
+    [Fact]
+    public void A_gate_turns_away_a_process_created_long_after_its_selection_even_while_one_is_still_starting()
+    {
+        // A process of the selection is stuck: another selection made a while later is still not merged into this one.
+        var census = new List<Sighting> { Seen(1, 0.2), Seen(5, 0.2 + JoinGate.StartingChainGap.TotalSeconds + 0.1) };
+        var now = T0.AddSeconds(0.4);
+        var gate = new JoinGate(P(9, 0), previousClose: null, () => census, () => now);
+
+        now = T0.AddSeconds(15);
+        Assert.False(gate.Admits(census[1].Process));
+        Assert.Equal([new MissingFile(@"C:\1.txt", StillRunning: true)], gate.Missing());
     }
 
     [Fact]
@@ -223,7 +260,7 @@ public sealed class JoinRulesTests
     public void A_gate_does_not_wait_for_another_selection_or_for_late_processes()
     {
         var census = new List<Sighting> { Seen(5, 4), Seen(6, -20) };
-        var gate = new JoinGate(P(9, 0), previousClose: T0.AddSeconds(-10), () => census);
+        var gate = new JoinGate(P(9, 0), previousClose: T0.AddSeconds(-10), () => census, () => T0.AddSeconds(0.2));
 
         Assert.False(gate.ExpectsMore());
     }

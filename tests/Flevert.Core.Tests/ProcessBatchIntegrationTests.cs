@@ -469,12 +469,35 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_pause_in_creating_a_selection_while_its_processes_are_still_starting_does_not_split_it()
+    {
+        // 100 processes starting on four cores starve whoever creates them: a 2.7 s pause after the 51st process was seen,
+        // and the 49 created after it were left out of a partial output. The processes created before the pause are
+        // still starting when it ends, which another selection, made by hand, does not wait for.
+        var files = Enumerable.Range(1, 4).Select(i => _dir.File($"{i}.txt", $"{i}\r\n")).ToList();
+        using var slow = SuspendedFlevert("dev.join", files[0]);
+        var before = files.Skip(1).Take(2).Select(f => StartFlevert("dev.join", f)).ToList();
+        await Task.Delay(JoinGate.ChainGap + TimeSpan.FromSeconds(1));
+        var after = StartFlevert("dev.join", files[3]);
+
+        await Task.Delay(TimeSpan.FromSeconds(1));
+        slow.Resume();
+        await ExitAllOk([.. before, after, slow.Process], TimeSpan.FromSeconds(60));
+
+        Assert.Equal(["1 (+3).txt", "1.txt", "2.txt", "3.txt", "4.txt"], _dir.FileNames());
+        Assert.Equal("1\r\n2\r\n3\r\n4\r\n", await File.ReadAllTextAsync(_dir.Combine("1 (+3).txt")));
+    }
+
+    [Fact]
     public async Task A_process_created_before_its_batch_closed_that_runs_after_it_is_left_out_with_no_second_output()
     {
         var files = Enumerable.Range(1, 3).Select(i => _dir.File($"{i}.txt", $"{i}\r\n")).ToList();
+        var created = Stopwatch.StartNew();
         var first = files.Take(2).Select(f => StartFlevert("dev.join", f)).ToList();
-        // Created after a pause long enough to look like another selection, so the leader does not wait for it.
-        await Task.Delay(TimeSpan.FromSeconds(2.6));
+        // Created after a pause long enough to look like another selection, once the first two have handed over their
+        // files (a pause while they are still starting is the shell's, and the leader would wait for it).
+        await FollowersExitedAsync(first);
+        await PausedSinceAsync(created, TimeSpan.FromSeconds(2.6));
         using var straggler = SuspendedFlevert("dev.join", files[2]);
         await ExitAllOk(first);
 
@@ -492,9 +515,12 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
     {
         var a = Enumerable.Range(1, 3).Select(i => _dir.File($"a {i}.txt", $"a{i}\r\n")).ToList();
         var b = Enumerable.Range(1, 2).Select(i => _dir.File($"b {i}.txt", $"b{i}\r\n")).ToList();
+        var created = Stopwatch.StartNew();
         var first = a.Select(f => StartFlevert("dev.join", f)).ToList();
-        // The user picks other files and chooses the same command while the first batch still waits for stragglers.
-        await Task.Delay(TimeSpan.FromSeconds(2.6));
+        // The user picks other files and chooses the same command while the first batch is still open: its processes have
+        // started and handed over their files (while they are still starting, the two selections are taken as one).
+        await FollowersExitedAsync(first);
+        await PausedSinceAsync(created, TimeSpan.FromSeconds(2.6));
         var second = b.Select(f => StartFlevert("dev.join", f)).ToList();
         await Task.WhenAll(first.Concat(second).Select(p => p.WaitForExitAsync())).WaitAsync(TimeSpan.FromSeconds(90));
 
@@ -729,6 +755,26 @@ public sealed class ProcessBatchIntegrationTests : IDisposable
             foreach (var p in processes.Where(p => !p.HasExited))
                 p.Kill(entireProcessTree: true);
         }
+    }
+
+    /// <summary>
+    /// Waits until all but one of <paramref name="processes"/>, one batch, have exited: the followers have handed over their
+    /// files, and the leader, which handed over its own as it started, is left.
+    /// </summary>
+    private static async Task FollowersExitedAsync(List<Process> processes)
+    {
+        var timer = Stopwatch.StartNew();
+        while (processes.Count(p => p.HasExited) < processes.Count - 1)
+        {
+            Assert.True(timer.Elapsed < TimeSpan.FromSeconds(30), "the followers did not hand over their files");
+            await Task.Delay(20);
+        }
+    }
+
+    private static async Task PausedSinceAsync(Stopwatch since, TimeSpan pause)
+    {
+        if (pause - since.Elapsed is { Ticks: > 0 } left)
+            await Task.Delay(left);
     }
 
     private string[] LoggedProcessIds() =>

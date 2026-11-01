@@ -12,16 +12,31 @@ internal sealed record Sighting(ProcessStamp Process, IReadOnlyList<string> File
 /// </summary>
 /// <param name="previousClose">When the batch before this one closed: processes created earlier belong to that one.</param>
 /// <param name="census">The running processes of the same executable, session and operation, other than this one.</param>
-internal sealed class JoinGate(ProcessStamp leader, DateTime? previousClose, Func<IReadOnlyList<Sighting>> census)
+/// <param name="clock">The time now, in UTC; tests replace it. Read as the gate is made, which is when the leader's own
+/// files are handed over, and at every delivery.</param>
+internal sealed class JoinGate(ProcessStamp leader, DateTime? previousClose, Func<IReadOnlyList<Sighting>> census, Func<DateTime>? clock = null)
 {
     /// <summary>Largest gap between two creations of one selection. The shell was measured at 0.5 s at most under load.</summary>
     public static readonly TimeSpan ChainGap = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// Largest gap between two creations of one selection while a process created before the gap has not handed over its
+    /// file yet. Processes starting by the dozen starve the one creating them: with 100 on four cores, a pause of 2.7 s
+    /// was seen after the 51st, and the 49 created after it were left out. Another selection is made by hand, after the
+    /// earlier one has started; while that one is still starting, the two are taken as one.
+    /// </summary>
+    public static readonly TimeSpan StartingChainGap = TimeSpan.FromSeconds(10);
+
     /// <summary>How long after the last delivery a process on the chain that has not handed over still holds the batch.</summary>
     public static readonly TimeSpan HoldLimit = TimeSpan.FromSeconds(30);
 
+    private static readonly Func<DateTime> RealClock = static () => DateTime.UtcNow;
+
     private readonly Lock _gate = new();
+    private readonly Func<DateTime> _now = clock ?? RealClock;
+    private readonly DateTime _leaderDelivered = (clock ?? RealClock)();
     private readonly List<ProcessStamp> _members = [];
+    private readonly Dictionary<ProcessStamp, DateTime> _deliveredAt = [];
     private readonly Dictionary<ProcessStamp, IReadOnlyList<string>> _seen = [];
 
     public IReadOnlyList<ProcessStamp> Members
@@ -55,7 +70,7 @@ internal sealed class JoinGate(ProcessStamp leader, DateTime? previousClose, Fun
     {
         lock (_gate)
         {
-            if (!_members.Contains(sender))
+            if (_deliveredAt.TryAdd(sender, _now()))
                 _members.Add(sender);
         }
     }
@@ -102,7 +117,7 @@ internal sealed class JoinGate(ProcessStamp leader, DateTime? previousClose, Fun
 
     // A close in the future means the clock went back since: it says nothing, or every sender would be turned away.
     private bool IsBeforePreviousClose(DateTime created) =>
-        previousClose is { } closed && closed <= DateTime.UtcNow && created < closed;
+        previousClose is { } closed && closed <= _now() && created < closed;
 
     /// <returns>The processes running now.</returns>
     private List<ProcessStamp> Look()
@@ -125,19 +140,37 @@ internal sealed class JoinGate(ProcessStamp leader, DateTime? previousClose, Fun
         return created >= first && created <= last;
     }
 
-    /// <summary>The run of creation times around the leader's with no gap wider than <see cref="ChainGap"/>.</summary>
+    /// <summary>
+    /// The run of creation times around the leader's with no gap wider than <see cref="ChainGap"/>, or than
+    /// <see cref="StartingChainGap"/> where a process created before the gap had not handed over its file when it ended.
+    /// </summary>
     private (DateTime First, DateTime Last) Chain(DateTime? candidate = null)
     {
-        var times = _members.Select(m => m.Created).Concat(_seen.Keys.Select(p => p.Created)).Append(leader.Created);
+        // Every process known, with when it handed over its files: not yet, for those seen running and for the candidate.
+        var known = _members.Select(m => (m.Created, Delivered: _deliveredAt[m]))
+            .Concat(_seen.Keys.Where(p => !_deliveredAt.ContainsKey(p)).Select(p => (p.Created, Delivered: DateTime.MaxValue)))
+            .Append((leader.Created, Delivered: _leaderDelivered));
         if (candidate is { } c)
-            times = times.Append(c);
-        var sorted = times.Order().ToList();
-        var at = sorted.IndexOf(leader.Created);
+            known = known.Append((c, Delivered: DateTime.MaxValue));
+        var sorted = known.OrderBy(k => k.Created).ToList();
+
+        // For each process, when it and every process created before it had all handed over their files.
+        var settled = new DateTime[sorted.Count];
+        for (var i = 0; i < sorted.Count; i++)
+            settled[i] = i > 0 && settled[i - 1] > sorted[i].Delivered ? settled[i - 1] : sorted[i].Delivered;
+
+        bool Linked(int later)
+        {
+            var gap = sorted[later].Created - sorted[later - 1].Created;
+            return gap <= ChainGap || (gap <= StartingChainGap && settled[later - 1] > sorted[later].Created);
+        }
+
+        var at = sorted.FindIndex(k => k.Created == leader.Created);
         var (low, high) = (at, at);
-        while (low > 0 && sorted[low] - sorted[low - 1] <= ChainGap)
+        while (low > 0 && Linked(low))
             low--;
-        while (high < sorted.Count - 1 && sorted[high + 1] - sorted[high] <= ChainGap)
+        while (high < sorted.Count - 1 && Linked(high + 1))
             high++;
-        return (sorted[low], sorted[high]);
+        return (sorted[low].Created, sorted[high].Created);
     }
 }
