@@ -442,7 +442,10 @@ public sealed class PdfSplitTests : IDisposable
             AfterQpdf = scratch =>
             {
                 held = HoldAPage(scratch);
-                released = ReleaseAfterTheLastCopyAsync(held, Path.GetDirectoryName(scratch)!, 1_500);
+                // By its name, not the folder qpdf was given: on Linux that is the split's handle (/proc/<pid>/fd/<n>),
+                // gone once the split ends, and its number may then be another file's.
+                var partial = Assert.Single(Directory.GetDirectories(_dir.Path, ".flevert-*.partial"));
+                released = ReleaseAfterTheLastCopyAsync(held, partial, 1_500);
             },
         };
 
@@ -461,12 +464,22 @@ public sealed class PdfSplitTests : IDisposable
         Assert.All(Entries(folder), name => Assert.EndsWith(".pdf", name, StringComparison.Ordinal));
     }
 
-    // Half a second after the last page has been copied out, when the split first tries to delete qpdf's folder.
+    // Half a second after the last page has been copied out, when the split first tries to delete qpdf's folder. On
+    // Windows the split cannot get past that delete until the page is let go. Linux deletes a page
+    // held open, so there the split can finish, and the folder take its final name, before the next look: the folder gone
+    // means the split is past the copy, and the page is let go then.
     private static async Task ReleaseAfterTheLastCopyAsync(FileStream held, string partial, int pages)
     {
-        while (Directory.GetFiles(partial, "*.pdf").Length < pages)
-            await Task.Delay(10);
-        await Task.Delay(500);
+        try
+        {
+            while (Directory.GetFiles(partial, "*.pdf").Length < pages)
+                await Task.Delay(10);
+            await Task.Delay(500);
+        }
+        catch (DirectoryNotFoundException)
+        {
+        }
+
         await held.DisposeAsync();
     }
 
