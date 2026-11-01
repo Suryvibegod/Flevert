@@ -302,16 +302,15 @@ public sealed class PdfMergeTests : IDisposable
     [Fact]
     public async Task Cancelling_stops_qpdf_and_leaves_no_partial_file()
     {
-        // About 13 s of qpdf work in few pages (the page limit refuses many pages): long enough to cancel in the middle.
+        // About 16 s of merging in few pages (the page limit refuses many pages), so qpdf would run on if not stopped.
         var big = _dir.Combine("big.pdf");
-        MaliciousPdf.WriteManyObjects(big, 1_000_000);
+        MaliciousPdf.WriteManyObjectsOnThePage(big, 1_000_000);
         string[] inputs = [big, Pdf("small.pdf", 100)];
-        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-        var timer = System.Diagnostics.Stopwatch.StartNew();
+        using var cancel = new CancelWhenQpdfRuns("--empty");
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Op().RunAsync(inputs, null, cancel.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new PdfMerge(cancel.Qpdf).RunAsync(inputs, null, cancel.Token));
 
-        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(3), $"took {timer.Elapsed}");
+        cancel.AssertStopped();
         Assert.Equal(["big.pdf", "small.pdf"], FileNames(_dir.Path));
     }
 }

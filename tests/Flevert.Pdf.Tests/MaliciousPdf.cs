@@ -263,14 +263,24 @@ internal static class MaliciousPdf
             Stream("/Filter [/FlateDecode /FlateDecode]", DoubleBomb.Value)]));
     }
 
-    private static byte[] ManyObjects(int count)
+    /// <summary>
+    /// As <see cref="WriteManyObjects"/>, but the page refers to the array, not the catalog: a merge, which copies the
+    /// pages and drops the catalog, copies every object too.
+    /// </summary>
+    public static void WriteManyObjectsOnThePage(string path, int count) =>
+        File.WriteAllBytes(path, ManyObjects(count, Ascii("<< /Type /Catalog /Pages 2 0 R >>"),
+            Ascii("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Extra 4 0 R >>")));
+
+    private static byte[] ManyObjects(int count) => ManyObjects(count, CatalogWithExtra, BlankPage);
+
+    private static byte[] ManyObjects(int count, byte[] catalog, byte[] page)
     {
         var references = new StringBuilder(count * 11).Append('[');
         for (var i = 0; i < count; i++)
             references.Append(CultureInfo.InvariantCulture, $"{i + 5} 0 R ");
         references.Append(']');
         var zero = Ascii("0");
-        return Document([CatalogWithExtra, OnePageTree, BlankPage, Ascii(references.ToString()), .. Enumerable.Repeat(zero, count)]);
+        return Document([catalog, OnePageTree, page, Ascii(references.ToString()), .. Enumerable.Repeat(zero, count)]);
     }
 
     private static byte[] LaunchAction(string pdfPath)

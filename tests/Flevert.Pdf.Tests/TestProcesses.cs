@@ -33,7 +33,7 @@ internal static partial class TestProcesses
             try
             {
                 // A worker that is exiting can still be listed: it is no longer the worker a test is looking for.
-                if (ParentId(process.Id) == Environment.ProcessId && IsRunning(process)
+                if (ParentId(process.Id) == Environment.ProcessId && IsRunning(process.Id)
                     && CommandLine(process) is { } line && line.EndsWith(" pdf-worker", StringComparison.Ordinal))
                 {
                     children.Add(process);
@@ -61,7 +61,7 @@ internal static partial class TestProcesses
             {
                 try
                 {
-                    if (ParentId(process.Id) == Environment.ProcessId && IsRunning(process))
+                    if (ParentId(process.Id) == Environment.ProcessId && IsRunning(process.Id))
                         count++;
                 }
                 catch (Win32Exception)
@@ -91,7 +91,7 @@ internal static partial class TestProcesses
             {
                 try
                 {
-                    if (ParentId(process.Id) == Environment.ProcessId && IsRunning(process))
+                    if (ParentId(process.Id) == Environment.ProcessId && IsRunning(process.Id))
                         left.Add($"{process.Id}: {CommandLine(process)}");
                 }
                 catch (Win32Exception)
@@ -103,6 +103,9 @@ internal static partial class TestProcesses
 
         return left;
     }
+
+    /// <summary>Whether <paramref name="processId"/> is a process this process started that has not exited.</summary>
+    public static bool IsRunningChild(int processId) => ParentId(processId) == Environment.ProcessId && IsRunning(processId);
 
     /// <summary>Waits until a worker runs, or fails the test.</summary>
     public static async Task<Process> WaitForWorkerAsync(TimeSpan within)
@@ -162,11 +165,11 @@ internal static partial class TestProcesses
 
     /// <summary>Whether the process has not exited. Its handle is signalled once it has; a handle still open elsewhere
     /// keeps an exited process listed.</summary>
-    private static bool IsRunning(Process process)
+    private static bool IsRunning(int processId)
     {
         if (OperatingSystem.IsLinux())
-            return ProcFs.IsRunning(process.Id);
-        var handle = OpenProcess(ProcessQueryLimitedInformation | Synchronize, false, (uint)process.Id);
+            return ProcFs.IsRunning(processId);
+        var handle = OpenProcess(ProcessQueryLimitedInformation | Synchronize, false, (uint)processId);
         if (handle == 0)
             return false;
         try
