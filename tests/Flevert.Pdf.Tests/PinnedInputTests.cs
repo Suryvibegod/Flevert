@@ -8,8 +8,10 @@ namespace Flevert.Pdf.Tests;
 /// On Linux whoever can write an input's folder can point its name at another file after the runner checked it (a link
 /// to a private file, whose converted copy would land beside the input). Every engine reads the file the runner pinned:
 /// ImageMagick in this process, qpdf, and the PDF worker. Here the name leads to a link to junk as soon as the input is
-/// pinned; an operation that opened the name again would fail on the junk, or convert it.
+/// pinned; an operation that opened the name again would fail on the junk, or convert it. In the worker collection: the
+/// operations on the worker start <c>flevert pdf-worker</c> children, which PdfWorkerTests would count as its own.
 /// </summary>
+[Collection(WorkerProcesses.Name)]
 public sealed class PinnedInputTests : IDisposable
 {
     private static readonly string[] Extensions = [".pdf", ".jpg", ".png"];

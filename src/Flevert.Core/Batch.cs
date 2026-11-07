@@ -96,7 +96,7 @@ public static class Batch
                         // The processes the batch reports missing are named in its record, so one that arrives after all
                         // (it was too slow to start) is not reported a second time; so is a cancel, for the same reason.
                         JoinRecord? closed = null;
-                        return BatchLeader.Start(() => CreateServer(name), server, files, idle,
+                        var joining = BatchLeader.Start(() => CreateServer(name), server, files, idle,
                             onClosed: () => TryRotateSecret(operationId, key), gate,
                             beforeClose: cancelled =>
                             {
@@ -109,6 +109,9 @@ public static class Batch
                                 if (closed is not null && ReadRecord(operationId) is { Open: false } current && current.Leader == self)
                                     WriteRecord(operationId, closed with { Cancelled = true }, self, onlyOverOwn: true);
                             });
+                        // Once the listener runs, so followers are served meanwhile.
+                        gate.Survey();
+                        return joining;
                     default:
                         // LeaderCollecting: its leader is replacing its pipe instance and retries for a while. Give the
                         // name back and wait, as a client, for the new instance: taking the name again and again could

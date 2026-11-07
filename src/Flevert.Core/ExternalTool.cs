@@ -218,7 +218,7 @@ public static partial class ExternalTool
             {
                 // Without the job, a crash of flevert.exe could leave the tool running: do not run it at all.
                 Kill(process, job);
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                await EndedAsync(process).ConfigureAwait(false);
                 if (e is Win32Exception { NativeErrorCode: ErrorNotEnoughQuota } && limits?.SingleProcess == true)
                     throw new ProcessLimitRefusedException(e);
                 throw;
@@ -256,6 +256,7 @@ public static partial class ExternalTool
             try
             {
                 await process.WaitForExitAsync(stop.Token).ConfigureAwait(false);
+                await EndedAsync(process).ConfigureAwait(false);
                 if (OperatingSystem.IsLinux())
                     memory?.Dispose();
                 // A child it started may still hold the pipes open; it is part of this run and ends with it.
@@ -280,7 +281,7 @@ public static partial class ExternalTool
             {
                 Kill(process, job);
                 // Never return while the tool runs: the caller may delete its files next.
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                await EndedAsync(process).ConfigureAwait(false);
                 await Task.WhenAny(Task.WhenAll(output, error, input), Task.Delay(DrainAfterKill, CancellationToken.None))
                     .ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
@@ -481,6 +482,21 @@ public static partial class ExternalTool
         {
             Trace.TraceWarning($"Could not lower the priority of {process.StartInfo.FileName}: {e.Message}");
         }
+    }
+
+    /// <summary>
+    /// Returns once the tool has ended. Windows gives a killed process its exit code at once and ends it a moment later
+    /// (TerminateProcess only starts the end): until its handle is signalled it still holds its files, memory and place
+    /// in the process list. <see cref="Process.HasExited"/>, which <see cref="Process.WaitForExitAsync"/> trusts, goes
+    /// by the exit code, so on a loaded machine a cancelled tesseract was still there when Make searchable returned.
+    /// </summary>
+    private static async Task EndedAsync(Process process)
+    {
+        await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+        // WaitForExit waits for the handle itself; without a timeout, on a thread of its own, as only a process that is
+        // still being ended blocks it.
+        if (OperatingSystem.IsWindows() && !process.WaitForExit(0))
+            await Task.Run(() => process.WaitForExit(), CancellationToken.None).ConfigureAwait(false);
     }
 
     private static void Kill(Process process, SafeHandle? job)

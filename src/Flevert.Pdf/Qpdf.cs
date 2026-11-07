@@ -102,6 +102,10 @@ public sealed partial class Qpdf
     /// <summary>A fixed limit instead of <see cref="MaxMemoryFor"/>, for tests.</summary>
     internal ulong? MaxMemoryBytes { get; init; }
 
+    /// <summary>For tests: runs as each qpdf has started, before it is given its paths, with the process as started (on
+    /// Linux, the setsid that execs into qpdf).</summary>
+    internal Action<System.Diagnostics.Process>? AfterStart { get; init; }
+
     /// <summary>
     /// Two minutes, plus a second per megabyte of input. qpdf rewrites tens of megabytes a second (a 30 MB PDF of 300 000
     /// pages took 8 s), so this only stops a run that is stuck, even for the largest PDF accepted (about 36 minutes).
@@ -643,7 +647,7 @@ public sealed partial class Qpdf
             ExternalToolResult run;
             try
             {
-                run = await ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, lines, limits: limits,
+                run = await ExternalTool.RunAsync(ExePath, [.. options, "@-"], timeout, AfterStart, lines, limits: limits,
                     environment: ToolEnvironment(), standardOutputLine: outputLine, cancellationToken: ct).ConfigureAwait(false);
             }
             catch (TimeoutException e)

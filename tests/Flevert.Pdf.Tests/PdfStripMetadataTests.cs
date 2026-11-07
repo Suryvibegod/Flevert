@@ -227,14 +227,16 @@ public sealed class PdfStripMetadataTests : IDisposable
     [Fact]
     public async Task Cancelling_stops_qpdf_and_leaves_nothing()
     {
+        // About 20 s of describing in few pages (the page limit refuses many pages), so qpdf would run on if not stopped;
+        // cancelled in the description, while the private folder for it exists.
         var input = _dir.Combine("big.pdf");
-        WriteBlank(input, 200_000, resources: true);
-        using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-        var timer = System.Diagnostics.Stopwatch.StartNew();
+        MaliciousPdf.WriteManyObjects(input, 1_000_000);
+        using var cancel = new CancelWhenQpdfRuns("--json-output");
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Op().RunAsync(input, cancel.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new PdfStripMetadata(cancel.Qpdf) { ScratchRoot = _scratch.Path }.RunAsync(input, cancel.Token));
 
-        Assert.True(timer.Elapsed < TimeSpan.FromSeconds(3), $"took {timer.Elapsed}");
+        cancel.AssertStopped();
         Assert.Equal(["big.pdf"], FileNames(_dir.Path));
         Assert.Empty(Directory.GetFileSystemEntries(_scratch.Path));
     }
