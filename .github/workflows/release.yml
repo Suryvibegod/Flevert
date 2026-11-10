@@ -47,7 +47,7 @@ jobs:
         run: |
           git merge-base --is-ancestor $env:GITHUB_SHA origin/main
           if ($LASTEXITCODE -ne 0) { throw "$env:TAG is not on main; releases are built only from reviewed commits." }
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           # The newest .NET 10 patch: a self-contained release ships its runtime.
           dotnet-version: 10.0.x
@@ -151,7 +151,7 @@ jobs:
           if [ "${TAG#v}" != "$version" ]; then echo "Tag $TAG does not match <Version>$version</Version> in Directory.Build.props; fix one of them and tag again."; exit 1; fi
       - name: Check the tag is on main
         run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "$TAG is not on main; releases are built only from reviewed commits."; exit 1; }
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           # The newest .NET 10 patch: the tarball is self-contained and ships its runtime.
           dotnet-version: 10.0.x
